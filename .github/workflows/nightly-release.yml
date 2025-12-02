@@ -42,7 +42,7 @@ jobs:
         name: Nightly Release
         body: "Automated nightly release - Updated on ${{ github.event.head_commit.timestamp }}"
         draft: false
-        prerelease: true
+        prerelease: false
         files: app/build/outputs/apk/release/app-release.apk
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
