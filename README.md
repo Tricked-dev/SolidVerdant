@@ -73,18 +73,12 @@ run `docker exec solidtime-scheduler php artisan passport:client --name=desktop 
 
 ## Usage
 
+Goal of this application is to have a easy to use tile to start and stop tracking, this application does everything i need it to but pullrequests for other features are welcome, forking is fine too
+
 1. **Login**: Tap "Login with OAuth2" to authenticate via your Solidtime account
 2. **View Tracking**: See your current time entry with live elapsed time
 3. **Refresh**: Pull to refresh or tap the refresh button to update tracking state
 4. **Logout**: Tap logout to clear all data and return to login screen
-
-### Key Features
-
-- **OAuth2 PKCE Flow**: Implements secure authentication with code verifier/challenge
-- **Automatic Token Refresh**: Uses OkHttp Authenticator to refresh tokens on 401 responses
-- **Reactive UI**: Flow-based state management with automatic UI updates
-- **Deep Link Handling**: Custom URL scheme for OAuth callbacks
-- **Error Handling**: Comprehensive error states and user feedback
 
 ## Building for Production
 
