@@ -35,37 +35,14 @@ jobs:
         KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
-    - name: Get previous release tag
-      id: get_tag
-      run: |
-        echo "tag=$(git describe --tags --abbrev=0 --match='nightly' || echo 'nightly')" >> $GITHUB_OUTPUT
-
-    - name: Delete previous release
-      uses: dev-drprasad/delete-tag-and-release@v1.1
-      with:
-        tag_name: ${{ steps.get_tag.outputs.tag }}
-        delete_repo_tag: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Update Nightly Release
+      uses: softprops/action-gh-release@v1
       with:
         tag_name: nightly
-        release_name: Nightly Release
-        body: "Automated nightly release"
+        name: Nightly Release
+        body: "Automated nightly release - Updated on ${{ github.event.head_commit.timestamp }}"
         draft: false
         prerelease: true
-
-    - name: Upload Release Asset
-      uses: actions/upload-release-asset@v1
+        files: app/build/outputs/apk/release/app-release.apk
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: app/build/outputs/apk/release/app-release.apk
-        asset_name: SolidVerdant-nightly.apk
-        asset_content_type: application/vnd.android.package-archive
