@@ -30,6 +30,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.User
 import java.time.ZonedDateTime
@@ -48,6 +50,8 @@ fun TrackingScreen(
     onStartTracking: () -> Unit = {},
     onStopTracking: () -> Unit = {}
 ) {
+    val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = uiState.isLoading)
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -81,33 +85,38 @@ fun TrackingScreen(
             )
         }
     ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Top
+        SwipeRefresh(
+            state = swipeRefreshState,
+            onRefresh = onRefresh,
+            modifier = Modifier.padding(paddingValues)
         ) {
-            when {
-                uiState.isLoading -> {
-                    CircularProgressIndicator()
-                }
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Top
+            ) {
+                when {
+                    uiState.isLoading && !uiState.isTracking -> {
+                        CircularProgressIndicator()
+                    }
 
-                uiState.error != null -> {
-                    ErrorCard(error = uiState.error)
-                }
+                    uiState.error != null -> {
+                        ErrorCard(error = uiState.error)
+                    }
 
-                uiState.isTracking && uiState.currentTimeEntry != null -> {
-                    TrackingCard(
-                        timeEntry = uiState.currentTimeEntry,
-                        elapsedSeconds = uiState.elapsedSeconds,
-                        onStop = onStopTracking
-                    )
-                }
+                    uiState.isTracking && uiState.currentTimeEntry != null -> {
+                        TrackingCard(
+                            timeEntry = uiState.currentTimeEntry,
+                            elapsedSeconds = uiState.elapsedSeconds,
+                            onStop = onStopTracking
+                        )
+                    }
 
-                else -> {
-                    NotTrackingCard(onStart = onStartTracking)
+                    else -> {
+                        NotTrackingCard(onStart = onStartTracking)
+                    }
                 }
             }
         }

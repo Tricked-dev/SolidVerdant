@@ -42,13 +42,10 @@ class TimeTrackingTileService : TileService() {
     @Inject
     lateinit var apiClientFactory: ApiClientFactory
 
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    @Inject
+    lateinit var cacheDataStore: dev.tricked.solidverdant.data.local.CacheDataStore
 
-    // Cache for project and task names to avoid repeated API calls
-    private var cachedProjects: List<dev.tricked.solidverdant.data.model.Project>? = null
-    private var cachedTasks: List<dev.tricked.solidverdant.data.model.Task>? = null
-    private var cacheTimestamp: Long = 0
-    private val CACHE_DURATION_MS = 60_000L // 1 minute
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     // Optimistic state for stopping/starting
     private var optimisticallyStopped = false
@@ -233,7 +230,7 @@ class TimeTrackingTileService : TileService() {
     }
 
     /**
-     * Load project and task names with caching
+     * Load project and task names using cache
      */
     private suspend fun loadProjectAndTaskNames(
         activeEntry: dev.tricked.solidverdant.data.model.TimeEntry
@@ -243,31 +240,36 @@ class TimeTrackingTileService : TileService() {
             val organizationId = memberships?.firstOrNull()?.organizationId
                 ?: return Pair(null, null)
 
-            // Check if cache is valid
-            val now = System.currentTimeMillis()
-            val cacheExpired = (now - cacheTimestamp) > CACHE_DURATION_MS
+            // Try to get from cache first
+            var projects = cacheDataStore.getCachedProjects()
+            var tasks = cacheDataStore.getCachedTasks()
 
-            // Refresh cache if needed
-            if (cachedProjects == null || cachedTasks == null || cacheExpired) {
+            // If cache is empty or expired, fetch from API
+            if (projects == null || tasks == null) {
                 try {
                     val endpoint = authRepository.endpoint.first()
                     val api = apiClientFactory.createApi(endpoint)
 
-                    cachedProjects = api.getProjects(organizationId).data
-                    cachedTasks = api.getTasks(organizationId).data
-                    cacheTimestamp = now
-                    Timber.d("Refreshed project/task cache")
+                    projects = api.getProjects(organizationId).data
+                    tasks = api.getTasks(organizationId).data
+
+                    // Update cache
+                    cacheDataStore.cacheProjects(projects)
+                    cacheDataStore.cacheTasks(tasks)
+
+                    Timber.d("Fetched and cached projects/tasks from API")
                 } catch (e: Exception) {
-                    Timber.w(e, "Failed to refresh cache, using old data if available")
+                    Timber.w(e, "Failed to fetch projects/tasks")
+                    return Pair(null, null)
                 }
             }
 
             // Look up names from cache
             val projectName = activeEntry.projectId?.let { projectId ->
-                cachedProjects?.find { it.id == projectId }?.name
+                projects.find { it.id == projectId }?.name
             }
             val taskName = activeEntry.taskId?.let { taskId ->
-                cachedTasks?.find { it.id == taskId }?.name
+                tasks.find { it.id == taskId }?.name
             }
 
             Pair(projectName, taskName)

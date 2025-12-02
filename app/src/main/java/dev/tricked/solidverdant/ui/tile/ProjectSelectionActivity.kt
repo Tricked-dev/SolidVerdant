@@ -34,6 +34,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import dagger.hilt.android.AndroidEntryPoint
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
@@ -84,52 +86,65 @@ fun ProjectSelectionContent(
     onCancel: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = uiState.isLoading)
 
     LaunchedEffect(Unit) {
         viewModel.loadProjects()
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(24.dp)
+    SwipeRefresh(
+        state = swipeRefreshState,
+        onRefresh = { viewModel.loadProjects(forceRefresh = true) }
     ) {
-        when {
-            uiState.isLoading -> {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    CircularProgressIndicator()
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(24.dp)
+        ) {
+            when {
+                uiState.isLoading && uiState.projects.isEmpty() -> {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator()
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Loading projects...")
+                    }
+                }
+
+                uiState.error != null && uiState.projects.isEmpty() -> {
+                    Text(
+                        text = "Error: ${uiState.error}",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("Loading projects...")
+                    Button(
+                        onClick = { viewModel.loadProjects(forceRefresh = true) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Retry")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = onCancel,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Close")
+                    }
                 }
-            }
 
-            uiState.error != null -> {
-                Text(
-                    text = "Error: ${uiState.error}",
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(
-                    onClick = onCancel,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Close")
+                else -> {
+                    StartTrackingForm(
+                        projects = uiState.projects.filter { !it.isArchived },
+                        tasks = uiState.tasks.filter { !it.isDone },
+                        onStartTracking = onStartTracking,
+                        onCancel = onCancel
+                    )
                 }
-            }
-
-            else -> {
-                StartTrackingForm(
-                    projects = uiState.projects.filter { !it.isArchived },
-                    tasks = uiState.tasks.filter { !it.isDone },
-                    onStartTracking = onStartTracking,
-                    onCancel = onCancel
-                )
             }
         }
     }
@@ -152,6 +167,28 @@ fun StartTrackingForm(
     var selection by remember { mutableStateOf<ProjectTaskSelection>(ProjectTaskSelection.NoProject) }
     var description by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+
+    // Filter projects and tasks based on search query
+    val filteredProjects = remember(searchQuery, projects) {
+        if (searchQuery.isBlank()) {
+            projects
+        } else {
+            projects.filter {
+                it.name.contains(searchQuery, ignoreCase = true)
+            }
+        }
+    }
+
+    val filteredTasks = remember(searchQuery, tasks) {
+        if (searchQuery.isBlank()) {
+            tasks
+        } else {
+            tasks.filter {
+                it.name.contains(searchQuery, ignoreCase = true)
+            }
+        }
+    }
 
     // Build display text
     val displayText = when (selection) {
@@ -172,7 +209,10 @@ fun StartTrackingForm(
     // Combined Project/Task dropdown
     ExposedDropdownMenuBox(
         expanded = expanded,
-        onExpandedChange = { expanded = it }
+        onExpandedChange = {
+            expanded = it
+            if (!it) searchQuery = "" // Clear search when closing
+        }
     ) {
         OutlinedTextField(
             value = displayText,
@@ -187,19 +227,36 @@ fun StartTrackingForm(
         )
         ExposedDropdownMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false }
+            onDismissRequest = {
+                expanded = false
+                searchQuery = ""
+            }
         ) {
+            // Search field
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                label = { Text("Search...") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                singleLine = true
+            )
+
             // No project option
             DropdownMenuItem(
                 text = { Text("No Project") },
                 onClick = {
                     selection = ProjectTaskSelection.NoProject
                     expanded = false
+                    searchQuery = ""
                 }
             )
 
             // Projects and their tasks
-            projects.forEach { project ->
+            filteredProjects.forEach { project ->
+                val projectTasks = filteredTasks.filter { it.projectId == project.id }
+
                 // Project item
                 DropdownMenuItem(
                     text = {
@@ -211,11 +268,11 @@ fun StartTrackingForm(
                     onClick = {
                         selection = ProjectTaskSelection.ProjectOnly(project)
                         expanded = false
+                        searchQuery = ""
                     }
                 )
 
                 // Tasks for this project (indented)
-                val projectTasks = tasks.filter { it.projectId == project.id }
                 projectTasks.forEach { task ->
                     DropdownMenuItem(
                         text = {
@@ -231,9 +288,24 @@ fun StartTrackingForm(
                         onClick = {
                             selection = ProjectTaskSelection.ProjectWithTask(project, task)
                             expanded = false
+                            searchQuery = ""
                         }
                     )
                 }
+            }
+
+            // Show message if no results
+            if (searchQuery.isNotBlank() && filteredProjects.isEmpty()) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            "No results found",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
+                    onClick = { }
+                )
             }
         }
     }
