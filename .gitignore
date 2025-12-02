@@ -1,0 +1,14 @@
+*.iml
+.gradle
+local.properties
+.idea
+.DS_Store
+build
+captures
+.externalNativeBuild
+solidtime-desktop
+da
+.kotlin
+my-release-key.jks
+convert_svg_path.py
+LOGO.svg

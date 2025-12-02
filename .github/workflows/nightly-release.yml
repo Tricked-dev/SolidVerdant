@@ -1,0 +1,71 @@
+name: Nightly Release
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch: # Allows manual triggering
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: Set up Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Decode and install keystore
+      run: |
+        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > ${{ runner.temp }}/my-release-key.jks
+
+    - name: Build release APK
+      run: ./gradlew app:assembleRelease
+      env:
+        KEYSTORE_PATH: ${{ runner.temp }}/my-release-key.jks
+        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+    - name: Get previous release tag
+      id: get_tag
+      run: |
+        echo "tag=$(git describe --tags --abbrev=0 --match='nightly' || echo 'nightly')" >> $GITHUB_OUTPUT
+
+    - name: Delete previous release
+      uses: dev-drprasad/delete-tag-and-release@v1.1
+      with:
+        tag_name: ${{ steps.get_tag.outputs.tag }}
+        delete_repo_tag: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: nightly
+        release_name: Nightly Release
+        body: "Automated nightly release"
+        draft: false
+        prerelease: true
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: app/build/outputs/apk/release/app-release.apk
+        asset_name: SolidVerdant-nightly.apk
+        asset_content_type: application/vnd.android.package-archive
