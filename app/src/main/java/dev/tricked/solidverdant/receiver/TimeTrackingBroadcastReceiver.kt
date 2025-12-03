@@ -36,11 +36,19 @@ class TimeTrackingBroadcastReceiver : BroadcastReceiver() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     override fun onReceive(context: Context?, intent: Intent?) {
-        if (context == null || intent == null) return
+        Timber.d("TimeTrackingBroadcastReceiver.onReceive called - action=${intent?.action}, context=$context")
+        if (context == null || intent == null) {
+            Timber.w("TimeTrackingBroadcastReceiver: context or intent is null")
+            return
+        }
 
         when (intent.action) {
             TimeTrackingNotificationService.ACTION_STOP_TRACKING_BROADCAST -> {
+                Timber.d("Handling stop tracking broadcast")
                 handleStopTracking(context)
+            }
+            else -> {
+                Timber.w("TimeTrackingBroadcastReceiver: Unknown action ${intent.action}")
             }
         }
     }

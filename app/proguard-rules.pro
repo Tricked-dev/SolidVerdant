@@ -124,3 +124,68 @@
 -dontwarn org.conscrypt.**
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
+
+# ===== Android Components - Services, Receivers, Activities =====
+# Keep all services (especially TileService and ForegroundService implementations)
+-keep public class * extends android.app.Service {
+    public <init>(...);
+    public <methods>;
+}
+
+# Keep TileService and its methods
+-keep class * extends android.service.quicksettings.TileService {
+    *;
+}
+
+# Keep BroadcastReceivers and their inner classes
+-keep public class * extends android.content.BroadcastReceiver {
+    public <init>(...);
+    public void onReceive(android.content.Context, android.content.Intent);
+}
+
+# Keep all inner BroadcastReceivers (like the one in TimeTrackingTileService)
+-keepclassmembers class * {
+    ** *BroadcastReceiver;
+}
+
+# Keep Activities
+-keep public class * extends android.app.Activity {
+    public <init>(...);
+}
+
+# Keep all companion object constants (used for intent actions and extras)
+-keepclassmembers class ** {
+    public static final ** Companion;
+}
+-keepclassmembers class **$Companion {
+    public static final java.lang.String ACTION_*;
+    public static final java.lang.String EXTRA_*;
+    public static ** INSTANCE;
+    <fields>;
+}
+
+# ===== Hilt Support =====
+# Keep classes annotated with Hilt annotations
+-keep @dagger.hilt.android.AndroidEntryPoint class * {
+    *;
+}
+
+# Keep Hilt generated classes
+-keep class dagger.hilt.** { *; }
+-keep class javax.inject.** { *; }
+-keep class * extends dagger.hilt.android.internal.managers.ViewComponentManager$FragmentContextWrapper { *; }
+
+# ===== App-specific Services and Receivers =====
+# Explicitly keep our time tracking components
+-keep class dev.tricked.solidverdant.service.TimeTrackingTileService { *; }
+-keep class dev.tricked.solidverdant.service.TimeTrackingNotificationService { *; }
+-keep class dev.tricked.solidverdant.receiver.TimeTrackingBroadcastReceiver { *; }
+-keep class dev.tricked.solidverdant.receiver.BootReceiver { *; }
+-keep class dev.tricked.solidverdant.ui.tile.ProjectSelectionActivity { *; }
+
+# Keep all action and extra string constants in our services
+-keepclassmembers class dev.tricked.solidverdant.service.** {
+    public static final java.lang.String ACTION_*;
+    public static final java.lang.String EXTRA_*;
+    public static ** Companion;
+}

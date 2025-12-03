@@ -53,8 +53,10 @@ class TimeTrackingNotificationService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        timber.log.Timber.d("NotificationService onStartCommand: action=${intent?.action}")
         when (intent?.action) {
             ACTION_START_TRACKING -> {
+                timber.log.Timber.d("Starting tracking notification")
                 isTracking = true
                 startTime = Instant.ofEpochMilli(
                     intent.getLongExtra(EXTRA_START_TIME, System.currentTimeMillis())

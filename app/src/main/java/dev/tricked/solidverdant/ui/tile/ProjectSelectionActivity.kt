@@ -72,6 +72,7 @@ class ProjectSelectionActivity : ComponentActivity() {
                             putExtra(TimeTrackingTileService.EXTRA_TASK_NAME, taskName)
                             setPackage(packageName)
                         }
+                        timber.log.Timber.d("ProjectSelectionActivity: Sending broadcast to start tracking - project=$projectName, task=$taskName, action=${intent.action}")
                         sendBroadcast(intent)
 
                         // Close immediately - TileService handles the rest

@@ -99,6 +99,7 @@ class TimeTrackingTileService : TileService() {
 
     private val broadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
+            Timber.d("TileService BroadcastReceiver.onReceive called - action=${intent?.action}, context=$context")
             when (intent?.action) {
                 ACTION_START_TRACKING -> {
                     val projectId = intent.getStringExtra(EXTRA_PROJECT_ID)
@@ -107,7 +108,7 @@ class TimeTrackingTileService : TileService() {
                     val projectName = intent.getStringExtra(EXTRA_PROJECT_NAME)
                     val taskName = intent.getStringExtra(EXTRA_TASK_NAME)
 
-                    Timber.d("Received start tracking: project=$projectName, task=$taskName")
+                    Timber.d("Received start tracking broadcast: project=$projectName, task=$taskName, projectId=$projectId, taskId=$taskId")
 
                     // Optimistic update immediately
                     setOptimisticStarting(projectName, taskName)
@@ -159,6 +160,7 @@ class TimeTrackingTileService : TileService() {
 
     override fun onCreate() {
         super.onCreate()
+        Timber.d("TileService onCreate called")
         createNotificationChannel()
 
         val filter = IntentFilter().apply {
@@ -167,6 +169,7 @@ class TimeTrackingTileService : TileService() {
             addAction(TimeTrackingNotificationService.ACTION_STOP_TRACKING_BROADCAST)
         }
 
+        Timber.d("TileService registering broadcast receiver with actions: ${filter.actionsIterator().asSequence().toList()}")
         registerReceiver(broadcastReceiver, filter, RECEIVER_NOT_EXPORTED)
     }
 
@@ -245,19 +248,23 @@ class TimeTrackingTileService : TileService() {
         projectName: String?,
         taskName: String?
     ) {
+        Timber.d("doStartTracking called: projectId=$projectId, taskId=$taskId, projectName=$projectName, taskName=$taskName")
         serviceScope.launch {
             try {
+                Timber.d("Fetching memberships and user info...")
                 val memberships = authRepository.getMyMemberships().getOrNull()
                 val membership = memberships?.firstOrNull()
                 val user = authRepository.getCurrentUser().getOrNull()
 
                 if (membership == null || user == null) {
-                    Timber.e("Missing membership or user")
+                    Timber.e("Missing membership or user - membership=$membership, user=$user")
                     clearOptimisticState()
                     showNotification("Failed to start tracking", "Missing user data")
                     refreshTile()
                     return@launch
                 }
+
+                Timber.d("Starting time entry with orgId=${membership.organizationId}, memberId=${membership.id}, userId=${user.id}")
 
                 val result = authRepository.startTimeEntry(
                     organizationId = membership.organizationId,
