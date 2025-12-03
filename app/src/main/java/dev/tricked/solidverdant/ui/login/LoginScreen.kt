@@ -31,7 +31,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.ui.auth.AuthUiState
 import dev.tricked.solidverdant.ui.auth.OAuthConfigState
 import dev.tricked.solidverdant.ui.config.ConfigScreen
@@ -65,12 +67,12 @@ fun LoginScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Solidtime Login") },
+                title = { Text(stringResource(R.string.solidtime_login)) },
                 actions = {
                     IconButton(onClick = { showConfigDialog = true }) {
                         Icon(
                             imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings"
+                            contentDescription = stringResource(R.string.settings)
                         )
                     }
                 }
@@ -86,14 +88,14 @@ fun LoginScreen(
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = "SolidVerdant",
+                text = stringResource(R.string.app_name),
                 style = MaterialTheme.typography.displayMedium
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "Time Tracking Client",
+                text = stringResource(R.string.time_tracking_client),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -107,7 +109,7 @@ fun LoginScreen(
                     onClick = onLoginClick,
                     enabled = !uiState.isLoading
                 ) {
-                    Text("Login with OAuth2")
+                    Text(stringResource(R.string.login_with_oauth2))
                 }
             }
 
@@ -125,7 +127,7 @@ fun LoginScreen(
 
             // Display current configuration
             Text(
-                text = "Endpoint: ${configState.endpoint}",
+                text = stringResource(R.string.endpoint_label, configState.endpoint),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -161,7 +163,7 @@ private fun ErrorCard(
             modifier = Modifier.padding(16.dp)
         ) {
             Text(
-                text = "Error",
+                text = stringResource(R.string.error),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onErrorContainer
             )

@@ -33,16 +33,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import dagger.hilt.android.AndroidEntryPoint
+import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
+import dev.tricked.solidverdant.service.TimeTrackingTileService
 import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
 
 /**
- * Activity for selecting a project when starting time tracking from Quick Settings
+ * Activity for selecting a project when starting time tracking from Quick Settings.
+ *
+ * This activity closes immediately after selection - the actual API call
+ * happens in the TileService to survive the activity lifecycle.
  */
 @AndroidEntryPoint
 class ProjectSelectionActivity : ComponentActivity() {
@@ -57,16 +63,18 @@ class ProjectSelectionActivity : ComponentActivity() {
                 ProjectSelectionContent(
                     viewModel = viewModel,
                     onStartTracking = { projectId, taskId, description, projectName, taskName ->
-                        // Broadcast to tile service for optimistic update
-                        val broadcastIntent =
-                            Intent("dev.tricked.solidverdant.TIME_TRACKING_STARTED").apply {
-                                putExtra("PROJECT_NAME", projectName)
-                                putExtra("TASK_NAME", taskName)
-                                setPackage(packageName)
-                            }
-                        sendBroadcast(broadcastIntent)
+                        // Send intent to TileService - it will handle the API call
+                        val intent = Intent(TimeTrackingTileService.ACTION_START_TRACKING).apply {
+                            putExtra(TimeTrackingTileService.EXTRA_PROJECT_ID, projectId)
+                            putExtra(TimeTrackingTileService.EXTRA_TASK_ID, taskId)
+                            putExtra(TimeTrackingTileService.EXTRA_DESCRIPTION, description)
+                            putExtra(TimeTrackingTileService.EXTRA_PROJECT_NAME, projectName)
+                            putExtra(TimeTrackingTileService.EXTRA_TASK_NAME, taskName)
+                            setPackage(packageName)
+                        }
+                        sendBroadcast(intent)
 
-                        viewModel.startTracking(projectId, taskId, description)
+                        // Close immediately - TileService handles the rest
                         finish()
                     },
                     onCancel = {
@@ -111,13 +119,13 @@ fun ProjectSelectionContent(
                     ) {
                         CircularProgressIndicator()
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text("Loading projects...")
+                        Text(stringResource(R.string.loading_projects))
                     }
                 }
 
                 uiState.error != null && uiState.projects.isEmpty() -> {
                     Text(
-                        text = "Error: ${uiState.error}",
+                        text = stringResource(R.string.error_format, uiState.error ?: ""),
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -126,14 +134,14 @@ fun ProjectSelectionContent(
                         onClick = { viewModel.loadProjects(forceRefresh = true) },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Retry")
+                        Text(stringResource(R.string.retry))
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedButton(
                         onClick = onCancel,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Close")
+                        Text(stringResource(R.string.close))
                     }
                 }
 
@@ -169,30 +177,18 @@ fun StartTrackingForm(
     var expanded by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
 
-    // Filter projects and tasks based on search query
     val filteredProjects = remember(searchQuery, projects) {
-        if (searchQuery.isBlank()) {
-            projects
-        } else {
-            projects.filter {
-                it.name.contains(searchQuery, ignoreCase = true)
-            }
-        }
+        if (searchQuery.isBlank()) projects
+        else projects.filter { it.name.contains(searchQuery, ignoreCase = true) }
     }
 
     val filteredTasks = remember(searchQuery, tasks) {
-        if (searchQuery.isBlank()) {
-            tasks
-        } else {
-            tasks.filter {
-                it.name.contains(searchQuery, ignoreCase = true)
-            }
-        }
+        if (searchQuery.isBlank()) tasks
+        else tasks.filter { it.name.contains(searchQuery, ignoreCase = true) }
     }
 
-    // Build display text
     val displayText = when (selection) {
-        is ProjectTaskSelection.NoProject -> "No Project"
+        is ProjectTaskSelection.NoProject -> stringResource(R.string.no_project)
         is ProjectTaskSelection.ProjectOnly -> (selection as ProjectTaskSelection.ProjectOnly).project.name
         is ProjectTaskSelection.ProjectWithTask -> {
             val sel = selection as ProjectTaskSelection.ProjectWithTask
@@ -201,24 +197,23 @@ fun StartTrackingForm(
     }
 
     Text(
-        text = "Start Time Tracking",
+        text = stringResource(R.string.start_time_tracking),
         style = MaterialTheme.typography.titleLarge,
         modifier = Modifier.padding(bottom = 16.dp)
     )
 
-    // Combined Project/Task dropdown
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = {
             expanded = it
-            if (!it) searchQuery = "" // Clear search when closing
+            if (!it) searchQuery = ""
         }
     ) {
         OutlinedTextField(
             value = displayText,
             onValueChange = {},
             readOnly = true,
-            label = { Text("Project / Task") },
+            label = { Text(stringResource(R.string.project_task)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier
                 .fillMaxWidth()
@@ -232,20 +227,18 @@ fun StartTrackingForm(
                 searchQuery = ""
             }
         ) {
-            // Search field
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                label = { Text("Search...") },
+                label = { Text(stringResource(R.string.search_placeholder)) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 singleLine = true
             )
 
-            // No project option
             DropdownMenuItem(
-                text = { Text("No Project") },
+                text = { Text(stringResource(R.string.no_project)) },
                 onClick = {
                     selection = ProjectTaskSelection.NoProject
                     expanded = false
@@ -253,11 +246,9 @@ fun StartTrackingForm(
                 }
             )
 
-            // Projects and their tasks
             filteredProjects.forEach { project ->
                 val projectTasks = filteredTasks.filter { it.projectId == project.id }
 
-                // Project item
                 DropdownMenuItem(
                     text = {
                         Text(
@@ -272,7 +263,6 @@ fun StartTrackingForm(
                     }
                 )
 
-                // Tasks for this project (indented)
                 projectTasks.forEach { task ->
                     DropdownMenuItem(
                         text = {
@@ -294,12 +284,11 @@ fun StartTrackingForm(
                 }
             }
 
-            // Show message if no results
             if (searchQuery.isNotBlank() && filteredProjects.isEmpty()) {
                 DropdownMenuItem(
                     text = {
                         Text(
-                            "No results found",
+                            stringResource(R.string.no_results_found),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -312,18 +301,16 @@ fun StartTrackingForm(
 
     Spacer(modifier = Modifier.height(12.dp))
 
-    // Description field
     OutlinedTextField(
         value = description,
         onValueChange = { description = it },
-        label = { Text("Description (Optional)") },
+        label = { Text(stringResource(R.string.description_optional)) },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true
     )
 
     Spacer(modifier = Modifier.height(20.dp))
 
-    // Buttons
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -332,7 +319,7 @@ fun StartTrackingForm(
             onClick = onCancel,
             modifier = Modifier.weight(1f)
         ) {
-            Text("Cancel")
+            Text(stringResource(R.string.cancel))
         }
         Button(
             onClick = {
@@ -360,7 +347,7 @@ fun StartTrackingForm(
             },
             modifier = Modifier.weight(1f)
         ) {
-            Text("Start")
+            Text(stringResource(R.string.start))
         }
     }
 }

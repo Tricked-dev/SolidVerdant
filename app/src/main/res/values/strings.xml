@@ -4,59 +4,74 @@
      file, You can obtain one at https://mozilla.org/MPL/2.0/.
 -->
 <resources>
+    <!-- App Name -->
     <string name="app_name">SolidVerdant</string>
+
+    <!-- Tile -->
     <string name="tile_label">Time Tracking</string>
-    <string name="add_task">New Task</string>
-    <string name="edit_task">Edit Task</string>
-    <string name="task_details">Task Details</string>
-    <string name="task_marked_complete">Task marked complete</string>
-    <string name="task_marked_active">Task marked active</string>
-    <string name="loading_tasks_error">Error while loading tasks</string>
-    <string name="loading_task_error">Error while loading task</string>
-    <string name="task_not_found">Task not found</string>
-    <string name="completed_tasks_cleared">Completed tasks cleared</string>
-    <string name="menu_filter">Filter</string>
-    <string name="open_drawer">Open Drawer</string>
-    <string name="menu_back">Back</string>
-    <string name="menu_clear">Clear completed</string>
-    <string name="menu_delete_task">Delete task</string>
-    <string name="menu_more">More</string>
-    <string name="navigation_view_header_title">Todo</string>
-    <string name="title_hint">Title</string>
-    <string name="description_hint">Enter your task here.</string>
-    <string name="cd_save_task">Save task</string>
-    <string name="empty_task_message">Tasks cannot be empty</string>
-    <string name="successfully_saved_task_message">Task saved</string>
-    <string name="list_title">Task List</string>
-    <string name="statistics_title">Statistics</string>
-    <string name="statistics_no_tasks">You have no tasks.</string>
-    <string name="statistics_active_tasks">Active tasks: %.1f%%</string>
-    <string name="statistics_completed_tasks">Completed tasks: %.1f%%</string>
-    <string name="statistics_error">Error loading statistics.</string>
-    <string name="no_data">No data</string>
-    <string name="loading">LOADING</string>
 
-    <string-array name="list_tasks_array">
-        <item>@string/nav_all</item>
-        <item>@string/nav_active</item>
-        <item>@string/nav_completed</item>
-    </string-array>
-    <string name="nav_all">All</string>
-    <string name="nav_active">Active</string>
-    <string name="nav_completed">Completed</string>
-    <string name="label_all">All Tasks</string>
-    <string name="label_active">Active Tasks</string>
-    <string name="label_completed">Completed Tasks</string>
-    <string name="no_tasks_all">You have no tasks!</string>
-    <string name="no_tasks_active">You have no active tasks!</string>
-    <string name="no_tasks_completed">You have no completed tasks!</string>
+    <!-- Login Screen -->
+    <string name="solidtime_login">Solidtime Login</string>
+    <string name="settings">Settings</string>
+    <string name="time_tracking_client">Time Tracking Client</string>
+    <string name="login_with_oauth2">Login with OAuth2</string>
+    <string name="endpoint_label">Endpoint: %1$s</string>
+
+    <!-- Config Screen -->
+    <string name="oauth_configuration">OAuth Configuration</string>
+    <string name="server_endpoint">Server Endpoint</string>
+    <string name="server_endpoint_placeholder">https://app.solidtime.io</string>
+    <string name="client_id">Client ID</string>
+    <string name="reset_to_defaults">Reset to Defaults</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+
+    <!-- Tracking Screen -->
+    <string name="time_tracking">Time Tracking</string>
     <string name="refresh">Refresh</string>
-    <string name="successfully_deleted_task_message">Task was deleted</string>
-    <string name="successfully_added_task_message">Task added</string>
-    <string name="no_data_description" />
+    <string name="logout">Logout</string>
+    <string name="currently_tracking">Currently Tracking</string>
+    <string name="not_tracking">Not Tracking</string>
+    <string name="no_active_time_entry">No active time entry</string>
+    <string name="start_tracking">Start Tracking</string>
+    <string name="stop_tracking">Stop Tracking</string>
+    <string name="entry_details">Entry Details</string>
+    <string name="started">Started</string>
+    <string name="entry_id">Entry ID</string>
+    <string name="billable">Billable</string>
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
+    <string name="tags">Tags</string>
+    <string name="error">Error</string>
+    <string name="start">Start</string>
+    <string name="stop">Stop</string>
 
-    <!-- Content Descriptions -->
-    <string name="tasks_header_image_content_description">Tasks header image</string>
-    <string name="no_tasks_image_content_description">No tasks image</string>
+    <!-- Project Selection -->
+    <string name="loading_projects">Loading projects…</string>
+    <string name="error_format">Error: %1$s</string>
+    <string name="retry">Retry</string>
+    <string name="close">Close</string>
+    <string name="start_time_tracking">Start Time Tracking</string>
+    <string name="project_task">Project / Task</string>
+    <string name="search_placeholder">Search…</string>
+    <string name="no_project">No Project</string>
+    <string name="description_optional">Description (Optional)</string>
+    <string name="no_results_found">No results found</string>
+
+    <!-- New Features -->
+    <string name="description">Description</string>
+    <string name="what_are_you_working_on">What are you working on?</string>
+    <string name="project">Project</string>
+    <string name="task">Task</string>
+    <string name="no_task">No Task</string>
+    <string name="update">Update</string>
+    <string name="time_entries_history">Time Entries History</string>
+    <string name="no_time_entries">No time entries yet</string>
+    <string name="edit">Edit</string>
+    <string name="delete">Delete</string>
+    <string name="no_description">No description</string>
+    <string name="edit_time_entry">Edit Time Entry</string>
+    <string name="today">Today</string>
+    <string name="yesterday">Yesterday</string>
 
 </resources>

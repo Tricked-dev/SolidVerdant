@@ -14,8 +14,11 @@ import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
+import androidx.core.content.edit
 import dagger.hilt.android.AndroidEntryPoint
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.data.local.CacheDataStore
+import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.ApiClientFactory
 import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.ui.tile.ProjectSelectionActivity
@@ -25,12 +28,19 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
 /**
  * Quick Settings Tile for time tracking
- * Allows starting/stopping time tracking from the quick settings panel
+ *
+ * Optimistic UX approach:
+ * - Happy path is instant (tile updates immediately, activity closes immediately)
+ * - API calls happen in background in TileService (survives activity close)
+ * - Failures shown via notifications
+ * - Optimistic state persisted in SharedPreferences (survives service recreation)
  */
 @RequiresApi(Build.VERSION_CODES.N)
 @AndroidEntryPoint
@@ -43,45 +53,72 @@ class TimeTrackingTileService : TileService() {
     lateinit var apiClientFactory: ApiClientFactory
 
     @Inject
-    lateinit var cacheDataStore: dev.tricked.solidverdant.data.local.CacheDataStore
+    lateinit var cacheDataStore: CacheDataStore
 
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val isProcessing = AtomicBoolean(false)
+    private val isUpdating = AtomicBoolean(false)
+    private var lastUpdateTime = 0L
 
-    // Optimistic state for stopping/starting
-    private var optimisticallyStopped = false
-    private var optimisticallyStarted = false
-    private var optimisticProjectName: String? = null
-    private var optimisticTaskName: String? = null
+    private val prefs by lazy {
+        getSharedPreferences("tile_state", MODE_PRIVATE)
+    }
 
     companion object {
         private const val NOTIFICATION_CHANNEL_ID = "time_tracking_errors"
         private const val NOTIFICATION_ID = 1001
-        private const val ACTION_TIME_TRACKING_STARTED =
-            "dev.tricked.solidverdant.TIME_TRACKING_STARTED"
+
+        // Actions
+        const val ACTION_START_TRACKING = "dev.tricked.solidverdant.ACTION_START_TRACKING"
+        const val ACTION_REFRESH_TILE = "dev.tricked.solidverdant.ACTION_REFRESH_TILE"
+
+        // Extras for start tracking
+        const val EXTRA_PROJECT_ID = "project_id"
+        const val EXTRA_TASK_ID = "task_id"
+        const val EXTRA_DESCRIPTION = "description"
+        const val EXTRA_PROJECT_NAME = "project_name"
+        const val EXTRA_TASK_NAME = "task_name"
+
+        // Prefs keys
+        private const val PREF_OPTIMISTIC_STATE = "optimistic_state"
+        private const val PREF_OPTIMISTIC_PROJECT = "optimistic_project"
+        private const val PREF_OPTIMISTIC_TASK = "optimistic_task"
+        private const val PREF_OPTIMISTIC_TIMESTAMP = "optimistic_timestamp"
+        private const val PREF_LAST_ENTRY_ID = "last_entry_id"
+        private const val PREF_LAST_PROJECT_NAME = "last_project_name"
+        private const val PREF_LAST_TASK_NAME = "last_task_name"
+        private const val PREF_LAST_PROJECT_ID = "last_project_id"
+        private const val PREF_LAST_TASK_ID = "last_task_id"
+        private const val PREF_LAST_ORG_ID = "last_org_id"
+        private const val PREF_LAST_USER_ID = "last_user_id"
+        private const val PREF_LAST_START_TIME = "last_start_time"
+
+        private const val OPTIMISTIC_TIMEOUT_MS = 30_000L
     }
 
-    private val trackingStartedReceiver = object : BroadcastReceiver() {
+    private val broadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == ACTION_TIME_TRACKING_STARTED) {
-                val projectName = intent.getStringExtra("PROJECT_NAME")
-                val taskName = intent.getStringExtra("TASK_NAME")
-                Timber.d("Received tracking started broadcast: project=$projectName, task=$taskName")
+            when (intent?.action) {
+                ACTION_START_TRACKING -> {
+                    val projectId = intent.getStringExtra(EXTRA_PROJECT_ID)
+                    val taskId = intent.getStringExtra(EXTRA_TASK_ID)
+                    val description = intent.getStringExtra(EXTRA_DESCRIPTION) ?: ""
+                    val projectName = intent.getStringExtra(EXTRA_PROJECT_NAME)
+                    val taskName = intent.getStringExtra(EXTRA_TASK_NAME)
 
-                // Set optimistic state
-                optimisticallyStarted = true
-                optimisticProjectName = projectName
-                optimisticTaskName = taskName
+                    Timber.d("Received start tracking: project=$projectName, task=$taskName")
 
-                // Update tile immediately
-                updateTileStateImmediate()
+                    // Optimistic update immediately
+                    setOptimisticStarting(projectName, taskName)
+                    updateTileImmediate()
 
-                // Clear optimistic state after delay
-                serviceScope.launch {
-                    kotlinx.coroutines.delay(3000)
-                    optimisticallyStarted = false
-                    optimisticProjectName = null
-                    optimisticTaskName = null
-                    requestListeningState()
+                    // API call in background
+                    doStartTracking(projectId, taskId, description, projectName, taskName)
+                }
+
+                ACTION_REFRESH_TILE -> {
+                    Timber.d("Received refresh request")
+                    refreshTile()
                 }
             }
         }
@@ -91,18 +128,18 @@ class TimeTrackingTileService : TileService() {
         super.onCreate()
         createNotificationChannel()
 
-        // Register broadcast receiver
-        val filter = IntentFilter(ACTION_TIME_TRACKING_STARTED)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(trackingStartedReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(trackingStartedReceiver, filter)
+        val filter = IntentFilter().apply {
+            addAction(ACTION_START_TRACKING)
+            addAction(ACTION_REFRESH_TILE)
         }
+
+        registerReceiver(broadcastReceiver, filter, RECEIVER_NOT_EXPORTED)
     }
 
     override fun onStartListening() {
         super.onStartListening()
-        Timber.d("Tile starting listening, updating state")
+        Timber.d("onStartListening")
+        checkExpiredOptimisticState()
         updateTileState()
     }
 
@@ -112,323 +149,562 @@ class TimeTrackingTileService : TileService() {
         updateTileState()
     }
 
-    override fun onTileRemoved() {
-        super.onTileRemoved()
-        Timber.d("Tile removed")
-    }
-
     override fun onClick() {
         super.onClick()
+        Timber.d("onClick")
+
+        if (isProcessing.getAndSet(true)) {
+            Timber.d("Already processing, ignoring click")
+            return
+        }
 
         serviceScope.launch {
             try {
-                // Check if logged in
                 val isLoggedIn = authRepository.isLoggedIn.first()
                 if (!isLoggedIn) {
-                    Timber.w("Not logged in, cannot track time")
-                    showAuthenticationRequired()
+                    Timber.w("Not logged in")
+                    updateTileImmediate()
                     return@launch
                 }
 
-                // Check for active time entry
-                val activeEntry = authRepository.getActiveTimeEntry().getOrNull()
+                // Try to get active entry from network
+                val activeEntry = try {
+                    withTimeoutOrNull(3000L) {
+                        authRepository.getActiveTimeEntry().getOrNull()
+                    }
+                } catch (e: Exception) {
+                    Timber.w(e, "Network failed, checking cache")
+                    null
+                }
 
-                if (activeEntry != null) {
-                    // Stop tracking
-                    stopTracking(
-                        activeEntry.organizationId,
-                        activeEntry.userId,
-                        activeEntry.id,
-                        activeEntry.start
-                    )
-                } else {
-                    // Start tracking - show project selection
-                    showProjectSelection()
+                when {
+                    activeEntry != null -> {
+                        // Network success - stop using real entry
+                        stopTracking(activeEntry)
+                    }
+
+                    else -> {
+                        // Network failed or no active entry
+                        val cachedEntry = getCachedEntryForStop()
+                        if (cachedEntry != null) {
+                            // We have cached entry data - try to stop using it
+                            Timber.d("Using cached entry for stop")
+                            stopTrackingWithCache(cachedEntry)
+                        } else {
+                            // No active entry and no cache - show project selection
+                            showProjectSelection()
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 Timber.e(e, "Failed to handle tile click")
+            } finally {
+                isProcessing.set(false)
             }
         }
     }
 
-    private fun updateTileState() {
+    private fun doStartTracking(
+        projectId: String?,
+        taskId: String?,
+        description: String,
+        projectName: String?,
+        taskName: String?
+    ) {
         serviceScope.launch {
             try {
-                val isLoggedIn = authRepository.isLoggedIn.first()
-                if (!isLoggedIn) {
-                    qsTile?.apply {
-                        state = Tile.STATE_INACTIVE
-                        label = "Time Tracking"
-                        subtitle = "Not logged in"
-                        icon = Icon.createWithResource(
-                            this@TimeTrackingTileService,
-                            R.drawable.ic_timer
-                        )
-                        updateTile()
-                    }
+                val memberships = authRepository.getMyMemberships().getOrNull()
+                val membership = memberships?.firstOrNull()
+                val user = authRepository.getCurrentUser().getOrNull()
+
+                if (membership == null || user == null) {
+                    Timber.e("Missing membership or user")
+                    clearOptimisticState()
+                    showNotification("Failed to start tracking", "Missing user data")
+                    refreshTile()
                     return@launch
                 }
 
-                val activeEntry = authRepository.getActiveTimeEntry().getOrNull()
+                val result = authRepository.startTimeEntry(
+                    organizationId = membership.organizationId,
+                    memberId = membership.id,
+                    userId = user.id,
+                    projectId = projectId,
+                    taskId = taskId,
+                    description = description
+                )
 
-                qsTile?.apply {
-                    // Check optimistic state first
-                    if (optimisticallyStopped) {
-                        state = Tile.STATE_INACTIVE
-                        label = "Time Tracking"
-                        subtitle = "Stopping..."
-                        icon = Icon.createWithResource(
-                            this@TimeTrackingTileService,
-                            R.drawable.ic_timer
-                        )
-                    } else if (optimisticallyStarted) {
-                        state = Tile.STATE_ACTIVE
-                        label = optimisticProjectName ?: "Starting..."
-                        subtitle = optimisticTaskName ?: "Starting tracking..."
-                        icon = Icon.createWithResource(
-                            this@TimeTrackingTileService,
-                            R.drawable.ic_stop
-                        )
-                    } else if (activeEntry != null) {
-                        // Load cached project and task names
-                        val (projectName, taskName) = loadProjectAndTaskNames(activeEntry)
-
-                        // Build display text
-                        val label = projectName ?: "Tracking"
-                        val subtitle = buildString {
-                            if (taskName != null) {
-                                append(taskName)
-                            } else if (activeEntry.description?.isNotEmpty() == true) {
-                                append(activeEntry.description)
-                            } else {
-                                append("Tap to stop")
-                            }
-                        }
-
-                        state = Tile.STATE_ACTIVE
-                        this.label = label
-                        this.subtitle = subtitle
-                        icon = Icon.createWithResource(
-                            this@TimeTrackingTileService,
-                            R.drawable.ic_stop
-                        )
-                    } else {
-                        state = Tile.STATE_INACTIVE
-                        label = "Time Tracking"
-                        subtitle = "Tap to start"
-                        icon = Icon.createWithResource(
-                            this@TimeTrackingTileService,
-                            R.drawable.ic_play
-                        )
-                    }
-                    updateTile()
+                result.onSuccess { entry ->
+                    Timber.d("Tracking started: ${entry.id}")
+                    clearOptimisticState()
+                    cacheActiveEntry(entry, projectName, taskName)
+                    refreshTile()
+                }.onFailure { error ->
+                    Timber.e(error, "Failed to start tracking")
+                    clearOptimisticState()
+                    showNotification("Failed to start tracking", error.message ?: "Unknown error")
+                    refreshTile()
                 }
             } catch (e: Exception) {
-                Timber.e(e, "Failed to update tile state")
+                Timber.e(e, "Error starting tracking")
+                clearOptimisticState()
+                showNotification("Failed to start tracking", e.message ?: "Unknown error")
+                refreshTile()
+            }
+        }
+    }
+
+    private fun stopTracking(activeEntry: TimeEntry) {
+        // Optimistic update
+        setOptimisticStopping()
+        updateTileImmediate()
+
+        serviceScope.launch {
+            try {
+                val result = authRepository.stopTimeEntry(
+                    organizationId = activeEntry.organizationId,
+                    timeEntryId = activeEntry.id,
+                    userId = activeEntry.userId,
+                    startTime = activeEntry.start
+                )
+
+                result.onSuccess {
+                    Timber.d("Tracking stopped")
+                    clearOptimisticState()
+                    clearCachedEntry()
+                    refreshTile()
+                }.onFailure { error ->
+                    Timber.e(error, "Failed to stop tracking")
+                    clearOptimisticState()
+                    showNotification("Failed to stop tracking", error.message ?: "Unknown error")
+                    refreshTile()
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Error stopping tracking")
+                clearOptimisticState()
+                showNotification("Failed to stop tracking", e.message ?: "Unknown error")
+                refreshTile()
             }
         }
     }
 
     /**
-     * Load project and task names using cache
+     * Stop tracking using cached entry data (for when network check failed but we have cache)
      */
-    private suspend fun loadProjectAndTaskNames(
-        activeEntry: dev.tricked.solidverdant.data.model.TimeEntry
-    ): Pair<String?, String?> {
-        return try {
-            val memberships = authRepository.getMyMemberships().getOrNull()
-            val organizationId = memberships?.firstOrNull()?.organizationId
-                ?: return Pair(null, null)
+    private fun stopTrackingWithCache(cached: CachedEntry) {
+        // Optimistic update
+        setOptimisticStopping()
+        updateTileImmediate()
 
-            // Try to get from cache first
-            var projects = cacheDataStore.getCachedProjects()
-            var tasks = cacheDataStore.getCachedTasks()
+        serviceScope.launch {
+            try {
+                val result = authRepository.stopTimeEntry(
+                    organizationId = cached.organizationId,
+                    timeEntryId = cached.entryId,
+                    userId = cached.userId,
+                    startTime = cached.startTime
+                )
 
-            // If cache is empty or expired, fetch from API
-            if (projects == null || tasks == null) {
-                try {
-                    val endpoint = authRepository.endpoint.first()
-                    val api = apiClientFactory.createApi(endpoint)
-
-                    projects = api.getProjects(organizationId).data
-                    tasks = api.getTasks(organizationId).data
-
-                    // Update cache
-                    cacheDataStore.cacheProjects(projects)
-                    cacheDataStore.cacheTasks(tasks)
-
-                    Timber.d("Fetched and cached projects/tasks from API")
-                } catch (e: Exception) {
-                    Timber.w(e, "Failed to fetch projects/tasks")
-                    return Pair(null, null)
+                result.onSuccess {
+                    Timber.d("Tracking stopped (from cache)")
+                    clearOptimisticState()
+                    clearCachedEntry()
+                    refreshTile()
+                }.onFailure { error ->
+                    Timber.e(error, "Failed to stop tracking (from cache)")
+                    clearOptimisticState()
+                    // Don't clear cache on failure - entry might still be active
+                    showNotification("Failed to stop tracking", error.message ?: "Unknown error")
+                    refreshTile()
                 }
+            } catch (e: Exception) {
+                Timber.e(e, "Error stopping tracking (from cache)")
+                clearOptimisticState()
+                showNotification("Failed to stop tracking", e.message ?: "Unknown error")
+                refreshTile()
             }
-
-            // Look up names from cache
-            val projectName = activeEntry.projectId?.let { projectId ->
-                projects.find { it.id == projectId }?.name
-            }
-            val taskName = activeEntry.taskId?.let { taskId ->
-                tasks.find { it.id == taskId }?.name
-            }
-
-            Pair(projectName, taskName)
-        } catch (e: Exception) {
-            Timber.w(e, "Failed to load project/task info")
-            Pair(null, null)
         }
+    }
+
+    /**
+     * Update tile state with debouncing and cache-first approach.
+     * Shows cached state immediately, then refreshes from network to catch external changes.
+     */
+    private fun updateTileState(forceNetwork: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!forceNetwork && now - lastUpdateTime < 500) {
+            Timber.d("Debouncing updateTileState")
+            return
+        }
+        lastUpdateTime = now
+
+        if (!isUpdating.compareAndSet(false, true)) {
+            Timber.d("Update already in progress, skipping")
+            return
+        }
+
+        serviceScope.launch {
+            try {
+                val tile = qsTile ?: return@launch
+
+                val optimistic = getOptimisticState()
+                if (optimistic != null) {
+                    applyState(tile, optimistic)
+                    return@launch
+                }
+
+                val isLoggedIn = authRepository.isLoggedIn.first()
+                if (!isLoggedIn) {
+                    applyState(tile, TileState.NotLoggedIn)
+                    return@launch
+                }
+
+                val cachedId = prefs.getString(PREF_LAST_ENTRY_ID, null)
+                if (cachedId != null) {
+                    val cachedProject = prefs.getString(PREF_LAST_PROJECT_NAME, null)
+                    val cachedTask = prefs.getString(PREF_LAST_TASK_NAME, null)
+                    applyState(tile, TileState.Active(cachedProject, cachedTask, null))
+                }
+
+                // Fetch from network - Result.success(null) means no entry, Result.failure means network failed
+                val result = try {
+                    withTimeoutOrNull(5000L) {
+                        authRepository.getActiveTimeEntry()
+                    }
+                } catch (e: Exception) {
+                    Timber.w(e, "Network fetch failed")
+                    null
+                }
+
+                when {
+                    result == null -> {
+                        // Timeout or exception - keep cached state
+                        Timber.d("Network timeout, keeping cached state")
+                    }
+
+                    result.isSuccess -> {
+                        val activeEntry = result.getOrNull()
+                        if (activeEntry != null) {
+                            val entryChanged = activeEntry.id != cachedId ||
+                                    activeEntry.projectId != prefs.getString(
+                                PREF_LAST_PROJECT_ID,
+                                null
+                            ) ||
+                                    activeEntry.taskId != prefs.getString(PREF_LAST_TASK_ID, null)
+
+                            if (entryChanged) {
+                                val (projectName, taskName) = loadNames(activeEntry)
+                                cacheActiveEntry(activeEntry, projectName, taskName)
+                                applyState(
+                                    tile,
+                                    TileState.Active(projectName, taskName, activeEntry.description)
+                                )
+                            }
+                        } else if (cachedId != null) {
+                            // Network succeeded, no active entry - stopped externally
+                            Timber.d("Entry stopped externally, clearing cache")
+                            clearCachedEntry()
+                            applyState(tile, TileState.Inactive)
+                        } else {
+                            applyState(tile, TileState.Inactive)
+                        }
+                    }
+
+                    result.isFailure -> {
+                        // Network failed - keep cached state
+                        Timber.d("Network failed: ${result.exceptionOrNull()?.message}, keeping cached state")
+                    }
+                }
+
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to update tile")
+                applyFallbackState()
+            } finally {
+                isUpdating.set(false)
+            }
+        }
+    }
+
+    private fun updateTileImmediate() {
+        val tile = qsTile ?: return
+        val optimistic = getOptimisticState()
+        if (optimistic != null) {
+            applyStateSync(tile, optimistic)
+        } else {
+            // Show cached state immediately
+            applyFallbackStateSync(tile)
+        }
+    }
+
+    /**
+     * Force a tile refresh with network call
+     */
+    private fun refreshTile() {
+        try {
+            requestListeningState(this, ComponentName(this, TimeTrackingTileService::class.java))
+        } catch (e: Exception) {
+            Timber.w(e, "requestListeningState failed")
+        }
+        // Force network refresh
+        lastUpdateTime = 0 // Reset debounce
+        isUpdating.set(false) // Allow new update
+        updateTileState(forceNetwork = true)
+    }
+
+    private sealed class TileState {
+        object NotLoggedIn : TileState()
+        object Inactive : TileState()
+        data class Active(
+            val projectName: String?,
+            val taskName: String?,
+            val description: String?
+        ) : TileState()
+
+        data class Starting(val projectName: String?, val taskName: String?) : TileState()
+        object Stopping : TileState()
+    }
+
+    private fun applyState(tile: Tile, state: TileState) {
+        serviceScope.launch(Dispatchers.Main) {
+            applyStateSync(tile, state)
+        }
+    }
+
+    private fun applyStateSync(tile: Tile, state: TileState) {
+        when (state) {
+            is TileState.NotLoggedIn -> {
+                tile.state = Tile.STATE_INACTIVE
+                tile.label = "Time Tracking"
+                tile.subtitle = "Not logged in"
+                tile.icon = Icon.createWithResource(this, R.drawable.ic_timer)
+            }
+
+            is TileState.Inactive -> {
+                tile.state = Tile.STATE_INACTIVE
+                tile.label = "Time Tracking"
+                tile.subtitle = "Tap to start"
+                tile.icon = Icon.createWithResource(this, R.drawable.ic_timer)
+            }
+
+            is TileState.Active -> {
+                tile.state = Tile.STATE_ACTIVE
+                tile.label = state.projectName ?: "Tracking"
+                tile.subtitle = state.taskName
+                    ?: state.description?.takeIf { it.isNotEmpty() }
+                            ?: "Tap to stop"
+                tile.icon = Icon.createWithResource(this, R.drawable.ic_stop)
+            }
+
+            is TileState.Starting -> {
+                tile.state = Tile.STATE_ACTIVE
+                tile.label = state.projectName ?: "Starting..."
+                tile.subtitle = state.taskName ?: "Starting..."
+                tile.icon = Icon.createWithResource(this, R.drawable.ic_stop)
+            }
+
+            is TileState.Stopping -> {
+                tile.state = Tile.STATE_INACTIVE
+                tile.label = "Time Tracking"
+                tile.subtitle = "Stopping..."
+                tile.icon = Icon.createWithResource(this, R.drawable.ic_timer)
+            }
+        }
+        tile.updateTile()
+    }
+
+    private fun applyFallbackState() {
+        val tile = qsTile ?: return
+        serviceScope.launch(Dispatchers.Main) {
+            applyFallbackStateSync(tile)
+        }
+    }
+
+    private fun applyFallbackStateSync(tile: Tile) {
+        val cachedId = prefs.getString(PREF_LAST_ENTRY_ID, null)
+        if (cachedId != null) {
+            tile.state = Tile.STATE_ACTIVE
+            tile.label = prefs.getString(PREF_LAST_PROJECT_NAME, null) ?: "Tracking"
+            tile.subtitle = prefs.getString(PREF_LAST_TASK_NAME, null) ?: "Tap to stop"
+            tile.icon = Icon.createWithResource(this, R.drawable.ic_stop)
+        } else {
+            tile.state = Tile.STATE_INACTIVE
+            tile.label = "Time Tracking"
+            tile.subtitle = "Tap to start"
+            tile.icon = Icon.createWithResource(this, R.drawable.ic_timer)
+        }
+        tile.updateTile()
+    }
+
+    private fun setOptimisticStarting(projectName: String?, taskName: String?) {
+        prefs.edit {
+            putString(PREF_OPTIMISTIC_STATE, "starting")
+            putString(PREF_OPTIMISTIC_PROJECT, projectName)
+            putString(PREF_OPTIMISTIC_TASK, taskName)
+            putLong(PREF_OPTIMISTIC_TIMESTAMP, System.currentTimeMillis())
+        }
+    }
+
+    private fun setOptimisticStopping() {
+        prefs.edit {
+            putString(PREF_OPTIMISTIC_STATE, "stopping")
+            putLong(PREF_OPTIMISTIC_TIMESTAMP, System.currentTimeMillis())
+        }
+    }
+
+    private fun getOptimisticState(): TileState? {
+        return when (prefs.getString(PREF_OPTIMISTIC_STATE, null)) {
+            "starting" -> TileState.Starting(
+                prefs.getString(PREF_OPTIMISTIC_PROJECT, null),
+                prefs.getString(PREF_OPTIMISTIC_TASK, null)
+            )
+
+            "stopping" -> TileState.Stopping
+            else -> null
+        }
+    }
+
+    private fun clearOptimisticState() {
+        prefs.edit {
+            remove(PREF_OPTIMISTIC_STATE)
+            remove(PREF_OPTIMISTIC_PROJECT)
+            remove(PREF_OPTIMISTIC_TASK)
+            remove(PREF_OPTIMISTIC_TIMESTAMP)
+        }
+    }
+
+    private fun checkExpiredOptimisticState() {
+        val timestamp = prefs.getLong(PREF_OPTIMISTIC_TIMESTAMP, 0)
+        if (timestamp > 0 && System.currentTimeMillis() - timestamp > OPTIMISTIC_TIMEOUT_MS) {
+            Timber.d("Clearing expired optimistic state")
+            clearOptimisticState()
+        }
+    }
+
+    private fun cacheActiveEntry(entry: TimeEntry, projectName: String?, taskName: String?) {
+        prefs.edit {
+            putString(PREF_LAST_ENTRY_ID, entry.id)
+            putString(PREF_LAST_PROJECT_NAME, projectName)
+            putString(PREF_LAST_TASK_NAME, taskName)
+            putString(PREF_LAST_PROJECT_ID, entry.projectId)
+            putString(PREF_LAST_TASK_ID, entry.taskId)
+            putString(PREF_LAST_ORG_ID, entry.organizationId)
+            putString(PREF_LAST_USER_ID, entry.userId)
+            putString(PREF_LAST_START_TIME, entry.start)
+        }
+    }
+
+    private fun clearCachedEntry() {
+        prefs.edit {
+            remove(PREF_LAST_ENTRY_ID)
+            remove(PREF_LAST_PROJECT_NAME)
+            remove(PREF_LAST_TASK_NAME)
+            remove(PREF_LAST_PROJECT_ID)
+            remove(PREF_LAST_TASK_ID)
+            remove(PREF_LAST_ORG_ID)
+            remove(PREF_LAST_USER_ID)
+            remove(PREF_LAST_START_TIME)
+        }
+    }
+
+    /**
+     * Get cached entry for offline stop. Returns null if cache is incomplete.
+     */
+    private fun getCachedEntryForStop(): CachedEntry? {
+        val entryId = prefs.getString(PREF_LAST_ENTRY_ID, null) ?: return null
+        val orgId = prefs.getString(PREF_LAST_ORG_ID, null) ?: return null
+        val userId = prefs.getString(PREF_LAST_USER_ID, null) ?: return null
+        val startTime = prefs.getString(PREF_LAST_START_TIME, null) ?: return null
+        return CachedEntry(entryId, orgId, userId, startTime)
+    }
+
+    private data class CachedEntry(
+        val entryId: String,
+        val organizationId: String,
+        val userId: String,
+        val startTime: String
+    )
+
+    private suspend fun loadNames(entry: TimeEntry): Pair<String?, String?> {
+        val cachedProject = prefs.getString(PREF_LAST_PROJECT_NAME, null)
+        val cachedTask = prefs.getString(PREF_LAST_TASK_NAME, null)
+        val cachedId = prefs.getString(PREF_LAST_ENTRY_ID, null)
+        val cachedProjectId = prefs.getString(PREF_LAST_PROJECT_ID, null)
+        val cachedTaskId = prefs.getString(PREF_LAST_TASK_ID, null)
+
+        // Use cache only if same entry AND same project/task
+        val sameEntry = cachedId == entry.id
+        val sameProject = cachedProjectId == entry.projectId
+        val sameTask = cachedTaskId == entry.taskId
+
+        if (sameEntry && sameProject && sameTask && (cachedProject != null || entry.projectId == null)) {
+            return Pair(cachedProject, cachedTask)
+        }
+
+        var projects = cacheDataStore.getCachedProjects()
+        var tasks = cacheDataStore.getCachedTasks()
+
+        if ((entry.projectId != null && projects == null) || (entry.taskId != null && tasks == null)) {
+            try {
+                val memberships = authRepository.getMyMemberships().getOrNull()
+                val orgId = memberships?.firstOrNull()?.organizationId ?: return Pair(null, null)
+                val endpoint = authRepository.endpoint.first()
+                val api = apiClientFactory.createApi(endpoint)
+
+                if (projects == null) {
+                    projects = api.getProjects(orgId).data
+                    cacheDataStore.cacheProjects(projects)
+                }
+                if (tasks == null) {
+                    tasks = api.getTasks(orgId).data
+                    cacheDataStore.cacheTasks(tasks)
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "Failed to load projects/tasks")
+                return Pair(null, null)
+            }
+        }
+
+        val projectName = entry.projectId?.let { pid -> projects?.find { it.id == pid }?.name }
+        val taskName = entry.taskId?.let { tid -> tasks?.find { it.id == tid }?.name }
+        return Pair(projectName, taskName)
     }
 
     private fun showProjectSelection() {
         val intent = Intent(this, ProjectSelectionActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
-            this,
-            0,
-            intent,
+            this, 0, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startActivityAndCollapse(pendingIntent)
-        } else {
-            @Suppress("DEPRECATION")
-            startActivityAndCollapse(pendingIntent)
-        }
-
-        // Refresh tile state after activity finishes
-        // Multiple refreshes to ensure we catch the state change
-        serviceScope.launch {
-            // First refresh after 1 second (in case it's quick)
-            kotlinx.coroutines.delay(1000)
-            Timber.d("First refresh after project selection")
-            requestListeningState()
-
-            // Second refresh after 3 seconds (in case API is slow)
-            kotlinx.coroutines.delay(2000)
-            Timber.d("Second refresh after project selection")
-            requestListeningState()
-        }
+        startActivityAndCollapse(pendingIntent)
     }
 
-    /**
-     * Request tile to refresh its state
-     */
-    private fun requestListeningState() {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                requestListeningState(
-                    this,
-                    ComponentName(this, TimeTrackingTileService::class.java)
-                )
-            }
-        } catch (e: Exception) {
-            Timber.w(e, "Failed to request listening state")
-            // Fallback to direct update
-            updateTileState()
-        }
-    }
-
-    private fun showAuthenticationRequired() {
-        // For now, just update the tile to show not logged in
-        updateTileState()
-    }
-
-    private fun stopTracking(
-        organizationId: String,
-        userId: String,
-        timeEntryId: String,
-        startTime: String
-    ) {
-        // Optimistically mark as stopped
-        optimisticallyStopped = true
-        updateTileStateImmediate()
-
-        serviceScope.launch {
-            try {
-                authRepository.stopTimeEntry(organizationId, timeEntryId, userId, startTime)
-                    .onSuccess {
-                        Timber.d("Time entry stopped from tile")
-                        optimisticallyStopped = false
-                        // Force tile refresh
-                        kotlinx.coroutines.delay(500)
-                        requestListeningState()
-                    }
-                    .onFailure { error ->
-                        Timber.e(error, "Failed to stop time entry from tile")
-                        // Revert optimistic state and show error
-                        optimisticallyStopped = false
-                        showStopFailedNotification()
-                        requestListeningState()
-                    }
-            } catch (e: Exception) {
-                Timber.e(e, "Error stopping time entry")
-                // Revert optimistic state and show error
-                optimisticallyStopped = false
-                showStopFailedNotification()
-                requestListeningState()
-            }
-        }
-    }
-
-    /**
-     * Update tile state immediately (synchronously)
-     */
-    private fun updateTileStateImmediate() {
-        qsTile?.apply {
-            if (optimisticallyStarted) {
-                state = Tile.STATE_ACTIVE
-                label = optimisticProjectName ?: "Starting..."
-                subtitle = optimisticTaskName ?: "Starting tracking..."
-                icon = Icon.createWithResource(this@TimeTrackingTileService, R.drawable.ic_stop)
-            } else if (optimisticallyStopped) {
-                state = Tile.STATE_INACTIVE
-                label = "Time Tracking"
-                subtitle = "Stopping..."
-                icon = Icon.createWithResource(this@TimeTrackingTileService, R.drawable.ic_timer)
-            }
-            updateTile()
-        }
-    }
-
-    /**
-     * Create notification channel for error notifications
-     */
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val name = "Time Tracking Errors"
-            val descriptionText = "Notifications for time tracking errors"
-            val importance = NotificationManager.IMPORTANCE_HIGH
-            val channel = NotificationChannel(NOTIFICATION_CHANNEL_ID, name, importance).apply {
-                description = descriptionText
-            }
-            val notificationManager =
-                getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannel(channel)
-        }
-    }
-
-    /**
-     * Show notification when stopping time tracking fails
-     */
-    private fun showStopFailedNotification() {
-        val notificationManager =
-            getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
+    private fun showNotification(title: String, message: String) {
+        val notificationManager = getSystemService(NotificationManager::class.java)
         val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_timer)
-            .setContentTitle("Failed to stop time tracking")
-            .setContentText("Tap to retry or open the app to check your time entries")
+            .setContentTitle(title)
+            .setContentText(message)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .build()
-
         notificationManager.notify(NOTIFICATION_ID, notification)
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "Time Tracking Errors",
+                NotificationManager.IMPORTANCE_HIGH
+            )
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         try {
-            unregisterReceiver(trackingStartedReceiver)
+            unregisterReceiver(broadcastReceiver)
         } catch (e: Exception) {
             Timber.w(e, "Failed to unregister receiver")
         }

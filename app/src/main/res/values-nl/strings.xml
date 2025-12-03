@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+     This Source Code Form is subject to the terms of the Mozilla Public
+     License, v. 2.0. If a copy of the MPL was not distributed with this
+     file, You can obtain one at https://mozilla.org/MPL/2.0/.
+-->
+<resources>
+    <!-- App Name -->
+    <string name="app_name">SolidGroen</string>
+
+    <!-- Tile -->
+    <string name="tile_label">Tijdregistratie</string>
+
+    <!-- Login Screen -->
+    <string name="solidtime_login">Solidtime Inloggen</string>
+    <string name="settings">Instellingen</string>
+    <string name="time_tracking_client">Tijdregistratie Client</string>
+    <string name="login_with_oauth2">Inloggen met OAuth2</string>
+    <string name="endpoint_label">Endpoint: %1$s</string>
+
+    <!-- Config Screen -->
+    <string name="oauth_configuration">OAuth Configuratie</string>
+    <string name="server_endpoint">Server Endpoint</string>
+    <string name="server_endpoint_placeholder">https://app.solidtime.io</string>
+    <string name="client_id">Client ID</string>
+    <string name="reset_to_defaults">Standaardinstellingen Herstellen</string>
+    <string name="save">Opslaan</string>
+    <string name="cancel">Annuleren</string>
+
+    <!-- Tracking Screen -->
+    <string name="time_tracking">Tijdregistratie</string>
+    <string name="refresh">Vernieuwen</string>
+    <string name="logout">Uitloggen</string>
+    <string name="currently_tracking">Momenteel Aan Het Registreren</string>
+    <string name="not_tracking">Niet Aan Het Registreren</string>
+    <string name="no_active_time_entry">Geen actieve tijdregistratie</string>
+    <string name="start_tracking">Registratie Starten</string>
+    <string name="stop_tracking">Registratie Stoppen</string>
+    <string name="entry_details">Registratie Details</string>
+    <string name="started">Gestart</string>
+    <string name="entry_id">Registratie ID</string>
+    <string name="billable">Factureerbaar</string>
+    <string name="yes">Ja</string>
+    <string name="no">Nee</string>
+    <string name="tags">Tags</string>
+    <string name="error">Fout</string>
+    <string name="start">Starten</string>
+    <string name="stop">Stoppen</string>
+
+    <!-- Project Selection -->
+    <string name="loading_projects">Projecten laden…</string>
+    <string name="error_format">Fout: %1$s</string>
+    <string name="retry">Opnieuw Proberen</string>
+    <string name="close">Sluiten</string>
+    <string name="start_time_tracking">Tijdregistratie Starten</string>
+    <string name="project_task">Project / Taak</string>
+    <string name="search_placeholder">Zoeken…</string>
+    <string name="no_project">Geen Project</string>
+    <string name="description_optional">Beschrijving (Optioneel)</string>
+    <string name="no_results_found">Geen resultaten gevonden</string>
+
+    <!-- New Features -->
+    <string name="description">Beschrijving</string>
+    <string name="what_are_you_working_on">Waar werk je aan?</string>
+    <string name="project">Project</string>
+    <string name="task">Taak</string>
+    <string name="no_task">Geen Taak</string>
+    <string name="update">Bijwerken</string>
+    <string name="time_entries_history">Tijdregistratie Geschiedenis</string>
+    <string name="no_time_entries">Nog geen tijdregistraties</string>
+    <string name="edit">Bewerken</string>
+    <string name="delete">Verwijderen</string>
+    <string name="no_description">Geen beschrijving</string>
+    <string name="edit_time_entry">Tijdregistratie Bewerken</string>
+    <string name="today">Vandaag</string>
+    <string name="yesterday">Gisteren</string>
+
+</resources>

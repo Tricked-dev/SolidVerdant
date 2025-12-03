@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+     This Source Code Form is subject to the terms of the Mozilla Public
+     License, v. 2.0. If a copy of the MPL was not distributed with this
+     file, You can obtain one at https://mozilla.org/MPL/2.0/.
+-->
+<resources>
+    <!-- App Name -->
+    <string name="app_name">ソリッドグリーン</string>
+
+    <!-- Tile -->
+    <string name="tile_label">時間追跡</string>
+
+    <!-- Login Screen -->
+    <string name="solidtime_login">Solidtimeログイン</string>
+    <string name="settings">設定</string>
+    <string name="time_tracking_client">時間追跡クライアント</string>
+    <string name="login_with_oauth2">OAuth2でログイン</string>
+    <string name="endpoint_label">エンドポイント: %1$s</string>
+
+    <!-- Config Screen -->
+    <string name="oauth_configuration">OAuth設定</string>
+    <string name="server_endpoint">サーバーエンドポイント</string>
+    <string name="server_endpoint_placeholder">https://app.solidtime.io</string>
+    <string name="client_id">クライアントID</string>
+    <string name="reset_to_defaults">デフォルトに戻す</string>
+    <string name="save">保存</string>
+    <string name="cancel">キャンセル</string>
+
+    <!-- Tracking Screen -->
+    <string name="time_tracking">時間追跡</string>
+    <string name="refresh">更新</string>
+    <string name="logout">ログアウト</string>
+    <string name="currently_tracking">追跡中</string>
+    <string name="not_tracking">追跡していません</string>
+    <string name="no_active_time_entry">アクティブな時間エントリがありません</string>
+    <string name="start_tracking">追跡を開始</string>
+    <string name="stop_tracking">追跡を停止</string>
+    <string name="entry_details">エントリの詳細</string>
+    <string name="started">開始</string>
+    <string name="entry_id">エントリID</string>
+    <string name="billable">請求可能</string>
+    <string name="yes">はい</string>
+    <string name="no">いいえ</string>
+    <string name="tags">タグ</string>
+    <string name="error">エラー</string>
+    <string name="start">開始</string>
+    <string name="stop">停止</string>
+
+    <!-- Project Selection -->
+    <string name="loading_projects">プロジェクトを読み込み中…</string>
+    <string name="error_format">エラー: %1$s</string>
+    <string name="retry">再試行</string>
+    <string name="close">閉じる</string>
+    <string name="start_time_tracking">時間追跡を開始</string>
+    <string name="project_task">プロジェクト / タスク</string>
+    <string name="search_placeholder">検索…</string>
+    <string name="no_project">プロジェクトなし</string>
+    <string name="description_optional">説明（任意）</string>
+    <string name="no_results_found">結果が見つかりません</string>
+
+    <!-- New Features -->
+    <string name="description">説明</string>
+    <string name="what_are_you_working_on">何に取り組んでいますか？</string>
+    <string name="project">プロジェクト</string>
+    <string name="task">タスク</string>
+    <string name="no_task">タスクなし</string>
+    <string name="update">更新</string>
+    <string name="time_entries_history">時間エントリ履歴</string>
+    <string name="no_time_entries">まだ時間エントリがありません</string>
+    <string name="edit">編集</string>
+    <string name="delete">削除</string>
+    <string name="no_description">説明なし</string>
+    <string name="edit_time_entry">時間エントリを編集</string>
+    <string name="today">今日</string>
+    <string name="yesterday">昨日</string>
+
+</resources>

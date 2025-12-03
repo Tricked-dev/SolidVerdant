@@ -3,8 +3,11 @@ package dev.tricked.solidverdant.ui.tile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.tricked.solidverdant.data.local.CacheDataStore
 import dev.tricked.solidverdant.data.model.Project
+import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.remote.ApiClientFactory
+import dev.tricked.solidverdant.data.repository.AuthRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,15 +19,19 @@ import javax.inject.Inject
 data class ProjectSelectionUiState(
     val isLoading: Boolean = false,
     val projects: List<Project> = emptyList(),
-    val tasks: List<dev.tricked.solidverdant.data.model.Task> = emptyList(),
+    val tasks: List<Task> = emptyList(),
     val error: String? = null
 )
 
+/**
+ * ViewModel for project selection.
+ * Only handles loading projects/tasks - actual tracking is done by TileService.
+ */
 @HiltViewModel
 class ProjectSelectionViewModel @Inject constructor(
     private val apiClientFactory: ApiClientFactory,
-    private val authRepository: dev.tricked.solidverdant.data.repository.AuthRepository,
-    private val cacheDataStore: dev.tricked.solidverdant.data.local.CacheDataStore
+    private val authRepository: AuthRepository,
+    private val cacheDataStore: CacheDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProjectSelectionUiState())
@@ -35,7 +42,6 @@ class ProjectSelectionViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
             try {
-                // Get organization ID from current membership
                 val memberships = authRepository.getMyMemberships().getOrNull()
                 val organizationId = memberships?.firstOrNull()?.organizationId
 
@@ -47,7 +53,7 @@ class ProjectSelectionViewModel @Inject constructor(
                     return@launch
                 }
 
-                // Try to load from cache first if not forcing refresh
+                // Try cache first
                 if (!forceRefresh) {
                     val cachedProjects = cacheDataStore.getCachedProjects()
                     val cachedTasks = cacheDataStore.getCachedTasks()
@@ -59,19 +65,18 @@ class ProjectSelectionViewModel @Inject constructor(
                             projects = cachedProjects,
                             tasks = cachedTasks
                         )
-                        // Load fresh data in background
+                        // Refresh in background
                         loadProjectsInBackground(organizationId)
                         return@launch
                     }
                 }
 
-                // Load projects and tasks from API
+                // Load from API
                 val endpoint = authRepository.endpoint.first()
                 val api = apiClientFactory.createApi(endpoint)
                 val projectsResponse = api.getProjects(organizationId)
                 val tasksResponse = api.getTasks(organizationId)
 
-                // Cache the results
                 cacheDataStore.cacheProjects(projectsResponse.data)
                 cacheDataStore.cacheTasks(tasksResponse.data)
 
@@ -90,9 +95,6 @@ class ProjectSelectionViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Load projects in background without showing loading state
-     */
     private fun loadProjectsInBackground(organizationId: String) {
         viewModelScope.launch {
             try {
@@ -101,50 +103,16 @@ class ProjectSelectionViewModel @Inject constructor(
                 val projectsResponse = api.getProjects(organizationId)
                 val tasksResponse = api.getTasks(organizationId)
 
-                // Update cache
                 cacheDataStore.cacheProjects(projectsResponse.data)
                 cacheDataStore.cacheTasks(tasksResponse.data)
 
-                // Update UI silently if data changed
                 _uiState.value = _uiState.value.copy(
                     projects = projectsResponse.data,
                     tasks = tasksResponse.data
                 )
                 Timber.d("Background refresh completed")
             } catch (e: Exception) {
-                Timber.w(e, "Background refresh failed, using cached data")
-            }
-        }
-    }
-
-    fun startTracking(projectId: String?, taskId: String?, description: String) {
-        viewModelScope.launch {
-            try {
-                val memberships = authRepository.getMyMemberships().getOrNull()
-                val membership = memberships?.firstOrNull()
-                val user = authRepository.getCurrentUser().getOrNull()
-
-                if (membership == null || user == null) {
-                    Timber.w("Cannot start tracking: missing membership or user")
-                    return@launch
-                }
-
-                authRepository.startTimeEntry(
-                    organizationId = membership.organizationId,
-                    memberId = membership.id,
-                    userId = user.id,
-                    projectId = projectId,
-                    taskId = taskId,
-                    description = description
-                )
-                    .onSuccess {
-                        Timber.d("Time tracking started from tile")
-                    }
-                    .onFailure { error ->
-                        Timber.e(error, "Failed to start tracking from tile")
-                    }
-            } catch (e: Exception) {
-                Timber.e(e, "Error starting tracking")
+                Timber.w(e, "Background refresh failed")
             }
         }
     }

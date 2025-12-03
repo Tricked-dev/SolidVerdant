@@ -34,6 +34,8 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        resourceConfigurations += listOf("en", "nl", "ja")
     }
 
     buildTypes {

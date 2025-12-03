@@ -12,7 +12,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.ui.auth.OAuthConfigState
 
 /**
@@ -30,20 +32,20 @@ fun ConfigScreen(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("OAuth Configuration") },
+        title = { Text(stringResource(R.string.oauth_configuration)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 OutlinedTextField(
                     value = endpoint,
                     onValueChange = { endpoint = it.trim() },
-                    label = { Text("Server Endpoint") },
-                    placeholder = { Text("https://app.solidtime.io") },
+                    label = { Text(stringResource(R.string.server_endpoint)) },
+                    placeholder = { Text(stringResource(R.string.server_endpoint_placeholder)) },
                     singleLine = true
                 )
                 OutlinedTextField(
                     value = clientId,
                     onValueChange = { clientId = it.trim() },
-                    label = { Text("Client ID") },
+                    label = { Text(stringResource(R.string.client_id)) },
                     singleLine = true
                 )
 
@@ -54,7 +56,7 @@ fun ConfigScreen(
                         onDismiss()
                     }
                 ) {
-                    Text("Reset to Defaults")
+                    Text(stringResource(R.string.reset_to_defaults))
                 }
             }
         },
@@ -66,12 +68,12 @@ fun ConfigScreen(
                 },
                 enabled = endpoint.isNotBlank() && clientId.isNotBlank()
             ) {
-                Text("Save")
+                Text(stringResource(R.string.save))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(stringResource(R.string.cancel))
             }
         }
     )

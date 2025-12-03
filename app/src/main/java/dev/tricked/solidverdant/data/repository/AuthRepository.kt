@@ -2,7 +2,11 @@ package dev.tricked.solidverdant.data.repository
 
 import dev.tricked.solidverdant.data.local.AuthDataStore
 import dev.tricked.solidverdant.data.model.Membership
+import dev.tricked.solidverdant.data.model.Project
+import dev.tricked.solidverdant.data.model.Tag
+import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.UpdateTimeEntryRequest
 import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.remote.ApiClientFactory
 import dev.tricked.solidverdant.util.PKCEUtil
@@ -286,6 +290,114 @@ class AuthRepository @Inject constructor(
             Result.success(Unit)
         } catch (e: Exception) {
             Timber.e(e, "Failed to reset OAuth config")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Get time entries for an organization
+     */
+    suspend fun getTimeEntries(organizationId: String, memberId: String): Result<List<TimeEntry>> {
+        return try {
+            val endpoint = authDataStore.getEndpoint()
+            val api = apiClientFactory.createApi(endpoint)
+            val response = api.getTimeEntries(organizationId, memberId, onlyFullDates = true)
+            Result.success(response.data)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to get time entries")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Get all tags for an organization
+     */
+    suspend fun getTags(organizationId: String): Result<List<Tag>> {
+        return try {
+            val endpoint = authDataStore.getEndpoint()
+            val api = apiClientFactory.createApi(endpoint)
+            val response = api.getTags(organizationId)
+            Result.success(response.data)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to get tags")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Get all projects for an organization
+     */
+    suspend fun getProjects(organizationId: String): Result<List<Project>> {
+        return try {
+            val endpoint = authDataStore.getEndpoint()
+            val api = apiClientFactory.createApi(endpoint)
+            val response = api.getProjects(organizationId)
+            Result.success(response.data)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to get projects")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Get all tasks for an organization
+     */
+    suspend fun getTasks(organizationId: String): Result<List<Task>> {
+        return try {
+            val endpoint = authDataStore.getEndpoint()
+            val api = apiClientFactory.createApi(endpoint)
+            val response = api.getTasks(organizationId)
+            Result.success(response.data)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to get tasks")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Update an existing time entry
+     */
+    suspend fun updateTimeEntry(
+        organizationId: String,
+        timeEntry: TimeEntry,
+        tags: List<String> = emptyList()
+    ): Result<TimeEntry> {
+        return try {
+            val endpoint = authDataStore.getEndpoint()
+            val api = apiClientFactory.createApi(endpoint)
+
+            val request = UpdateTimeEntryRequest(
+                userId = timeEntry.userId,
+                start = timeEntry.start,
+                end = timeEntry.end,
+                description = timeEntry.description,
+                projectId = timeEntry.projectId,
+                taskId = timeEntry.taskId,
+                billable = timeEntry.billable,
+                tags = tags
+            )
+
+            val response = api.updateTimeEntry(organizationId, timeEntry.id, request)
+            Timber.d("Time entry updated: ${response.data?.id}")
+            Result.success(response.data!!)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to update time entry")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Delete a time entry
+     */
+    suspend fun deleteTimeEntry(organizationId: String, timeEntryId: String): Result<Unit> {
+        return try {
+            val endpoint = authDataStore.getEndpoint()
+            val api = apiClientFactory.createApi(endpoint)
+            api.deleteTimeEntry(organizationId, timeEntryId)
+            Timber.d("Time entry deleted: $timeEntryId")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to delete time entry")
             Result.failure(e)
         }
     }

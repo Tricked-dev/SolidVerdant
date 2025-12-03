@@ -9,7 +9,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
 import kotlinx.coroutines.flow.first
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import timber.log.Timber
 import javax.inject.Inject

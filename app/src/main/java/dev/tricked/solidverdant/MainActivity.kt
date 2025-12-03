@@ -16,6 +16,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import dagger.hilt.android.AndroidEntryPoint
+import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.ui.auth.AuthViewModel
 import dev.tricked.solidverdant.ui.login.LoginScreen
 import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
@@ -104,17 +105,21 @@ fun SolidVerdantApp(
     val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
     val trackingUiState by trackingViewModel.uiState.collectAsState()
 
-    // Load user data and tracking state when logged in
+    // Load user data when logged in
     LaunchedEffect(isLoggedIn) {
         if (isLoggedIn) {
             authViewModel.loadUserData()
         }
     }
 
-    // Load tracking state when user and membership are available
-    LaunchedEffect(authUiState.currentMembership) {
-        authUiState.currentMembership?.let {
-            trackingViewModel.loadActiveTimeEntry()
+    // Load all tracking data when user and membership are available
+    LaunchedEffect(authUiState.currentMembership, authUiState.user) {
+        val membership = authUiState.currentMembership
+        if (membership != null) {
+            trackingViewModel.loadAllData(
+                organizationId = membership.organizationId,
+                memberId = membership.id
+            )
         }
     }
 
@@ -124,8 +129,11 @@ fun SolidVerdantApp(
                 user = authUiState.user,
                 uiState = trackingUiState,
                 onRefresh = {
-                    authUiState.currentMembership?.let {
-                        trackingViewModel.loadActiveTimeEntry()
+                    authUiState.currentMembership?.let { membership ->
+                        trackingViewModel.loadAllData(
+                            organizationId = membership.organizationId,
+                            memberId = membership.id
+                        )
                     }
                 },
                 onLogout = {
@@ -149,8 +157,59 @@ fun SolidVerdantApp(
                                 organizationId = membership.organizationId,
                                 userId = user.id
                             )
+                            // Reload data to show the stopped entry in history
+                            trackingViewModel.loadAllData(
+                                organizationId = membership.organizationId,
+                                memberId = membership.id
+                            )
                         }
                     }
+                },
+                onDescriptionChange = { description ->
+                    trackingViewModel.updateDescription(description)
+                },
+                onProjectChange = { projectId ->
+                    trackingViewModel.updateProject(projectId)
+                },
+                onTaskChange = { taskId ->
+                    trackingViewModel.updateTask(taskId)
+                },
+                onTagsChange = { tags ->
+                    trackingViewModel.updateTags(tags)
+                },
+                onBillableChange = { billable ->
+                    trackingViewModel.updateBillable(billable)
+                },
+                onUpdateCurrentEntry = {
+                    authUiState.currentMembership?.let { membership ->
+                        trackingViewModel.updateCurrentTimeEntry(
+                            organizationId = membership.organizationId
+                        )
+                    }
+                },
+                onUpdatePastEntry = { entry: TimeEntry, description: String?, projectId: String?, taskId: String?, tags: List<String>, billable: Boolean ->
+                    authUiState.currentMembership?.let { membership ->
+                        trackingViewModel.updatePastTimeEntry(
+                            organizationId = membership.organizationId,
+                            timeEntry = entry,
+                            description = description,
+                            projectId = projectId,
+                            taskId = taskId,
+                            tags = tags,
+                            billable = billable
+                        )
+                    }
+                },
+                onDeleteEntry = { timeEntryId ->
+                    authUiState.currentMembership?.let { membership ->
+                        trackingViewModel.deleteTimeEntry(
+                            organizationId = membership.organizationId,
+                            timeEntryId = timeEntryId
+                        )
+                    }
+                },
+                getGroupedEntries = {
+                    trackingViewModel.getGroupedTimeEntries()
                 }
             )
         }

@@ -20,6 +20,10 @@
 - **Encrypted Storage** - Secure token storage using Android DataStore
 - **Offline-First Architecture** - Clean architecture with reactive state management
 
+## Quirks
+
+- State of tile will not sync correctly with what is online unless you have the application open, this is not a problem if you exclusively use the tile and app instead of using the website & desktop app.
+
 ## Screenshots
 
 <p align="center">

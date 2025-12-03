@@ -4,17 +4,23 @@ import dev.tricked.solidverdant.data.model.MembershipsResponse
 import dev.tricked.solidverdant.data.model.ProjectsResponse
 import dev.tricked.solidverdant.data.model.StartTimeEntryRequest
 import dev.tricked.solidverdant.data.model.StopTimeEntryRequest
+import dev.tricked.solidverdant.data.model.TagsResponse
 import dev.tricked.solidverdant.data.model.TasksResponse
+import dev.tricked.solidverdant.data.model.TimeEntriesResponse
 import dev.tricked.solidverdant.data.model.TimeEntryResponse
 import dev.tricked.solidverdant.data.model.TokenResponse
+import dev.tricked.solidverdant.data.model.UpdateTimeEntryRequest
 import dev.tricked.solidverdant.data.model.UserResponse
+import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 /**
  * Retrofit API interface for Solidtime API
@@ -97,4 +103,41 @@ interface SolidtimeApi {
     suspend fun getTasks(
         @Path("organization") organizationId: String
     ): TasksResponse
+
+    /**
+     * Get all tags for an organization
+     */
+    @GET("api/v1/organizations/{organization}/tags")
+    suspend fun getTags(
+        @Path("organization") organizationId: String
+    ): TagsResponse
+
+    /**
+     * Get time entries for an organization with optional filters
+     */
+    @GET("api/v1/organizations/{organization}/time-entries")
+    suspend fun getTimeEntries(
+        @Path("organization") organizationId: String,
+        @Query("member_id") memberId: String,
+        @Query("only_full_dates") onlyFullDates: Boolean = true
+    ): TimeEntriesResponse
+
+    /**
+     * Update an existing time entry
+     */
+    @PUT("api/v1/organizations/{organization}/time-entries/{id}")
+    suspend fun updateTimeEntry(
+        @Path("organization") organizationId: String,
+        @Path("id") timeEntryId: String,
+        @Body request: UpdateTimeEntryRequest
+    ): TimeEntryResponse
+
+    /**
+     * Delete a time entry
+     */
+    @DELETE("api/v1/organizations/{organization}/time-entries/{id}")
+    suspend fun deleteTimeEntry(
+        @Path("organization") organizationId: String,
+        @Path("id") timeEntryId: String
+    ): Response<Unit>
 }

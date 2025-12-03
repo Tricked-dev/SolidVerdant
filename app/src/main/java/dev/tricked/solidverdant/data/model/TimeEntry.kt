@@ -180,3 +180,37 @@ data class ProjectsResponse(
 data class TasksResponse(
     val data: List<Task>
 )
+
+/**
+ * Response wrapper for tags API calls
+ */
+@Serializable
+data class TagsResponse(
+    val data: List<Tag>
+)
+
+/**
+ * Response wrapper for multiple time entries
+ */
+@Serializable
+data class TimeEntriesResponse(
+    val data: List<TimeEntry>
+)
+
+/**
+ * Request to update an existing time entry
+ */
+@Serializable
+data class UpdateTimeEntryRequest(
+    @SerialName("user_id")
+    val userId: String,
+    val start: String,
+    val end: String? = null,
+    val description: String? = null,
+    @SerialName("project_id")
+    val projectId: String? = null,
+    @SerialName("task_id")
+    val taskId: String? = null,
+    val billable: Boolean = false,
+    val tags: List<String> = emptyList()
+)
