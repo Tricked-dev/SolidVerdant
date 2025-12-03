@@ -74,4 +74,16 @@
     <string name="today">Vandaag</string>
     <string name="yesterday">Gisteren</string>
 
+    <!-- Notifications -->
+    <string name="notification_channel_tracking_name">Tijdregistratie</string>
+    <string name="notification_channel_tracking_description">Toont tijdregistratiestatus en verstreken tijd</string>
+    <string name="notification_tracking_default">Tijd registreren</string>
+    <string name="notification_quick_start_ready">Klaar om tijd te registreren</string>
+
+    <!-- Settings -->
+    <string name="settings_menu">Instellingen</string>
+    <string name="quick_start">Snel Starten</string>
+    <string name="always_show_notifications">Meldingen altijd tonen</string>
+    <string name="always_show_notifications_description">Toon blijvende melding tijdens tijdregistratie</string>
+
 </resources>

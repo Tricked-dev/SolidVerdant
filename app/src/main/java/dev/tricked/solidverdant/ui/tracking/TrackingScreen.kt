@@ -1,6 +1,10 @@
 package dev.tricked.solidverdant.ui.tracking
 
 import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -26,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -35,6 +40,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -45,16 +51,22 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,6 +85,9 @@ import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.User
+import dev.tricked.solidverdant.service.TimeTrackingNotificationService
+import dev.tricked.solidverdant.util.NotificationPermissionHelper
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -95,6 +110,8 @@ sealed class ProjectTaskSelection {
 fun TrackingScreen(
     user: User?,
     uiState: TrackingUiState,
+    alwaysShowNotifications: Boolean,
+    onAlwaysShowNotificationsChange: (Boolean) -> Unit,
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
     onStartTracking: () -> Unit,
@@ -110,6 +127,9 @@ fun TrackingScreen(
     getGroupedEntries: () -> Map<LocalDate, List<TimeEntry>>
 ) {
     var showEditDialog by remember { mutableStateOf<TimeEntry?>(null) }
+    val context = LocalContext.current
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
 
     // Permission launcher for notification permission (Android 13+)
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -118,137 +138,225 @@ fun TrackingScreen(
         // Permission result is handled, no action needed
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            stringResource(R.string.time_tracking),
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        user?.name?.let {
+    // Listen for stop tracking broadcasts from notification
+    DisposableEffect(Unit) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == TimeTrackingNotificationService.ACTION_STOP_TRACKING_BROADCAST) {
+                    // Trigger stop tracking when notification stop button is pressed
+                    onStopTracking()
+                }
+            }
+        }
+
+        val filter = IntentFilter(TimeTrackingNotificationService.ACTION_STOP_TRACKING_BROADCAST)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            context.registerReceiver(receiver, filter)
+        }
+
+        onDispose {
+            context.unregisterReceiver(receiver)
+        }
+    }
+
+    // Request notification permission on first start tracking
+    DisposableEffect(uiState.isTracking) {
+        if (uiState.isTracking && !NotificationPermissionHelper.hasNotificationPermission(context)) {
+            if (context is android.app.Activity) {
+                NotificationPermissionHelper.requestNotificationPermission(context)
+            }
+        }
+        onDispose { }
+    }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet {
+                Column(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth()
+                ) {
+                    Text(
+                        text = stringResource(R.string.settings_menu),
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+
+                    HorizontalDivider()
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Always show notifications toggle
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = it,
+                                text = stringResource(R.string.always_show_notifications),
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Text(
+                                text = stringResource(R.string.always_show_notifications_description),
                                 style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                        Switch(
+                            checked = alwaysShowNotifications,
+                            onCheckedChange = onAlwaysShowNotificationsChange
+                        )
                     }
-                },
-                actions = {
-                    // Notification permission button (Android 13+)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        IconButton(
-                            onClick = {
-                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Notifications,
-                                contentDescription = "Enable notifications"
+                }
+            }
+        }
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text(
+                                stringResource(R.string.time_tracking),
+                                fontWeight = FontWeight.SemiBold
                             )
-                        }
-                    }
-                    IconButton(onClick = onRefresh) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = stringResource(R.string.refresh)
-                        )
-                    }
-                    IconButton(onClick = onLogout) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
-                            contentDescription = stringResource(R.string.logout)
-                        )
-                    }
-                }
-            )
-        },
-        containerColor = MaterialTheme.colorScheme.surface
-    ) { paddingValues ->
-        PullToRefreshBox(
-            isRefreshing = uiState.isLoading,
-            onRefresh = onRefresh,
-            modifier = Modifier.padding(paddingValues)
-        ) {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                item { Spacer(Modifier.height(8.dp)) }
-
-                // Error display
-                if (uiState.error != null) {
-                    item {
-                        ErrorCard(error = uiState.error)
-                    }
-                }
-
-                // Tracking controls
-                item {
-                    TrackingControls(
-                        uiState = uiState,
-                        onDescriptionChange = onDescriptionChange,
-                        onProjectChange = onProjectChange,
-                        onTaskChange = onTaskChange,
-                        onTagsChange = onTagsChange,
-                        onBillableChange = onBillableChange,
-                        onStart = onStartTracking,
-                        onStop = onStopTracking,
-                        onUpdate = onUpdateCurrentEntry
-                    )
-                }
-
-                // Time entries history
-                val groupedEntries = getGroupedEntries()
-                val filteredGroupedEntries = groupedEntries.mapValues { (_, entries) ->
-                    entries.filter { (it.duration ?: 0) > 0 }
-                }.filterValues { it.isNotEmpty() }
-
-                if (filteredGroupedEntries.isNotEmpty()) {
-                    filteredGroupedEntries.forEach { (date, entries) ->
-                        item(key = "header_$date") {
-                            DateHeader(date = date)
-                        }
-
-                        // Group entries by project and task
-                        val groupedByProjectTask = entries.groupBy {
-                            "${it.projectId}_${it.taskId}_${it.description ?: ""}"
-                        }
-
-                        groupedByProjectTask.forEach { (_, groupedEntries) ->
-                            item(key = "group_${groupedEntries.first().id}") {
-                                CollapsibleTimeEntryGroup(
-                                    entries = groupedEntries,
-                                    projects = uiState.projects,
-                                    tasks = uiState.tasks,
-                                    onEdit = { entry -> showEditDialog = entry },
-                                    onDelete = { entry -> onDeleteEntry(entry.id) }
+                            user?.name?.let {
+                                Text(
+                                    text = it,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                            Icon(
+                                imageVector = Icons.Default.Menu,
+                                contentDescription = stringResource(R.string.settings_menu)
+                            )
+                        }
+                    },
+                    actions = {
+                        // Notification permission button (Android 13+)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            IconButton(
+                                onClick = {
+                                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Notifications,
+                                    contentDescription = "Enable notifications"
+                                )
+                            }
+                        }
+                        IconButton(onClick = onRefresh) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = stringResource(R.string.refresh)
+                            )
+                        }
+                        IconButton(onClick = onLogout) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                                contentDescription = stringResource(R.string.logout)
+                            )
+                        }
                     }
-                }
+                )
+            },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) { paddingValues ->
+            PullToRefreshBox(
+                isRefreshing = uiState.isLoading,
+                onRefresh = onRefresh,
+                modifier = Modifier.padding(paddingValues)
+            ) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    item { Spacer(Modifier.height(8.dp)) }
 
-                // Empty state
-                if (uiState.timeEntries.isEmpty() && !uiState.isLoading) {
+                    // Error display
+                    if (uiState.error != null) {
+                        item {
+                            ErrorCard(error = uiState.error)
+                        }
+                    }
+
+                    // Tracking controls
                     item {
-                        Text(
-                            text = stringResource(R.string.no_time_entries),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(32.dp)
+                        TrackingControls(
+                            uiState = uiState,
+                            onDescriptionChange = onDescriptionChange,
+                            onProjectChange = onProjectChange,
+                            onTaskChange = onTaskChange,
+                            onTagsChange = onTagsChange,
+                            onBillableChange = onBillableChange,
+                            onStart = onStartTracking,
+                            onStop = onStopTracking,
+                            onUpdate = onUpdateCurrentEntry
                         )
                     }
-                }
 
-                item { Spacer(Modifier.height(16.dp)) }
+                    // Time entries history
+                    val groupedEntries = getGroupedEntries()
+                    val filteredGroupedEntries = groupedEntries.mapValues { (_, entries) ->
+                        entries.filter { (it.duration ?: 0) > 0 }
+                    }.filterValues { it.isNotEmpty() }
+
+                    if (filteredGroupedEntries.isNotEmpty()) {
+                        filteredGroupedEntries.forEach { (date, entries) ->
+                            item(key = "header_$date") {
+                                DateHeader(date = date)
+                            }
+
+                            // Group entries by project and task
+                            val groupedByProjectTask = entries.groupBy {
+                                "${it.projectId}_${it.taskId}_${it.description ?: ""}"
+                            }
+
+                            groupedByProjectTask.forEach { (_, groupedEntries) ->
+                                item(key = "group_${groupedEntries.first().id}") {
+                                    CollapsibleTimeEntryGroup(
+                                        entries = groupedEntries,
+                                        projects = uiState.projects,
+                                        tasks = uiState.tasks,
+                                        onEdit = { entry -> showEditDialog = entry },
+                                        onDelete = { entry -> onDeleteEntry(entry.id) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Empty state
+                    if (uiState.timeEntries.isEmpty() && !uiState.isLoading) {
+                        item {
+                            Text(
+                                text = stringResource(R.string.no_time_entries),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(32.dp)
+                            )
+                        }
+                    }
+
+                    item { Spacer(Modifier.height(16.dp)) }
+                }
             }
         }
     }

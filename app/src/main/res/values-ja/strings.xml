@@ -74,4 +74,16 @@
     <string name="today">今日</string>
     <string name="yesterday">昨日</string>
 
+    <!-- Notifications -->
+    <string name="notification_channel_tracking_name">時間追跡</string>
+    <string name="notification_channel_tracking_description">時間追跡のステータスと経過時間を表示します</string>
+    <string name="notification_tracking_default">時間を追跡中</string>
+    <string name="notification_quick_start_ready">時間追跡の準備完了</string>
+
+    <!-- Settings -->
+    <string name="settings_menu">設定</string>
+    <string name="quick_start">クイックスタート</string>
+    <string name="always_show_notifications">通知を常に表示</string>
+    <string name="always_show_notifications_description">時間追跡中に継続的な通知を表示</string>
+
 </resources>

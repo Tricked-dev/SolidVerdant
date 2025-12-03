@@ -1,18 +1,24 @@
 package dev.tricked.solidverdant.ui.tracking
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.AuthRepository
+import dev.tricked.solidverdant.service.TimeTrackingNotificationService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.time.Instant
@@ -47,13 +53,59 @@ data class TrackingUiState(
  */
 @HiltViewModel
 class TrackingViewModel @Inject constructor(
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val settingsDataStore: SettingsDataStore,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TrackingUiState())
     val uiState: StateFlow<TrackingUiState> = _uiState.asStateFlow()
 
+    val alwaysShowNotifications = settingsDataStore.alwaysShowNotification
+
     private var timerJob: Job? = null
+    private var isInitialized = false
+
+    init {
+        // Monitor settings changes and update notification state
+        viewModelScope.launch {
+            settingsDataStore.alwaysShowNotification.collect { enabled ->
+                // Only update notification state after initial data load
+                if (isInitialized) {
+                    updateNotificationState()
+                }
+            }
+        }
+    }
+
+    /**
+     * Set whether to always show notifications
+     */
+    fun setAlwaysShowNotifications(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsDataStore.setAlwaysShowNotification(enabled)
+            // updateNotificationState() is called automatically by the collector in init
+        }
+    }
+
+    /**
+     * Update notification state based on tracking status and settings
+     */
+    private suspend fun updateNotificationState() {
+        val alwaysShow = settingsDataStore.alwaysShowNotification.first()
+        val isTracking = _uiState.value.isTracking
+
+        if (alwaysShow) {
+            if (!isTracking) {
+                // Show idle notification (quick start)
+                TimeTrackingNotificationService.showIdle(context)
+            }
+            // If tracking, notification is already shown by startTracking()
+        } else {
+            // Hide notification when always show is disabled
+            TimeTrackingNotificationService.hide(context)
+        }
+    }
 
     /**
      * Load all data needed for the tracking screen
@@ -99,12 +151,34 @@ class TrackingViewModel @Inject constructor(
                         editingBillable = timeEntry?.billable ?: false
                     )
 
+                    // Update notification state based on tracking status and settings
+                    val alwaysShow = settingsDataStore.alwaysShowNotification.first()
+                    if (timeEntry != null && alwaysShow) {
+                        // If tracking, show tracking notification with details
+                        val projectName =
+                            _uiState.value.projects.find { it.id == timeEntry.projectId }?.name
+                        val taskName = _uiState.value.tasks.find { it.id == timeEntry.taskId }?.name
+                        TimeTrackingNotificationService.startTracking(
+                            context = context,
+                            startTime = Instant.parse(timeEntry.start),
+                            projectName = projectName,
+                            taskName = taskName,
+                            description = timeEntry.description
+                        )
+                    } else {
+                        // Update notification state for non-tracking cases
+                        updateNotificationState()
+                    }
+
                     // Start timer if tracking
-                    if (isTracking && timeEntry != null) {
-                        startTimer(timeEntry.start)
+                    if (isTracking) {
+                        startTimer(timeEntry!!.start)
                     } else {
                         stopTimer()
                     }
+
+                    // Mark as initialized after first load
+                    isInitialized = true
                 }
                 .onFailure { error ->
                     Timber.e(error, "Failed to load active time entry")
@@ -113,6 +187,9 @@ class TrackingViewModel @Inject constructor(
                         error = error.message ?: "Failed to load tracking state"
                     )
                     stopTimer()
+
+                    // Mark as initialized even on failure
+                    isInitialized = true
                 }
         }
     }
@@ -197,6 +274,9 @@ class TrackingViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(elapsedSeconds = elapsed)
                     delay(1000) // Update every second
                 }
+            } catch (e: CancellationException) {
+                // Expected when timer is stopped, don't log as error
+                throw e
             } catch (e: Exception) {
                 Timber.e(e, "Failed to parse start time or run timer")
             }
@@ -267,6 +347,21 @@ class TrackingViewModel @Inject constructor(
                 description = _uiState.value.editingDescription
             )
                 .onSuccess { timeEntry ->
+                    // Start persistent notification (if enabled)
+                    val alwaysShow = settingsDataStore.alwaysShowNotification.first()
+                    if (alwaysShow) {
+                        val projectName =
+                            _uiState.value.projects.find { it.id == timeEntry.projectId }?.name
+                        val taskName = _uiState.value.tasks.find { it.id == timeEntry.taskId }?.name
+                        TimeTrackingNotificationService.startTracking(
+                            context = context,
+                            startTime = Instant.parse(timeEntry.start),
+                            projectName = projectName,
+                            taskName = taskName,
+                            description = timeEntry.description
+                        )
+                    }
+
                     // Update the time entry with tags if needed
                     if (_uiState.value.editingTags.isNotEmpty()) {
                         updateCurrentTimeEntry(
@@ -324,6 +419,19 @@ class TrackingViewModel @Inject constructor(
                 tags = tags ?: _uiState.value.editingTags
             )
                 .onSuccess { updated ->
+                    // Update notification with new info if tracking is active
+                    if (updated.end == null) {
+                        val projectName =
+                            _uiState.value.projects.find { it.id == updated.projectId }?.name
+                        val taskName = _uiState.value.tasks.find { it.id == updated.taskId }?.name
+                        TimeTrackingNotificationService.updateTrackingInfo(
+                            context = context,
+                            projectName = projectName,
+                            taskName = taskName,
+                            description = updated.description
+                        )
+                    }
+
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         isTracking = true,
@@ -377,6 +485,9 @@ class TrackingViewModel @Inject constructor(
                     )
                     stopTimer()
                     Timber.d("Time entry stopped successfully")
+
+                    // Update notification state (will switch to idle or hide based on settings)
+                    updateNotificationState()
 
                     // Reload time entries to show the stopped entry
                     // Will be called from the UI after stop

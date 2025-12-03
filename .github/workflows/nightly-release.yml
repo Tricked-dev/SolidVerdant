@@ -20,6 +20,11 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v4
+      with:
+        cache-read-only: false
+
     - name: Set up Android SDK
       uses: android-actions/setup-android@v3
 
@@ -35,14 +40,25 @@ jobs:
         KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
+    - name: Build debug APK
+      run: ./gradlew app:assembleDebug
+
     - name: Update Nightly Release
       uses: softprops/action-gh-release@v1
       with:
         tag_name: nightly
         name: Nightly Release
-        body: "Automated nightly release - Updated on ${{ github.event.head_commit.timestamp }}"
+        body: |
+          Automated nightly release - Updated on ${{ github.event.head_commit.timestamp }}
+
+          ## Downloads
+
+          [![Release APK](https://img.shields.io/badge/Download-Release_APK-green?style=for-the-badge&logo=android)](https://github.com/${{ github.repository }}/releases/download/nightly/app-release.apk)
+          [![Debug APK](https://img.shields.io/badge/Download-Debug_APK-blue?style=for-the-badge&logo=android)](https://github.com/${{ github.repository }}/releases/download/nightly/app-debug.apk)
         draft: false
         prerelease: false
-        files: app/build/outputs/apk/release/app-release.apk
+        files: |
+          app/build/outputs/apk/release/app-release.apk
+          app/build/outputs/apk/debug/app-debug.apk
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

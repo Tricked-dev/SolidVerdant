@@ -104,6 +104,7 @@ fun SolidVerdantApp(
     val configState by authViewModel.configState.collectAsState()
     val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
     val trackingUiState by trackingViewModel.uiState.collectAsState()
+    val alwaysShowNotifications by trackingViewModel.alwaysShowNotifications.collectAsState(initial = false)
 
     // Load user data when logged in
     LaunchedEffect(isLoggedIn) {
@@ -128,6 +129,10 @@ fun SolidVerdantApp(
             TrackingScreen(
                 user = authUiState.user,
                 uiState = trackingUiState,
+                alwaysShowNotifications = alwaysShowNotifications,
+                onAlwaysShowNotificationsChange = { enabled ->
+                    trackingViewModel.setAlwaysShowNotifications(enabled)
+                },
                 onRefresh = {
                     authUiState.currentMembership?.let { membership ->
                         trackingViewModel.loadAllData(

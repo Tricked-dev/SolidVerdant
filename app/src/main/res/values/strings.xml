@@ -74,4 +74,16 @@
     <string name="today">Today</string>
     <string name="yesterday">Yesterday</string>
 
+    <!-- Notifications -->
+    <string name="notification_channel_tracking_name">Time Tracking</string>
+    <string name="notification_channel_tracking_description">Shows time tracking status and elapsed time</string>
+    <string name="notification_tracking_default">Tracking time</string>
+    <string name="notification_quick_start_ready">Ready to track time</string>
+
+    <!-- Settings -->
+    <string name="settings_menu">Settings</string>
+    <string name="quick_start">Quick Start</string>
+    <string name="always_show_notifications">Always show notifications</string>
+    <string name="always_show_notifications_description">Show persistent notification while tracking time</string>
+
 </resources>

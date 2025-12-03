@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
+import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
@@ -120,6 +121,38 @@ class TimeTrackingTileService : TileService() {
                     Timber.d("Received refresh request")
                     refreshTile()
                 }
+
+                TimeTrackingNotificationService.ACTION_STOP_TRACKING_BROADCAST -> {
+                    Timber.d("Received stop tracking from notification")
+                    // Handle stop tracking from notification
+                    serviceScope.launch {
+                        try {
+                            val activeEntry = try {
+                                withTimeoutOrNull(3000L) {
+                                    authRepository.getActiveTimeEntry().getOrNull()
+                                }
+                            } catch (e: Exception) {
+                                Timber.w(e, "Network failed, checking cache")
+                                null
+                            }
+
+                            when {
+                                activeEntry != null -> {
+                                    stopTracking(activeEntry)
+                                }
+
+                                else -> {
+                                    val cachedEntry = getCachedEntryForStop()
+                                    if (cachedEntry != null) {
+                                        stopTrackingWithCache(cachedEntry)
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Timber.e(e, "Failed to handle stop from notification")
+                        }
+                    }
+                }
             }
         }
     }
@@ -131,6 +164,7 @@ class TimeTrackingTileService : TileService() {
         val filter = IntentFilter().apply {
             addAction(ACTION_START_TRACKING)
             addAction(ACTION_REFRESH_TILE)
+            addAction(TimeTrackingNotificationService.ACTION_STOP_TRACKING_BROADCAST)
         }
 
         registerReceiver(broadcastReceiver, filter, RECEIVER_NOT_EXPORTED)
@@ -238,6 +272,16 @@ class TimeTrackingTileService : TileService() {
                     Timber.d("Tracking started: ${entry.id}")
                     clearOptimisticState()
                     cacheActiveEntry(entry, projectName, taskName)
+
+                    // Start persistent notification
+                    TimeTrackingNotificationService.startTracking(
+                        context = this@TimeTrackingTileService,
+                        startTime = Instant.parse(entry.start),
+                        projectName = projectName,
+                        taskName = taskName,
+                        description = description.takeIf { it.isNotBlank() }
+                    )
+
                     refreshTile()
                 }.onFailure { error ->
                     Timber.e(error, "Failed to start tracking")
@@ -272,6 +316,10 @@ class TimeTrackingTileService : TileService() {
                     Timber.d("Tracking stopped")
                     clearOptimisticState()
                     clearCachedEntry()
+
+                    // Stop persistent notification
+                    TimeTrackingNotificationService.stopTracking(this@TimeTrackingTileService)
+
                     refreshTile()
                 }.onFailure { error ->
                     Timber.e(error, "Failed to stop tracking")
@@ -309,6 +357,10 @@ class TimeTrackingTileService : TileService() {
                     Timber.d("Tracking stopped (from cache)")
                     clearOptimisticState()
                     clearCachedEntry()
+
+                    // Stop persistent notification
+                    TimeTrackingNotificationService.stopTracking(this@TimeTrackingTileService)
+
                     refreshTile()
                 }.onFailure { error ->
                     Timber.e(error, "Failed to stop tracking (from cache)")

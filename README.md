@@ -29,6 +29,7 @@ Direct Download
 ## Quirks
 
 - State of tile will not sync correctly with what is online unless you have the application open, this is not a problem if you exclusively use the tile and app instead of using the website & desktop app.
+- Tiles are very wonky in hindsight i have also added notif mode that should work better - currently testing it out
 
 ## Screenshots
 

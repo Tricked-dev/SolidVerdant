@@ -3,6 +3,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:name=".SolidVerdantApp"
@@ -58,6 +61,37 @@
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
         </service>
+
+        <!-- Unified Time Tracking Notification Service -->
+        <service
+            android:name=".service.TimeTrackingNotificationService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Time tracking with quick start and network sync" />
+        </service>
+
+        <!-- Boot Receiver to restore notification after reboot -->
+        <receiver
+            android:name=".receiver.BootReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Time Tracking Broadcast Receiver for notification actions -->
+        <receiver
+            android:name=".receiver.TimeTrackingBroadcastReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="dev.tricked.solidverdant.ACTION_STOP_TRACKING_FROM_NOTIFICATION" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>
