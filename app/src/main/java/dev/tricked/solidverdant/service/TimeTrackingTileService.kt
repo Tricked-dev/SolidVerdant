@@ -18,6 +18,7 @@ import androidx.core.content.edit
 import dagger.hilt.android.AndroidEntryPoint
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.local.CacheDataStore
+import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.ApiClientFactory
 import dev.tricked.solidverdant.data.repository.AuthRepository
@@ -55,6 +56,9 @@ class TimeTrackingTileService : TileService() {
 
     @Inject
     lateinit var cacheDataStore: CacheDataStore
+
+    @Inject
+    lateinit var settingsDataStore: SettingsDataStore
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val isProcessing = AtomicBoolean(false)
@@ -324,8 +328,13 @@ class TimeTrackingTileService : TileService() {
                     clearOptimisticState()
                     clearCachedEntry()
 
-                    // Stop persistent notification
-                    TimeTrackingNotificationService.stopTracking(this@TimeTrackingTileService)
+                    // Update notification state based on settings
+                    val alwaysShow = settingsDataStore.alwaysShowNotification.first()
+                    if (alwaysShow) {
+                        TimeTrackingNotificationService.showIdle(this@TimeTrackingTileService)
+                    } else {
+                        TimeTrackingNotificationService.stopTracking(this@TimeTrackingTileService)
+                    }
 
                     refreshTile()
                 }.onFailure { error ->
@@ -365,8 +374,13 @@ class TimeTrackingTileService : TileService() {
                     clearOptimisticState()
                     clearCachedEntry()
 
-                    // Stop persistent notification
-                    TimeTrackingNotificationService.stopTracking(this@TimeTrackingTileService)
+                    // Update notification state based on settings
+                    val alwaysShow = settingsDataStore.alwaysShowNotification.first()
+                    if (alwaysShow) {
+                        TimeTrackingNotificationService.showIdle(this@TimeTrackingTileService)
+                    } else {
+                        TimeTrackingNotificationService.stopTracking(this@TimeTrackingTileService)
+                    }
 
                     refreshTile()
                 }.onFailure { error ->
@@ -458,12 +472,29 @@ class TimeTrackingTileService : TileService() {
                                     tile,
                                     TileState.Active(projectName, taskName, activeEntry.description)
                                 )
+
+                                // Start notification for externally started tracking
+                                TimeTrackingNotificationService.startTracking(
+                                    context = this@TimeTrackingTileService,
+                                    startTime = Instant.parse(activeEntry.start),
+                                    projectName = projectName,
+                                    taskName = taskName,
+                                    description = activeEntry.description
+                                )
                             }
                         } else if (cachedId != null) {
                             // Network succeeded, no active entry - stopped externally
                             Timber.d("Entry stopped externally, clearing cache")
                             clearCachedEntry()
                             applyState(tile, TileState.Inactive)
+
+                            // Update notification state based on settings
+                            val alwaysShow = settingsDataStore.alwaysShowNotification.first()
+                            if (alwaysShow) {
+                                TimeTrackingNotificationService.showIdle(this@TimeTrackingTileService)
+                            } else {
+                                TimeTrackingNotificationService.stopTracking(this@TimeTrackingTileService)
+                            }
                         } else {
                             applyState(tile, TileState.Inactive)
                         }
