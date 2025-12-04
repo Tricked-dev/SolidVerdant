@@ -39,6 +39,14 @@ Direct Download
   <img src="screenshots/started.png" width="30%" alt="started" />
 </p>
 
+
+<p align="center">
+  <img src="screenshots/home.png" width="30%" alt="Home" />
+  <img src="screenshots/home2.png" width="30%" alt="Home Tracking" />
+  <img src="screenshots/notif.png" width="30%" alt="Notif" />
+</p>
+
+
 <p align="center">
   <em>Login Screen • Time Tracking • Configuration</em>
 </p>
