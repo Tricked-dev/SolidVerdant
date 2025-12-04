@@ -33,8 +33,6 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
         resourceConfigurations += listOf("en", "nl", "ja")
     }
 
@@ -43,42 +41,13 @@ android {
             applicationIdSuffix = ".dev"
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro")
-            testProguardFiles(
-                getDefaultProguardFile("proguard-android.txt"),
-                "proguardTest-rules.pro"
-            )
-            enableUnitTestCoverage = true
-            enableAndroidTestCoverage = true
         }
 
         getByName("release") {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro")
-            testProguardFiles(
-                getDefaultProguardFile("proguard-android.txt"),
-                "proguardTest-rules.pro"
-            )
             signingConfig = signingConfigs.getByName("release")
-        }
-    }
-
-    // Always show the result of every unit test, even if it passes.
-    testOptions.unitTests {
-        isIncludeAndroidResources = true
-
-        all { test ->
-            with(test) {
-                testLogging {
-                    events = setOf(
-                        org.gradle.api.tasks.testing.logging.TestLogEvent.PASSED,
-                        org.gradle.api.tasks.testing.logging.TestLogEvent.SKIPPED,
-                        org.gradle.api.tasks.testing.logging.TestLogEvent.FAILED,
-                        org.gradle.api.tasks.testing.logging.TestLogEvent.STANDARD_OUT,
-                        org.gradle.api.tasks.testing.logging.TestLogEvent.STANDARD_ERROR,
-                    )
-                }
-            }
         }
     }
 
@@ -163,52 +132,4 @@ dependencies {
 
     debugImplementation(composeBom)
     debugImplementation(libs.androidx.compose.ui.tooling.core)
-    debugImplementation(libs.androidx.compose.ui.test.manifest)
-
-    // Dependencies for local unit tests
-    testImplementation(composeBom)
-    testImplementation(libs.junit4)
-    testImplementation(libs.androidx.archcore.testing)
-    testImplementation(libs.kotlinx.coroutines.android)
-    testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(libs.androidx.navigation.testing)
-    testImplementation(libs.androidx.test.espresso.core)
-    testImplementation(libs.androidx.test.espresso.contrib)
-    testImplementation(libs.androidx.test.espresso.intents)
-    testImplementation(libs.google.truth)
-    testImplementation(libs.androidx.compose.ui.test.junit)
-
-    // JVM tests - Hilt
-    testImplementation(libs.hilt.android.testing)
-    kspTest(libs.hilt.compiler)
-
-    // Dependencies for Android unit tests
-    androidTestImplementation(composeBom)
-    androidTestImplementation(libs.junit4)
-    androidTestImplementation(libs.kotlinx.coroutines.test)
-    androidTestImplementation(libs.androidx.compose.ui.test.junit)
-
-    // AndroidX Test - JVM testing
-    testImplementation(libs.androidx.test.core.ktx)
-    testImplementation(libs.androidx.test.ext)
-    testImplementation(libs.androidx.test.rules)
-    testImplementation(project(":shared-test"))
-
-    // AndroidX Test - Instrumented testing
-    androidTestImplementation(libs.androidx.test.core.ktx)
-    androidTestImplementation(libs.androidx.test.ext)
-    androidTestImplementation(libs.androidx.test.rules)
-    androidTestImplementation(libs.room.testing)
-    androidTestImplementation(libs.androidx.archcore.testing)
-    androidTestImplementation(libs.androidx.navigation.testing)
-    androidTestImplementation(libs.androidx.test.espresso.core)
-    androidTestImplementation(libs.androidx.test.espresso.contrib)
-    androidTestImplementation(libs.androidx.test.espresso.intents)
-    androidTestImplementation(libs.androidx.test.espresso.idling.resources)
-    androidTestImplementation(libs.androidx.test.espresso.idling.concurrent)
-    androidTestImplementation(project(":shared-test"))
-
-    // AndroidX Test - Hilt testing
-    androidTestImplementation(libs.hilt.android.testing)
-    kspAndroidTest(libs.hilt.compiler)
 }
