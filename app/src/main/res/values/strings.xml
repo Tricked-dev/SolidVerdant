@@ -77,6 +77,13 @@
     <!-- Notifications -->
     <string name="notification_channel_tracking_name">Time Tracking</string>
     <string name="notification_channel_tracking_description">Shows time tracking status and elapsed time</string>
+    <string name="notification_channel_active_name">Active Timer</string>
+    <string name="notification_channel_active_description">Shows running timer and elapsed time</string>
+    <string name="notification_channel_idle_name">Quick Start</string>
+    <string name="notification_channel_idle_description">Ready to quickly start time tracking</string>
+    <string name="notification_channel_error_name">Sync Issues</string>
+    <string name="notification_channel_error_description">Alerts about synchronization problems</string>
+    <string name="time_tracking_notification_title">Time Tracking</string>
     <string name="notification_tracking_default">Tracking time</string>
     <string name="notification_quick_start_ready">Ready to track time</string>
 
@@ -85,5 +92,11 @@
     <string name="quick_start">Quick Start</string>
     <string name="always_show_notifications">Always show notifications</string>
     <string name="always_show_notifications_description">Show persistent notification while tracking time</string>
+
+    <!-- Widget -->
+    <string name="widget_name">Time Tracker</string>
+    <string name="widget_description">Shows current tracking status with quick controls</string>
+    <string name="widget_not_tracking">Not tracking</string>
+    <string name="widget_login_required">Login required</string>
 
 </resources>

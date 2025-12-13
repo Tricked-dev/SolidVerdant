@@ -77,6 +77,13 @@
     <!-- Notifications -->
     <string name="notification_channel_tracking_name">時間追跡</string>
     <string name="notification_channel_tracking_description">時間追跡のステータスと経過時間を表示します</string>
+    <string name="notification_channel_active_name">アクティブタイマー</string>
+    <string name="notification_channel_active_description">実行中のタイマーと経過時間を表示します</string>
+    <string name="notification_channel_idle_name">クイックスタート</string>
+    <string name="notification_channel_idle_description">時間追跡をすぐに開始できる準備完了</string>
+    <string name="notification_channel_error_name">同期の問題</string>
+    <string name="notification_channel_error_description">同期の問題についての警告</string>
+    <string name="time_tracking_notification_title">時間追跡</string>
     <string name="notification_tracking_default">時間を追跡中</string>
     <string name="notification_quick_start_ready">時間追跡の準備完了</string>
 
@@ -85,5 +92,11 @@
     <string name="quick_start">クイックスタート</string>
     <string name="always_show_notifications">通知を常に表示</string>
     <string name="always_show_notifications_description">時間追跡中に継続的な通知を表示</string>
+
+    <!-- Widget -->
+    <string name="widget_name">時間トラッカー</string>
+    <string name="widget_description">クイックコントロール付きの現在の追跡ステータスを表示します</string>
+    <string name="widget_not_tracking">追跡していません</string>
+    <string name="widget_login_required">ログインが必要です</string>
 
 </resources>

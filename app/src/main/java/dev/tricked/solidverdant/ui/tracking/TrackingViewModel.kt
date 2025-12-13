@@ -12,6 +12,7 @@ import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.service.TimeTrackingNotificationService
+import dev.tricked.solidverdant.widget.TimeTrackingWidget
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -103,7 +104,7 @@ class TrackingViewModel @Inject constructor(
             // If tracking, notification is already shown by startTracking()
         } else {
             // Hide notification when always show is disabled
-            TimeTrackingNotificationService.hide(context)
+            TimeTrackingNotificationService.stopTracking(context)
         }
     }
 
@@ -169,6 +170,26 @@ class TrackingViewModel @Inject constructor(
                         // Update notification state for non-tracking cases
                         updateNotificationState()
                     }
+
+                    // Update widget state
+                    if (timeEntry != null) {
+                        val projectName =
+                            _uiState.value.projects.find { it.id == timeEntry.projectId }?.name
+                        val taskName = _uiState.value.tasks.find { it.id == timeEntry.taskId }?.name
+                        settingsDataStore.setWidgetTrackingState(
+                            isTracking = true,
+                            startTimeEpochMillis = Instant.parse(timeEntry.start).toEpochMilli(),
+                            projectName = projectName,
+                            taskName = taskName,
+                            description = timeEntry.description
+                        )
+                    } else {
+                        settingsDataStore.setWidgetTrackingState(
+                            isTracking = false
+                        )
+                    }
+                    // Request widget update
+                    TimeTrackingWidget.requestUpdate(context)
 
                     // Start timer if tracking
                     if (isTracking) {
@@ -349,10 +370,11 @@ class TrackingViewModel @Inject constructor(
                 .onSuccess { timeEntry ->
                     // Start persistent notification (if enabled)
                     val alwaysShow = settingsDataStore.alwaysShowNotification.first()
+                    val projectName =
+                        _uiState.value.projects.find { it.id == timeEntry.projectId }?.name
+                    val taskName = _uiState.value.tasks.find { it.id == timeEntry.taskId }?.name
+
                     if (alwaysShow) {
-                        val projectName =
-                            _uiState.value.projects.find { it.id == timeEntry.projectId }?.name
-                        val taskName = _uiState.value.tasks.find { it.id == timeEntry.taskId }?.name
                         TimeTrackingNotificationService.startTracking(
                             context = context,
                             startTime = Instant.parse(timeEntry.start),
@@ -361,6 +383,16 @@ class TrackingViewModel @Inject constructor(
                             description = timeEntry.description
                         )
                     }
+
+                    // Update widget state
+                    settingsDataStore.setWidgetTrackingState(
+                        isTracking = true,
+                        startTimeEpochMillis = Instant.parse(timeEntry.start).toEpochMilli(),
+                        projectName = projectName,
+                        taskName = taskName,
+                        description = timeEntry.description
+                    )
+                    TimeTrackingWidget.requestUpdate(context)
 
                     // Update the time entry with tags if needed
                     if (_uiState.value.editingTags.isNotEmpty()) {
@@ -430,6 +462,16 @@ class TrackingViewModel @Inject constructor(
                             taskName = taskName,
                             description = updated.description
                         )
+
+                        // Update widget state
+                        settingsDataStore.setWidgetTrackingState(
+                            isTracking = true,
+                            startTimeEpochMillis = Instant.parse(updated.start).toEpochMilli(),
+                            projectName = projectName,
+                            taskName = taskName,
+                            description = updated.description
+                        )
+                        TimeTrackingWidget.requestUpdate(context)
                     }
 
                     _uiState.value = _uiState.value.copy(
@@ -488,6 +530,10 @@ class TrackingViewModel @Inject constructor(
 
                     // Update notification state (will switch to idle or hide based on settings)
                     updateNotificationState()
+
+                    // Update widget state to idle
+                    settingsDataStore.setWidgetTrackingState(isTracking = false)
+                    TimeTrackingWidget.requestUpdate(context)
 
                     // Reload time entries to show the stopped entry
                     // Will be called from the UI after stop

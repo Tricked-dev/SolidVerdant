@@ -34,6 +34,9 @@ android {
         versionName = "1.0"
 
         resourceConfigurations += listOf("en", "nl", "ja")
+
+        // Add package name as string resource for release
+        resValue("string", "app_package_name", "dev.tricked.solidverdant")
     }
 
     buildTypes {
@@ -41,6 +44,9 @@ android {
             applicationIdSuffix = ".dev"
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro")
+
+            // Override package name for debug builds
+            resValue("string", "app_package_name", "dev.tricked.solidverdant.dev")
         }
 
         getByName("release") {
@@ -48,6 +54,9 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("release")
+
+            // Override package name for release builds
+            resValue("string", "app_package_name", "dev.tricked.solidverdant")
         }
     }
 

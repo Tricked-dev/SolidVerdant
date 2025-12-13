@@ -1,10 +1,7 @@
 package dev.tricked.solidverdant.ui.tracking
 
 import android.Manifest
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -85,7 +82,6 @@ import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.User
-import dev.tricked.solidverdant.service.TimeTrackingNotificationService
 import dev.tricked.solidverdant.util.NotificationPermissionHelper
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -138,29 +134,6 @@ fun TrackingScreen(
         // Permission result is handled, no action needed
     }
 
-    // Listen for stop tracking broadcasts from notification
-    DisposableEffect(Unit) {
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                if (intent?.action == TimeTrackingNotificationService.ACTION_STOP_TRACKING_BROADCAST) {
-                    // Trigger stop tracking when notification stop button is pressed
-                    onStopTracking()
-                }
-            }
-        }
-
-        val filter = IntentFilter(TimeTrackingNotificationService.ACTION_STOP_TRACKING_BROADCAST)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            context.registerReceiver(receiver, filter)
-        }
-
-        onDispose {
-            context.unregisterReceiver(receiver)
-        }
-    }
-
     // Request notification permission on first start tracking
     DisposableEffect(uiState.isTracking) {
         if (uiState.isTracking && !NotificationPermissionHelper.hasNotificationPermission(context)) {
@@ -177,40 +150,72 @@ fun TrackingScreen(
             ModalDrawerSheet {
                 Column(
                     modifier = Modifier
-                        .padding(16.dp)
-                        .fillMaxWidth()
+                        .fillMaxSize()
                 ) {
-                    Text(
-                        text = stringResource(R.string.settings_menu),
-                        style = MaterialTheme.typography.headlineSmall,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-
-                    HorizontalDivider()
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Always show notifications toggle
-                    Row(
+                    Column(
                         modifier = Modifier
+                            .weight(1f)
+                            .padding(16.dp)
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.always_show_notifications),
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                            Text(
-                                text = stringResource(R.string.always_show_notifications_description),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        Text(
+                            text = stringResource(R.string.settings_menu),
+                            style = MaterialTheme.typography.headlineSmall,
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
+
+                        HorizontalDivider()
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.always_show_notifications),
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Text(
+                                    text = stringResource(R.string.always_show_notifications_description),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = alwaysShowNotifications,
+                                onCheckedChange = onAlwaysShowNotificationsChange
                             )
                         }
-                        Switch(
-                            checked = alwaysShowNotifications,
-                            onCheckedChange = onAlwaysShowNotificationsChange
+                    }
+
+                    // Logout button at the bottom
+                    Button(
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            onLogout()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = stringResource(R.string.logout),
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
@@ -246,8 +251,10 @@ fun TrackingScreen(
                         }
                     },
                     actions = {
-                        // Notification permission button (Android 13+)
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        // Notification permission button (Android 13+) - only show if not granted
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                            !NotificationPermissionHelper.hasNotificationPermission(context)
+                        ) {
                             IconButton(
                                 onClick = {
                                     notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -263,12 +270,6 @@ fun TrackingScreen(
                             Icon(
                                 imageVector = Icons.Default.Refresh,
                                 contentDescription = stringResource(R.string.refresh)
-                            )
-                        }
-                        IconButton(onClick = onLogout) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ExitToApp,
-                                contentDescription = stringResource(R.string.logout)
                             )
                         }
                     }

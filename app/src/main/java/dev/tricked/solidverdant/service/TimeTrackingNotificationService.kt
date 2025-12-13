@@ -16,26 +16,36 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import dagger.hilt.android.AndroidEntryPoint
 import dev.tricked.solidverdant.MainActivity
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.data.local.SettingsDataStore
+import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.ui.tile.ProjectSelectionActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import java.time.Duration
+import timber.log.Timber
 import java.time.Instant
+import javax.inject.Inject
 
 /**
  * Foreground service that displays a persistent notification while time tracking is active.
  * This provides better background network access and gives users control over tracking.
  */
+@AndroidEntryPoint
 class TimeTrackingNotificationService : Service() {
 
-    private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
-    private var updateJob: Job? = null
+    @Inject
+    lateinit var authRepository: AuthRepository
+
+    @Inject
+    lateinit var settingsDataStore: SettingsDataStore
+
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
     private var startTime: Instant? = null
     private var projectName: String? = null
     private var taskName: String? = null
@@ -53,10 +63,9 @@ class TimeTrackingNotificationService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        timber.log.Timber.d("NotificationService onStartCommand: action=${intent?.action}")
+        Timber.d("NotificationService onStartCommand: action=${intent?.action}")
         when (intent?.action) {
             ACTION_START_TRACKING -> {
-                timber.log.Timber.d("Starting tracking notification")
                 isTracking = true
                 startTime = Instant.ofEpochMilli(
                     intent.getLongExtra(EXTRA_START_TIME, System.currentTimeMillis())
@@ -71,7 +80,6 @@ class TimeTrackingNotificationService : Service() {
                 } else {
                     notificationManager.notify(NOTIFICATION_ID, buildNotification())
                 }
-                startUpdatingNotification()
             }
 
             ACTION_SHOW_IDLE -> {
@@ -80,7 +88,6 @@ class TimeTrackingNotificationService : Service() {
                 projectName = null
                 taskName = null
                 description = null
-                updateJob?.cancel()
 
                 if (!isForeground) {
                     startForeground(NOTIFICATION_ID, buildNotification())
@@ -91,7 +98,7 @@ class TimeTrackingNotificationService : Service() {
             }
 
             ACTION_STOP_TRACKING -> {
-                stopService()
+                handleStopTracking()
             }
 
             ACTION_UPDATE_INFO -> {
@@ -109,20 +116,106 @@ class TimeTrackingNotificationService : Service() {
         return START_STICKY
     }
 
+    private fun handleStopTracking() {
+        serviceScope.launch {
+            try {
+                // Get active time entry
+                authRepository.getActiveTimeEntry()
+                    .onSuccess { activeEntry ->
+                        if (activeEntry != null) {
+                            // Get user info for userId
+                            authRepository.getCurrentUser()
+                                .onSuccess { user ->
+                                    // Stop the active time entry
+                                    authRepository.stopTimeEntry(
+                                        organizationId = activeEntry.organizationId,
+                                        timeEntryId = activeEntry.id,
+                                        userId = user.id,
+                                        startTime = activeEntry.start
+                                    ).onSuccess {
+                                        // Update notification state based on settings
+                                        launch {
+                                            val alwaysShow = settingsDataStore.alwaysShowNotification.first()
+                                            if (alwaysShow) {
+                                                // Show idle notification
+                                                showIdle(this@TimeTrackingNotificationService)
+                                            } else {
+                                                // Hide notification completely
+                                                stopTracking(this@TimeTrackingNotificationService)
+                                            }
+                                        }
+                                    }.onFailure { error ->
+                                        Timber.e(
+                                            error,
+                                            "Failed to stop time entry from notification"
+                                        )
+                                    }
+                                }.onFailure { error ->
+                                    Timber.e(error, "Failed to get user info")
+                                }
+                        } else {
+                            Timber.w("No active time entry to stop")
+                            // Still update notification state
+                            launch {
+                                val alwaysShow = settingsDataStore.alwaysShowNotification.first()
+                                if (alwaysShow) {
+                                    showIdle(this@TimeTrackingNotificationService)
+                                } else {
+                                    stopTracking(this@TimeTrackingNotificationService)
+                                }
+                            }
+                        }
+                    }.onFailure { error ->
+                        Timber.e(error, "Failed to get active time entry")
+                    }
+            } finally {
+                stopService()
+            }
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                getString(R.string.notification_channel_tracking_name),
-                NotificationManager.IMPORTANCE_LOW
+            // Active tracking channel - higher importance for ongoing timer
+            val activeChannel = NotificationChannel(
+                CHANNEL_ID_ACTIVE,
+                getString(R.string.notification_channel_active_name),
+                NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = getString(R.string.notification_channel_tracking_description)
+                description = getString(R.string.notification_channel_active_description)
                 setShowBadge(false)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                setSound(null, null) // Silent
             }
-            notificationManager.createNotificationChannel(channel)
+
+            // Idle/Quick start channel - low importance
+            val idleChannel = NotificationChannel(
+                CHANNEL_ID_IDLE,
+                getString(R.string.notification_channel_idle_name),
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = getString(R.string.notification_channel_idle_description)
+                setShowBadge(false)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                setSound(null, null) // Silent
+            }
+
+            // Error/Sync issues channel - default importance
+            val errorChannel = NotificationChannel(
+                CHANNEL_ID_ERROR,
+                getString(R.string.notification_channel_error_name),
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = getString(R.string.notification_channel_error_description)
+                setShowBadge(true)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            }
+
+            notificationManager.createNotificationChannels(
+                listOf(activeChannel, idleChannel, errorChannel)
+            )
         }
     }
 
@@ -135,11 +228,6 @@ class TimeTrackingNotificationService : Service() {
     }
 
     private fun buildTrackingNotification(): Notification {
-        val elapsedTime = startTime?.let { start ->
-            val duration = Duration.between(start, Instant.now())
-            formatDuration(duration)
-        } ?: "00:00:00"
-
         // Build content text with project/task info
         val contentText = buildString {
             if (!description.isNullOrBlank()) {
@@ -169,31 +257,31 @@ class TimeTrackingNotificationService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Intent to stop tracking from notification
-        val stopIntent = Intent(ACTION_STOP_TRACKING_BROADCAST).apply {
-            setPackage(packageName)
+        val stopIntent = Intent(this, TimeTrackingNotificationService::class.java).apply {
+            action = ACTION_STOP_TRACKING
         }
-        val stopPendingIntent = PendingIntent.getBroadcast(
-            this,
-            1,
-            stopIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+
+        val stopPendingIntent = PendingIntent.getService(
+            this, 1, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(elapsedTime)
+        return NotificationCompat.Builder(this, CHANNEL_ID_ACTIVE)
+            .setContentTitle(getString(R.string.time_tracking_notification_title))
             .setContentText(contentText)
             .setSmallIcon(R.drawable.ic_timer)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(openAppPendingIntent)
+            .setWhen(startTime?.toEpochMilli() ?: System.currentTimeMillis())
+            .setUsesChronometer(true)
+            .setChronometerCountDown(false)
             .addAction(
                 R.drawable.ic_timer,
                 getString(R.string.stop_tracking),
                 stopPendingIntent
             )
             .setCategory(NotificationCompat.CATEGORY_STATUS)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
     }
@@ -210,7 +298,7 @@ class TimeTrackingNotificationService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, CHANNEL_ID_IDLE)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(getString(R.string.notification_quick_start_ready))
             .setSmallIcon(R.drawable.ic_timer)
@@ -228,18 +316,7 @@ class TimeTrackingNotificationService : Service() {
             .build()
     }
 
-    private fun startUpdatingNotification() {
-        updateJob?.cancel()
-        updateJob = serviceScope.launch {
-            while (isActive) {
-                delay(1000) // Update every second
-                notificationManager.notify(NOTIFICATION_ID, buildNotification())
-            }
-        }
-    }
-
     private fun stopService() {
-        updateJob?.cancel()
         isForeground = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -247,20 +324,15 @@ class TimeTrackingNotificationService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        updateJob?.cancel()
         isForeground = false
     }
 
-    private fun formatDuration(duration: Duration): String {
-        val hours = duration.toHours()
-        val minutes = duration.toMinutesPart()
-        val seconds = duration.toSecondsPart()
-        return String.format("%02d:%02d:%02d", hours, minutes, seconds)
-    }
-
     companion object {
-        private const val CHANNEL_ID = "time_tracking_unified"
+        private const val CHANNEL_ID_ACTIVE = "time_tracking_active"
+        private const val CHANNEL_ID_IDLE = "time_tracking_idle"
+        private const val CHANNEL_ID_ERROR = "time_tracking_error"
         private const val NOTIFICATION_ID = 1001
+        private const val NOTIFICATION_ID_ERROR = 1002
 
         const val ACTION_START_TRACKING =
             "dev.tricked.solidverdant.ACTION_START_TRACKING_NOTIFICATION"
@@ -268,8 +340,6 @@ class TimeTrackingNotificationService : Service() {
         const val ACTION_STOP_TRACKING =
             "dev.tricked.solidverdant.ACTION_STOP_TRACKING_NOTIFICATION"
         const val ACTION_UPDATE_INFO = "dev.tricked.solidverdant.ACTION_UPDATE_INFO"
-        const val ACTION_STOP_TRACKING_BROADCAST =
-            "dev.tricked.solidverdant.ACTION_STOP_TRACKING_FROM_NOTIFICATION"
 
         const val EXTRA_START_TIME = "start_time"
         const val EXTRA_PROJECT_NAME = "project_name"
@@ -307,20 +377,13 @@ class TimeTrackingNotificationService : Service() {
         }
 
         /**
-         * Hide the notification service completely
+         * Stop the notification service
          */
-        fun hide(context: Context) {
+        fun stopTracking(context: Context) {
             val intent = Intent(context, TimeTrackingNotificationService::class.java).apply {
                 action = ACTION_STOP_TRACKING
             }
             context.startService(intent)
-        }
-
-        /**
-         * Stop the notification service (alias for hide)
-         */
-        fun stopTracking(context: Context) {
-            hide(context)
         }
 
         /**

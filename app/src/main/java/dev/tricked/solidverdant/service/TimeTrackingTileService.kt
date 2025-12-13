@@ -126,38 +126,6 @@ class TimeTrackingTileService : TileService() {
                     Timber.d("Received refresh request")
                     refreshTile()
                 }
-
-                TimeTrackingNotificationService.ACTION_STOP_TRACKING_BROADCAST -> {
-                    Timber.d("Received stop tracking from notification")
-                    // Handle stop tracking from notification
-                    serviceScope.launch {
-                        try {
-                            val activeEntry = try {
-                                withTimeoutOrNull(3000L) {
-                                    authRepository.getActiveTimeEntry().getOrNull()
-                                }
-                            } catch (e: Exception) {
-                                Timber.w(e, "Network failed, checking cache")
-                                null
-                            }
-
-                            when {
-                                activeEntry != null -> {
-                                    stopTracking(activeEntry)
-                                }
-
-                                else -> {
-                                    val cachedEntry = getCachedEntryForStop()
-                                    if (cachedEntry != null) {
-                                        stopTrackingWithCache(cachedEntry)
-                                    }
-                                }
-                            }
-                        } catch (e: Exception) {
-                            Timber.e(e, "Failed to handle stop from notification")
-                        }
-                    }
-                }
             }
         }
     }
@@ -170,7 +138,6 @@ class TimeTrackingTileService : TileService() {
         val filter = IntentFilter().apply {
             addAction(ACTION_START_TRACKING)
             addAction(ACTION_REFRESH_TILE)
-            addAction(TimeTrackingNotificationService.ACTION_STOP_TRACKING_BROADCAST)
         }
 
         Timber.d("TileService registering broadcast receiver with actions: ${filter.actionsIterator().asSequence().toList()}")

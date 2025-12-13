@@ -189,3 +189,23 @@
     public static final java.lang.String EXTRA_*;
     public static ** Companion;
 }
+
+# ===== Widgets =====
+# Keep AppWidgetProvider implementations
+-keep public class * extends android.appwidget.AppWidgetProvider {
+    public <init>(...);
+    public void onUpdate(android.content.Context, android.appwidget.AppWidgetManager, int[]);
+    public void onReceive(android.content.Context, android.content.Intent);
+}
+
+# Explicitly keep our widget
+-keep class dev.tricked.solidverdant.widget.TimeTrackingWidget { *; }
+
+# ===== Utilities and Managers =====
+# Keep ShortcutManager and its methods (used via object singleton)
+-keep class dev.tricked.solidverdant.util.ShortcutManager { *; }
+-keepclassmembers class dev.tricked.solidverdant.util.ShortcutManager {
+    public static final ** INSTANCE;
+    public static *** EXTRA_*;
+    <methods>;
+}

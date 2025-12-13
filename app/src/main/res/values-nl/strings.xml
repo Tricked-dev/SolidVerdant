@@ -77,6 +77,13 @@
     <!-- Notifications -->
     <string name="notification_channel_tracking_name">Tijdregistratie</string>
     <string name="notification_channel_tracking_description">Toont tijdregistratiestatus en verstreken tijd</string>
+    <string name="notification_channel_active_name">Actieve Timer</string>
+    <string name="notification_channel_active_description">Toont lopende timer en verstreken tijd</string>
+    <string name="notification_channel_idle_name">Snel Starten</string>
+    <string name="notification_channel_idle_description">Klaar om snel tijdregistratie te starten</string>
+    <string name="notification_channel_error_name">Synchronisatieproblemen</string>
+    <string name="notification_channel_error_description">Waarschuwingen over synchronisatieproblemen</string>
+    <string name="time_tracking_notification_title">Tijdregistratie</string>
     <string name="notification_tracking_default">Tijd registreren</string>
     <string name="notification_quick_start_ready">Klaar om tijd te registreren</string>
 
@@ -85,5 +92,11 @@
     <string name="quick_start">Snel Starten</string>
     <string name="always_show_notifications">Meldingen altijd tonen</string>
     <string name="always_show_notifications_description">Toon blijvende melding tijdens tijdregistratie</string>
+
+    <!-- Widget -->
+    <string name="widget_name">Tijdregistratie</string>
+    <string name="widget_description">Toont huidige registratiestatus met snelle bediening</string>
+    <string name="widget_not_tracking">Niet aan het registreren</string>
+    <string name="widget_login_required">Inloggen vereist</string>
 
 </resources>
