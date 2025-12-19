@@ -7,9 +7,6 @@
     <!-- App Name -->
     <string name="app_name">ソリッドグリーン</string>
 
-    <!-- Tile -->
-    <string name="tile_label">時間追跡</string>
-
     <!-- Login Screen -->
     <string name="solidtime_login">Solidtimeログイン</string>
     <string name="settings">設定</string>

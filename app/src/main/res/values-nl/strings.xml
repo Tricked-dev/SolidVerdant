@@ -7,9 +7,6 @@
     <!-- App Name -->
     <string name="app_name">SolidGroen</string>
 
-    <!-- Tile -->
-    <string name="tile_label">Tijdregistratie</string>
-
     <!-- Login Screen -->
     <string name="solidtime_login">Solidtime Inloggen</string>
     <string name="settings">Instellingen</string>
