@@ -23,13 +23,12 @@ Direct Download
 - **Material 3 Design** - Modern, beautiful UI following Material Design 3 guidelines
 - **Automatic Token Refresh** - Seamless session management without manual re-authentication
 - **Custom Server Support** - Configure custom Solidtime server endpoints
-- **Encrypted Storage** - Secure token storage using Android DataStore
-- **Offline-First Architecture** - Clean architecture with reactive state management
 
 ## Quirks
 
 - State of tile will not sync correctly with what is online unless you have the application open, this is not a problem if you exclusively use the tile and app instead of using the website & desktop app.
 - Tiles are very wonky in hindsight i have also added notif mode that should work better - currently testing it out
+- Instant ratelimits i think theres some loop - more debugging needed lol
 
 ## Screenshots
 
