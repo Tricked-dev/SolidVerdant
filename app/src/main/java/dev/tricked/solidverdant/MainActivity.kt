@@ -170,6 +170,27 @@ fun SolidVerdantApp(
                         }
                     }
                 },
+                onPauseTracking = {
+                    authUiState.currentMembership?.let { membership ->
+                        authUiState.user?.let { user ->
+                            trackingViewModel.pauseTimeEntry(
+                                organizationId = membership.organizationId,
+                                userId = user.id
+                            )
+                        }
+                    }
+                },
+                onResumeTracking = {
+                    authUiState.currentMembership?.let { membership ->
+                        authUiState.user?.let { user ->
+                            trackingViewModel.resumeTimeEntry(
+                                organizationId = membership.organizationId,
+                                memberId = membership.id,
+                                userId = user.id
+                            )
+                        }
+                    }
+                },
                 onDescriptionChange = { description ->
                     trackingViewModel.updateDescription(description)
                 },

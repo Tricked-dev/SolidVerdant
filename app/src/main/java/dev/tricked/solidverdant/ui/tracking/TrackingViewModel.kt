@@ -34,6 +34,7 @@ import javax.inject.Inject
 data class TrackingUiState(
     val isLoading: Boolean = false,
     val isTracking: Boolean = false,
+    val isPaused: Boolean = false,
     val currentTimeEntry: TimeEntry? = null,
     val timeEntries: List<TimeEntry> = emptyList(),
     val projects: List<Project> = emptyList(),
@@ -500,6 +501,26 @@ class TrackingViewModel @Inject constructor(
      */
     fun stopTimeEntry(organizationId: String, userId: String) {
         val currentEntry = _uiState.value.currentTimeEntry
+
+        // If paused, the entry is already stopped - just clear the paused state
+        if (currentEntry == null && _uiState.value.isPaused) {
+            _uiState.value = _uiState.value.copy(
+                isPaused = false,
+                editingDescription = "",
+                editingProjectId = null,
+                editingTaskId = null,
+                editingTags = emptyList(),
+                editingBillable = false
+            )
+            viewModelScope.launch {
+                updateNotificationState()
+                settingsDataStore.setWidgetTrackingState(isTracking = false)
+                TimeTrackingWidget.requestUpdate(context)
+            }
+            Timber.d("Cleared paused state")
+            return
+        }
+
         if (currentEntry == null) {
             Timber.w("No active time entry to stop")
             return
@@ -518,6 +539,7 @@ class TrackingViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         isTracking = false,
+                        isPaused = false,
                         currentTimeEntry = null,
                         editingDescription = "",
                         editingProjectId = null,
@@ -543,6 +565,121 @@ class TrackingViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = error.message ?: "Failed to stop tracking"
+                    )
+                }
+        }
+    }
+
+    /**
+     * Pause the active time entry - stops it via API but keeps notification in paused state
+     * preserving the project/task/description for easy resume
+     */
+    fun pauseTimeEntry(organizationId: String, userId: String) {
+        val currentEntry = _uiState.value.currentTimeEntry
+        if (currentEntry == null) {
+            Timber.w("No active time entry to pause")
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+
+            authRepository.stopTimeEntry(
+                organizationId = organizationId,
+                timeEntryId = currentEntry.id,
+                userId = userId,
+                startTime = currentEntry.start
+            )
+                .onSuccess {
+                    // Keep the editing state (project, task, description) for resume
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        isTracking = false,
+                        isPaused = true,
+                        currentTimeEntry = null
+                    )
+                    stopTimer()
+                    Timber.d("Time entry paused successfully")
+
+                    // Update notification to paused state
+                    TimeTrackingNotificationService.pauseTracking(context)
+
+                    // Update widget state to idle
+                    settingsDataStore.setWidgetTrackingState(isTracking = false)
+                    TimeTrackingWidget.requestUpdate(context)
+                }
+                .onFailure { error ->
+                    Timber.e(error, "Failed to pause time entry")
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = error.message ?: "Failed to pause tracking"
+                    )
+                }
+        }
+    }
+
+    /**
+     * Resume tracking after pause - starts a new time entry with the same project/task/description
+     */
+    fun resumeTimeEntry(organizationId: String, memberId: String, userId: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null, isPaused = false)
+
+            authRepository.startTimeEntry(
+                organizationId = organizationId,
+                memberId = memberId,
+                userId = userId,
+                projectId = _uiState.value.editingProjectId,
+                taskId = _uiState.value.editingTaskId,
+                description = _uiState.value.editingDescription
+            )
+                .onSuccess { timeEntry ->
+                    val projectName =
+                        _uiState.value.projects.find { it.id == timeEntry.projectId }?.name
+                    val taskName = _uiState.value.tasks.find { it.id == timeEntry.taskId }?.name
+
+                    // Update notification to tracking state
+                    TimeTrackingNotificationService.resumeTracking(
+                        context = context,
+                        startTime = Instant.parse(timeEntry.start),
+                        projectName = projectName,
+                        taskName = taskName,
+                        description = timeEntry.description
+                    )
+
+                    // Update widget state
+                    settingsDataStore.setWidgetTrackingState(
+                        isTracking = true,
+                        startTimeEpochMillis = Instant.parse(timeEntry.start).toEpochMilli(),
+                        projectName = projectName,
+                        taskName = taskName,
+                        description = timeEntry.description
+                    )
+                    TimeTrackingWidget.requestUpdate(context)
+
+                    // Update the time entry with tags if needed
+                    if (_uiState.value.editingTags.isNotEmpty()) {
+                        updateCurrentTimeEntry(
+                            organizationId,
+                            timeEntry,
+                            _uiState.value.editingTags
+                        )
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            isTracking = true,
+                            currentTimeEntry = timeEntry
+                        )
+                        startTimer(timeEntry.start)
+                        Timber.d("Time entry resumed successfully with new entry")
+                    }
+                }
+                .onFailure { error ->
+                    Timber.e(error, "Failed to resume time entry")
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        isPaused = true, // Stay paused on failure
+                        error = error.message ?: "Failed to resume tracking"
                     )
                 }
         }

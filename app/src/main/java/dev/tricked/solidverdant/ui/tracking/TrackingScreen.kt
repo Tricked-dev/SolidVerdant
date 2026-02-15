@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -112,6 +113,8 @@ fun TrackingScreen(
     onLogout: () -> Unit,
     onStartTracking: () -> Unit,
     onStopTracking: () -> Unit,
+    onPauseTracking: () -> Unit,
+    onResumeTracking: () -> Unit,
     onDescriptionChange: (String) -> Unit,
     onProjectChange: (String?) -> Unit,
     onTaskChange: (String?) -> Unit,
@@ -309,6 +312,8 @@ fun TrackingScreen(
                             onBillableChange = onBillableChange,
                             onStart = onStartTracking,
                             onStop = onStopTracking,
+                            onPause = onPauseTracking,
+                            onResume = onResumeTracking,
                             onUpdate = onUpdateCurrentEntry
                         )
                     }
@@ -392,6 +397,8 @@ private fun TrackingControls(
     onBillableChange: (Boolean) -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
     onUpdate: () -> Unit
 ) {
     Card(
@@ -416,6 +423,19 @@ private fun TrackingControls(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
                     fontSize = 48.sp,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            } else if (uiState.isPaused) {
+                Text(
+                    text = stringResource(R.string.paused),
+                    style = MaterialTheme.typography.displayMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.tertiary,
+                    fontSize = 36.sp,
                     modifier = Modifier.align(Alignment.CenterHorizontally)
                 )
                 HorizontalDivider(
@@ -488,6 +508,57 @@ private fun TrackingControls(
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(stringResource(R.string.update), fontWeight = FontWeight.SemiBold)
+                    }
+                    Button(
+                        onClick = onPause,
+                        modifier = Modifier.weight(1f),
+                        enabled = !uiState.isLoading,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.tertiary,
+                            contentColor = MaterialTheme.colorScheme.onTertiary
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Pause,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.pause), fontWeight = FontWeight.SemiBold)
+                    }
+                    Button(
+                        onClick = onStop,
+                        modifier = Modifier.weight(1f),
+                        enabled = !uiState.isLoading,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Stop,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.stop), fontWeight = FontWeight.SemiBold)
+                    }
+                } else if (uiState.isPaused) {
+                    Button(
+                        onClick = onResume,
+                        modifier = Modifier.weight(1f),
+                        enabled = !uiState.isLoading,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.resume), fontWeight = FontWeight.SemiBold)
                     }
                     Button(
                         onClick = onStop,
