@@ -38,6 +38,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -68,9 +69,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -318,6 +322,29 @@ fun TrackingScreen(
                         )
                     }
 
+                    // Continue last entry button
+                    if (!uiState.isTracking && !uiState.isPaused) {
+                        val lastEntry = uiState.timeEntries
+                            .filter { it.end != null && !it.description.isNullOrBlank() }
+                            .maxByOrNull { it.start }
+                        lastEntry?.let { entry ->
+                            item(key = "continue_last") {
+                                ContinueLastEntryButton(
+                                    entry = entry,
+                                    projects = uiState.projects,
+                                    onContinue = {
+                                        onDescriptionChange(entry.description ?: "")
+                                        onProjectChange(entry.projectId)
+                                        onTaskChange(entry.taskId)
+                                        onTagsChange(entry.tags.map { it.id })
+                                        onBillableChange(entry.billable)
+                                        onStartTracking()
+                                    }
+                                )
+                            }
+                        }
+                    }
+
                     // Time entries history
                     val groupedEntries = getGroupedEntries()
                     val filteredGroupedEntries = groupedEntries.mapValues { (_, entries) ->
@@ -401,6 +428,8 @@ private fun TrackingControls(
     onResume: () -> Unit,
     onUpdate: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -444,16 +473,21 @@ private fun TrackingControls(
                 )
             }
 
-            // Description field
-            OutlinedTextField(
-                value = uiState.editingDescription,
-                onValueChange = onDescriptionChange,
-                label = { Text(stringResource(R.string.description)) },
-                placeholder = { Text(stringResource(R.string.what_are_you_working_on)) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
+            // Description field with recent entry suggestions
+            DescriptionFieldWithSuggestions(
+                description = uiState.editingDescription,
+                onDescriptionChange = onDescriptionChange,
+                timeEntries = uiState.timeEntries,
+                projects = uiState.projects,
+                tags = uiState.tags,
                 enabled = !uiState.isLoading,
-                shape = RoundedCornerShape(8.dp)
+                onEntryCopied = { entry ->
+                    onDescriptionChange(entry.description ?: "")
+                    onProjectChange(entry.projectId)
+                    onTaskChange(entry.taskId)
+                    onTagsChange(entry.tags.map { it.id })
+                    onBillableChange(entry.billable)
+                }
             )
 
             // Combined Project/Task selector
@@ -510,7 +544,10 @@ private fun TrackingControls(
                         Text(stringResource(R.string.update), fontWeight = FontWeight.SemiBold)
                     }
                     Button(
-                        onClick = onPause,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onPause()
+                        },
                         modifier = Modifier.weight(1f),
                         enabled = !uiState.isLoading,
                         colors = ButtonDefaults.buttonColors(
@@ -528,7 +565,10 @@ private fun TrackingControls(
                         Text(stringResource(R.string.pause), fontWeight = FontWeight.SemiBold)
                     }
                     Button(
-                        onClick = onStop,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onStop()
+                        },
                         modifier = Modifier.weight(1f),
                         enabled = !uiState.isLoading,
                         colors = ButtonDefaults.buttonColors(
@@ -547,7 +587,10 @@ private fun TrackingControls(
                     }
                 } else if (uiState.isPaused) {
                     Button(
-                        onClick = onResume,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onResume()
+                        },
                         modifier = Modifier.weight(1f),
                         enabled = !uiState.isLoading,
                         shape = RoundedCornerShape(8.dp)
@@ -561,7 +604,10 @@ private fun TrackingControls(
                         Text(stringResource(R.string.resume), fontWeight = FontWeight.SemiBold)
                     }
                     Button(
-                        onClick = onStop,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onStop()
+                        },
                         modifier = Modifier.weight(1f),
                         enabled = !uiState.isLoading,
                         colors = ButtonDefaults.buttonColors(
@@ -580,7 +626,10 @@ private fun TrackingControls(
                     }
                 } else {
                     Button(
-                        onClick = onStart,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onStart()
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !uiState.isLoading,
                         shape = RoundedCornerShape(8.dp)
@@ -594,6 +643,244 @@ private fun TrackingControls(
                         Text(stringResource(R.string.start), fontWeight = FontWeight.SemiBold)
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * "Continue last entry" button that starts tracking with the same params as the last entry.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ContinueLastEntryButton(
+    entry: TimeEntry,
+    projects: List<Project>,
+    onContinue: () -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    val project = projects.find { it.id == entry.projectId }
+
+    OutlinedButton(
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            onContinue()
+        },
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Icon(
+            Icons.Default.PlayArrow,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(Modifier.width(8.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.continue_last_entry),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = entry.description ?: "",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            if (project != null) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(Color(android.graphics.Color.parseColor(project.color)))
+                    )
+                    Text(
+                        text = project.name,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            if (entry.tags.isNotEmpty()) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(top = 2.dp)
+                ) {
+                    entry.tags.forEach { tag ->
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            tonalElevation = 0.dp
+                        ) {
+                            Text(
+                                text = tag.name,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Description field with dropdown suggestions from recent time entries.
+ * Shows the last 5 unique entries (deduplicated by description+project+task+tags).
+ * Filters out entries with no description.
+ * Tapping a suggestion copies all fields (description, project, task, tags, billable).
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun DescriptionFieldWithSuggestions(
+    description: String,
+    onDescriptionChange: (String) -> Unit,
+    timeEntries: List<TimeEntry>,
+    projects: List<Project>,
+    tags: List<Tag>,
+    enabled: Boolean,
+    onEntryCopied: (TimeEntry) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    // Compute last 5 unique recent entries, filtering out empty descriptions
+    val recentEntries = remember(timeEntries) {
+        timeEntries
+            .filter { it.end != null && !it.description.isNullOrBlank() }
+            .sortedByDescending { it.start }
+            .distinctBy { entry ->
+                "${entry.description}|${entry.projectId}|${entry.taskId}|${entry.tags.map { it.id }.sorted()}"
+            }
+            .take(5)
+    }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded && recentEntries.isNotEmpty(),
+        onExpandedChange = {
+            if (enabled) expanded = it
+        }
+    ) {
+        OutlinedTextField(
+            value = description,
+            onValueChange = {
+                onDescriptionChange(it)
+                expanded = false
+            },
+            label = { Text(stringResource(R.string.description)) },
+            placeholder = { Text(stringResource(R.string.what_are_you_working_on)) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = enabled)
+                .onFocusChanged {
+                    if (it.isFocused && enabled) expanded = true
+                },
+            singleLine = true,
+            enabled = enabled,
+            shape = RoundedCornerShape(8.dp)
+        )
+
+        ExposedDropdownMenu(
+            expanded = expanded && recentEntries.isNotEmpty(),
+            onDismissRequest = { expanded = false }
+        ) {
+            Text(
+                stringResource(R.string.recent_entries),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+
+            recentEntries.forEach { entry ->
+                val project = projects.find { it.id == entry.projectId }
+                val entryTagNames = entry.tags.map { it.name }
+
+                DropdownMenuItem(
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            // Description
+                            Text(
+                                text = entry.description!!,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            // Project row
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (project != null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                Color(
+                                                    android.graphics.Color.parseColor(
+                                                        project.color
+                                                    )
+                                                )
+                                            )
+                                    )
+                                    Text(
+                                        text = project.name,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                } else {
+                                    Text(
+                                        text = stringResource(R.string.no_project_label),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            // Tag chips
+                            if (entryTagNames.isNotEmpty()) {
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    entryTagNames.forEach { tagName ->
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = MaterialTheme.colorScheme.secondaryContainer,
+                                            tonalElevation = 0.dp
+                                        ) {
+                                            Text(
+                                                text = tagName,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                modifier = Modifier.padding(
+                                                    horizontal = 6.dp,
+                                                    vertical = 2.dp
+                                                )
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    onClick = {
+                        onEntryCopied(entry)
+                        expanded = false
+                    }
+                )
             }
         }
     }

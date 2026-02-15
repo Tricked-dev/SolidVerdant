@@ -97,6 +97,13 @@
     <string name="paused">Paused</string>
     <string name="notification_paused_title">Time Tracking (Paused)</string>
     <string name="notification_paused_text">Tap resume to start a new session</string>
+    <string name="notification_paused_tracked">Tracked: %1$s</string>
+    <string name="notification_paused_since">Paused for</string>
+
+    <!-- Description Suggestions -->
+    <string name="recent_entries">Recent entries</string>
+    <string name="no_project_label">No project</string>
+    <string name="continue_last_entry">Continue last entry</string>
 
     <!-- Widget -->
     <string name="widget_name">Time Tracker</string>

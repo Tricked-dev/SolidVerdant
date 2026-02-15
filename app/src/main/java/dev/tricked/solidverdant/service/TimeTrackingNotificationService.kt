@@ -54,6 +54,8 @@ class TimeTrackingNotificationService : Service() {
     private var isTracking: Boolean = false
     private var isPaused: Boolean = false
     private var isForeground: Boolean = false
+    private var pausedAt: Instant? = null
+    private var elapsedBeforePauseSeconds: Long = 0
 
     private val notificationManager: NotificationManager by lazy {
         getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -192,6 +194,15 @@ class TimeTrackingNotificationService : Service() {
     }
 
     private fun handlePauseTracking() {
+        // Calculate elapsed time before pausing
+        val now = Instant.now()
+        pausedAt = now
+        elapsedBeforePauseSeconds = if (startTime != null) {
+            now.epochSecond - startTime!!.epochSecond
+        } else {
+            0
+        }
+
         // Immediately show paused notification
         isPaused = true
         isTracking = false
@@ -414,20 +425,19 @@ class TimeTrackingNotificationService : Service() {
     }
 
     private fun buildPausedNotification(): Notification {
+        // Format elapsed time before pause
+        val trackedTime = formatDuration(elapsedBeforePauseSeconds)
+
+        // Build content text with project/task info and tracked duration
         val contentText = buildString {
+            append(getString(R.string.notification_paused_tracked, trackedTime))
             if (!projectName.isNullOrBlank()) {
+                append(" • ")
                 append(projectName)
                 if (!taskName.isNullOrBlank()) {
                     append(" / ")
                     append(taskName)
                 }
-            }
-            if (!description.isNullOrBlank()) {
-                if (isNotEmpty()) append(" • ")
-                append(description)
-            }
-            if (isEmpty()) {
-                append(getString(R.string.notification_paused_text))
             }
         }
 
@@ -462,6 +472,11 @@ class TimeTrackingNotificationService : Service() {
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(openAppPendingIntent)
+            // Use chronometer to show time since paused
+            .setWhen(pausedAt?.toEpochMilli() ?: System.currentTimeMillis())
+            .setUsesChronometer(true)
+            .setChronometerCountDown(false)
+            .setSubText(getString(R.string.notification_paused_since))
             .addAction(
                 R.drawable.ic_timer,
                 getString(R.string.resume),
@@ -476,6 +491,13 @@ class TimeTrackingNotificationService : Service() {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
+    }
+
+    private fun formatDuration(totalSeconds: Long): String {
+        val hours = totalSeconds / 3600
+        val minutes = (totalSeconds % 3600) / 60
+        val seconds = totalSeconds % 60
+        return String.format("%02d:%02d:%02d", hours, minutes, seconds)
     }
 
     private fun buildIdleNotification(): Notification {
