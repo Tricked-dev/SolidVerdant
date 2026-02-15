@@ -3,9 +3,6 @@
 [![GitHub Downloads (specific asset, latest release)](https://img.shields.io/github/downloads/tricked-dev/SolidVerdant/latest/app-release.apk?displayAssetName=true&style=for-the-badge&logo=android)](https://github.com/Tricked-dev/SolidVerdant/releases/tag/nightly)
 [![Static Badge](https://img.shields.io/badge/Download_Click!-Instantly?style=for-the-badge&logo=Speedtest&label=Instantly&link=https%3A%2F%2Fgithub.com%2FTricked-dev%2FSolidVerdant%2Freleases%2Fdownload%2Fnightly%2Fapp-release.apk)](https://github.com/Tricked-dev/SolidVerdant/releases/download/nightly/app-release.apk)
 
-Direct Download
-
-
 <p align="center">
   <strong>Modern Android time tracking client for Solidtime</strong>
 </p>
@@ -18,17 +15,38 @@ Direct Download
 
 ## Features
 
-- **OAuth2 Authentication with PKCE** - Secure authentication flow with Proof Key for Code Exchange
-- **Real-time Tracking Display** - View your current time entry with live elapsed time counter
-- **Material 3 Design** - Modern, beautiful UI following Material Design 3 guidelines
-- **Automatic Token Refresh** - Seamless session management without manual re-authentication
-- **Custom Server Support** - Configure custom Solidtime server endpoints
+### Time tracking
+
+- Start/stop time entries with a live elapsed timer
+- Select projects and tasks from searchable dropdowns
+- Add descriptions
+- Edit or delete past time entries
+- View history grouped by date, with identical entries collapsed into expandable groups
+- Pull-to-refresh to sync with the server
+
+### Android integration
+
+- **Quick Settings tile** - Start/stop tracking without opening the app, with project selection dialog
+- **Persistent notification** - Shows elapsed time with a chronometer and a stop button; optionally stays visible when idle
+- **Boot persistence** - Restores notification state after reboot
+
+### Auth and configuration
+
+- OAuth2 with PKCE (no API keys needed)
+- Automatic token refresh
+- Custom server endpoints and OAuth client IDs
+- Encrypted token storage
+
+### UI
+
+- Material 3 with Material You dynamic colors (Android 12+)
+- Dark and light themes follow system settings
+- Edge-to-edge display with predictive back gesture support (Android 13+)
+- Available in English, Dutch, and Japanese + any language you want if you create a pull request
 
 ## Quirks
 
-- State of tile will not sync correctly with what is online unless you have the application open, this is not a problem if you exclusively use the tile and app instead of using the website & desktop app.
-- Tiles are very wonky in hindsight i have also added notif mode that should work better - currently testing it out
-- Instant ratelimits i think theres some loop - more debugging needed lol
+- The Quick Settings tile state won't sync with changes made on the web or desktop unless the app is open. Not a problem if you only use the tile and app.
 
 ## Screenshots
 
@@ -121,17 +139,6 @@ Run instrumentation tests:
 ```bash
 ./gradlew connectedAndroidTest
 ```
-
-## Security
-
-SolidVerdant implements enterprise-grade security features:
-
-- **PKCE (Proof Key for Code Exchange)**: Prevents authorization code interception attacks
-- **State Parameter Validation**: CSRF protection for OAuth flow
-- **Encrypted Token Storage**: Secure storage using Android DataStore
-- **Automatic Token Rotation**: Tokens refreshed securely on expiration
-- **Custom Tabs**: OAuth flows handled in secure, isolated browser context
-
 ## Links
 
 - **Solidtime Website**: [https://www.solidtime.io/](https://www.solidtime.io/)
