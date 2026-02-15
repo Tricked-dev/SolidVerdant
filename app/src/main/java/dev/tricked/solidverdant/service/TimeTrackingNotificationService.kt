@@ -25,6 +25,7 @@ import dev.tricked.solidverdant.ui.tile.ProjectSelectionActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -134,16 +135,12 @@ class TimeTrackingNotificationService : Service() {
                                         startTime = activeEntry.start
                                     ).onSuccess {
                                         // Update notification state based on settings
-                                        launch {
-                                            val alwaysShow = settingsDataStore.alwaysShowNotification.first()
-                                            if (alwaysShow) {
-                                                // Show idle notification
-                                                showIdle(this@TimeTrackingNotificationService)
-                                            } else {
-                                                // Hide notification completely
-                                                stopTracking(this@TimeTrackingNotificationService)
-                                            }
+                                        val alwaysShow = settingsDataStore.alwaysShowNotification.first()
+                                        if (alwaysShow) {
+                                            // Show idle notification
+                                            showIdle(this@TimeTrackingNotificationService)
                                         }
+                                        // If not alwaysShow, stopService() in finally will clean up
                                     }.onFailure { error ->
                                         Timber.e(
                                             error,
@@ -155,15 +152,12 @@ class TimeTrackingNotificationService : Service() {
                                 }
                         } else {
                             Timber.w("No active time entry to stop")
-                            // Still update notification state
-                            launch {
-                                val alwaysShow = settingsDataStore.alwaysShowNotification.first()
-                                if (alwaysShow) {
-                                    showIdle(this@TimeTrackingNotificationService)
-                                } else {
-                                    stopTracking(this@TimeTrackingNotificationService)
-                                }
+                            // Check if we should show idle notification
+                            val alwaysShow = settingsDataStore.alwaysShowNotification.first()
+                            if (alwaysShow) {
+                                showIdle(this@TimeTrackingNotificationService)
                             }
+                            // If not alwaysShow, stopService() in finally will clean up
                         }
                     }.onFailure { error ->
                         Timber.e(error, "Failed to get active time entry")
@@ -325,6 +319,7 @@ class TimeTrackingNotificationService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         isForeground = false
+        serviceScope.cancel()
     }
 
     companion object {

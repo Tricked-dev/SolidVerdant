@@ -56,7 +56,7 @@ jobs:
           [![Release APK](https://img.shields.io/badge/Download-Release_APK-green?style=for-the-badge&logo=android)](https://github.com/${{ github.repository }}/releases/download/nightly/app-release.apk)
           [![Debug APK](https://img.shields.io/badge/Download-Debug_APK-blue?style=for-the-badge&logo=android)](https://github.com/${{ github.repository }}/releases/download/nightly/app-debug.apk)
         draft: false
-        prerelease: false
+        prerelease: true
         files: |
           app/build/outputs/apk/release/app-release.apk
           app/build/outputs/apk/debug/app-debug.apk

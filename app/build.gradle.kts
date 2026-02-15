@@ -13,6 +13,11 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+val appVersionName: String = project.findProperty("app.versionName") as String
+val appVersionCode: Int = appVersionName.split(".").let { (major, minor, patch) ->
+    major.toInt() * 10000 + minor.toInt() * 100 + patch.toInt()
+}
+
 android {
     namespace = "dev.tricked.solidverdant"
     compileSdk = libs.versions.compileSdk.get().toInt()
@@ -30,8 +35,8 @@ android {
         applicationId = "dev.tricked.solidverdant"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         resourceConfigurations += listOf("en", "nl", "ja")
 

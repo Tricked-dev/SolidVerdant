@@ -1,0 +1,126 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'gradle.properties'
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.current }}
+      changed: ${{ steps.version.outputs.changed }}
+      changelog: ${{ steps.changelog.outputs.log }}
+      prev_tag: ${{ steps.changelog.outputs.prev_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get current version
+        id: version
+        run: |
+          CURRENT=$(grep '^app.versionName=' gradle.properties | cut -d= -f2)
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+
+          # Check if version changed in this commit
+          PREVIOUS=$(git show HEAD~1:gradle.properties 2>/dev/null | grep '^app.versionName=' | cut -d= -f2 || echo "")
+          if [ "$CURRENT" != "$PREVIOUS" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate changelog
+        id: changelog
+        if: steps.version.outputs.changed == 'true'
+        run: |
+          # Find the previous release tag
+          PREV_TAG=$(git tag --sort=-v:refname | grep '^v' | head -n1 || echo "")
+          echo "prev_tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
+
+          if [ -n "$PREV_TAG" ]; then
+            LOG=$(git log "$PREV_TAG"..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          else
+            LOG=$(git log --pretty=format:"- %s (%h)" --no-merges -20)
+          fi
+
+          # Write to output using delimiter for multiline
+          {
+            echo "log<<CHANGELOG_EOF"
+            echo "$LOG"
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: check-version
+    if: needs.check-version.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Decode and install keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > ${{ runner.temp }}/my-release-key.jks
+
+      - name: Build release APK
+        run: ./gradlew app:assembleRelease
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/my-release-key.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ needs.check-version.outputs.version }}
+          name: v${{ needs.check-version.outputs.version }}
+          body: |
+            ## SolidVerdant v${{ needs.check-version.outputs.version }}
+
+            [![Android](https://img.shields.io/badge/Platform-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://developer.android.com)
+            [![Kotlin](https://img.shields.io/badge/Kotlin-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org)
+            [![Jetpack Compose](https://img.shields.io/badge/Jetpack_Compose-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
+
+            ---
+
+            ### Download
+
+            [![Release APK](https://img.shields.io/badge/Download-Release_APK-green?style=for-the-badge&logo=android)](https://github.com/${{ github.repository }}/releases/download/v${{ needs.check-version.outputs.version }}/app-release.apk)
+
+            ---
+
+            ### What's Changed
+
+            ${{ needs.check-version.outputs.changelog }}
+
+            ---
+
+            **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ needs.check-version.outputs.prev_tag }}...v${{ needs.check-version.outputs.version }}
+          draft: false
+          prerelease: false
+          files: |
+            app/build/outputs/apk/release/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

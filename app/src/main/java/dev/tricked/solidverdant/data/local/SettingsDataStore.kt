@@ -16,6 +16,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -57,7 +58,7 @@ class SettingsDataStore @Inject constructor(
      */
     val alwaysShowNotification: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[ALWAYS_SHOW_NOTIFICATION] ?: false // Default to false
-    }
+    }.distinctUntilChanged()
 
     /**
      * Set whether to always show notifications
