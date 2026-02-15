@@ -90,6 +90,16 @@
     <string name="always_show_notifications">通知を常に表示</string>
     <string name="always_show_notifications_description">時間追跡中に継続的な通知を表示</string>
 
+    <!-- About / Verification -->
+    <string name="about">概要</string>
+    <string name="app_version">バージョン %1$s</string>
+    <string name="verification_info">検証情報</string>
+    <string name="package_id_label">パッケージID</string>
+    <string name="signing_certificate_label">署名証明書 (SHA-256)</string>
+    <string name="copied_to_clipboard">クリップボードにコピーしました</string>
+    <string name="add_to_obtainium">Obtainiumに追加</string>
+    <string name="add_to_obtainium_description">Obtainiumでアップデートを追跡</string>
+
     <!-- Widget -->
     <string name="widget_name">時間トラッカー</string>
     <string name="widget_description">クイックコントロール付きの現在の追跡ステータスを表示します</string>

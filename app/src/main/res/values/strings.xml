@@ -105,6 +105,16 @@
     <string name="no_project_label">No project</string>
     <string name="continue_last_entry">Continue last entry</string>
 
+    <!-- About / Verification -->
+    <string name="about">About</string>
+    <string name="app_version">Version %1$s</string>
+    <string name="verification_info">Verification Info</string>
+    <string name="package_id_label">Package ID</string>
+    <string name="signing_certificate_label">Signing Certificate (SHA-256)</string>
+    <string name="copied_to_clipboard">Copied to clipboard</string>
+    <string name="add_to_obtainium">Add to Obtainium</string>
+    <string name="add_to_obtainium_description">Track updates via Obtainium</string>
+
     <!-- Widget -->
     <string name="widget_name">Time Tracker</string>
     <string name="widget_description">Shows current tracking status with quick controls</string>

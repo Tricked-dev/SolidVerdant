@@ -1,8 +1,14 @@
 package dev.tricked.solidverdant.ui.tracking
 
 import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -21,8 +27,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Delete
@@ -81,6 +89,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import dev.tricked.solidverdant.BuildConfig
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
@@ -164,6 +173,7 @@ fun TrackingScreen(
                             .weight(1f)
                             .padding(16.dp)
                             .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
                     ) {
                         Text(
                             text = stringResource(R.string.settings_menu),
@@ -197,6 +207,13 @@ fun TrackingScreen(
                                 onCheckedChange = onAlwaysShowNotificationsChange
                             )
                         }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider()
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // About / Verification section
+                        AboutSection(context = context)
                     }
 
                     // Logout button at the bottom
@@ -1502,6 +1519,151 @@ private fun ErrorCard(error: String) {
             )
         }
     }
+}
+
+/**
+ * About section with version info, verification details, and Obtainium button
+ */
+@Composable
+private fun AboutSection(context: Context) {
+    Text(
+        text = stringResource(R.string.about),
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(bottom = 12.dp)
+    )
+
+    // Version
+    Text(
+        text = stringResource(R.string.app_version, BuildConfig.VERSION_NAME),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(bottom = 16.dp)
+    )
+
+    // Verification Info card
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.verification_info),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            // Package ID
+            Text(
+                text = stringResource(R.string.package_id_label),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = context.packageName,
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                modifier = Modifier.clickable {
+                    copyToClipboard(context, context.packageName)
+                }
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Signing Certificate SHA-256
+            Text(
+                text = stringResource(R.string.signing_certificate_label),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            val signingHash = remember { getSigningCertificateHash(context) }
+            Text(
+                text = signingHash,
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                modifier = Modifier.clickable {
+                    copyToClipboard(context, signingHash)
+                }
+            )
+        }
+    }
+
+    Spacer(modifier = Modifier.height(12.dp))
+
+    // Add to Obtainium button
+    OutlinedButton(
+        onClick = {
+            val obtainiumUrl = "https://apps.obtainium.imranr.dev/redirect.html?r=obtainium://app/%7B%22id%22%3A%22dev.tricked.solidverdant%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FTricked-dev%2FSolidVerdant%22%2C%22author%22%3A%22Tricked-dev%22%2C%22name%22%3A%22SolidVerdant%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22autoApkFilterByArch%5C%22%3Atrue%7D%22%7D"
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(obtainiumUrl))
+            context.startActivity(intent)
+        },
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = stringResource(R.string.add_to_obtainium),
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = stringResource(R.string.add_to_obtainium_description),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/**
+ * Get the SHA-256 hash of the app's signing certificate
+ */
+private fun getSigningCertificateHash(context: Context): String {
+    return try {
+        val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            context.packageManager.getPackageInfo(
+                context.packageName,
+                PackageManager.GET_SIGNING_CERTIFICATES
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageInfo(
+                context.packageName,
+                PackageManager.GET_SIGNATURES
+            )
+        }
+
+        val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            packageInfo.signingInfo?.apkContentsSigners
+        } else {
+            @Suppress("DEPRECATION")
+            packageInfo.signatures
+        }
+
+        val signature = signatures?.firstOrNull() ?: return "Unknown"
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        val hashBytes = digest.digest(signature.toByteArray())
+        hashBytes.joinToString(":") { "%02X".format(it) }
+    } catch (e: Exception) {
+        "Unknown"
+    }
+}
+
+/**
+ * Copy text to clipboard and show a toast
+ */
+private fun copyToClipboard(context: Context, text: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    val clip = ClipData.newPlainText("SolidVerdant", text)
+    clipboard.setPrimaryClip(clip)
+    Toast.makeText(context, R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show()
 }
 
 /**

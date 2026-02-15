@@ -108,6 +108,16 @@ jobs:
             ### Download
 
             [![Release APK](https://img.shields.io/badge/Download-Release_APK-green?style=for-the-badge&logo=android)](https://github.com/${{ github.repository }}/releases/download/v${{ needs.check-version.outputs.version }}/app-release.apk)
+            [![Add to Obtainium](https://img.shields.io/badge/Add_to-Obtainium-blue?style=for-the-badge&logo=android)](https://apps.obtainium.imranr.dev/redirect.html?r=obtainium://add/https://github.com/${{ github.repository }})
+
+            ---
+
+            ### Verification
+
+            | Field | Value |
+            |-------|-------|
+            | **Package ID** | `dev.tricked.solidverdant` |
+            | **SHA-256 Signing Certificate** | `7A:38:2F:E9:14:1B:D3:DC:A4:C4:82:20:7F:FF:12:5A:82:8D:66:92:C4:0E:5A:BC:30:61:6C:33:15:C7:F3:64` |
 
             ---
 

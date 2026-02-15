@@ -90,6 +90,16 @@
     <string name="always_show_notifications">Meldingen altijd tonen</string>
     <string name="always_show_notifications_description">Toon blijvende melding tijdens tijdregistratie</string>
 
+    <!-- About / Verification -->
+    <string name="about">Over</string>
+    <string name="app_version">Versie %1$s</string>
+    <string name="verification_info">Verificatie-informatie</string>
+    <string name="package_id_label">Pakket-ID</string>
+    <string name="signing_certificate_label">Ondertekeningscertificaat (SHA-256)</string>
+    <string name="copied_to_clipboard">Gekopieerd naar klembord</string>
+    <string name="add_to_obtainium">Toevoegen aan Obtainium</string>
+    <string name="add_to_obtainium_description">Updates bijhouden via Obtainium</string>
+
     <!-- Widget -->
     <string name="widget_name">Tijdregistratie</string>
     <string name="widget_description">Toont huidige registratiestatus met snelle bediening</string>
