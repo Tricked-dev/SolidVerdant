@@ -123,9 +123,46 @@ class TimeTrackingNotificationService : Service() {
                     notificationManager.notify(NOTIFICATION_ID, buildNotification())
                 }
             }
+            ACTION_QUICK_START -> handleQuickStart(intent)
         }
 
         return START_STICKY
+    }
+
+    private fun handleQuickStart(intent: Intent) {
+        isTracking = true
+        isPaused = false
+        startTime = Instant.now()
+        projectName = intent.getStringExtra(EXTRA_PROJECT_NAME)
+        taskName = intent.getStringExtra(EXTRA_TASK_NAME)
+        description = intent.getStringExtra(EXTRA_DESCRIPTION)
+        startForeground(NOTIFICATION_ID, buildNotification())
+        isForeground = true
+
+        serviceScope.launch {
+            val membership = authRepository.getCurrentMembership()
+            val user = authRepository.getCurrentUser().getOrNull()
+            if (membership == null || user == null) {
+                Timber.e("Quick start failed: missing membership or user")
+                stopService()
+                return@launch
+            }
+
+            authRepository.startTimeEntry(
+                organizationId = membership.organizationId,
+                memberId = membership.id,
+                userId = user.id,
+                projectId = intent.getStringExtra(EXTRA_PROJECT_ID),
+                taskId = intent.getStringExtra(EXTRA_TASK_ID),
+                description = description.orEmpty()
+            ).onSuccess { entry ->
+                startTime = Instant.parse(entry.start)
+                notificationManager.notify(NOTIFICATION_ID, buildNotification())
+            }.onFailure { error ->
+                Timber.e(error, "Quick start failed")
+                stopService()
+            }
+        }
     }
 
     private fun handleStopTracking() {
@@ -558,11 +595,14 @@ class TimeTrackingNotificationService : Service() {
         const val ACTION_RESUME_TRACKING =
             "dev.tricked.solidverdant.ACTION_RESUME_TRACKING_NOTIFICATION"
         const val ACTION_UPDATE_INFO = "dev.tricked.solidverdant.ACTION_UPDATE_INFO"
+        const val ACTION_QUICK_START = "dev.tricked.solidverdant.ACTION_QUICK_START"
 
         const val EXTRA_START_TIME = "start_time"
         const val EXTRA_PROJECT_NAME = "project_name"
         const val EXTRA_TASK_NAME = "task_name"
         const val EXTRA_DESCRIPTION = "description"
+        const val EXTRA_PROJECT_ID = "project_id"
+        const val EXTRA_TASK_ID = "task_id"
 
         /**
          * Show idle notification (quick start)
@@ -570,6 +610,25 @@ class TimeTrackingNotificationService : Service() {
         fun showIdle(context: Context) {
             val intent = Intent(context, TimeTrackingNotificationService::class.java).apply {
                 action = ACTION_SHOW_IDLE
+            }
+            context.startForegroundService(intent)
+        }
+
+        fun quickStart(
+            context: Context,
+            projectId: String?,
+            taskId: String?,
+            description: String,
+            projectName: String?,
+            taskName: String?
+        ) {
+            val intent = Intent(context, TimeTrackingNotificationService::class.java).apply {
+                action = ACTION_QUICK_START
+                putExtra(EXTRA_PROJECT_ID, projectId)
+                putExtra(EXTRA_TASK_ID, taskId)
+                putExtra(EXTRA_DESCRIPTION, description)
+                putExtra(EXTRA_PROJECT_NAME, projectName)
+                putExtra(EXTRA_TASK_NAME, taskName)
             }
             context.startForegroundService(intent)
         }

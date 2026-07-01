@@ -90,6 +90,7 @@
 
     <!-- Settings -->
     <string name="settings_menu">Settings</string>
+    <string name="server_information">Server information</string>
     <string name="quick_start">Quick Start</string>
     <string name="always_show_notifications">Always show notifications</string>
     <string name="always_show_notifications_description">Show persistent notification while tracking time</string>

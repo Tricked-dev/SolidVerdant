@@ -130,6 +130,8 @@ fun SolidVerdantApp(
                 user = authUiState.user,
                 memberships = authUiState.memberships,
                 currentMembership = authUiState.currentMembership,
+                serverEndpoint = configState.endpoint,
+                clientId = configState.clientId,
                 uiState = trackingUiState,
                 alwaysShowNotifications = alwaysShowNotifications,
                 onAlwaysShowNotificationsChange = { enabled ->
@@ -163,12 +165,8 @@ fun SolidVerdantApp(
                         authUiState.user?.let { user ->
                             trackingViewModel.stopTimeEntry(
                                 organizationId = membership.organizationId,
+                                memberId = membership.id,
                                 userId = user.id
-                            )
-                            // Reload data to show the stopped entry in history
-                            trackingViewModel.loadAllData(
-                                organizationId = membership.organizationId,
-                                memberId = membership.id
                             )
                         }
                     }

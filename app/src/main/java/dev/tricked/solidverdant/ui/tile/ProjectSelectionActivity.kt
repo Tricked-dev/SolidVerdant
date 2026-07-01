@@ -1,6 +1,5 @@
 package dev.tricked.solidverdant.ui.tile
 
-import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -41,7 +40,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
-import dev.tricked.solidverdant.service.TimeTrackingTileService
+import dev.tricked.solidverdant.service.TimeTrackingNotificationService
 import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
 
 /**
@@ -64,17 +63,14 @@ class ProjectSelectionActivity : ComponentActivity() {
                 ProjectSelectionContent(
                     viewModel = viewModel,
                     onStartTracking = { projectId, taskId, description, projectName, taskName ->
-                        // Send intent to TileService - it will handle the API call
-                        val intent = Intent(TimeTrackingTileService.ACTION_START_TRACKING).apply {
-                            putExtra(TimeTrackingTileService.EXTRA_PROJECT_ID, projectId)
-                            putExtra(TimeTrackingTileService.EXTRA_TASK_ID, taskId)
-                            putExtra(TimeTrackingTileService.EXTRA_DESCRIPTION, description)
-                            putExtra(TimeTrackingTileService.EXTRA_PROJECT_NAME, projectName)
-                            putExtra(TimeTrackingTileService.EXTRA_TASK_NAME, taskName)
-                            setPackage(packageName)
-                        }
-                        timber.log.Timber.d("ProjectSelectionActivity: Sending broadcast to start tracking - project=$projectName, task=$taskName, action=${intent.action}")
-                        sendBroadcast(intent)
+                        TimeTrackingNotificationService.quickStart(
+                            context = this,
+                            projectId = projectId,
+                            taskId = taskId,
+                            description = description,
+                            projectName = projectName,
+                            taskName = taskName
+                        )
 
                         // Close immediately - TileService handles the rest
                         finish()

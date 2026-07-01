@@ -15,6 +15,9 @@ import dev.tricked.solidverdant.service.TimeTrackingNotificationService
 import dev.tricked.solidverdant.widget.TimeTrackingWidget
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -97,14 +100,12 @@ class TrackingViewModel @Inject constructor(
         val alwaysShow = settingsDataStore.alwaysShowNotification.first()
         val isTracking = _uiState.value.isTracking
 
-        if (alwaysShow) {
-            if (!isTracking) {
-                // Show idle notification (quick start)
-                TimeTrackingNotificationService.showIdle(context)
-            }
-            // If tracking, notification is already shown by startTracking()
+        if (isTracking) {
+            // Active tracking always owns a foreground notification.
+            return
+        } else if (alwaysShow) {
+            TimeTrackingNotificationService.showIdle(context)
         } else {
-            // Hide notification when always show is disabled
             TimeTrackingNotificationService.stopTracking(context)
         }
     }
@@ -115,31 +116,26 @@ class TrackingViewModel @Inject constructor(
     fun loadAllData(organizationId: String, memberId: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-
-            // Load active time entry
-            loadActiveTimeEntry()
-
-            // Load time entries
-            loadTimeEntries(organizationId, memberId)
-
-            // Load projects
-            loadProjects(organizationId)
-
-            // Load tasks
-            loadTasks(organizationId)
-
-            // Load tags
-            loadTags(organizationId)
-
-            _uiState.value = _uiState.value.copy(isLoading = false)
+            try {
+                coroutineScope {
+                    listOf(
+                        async { loadActiveTimeEntry() },
+                        async { loadTimeEntries(organizationId, memberId) },
+                        async { loadProjects(organizationId) },
+                        async { loadTasks(organizationId) },
+                        async { loadTags(organizationId) }
+                    ).awaitAll()
+                }
+            } finally {
+                _uiState.value = _uiState.value.copy(isLoading = false)
+            }
         }
     }
 
     /**
      * Load the active time entry for the current user
      */
-    fun loadActiveTimeEntry() {
-        viewModelScope.launch {
+    private suspend fun loadActiveTimeEntry() {
             authRepository.getActiveTimeEntry()
                 .onSuccess { timeEntry ->
                     val isTracking = timeEntry != null
@@ -154,8 +150,7 @@ class TrackingViewModel @Inject constructor(
                     )
 
                     // Update notification state based on tracking status and settings
-                    val alwaysShow = settingsDataStore.alwaysShowNotification.first()
-                    if (timeEntry != null && alwaysShow) {
+                    if (timeEntry != null) {
                         // If tracking, show tracking notification with details
                         val projectName =
                             _uiState.value.projects.find { it.id == timeEntry.projectId }?.name
@@ -213,14 +208,12 @@ class TrackingViewModel @Inject constructor(
                     // Mark as initialized even on failure
                     isInitialized = true
                 }
-        }
     }
 
     /**
      * Load time entries
      */
-    private fun loadTimeEntries(organizationId: String, memberId: String) {
-        viewModelScope.launch {
+    private suspend fun loadTimeEntries(organizationId: String, memberId: String) {
             authRepository.getTimeEntries(organizationId, memberId)
                 .onSuccess { entries ->
                     _uiState.value = _uiState.value.copy(timeEntries = entries)
@@ -228,14 +221,12 @@ class TrackingViewModel @Inject constructor(
                 .onFailure { error ->
                     Timber.e(error, "Failed to load time entries")
                 }
-        }
     }
 
     /**
      * Load projects
      */
-    private fun loadProjects(organizationId: String) {
-        viewModelScope.launch {
+    private suspend fun loadProjects(organizationId: String) {
             authRepository.getProjects(organizationId)
                 .onSuccess { projects ->
                     _uiState.value =
@@ -244,14 +235,12 @@ class TrackingViewModel @Inject constructor(
                 .onFailure { error ->
                     Timber.e(error, "Failed to load projects")
                 }
-        }
     }
 
     /**
      * Load tasks
      */
-    private fun loadTasks(organizationId: String) {
-        viewModelScope.launch {
+    private suspend fun loadTasks(organizationId: String) {
             authRepository.getTasks(organizationId)
                 .onSuccess { tasks ->
                     _uiState.value = _uiState.value.copy(tasks = tasks.filter { !it.isDone })
@@ -259,14 +248,12 @@ class TrackingViewModel @Inject constructor(
                 .onFailure { error ->
                     Timber.e(error, "Failed to load tasks")
                 }
-        }
     }
 
     /**
      * Load tags
      */
-    private fun loadTags(organizationId: String) {
-        viewModelScope.launch {
+    private suspend fun loadTags(organizationId: String) {
             authRepository.getTags(organizationId)
                 .onSuccess { tags ->
                     _uiState.value = _uiState.value.copy(tags = tags)
@@ -274,7 +261,6 @@ class TrackingViewModel @Inject constructor(
                 .onFailure { error ->
                     Timber.e(error, "Failed to load tags")
                 }
-        }
     }
 
     /**
@@ -369,21 +355,18 @@ class TrackingViewModel @Inject constructor(
                 description = _uiState.value.editingDescription
             )
                 .onSuccess { timeEntry ->
-                    // Start persistent notification (if enabled)
-                    val alwaysShow = settingsDataStore.alwaysShowNotification.first()
+                    // Active timers always have a foreground notification.
                     val projectName =
                         _uiState.value.projects.find { it.id == timeEntry.projectId }?.name
                     val taskName = _uiState.value.tasks.find { it.id == timeEntry.taskId }?.name
 
-                    if (alwaysShow) {
-                        TimeTrackingNotificationService.startTracking(
-                            context = context,
-                            startTime = Instant.parse(timeEntry.start),
-                            projectName = projectName,
-                            taskName = taskName,
-                            description = timeEntry.description
-                        )
-                    }
+                    TimeTrackingNotificationService.startTracking(
+                        context = context,
+                        startTime = Instant.parse(timeEntry.start),
+                        projectName = projectName,
+                        taskName = taskName,
+                        description = timeEntry.description
+                    )
 
                     // Update widget state
                     settingsDataStore.setWidgetTrackingState(
@@ -499,7 +482,7 @@ class TrackingViewModel @Inject constructor(
     /**
      * Stop the active time entry
      */
-    fun stopTimeEntry(organizationId: String, userId: String) {
+    fun stopTimeEntry(organizationId: String, memberId: String, userId: String) {
         val currentEntry = _uiState.value.currentTimeEntry
 
         // If paused, the entry is already stopped - just clear the paused state
@@ -537,7 +520,6 @@ class TrackingViewModel @Inject constructor(
             )
                 .onSuccess { timeEntry ->
                     _uiState.value = _uiState.value.copy(
-                        isLoading = false,
                         isTracking = false,
                         isPaused = false,
                         currentTimeEntry = null,
@@ -557,8 +539,9 @@ class TrackingViewModel @Inject constructor(
                     settingsDataStore.setWidgetTrackingState(isTracking = false)
                     TimeTrackingWidget.requestUpdate(context)
 
-                    // Reload time entries to show the stopped entry
-                    // Will be called from the UI after stop
+                    // Refresh only after the stop has been committed by the server.
+                    loadTimeEntries(organizationId, memberId)
+                    _uiState.value = _uiState.value.copy(isLoading = false)
                 }
                 .onFailure { error ->
                     Timber.e(error, "Failed to stop time entry")

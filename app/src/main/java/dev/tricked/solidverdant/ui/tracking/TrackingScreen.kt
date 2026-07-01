@@ -123,6 +123,8 @@ fun TrackingScreen(
     user: User?,
     memberships: List<Membership>,
     currentMembership: Membership?,
+    serverEndpoint: String,
+    clientId: String,
     uiState: TrackingUiState,
     alwaysShowNotifications: Boolean,
     onAlwaysShowNotificationsChange: (Boolean) -> Unit,
@@ -189,6 +191,54 @@ fun TrackingScreen(
 
                         HorizontalDivider()
 
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Text(
+                            text = stringResource(R.string.server_information),
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                        Text(
+                            text = stringResource(R.string.server_endpoint),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                        Text(
+                            text = serverEndpoint,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    clipboard.setPrimaryClip(ClipData.newPlainText("Server endpoint", serverEndpoint))
+                                    Toast.makeText(context, R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show()
+                                }
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                        Text(
+                            text = stringResource(R.string.client_id),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                        Text(
+                            text = clientId,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    clipboard.setPrimaryClip(ClipData.newPlainText("Client ID", clientId))
+                                    Toast.makeText(context, R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show()
+                                }
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider()
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Row(

@@ -55,13 +55,6 @@ class BootReceiver : BroadcastReceiver() {
                     return@launch
                 }
 
-                // Check if always show notifications is enabled
-                val alwaysShowNotifications = settingsDataStore.alwaysShowNotification.first()
-                if (!alwaysShowNotifications) {
-                    Timber.d("Always show notifications disabled, skipping notification restore")
-                    return@launch
-                }
-
                 // Check if there's an active time entry
                 val activeEntryResult = authRepository.getActiveTimeEntry()
                 activeEntryResult.onSuccess { timeEntry ->
@@ -74,7 +67,7 @@ class BootReceiver : BroadcastReceiver() {
                             taskName = null,
                             description = timeEntry.description
                         )
-                    } else {
+                    } else if (settingsDataStore.alwaysShowNotification.first()) {
                         Timber.d("No active tracking, showing idle notification")
                         TimeTrackingNotificationService.showIdle(context)
                     }
