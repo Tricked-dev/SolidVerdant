@@ -128,6 +128,8 @@ fun SolidVerdantApp(
         isLoggedIn -> {
             TrackingScreen(
                 user = authUiState.user,
+                memberships = authUiState.memberships,
+                currentMembership = authUiState.currentMembership,
                 uiState = trackingUiState,
                 alwaysShowNotifications = alwaysShowNotifications,
                 onAlwaysShowNotificationsChange = { enabled ->
@@ -144,6 +146,7 @@ fun SolidVerdantApp(
                 onLogout = {
                     authViewModel.logout()
                 },
+                onMembershipChange = authViewModel::selectMembership,
                 onStartTracking = {
                     authUiState.currentMembership?.let { membership ->
                         authUiState.user?.let { user ->

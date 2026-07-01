@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.tricked.solidverdant.data.model.Membership
 import dev.tricked.solidverdant.data.model.User
+import dev.tricked.solidverdant.data.local.CacheDataStore
 import dev.tricked.solidverdant.data.repository.AuthRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -40,7 +41,8 @@ data class OAuthConfigState(
  */
 @HiltViewModel
 class AuthViewModel @Inject constructor(
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val cacheDataStore: CacheDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AuthUiState())
@@ -153,7 +155,9 @@ class AuthViewModel @Inject constructor(
             // Load memberships
             authRepository.getMyMemberships()
                 .onSuccess { memberships ->
-                    val currentMembership = memberships.firstOrNull()
+                    val savedMembershipId = authRepository.getCurrentMembershipId()
+                    val currentMembership = memberships.firstOrNull { it.id == savedMembershipId }
+                        ?: memberships.firstOrNull()
                     _uiState.value = _uiState.value.copy(
                         memberships = memberships,
                         currentMembership = currentMembership,
@@ -172,6 +176,17 @@ class AuthViewModel @Inject constructor(
                         error = error.message ?: "Failed to load memberships"
                     )
                 }
+        }
+    }
+
+    fun selectMembership(membership: Membership) {
+        if (membership.id == _uiState.value.currentMembership?.id) return
+
+        _uiState.value = _uiState.value.copy(currentMembership = membership)
+        viewModelScope.launch {
+            cacheDataStore.clearCache()
+            authRepository.saveCurrentMembershipId(membership.id)
+                .onFailure { Timber.e(it, "Failed to save selected membership") }
         }
     }
 

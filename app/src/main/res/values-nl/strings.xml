@@ -86,6 +86,7 @@
 
     <!-- Settings -->
     <string name="settings_menu">Instellingen</string>
+    <string name="organization">Organisatie</string>
     <string name="quick_start">Snel Starten</string>
     <string name="always_show_notifications">Meldingen altijd tonen</string>
     <string name="always_show_notifications_description">Toon blijvende melding tijdens tijdregistratie</string>

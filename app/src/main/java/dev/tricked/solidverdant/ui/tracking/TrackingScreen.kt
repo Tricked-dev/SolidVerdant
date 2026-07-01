@@ -34,6 +34,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
@@ -92,6 +93,7 @@ import androidx.compose.ui.window.Dialog
 import dev.tricked.solidverdant.BuildConfig
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.Project
+import dev.tricked.solidverdant.data.model.Membership
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
@@ -119,11 +121,14 @@ sealed class ProjectTaskSelection {
 @Composable
 fun TrackingScreen(
     user: User?,
+    memberships: List<Membership>,
+    currentMembership: Membership?,
     uiState: TrackingUiState,
     alwaysShowNotifications: Boolean,
     onAlwaysShowNotificationsChange: (Boolean) -> Unit,
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
+    onMembershipChange: (Membership) -> Unit,
     onStartTracking: () -> Unit,
     onStopTracking: () -> Unit,
     onPauseTracking: () -> Unit,
@@ -139,6 +144,7 @@ fun TrackingScreen(
     getGroupedEntries: () -> Map<LocalDate, List<TimeEntry>>
 ) {
     var showEditDialog by remember { mutableStateOf<TimeEntry?>(null) }
+    var organizationMenuExpanded by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -263,6 +269,42 @@ fun TrackingScreen(
                                     overflow = TextOverflow.Ellipsis,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                            }
+                            if (currentMembership != null) {
+                                Box {
+                                    Text(
+                                        text = currentMembership.organization.name,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.clickable(
+                                            enabled = memberships.size > 1 && !uiState.isTracking && !uiState.isPaused
+                                        ) { organizationMenuExpanded = true }
+                                    )
+                                    androidx.compose.material3.DropdownMenu(
+                                        expanded = organizationMenuExpanded,
+                                        onDismissRequest = { organizationMenuExpanded = false }
+                                    ) {
+                                        memberships.forEach { membership ->
+                                            DropdownMenuItem(
+                                                text = { Text(membership.organization.name) },
+                                                onClick = {
+                                                    organizationMenuExpanded = false
+                                                    onMembershipChange(membership)
+                                                },
+                                                trailingIcon = if (membership.id == currentMembership.id) {
+                                                    {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Done,
+                                                            contentDescription = null
+                                                        )
+                                                    }
+                                                } else null
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     },

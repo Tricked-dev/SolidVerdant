@@ -223,8 +223,7 @@ class TimeTrackingTileService : TileService() {
         serviceScope.launch {
             try {
                 Timber.d("Fetching memberships and user info...")
-                val memberships = authRepository.getMyMemberships().getOrNull()
-                val membership = memberships?.firstOrNull()
+                val membership = authRepository.getCurrentMembership()
                 val user = authRepository.getCurrentUser().getOrNull()
 
                 if (membership == null || user == null) {
@@ -702,8 +701,7 @@ class TimeTrackingTileService : TileService() {
 
         if ((entry.projectId != null && projects == null) || (entry.taskId != null && tasks == null)) {
             try {
-                val memberships = authRepository.getMyMemberships().getOrNull()
-                val orgId = memberships?.firstOrNull()?.organizationId ?: return Pair(null, null)
+                val orgId = entry.organizationId
                 val endpoint = authRepository.endpoint.first()
                 val api = apiClientFactory.createApi(endpoint)
 

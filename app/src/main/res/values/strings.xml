@@ -28,6 +28,7 @@
 
     <!-- Tracking Screen -->
     <string name="time_tracking">Time Tracking</string>
+    <string name="organization">Organization</string>
     <string name="refresh">Refresh</string>
     <string name="logout">Logout</string>
     <string name="currently_tracking">Currently Tracking</string>

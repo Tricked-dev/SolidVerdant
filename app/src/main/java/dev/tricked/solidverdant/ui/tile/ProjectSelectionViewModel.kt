@@ -42,8 +42,7 @@ class ProjectSelectionViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
             try {
-                val memberships = authRepository.getMyMemberships().getOrNull()
-                val organizationId = memberships?.firstOrNull()?.organizationId
+                val organizationId = authRepository.getCurrentMembership()?.organizationId
 
                 if (organizationId == null) {
                     _uiState.value = _uiState.value.copy(

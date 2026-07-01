@@ -52,7 +52,6 @@ class BootReceiver : BroadcastReceiver() {
                 val isLoggedIn = authRepository.isLoggedIn.first()
                 if (!isLoggedIn) {
                     Timber.d("User not logged in, skipping notification restore")
-                    pendingResult.finish()
                     return@launch
                 }
 
@@ -60,7 +59,6 @@ class BootReceiver : BroadcastReceiver() {
                 val alwaysShowNotifications = settingsDataStore.alwaysShowNotification.first()
                 if (!alwaysShowNotifications) {
                     Timber.d("Always show notifications disabled, skipping notification restore")
-                    pendingResult.finish()
                     return@launch
                 }
 

@@ -11,6 +11,7 @@ import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.remote.ApiClientFactory
 import dev.tricked.solidverdant.util.PKCEUtil
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -31,6 +32,14 @@ class AuthRepository @Inject constructor(
     val isLoggedIn: Flow<Boolean> = authDataStore.isLoggedIn
     val endpoint: Flow<String> = authDataStore.endpoint
     val clientId: Flow<String> = authDataStore.clientId
+
+    suspend fun getCurrentMembershipId(): String? = authDataStore.currentMembershipId.first()
+
+    suspend fun getCurrentMembership(): Membership? {
+        val memberships = getMyMemberships().getOrNull() ?: return null
+        val selectedId = getCurrentMembershipId()
+        return memberships.firstOrNull { it.id == selectedId } ?: memberships.firstOrNull()
+    }
 
     /**
      * Initialize the OAuth2 authorization flow

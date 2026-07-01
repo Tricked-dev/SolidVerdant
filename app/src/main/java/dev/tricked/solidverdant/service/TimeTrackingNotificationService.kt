@@ -271,8 +271,7 @@ class TimeTrackingNotificationService : Service() {
         serviceScope.launch {
             try {
                 val user = authRepository.getCurrentUser().getOrNull() ?: return@launch
-                val memberships = authRepository.getMyMemberships().getOrNull() ?: return@launch
-                val membership = memberships.firstOrNull() ?: return@launch
+                val membership = authRepository.getCurrentMembership() ?: return@launch
 
                 // Find project/task IDs from names if needed
                 val projects = authRepository.getProjects(membership.organizationId).getOrNull()

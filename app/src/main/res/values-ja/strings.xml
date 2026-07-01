@@ -86,6 +86,7 @@
 
     <!-- Settings -->
     <string name="settings_menu">設定</string>
+    <string name="organization">組織</string>
     <string name="quick_start">クイックスタート</string>
     <string name="always_show_notifications">通知を常に表示</string>
     <string name="always_show_notifications_description">時間追跡中に継続的な通知を表示</string>
