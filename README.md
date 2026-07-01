@@ -19,16 +19,21 @@
 ### Time tracking
 
 - Start/stop time entries with a live elapsed timer
+- Pause and resume active timers
 - Select projects and tasks from searchable dropdowns
-- Add descriptions
+- Add descriptions, tags, and billable status
+- Continue the most recent completed entry
 - Edit or delete past time entries
 - View history grouped by date, with identical entries collapsed into expandable groups
 - Pull-to-refresh to sync with the server
+- Switch between all organizations available to your Solidtime account
 
 ### Android integration
 
-- **Quick Settings tile** - Start/stop tracking without opening the app, with project selection dialog
-- **Persistent notification** - Shows elapsed time with a chronometer and a stop button; optionally stays visible when idle
+- **Quick Settings tile** - Start/stop tracking without opening the app, with project and task selection
+- **Persistent notification** - Shows elapsed time with pause and stop controls
+- **Notification quick start** - Start a timer with project, task, and description selection directly from the idle notification
+- **Home-screen widget** - View tracking state and access quick controls
 - **Boot persistence** - Restores notification state after reboot
 
 ### Auth and configuration
@@ -36,6 +41,7 @@
 - OAuth2 with PKCE (no API keys needed)
 - Automatic token refresh
 - Custom server endpoints and OAuth client IDs
+- Server details available in the settings drawer with tap-to-copy
 - Encrypted token storage
 
 ### UI
@@ -114,8 +120,9 @@ Goal of this application is to have a easy to use tile to start and stop trackin
 
 1. **Login**: Tap "Login with OAuth2" to authenticate via your Solidtime account
 2. **View Tracking**: See your current time entry with live elapsed time
-3. **Refresh**: Pull to refresh or tap the refresh button to update tracking state
-4. **Logout**: Tap logout to clear all data and return to login screen
+3. **Switch Organization**: Tap the organization name in the header while no timer is active
+4. **Refresh**: Pull to refresh or tap the refresh button to update tracking state
+5. **Logout**: Open the navigation drawer and tap logout to clear all data and return to login screen
 
 ## Building for Production
 
