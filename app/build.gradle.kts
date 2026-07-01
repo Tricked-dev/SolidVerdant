@@ -4,6 +4,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -37,8 +39,6 @@ android {
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = appVersionCode
         versionName = appVersionName
-
-        resourceConfigurations += listOf("en", "nl", "ja")
 
         // Add package name as string resource for release
         resValue("string", "app_package_name", "dev.tricked.solidverdant")
@@ -75,8 +75,8 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
+    androidResources {
+        localeFilters += listOf("en", "nl", "ja")
     }
     packaging {
         resources {
@@ -84,11 +84,12 @@ android {
         }
     }
 
-    tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-        kotlinOptions {
-            freeCompilerArgs += "-opt-in=kotlin.RequiresOptIn"
-            freeCompilerArgs += "-opt-in=kotlin.Experimental"
-        }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+        optIn.add("kotlin.RequiresOptIn")
     }
 }
 
