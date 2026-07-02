@@ -23,6 +23,12 @@ import javax.inject.Singleton
 
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
+enum class AppThemeMode {
+    SYSTEM,
+    LIGHT,
+    NEO
+}
+
 /**
  * DataStore for app settings
  */
@@ -34,6 +40,7 @@ class SettingsDataStore @Inject constructor(
 
     companion object {
         private val ALWAYS_SHOW_NOTIFICATION = booleanPreferencesKey("always_show_notification")
+        private val APP_THEME = stringPreferencesKey("app_theme")
         private val WIDGET_IS_TRACKING = booleanPreferencesKey("widget_is_tracking")
         private val WIDGET_START_TIME = longPreferencesKey("widget_start_time")
         private val WIDGET_PROJECT_NAME = stringPreferencesKey("widget_project_name")
@@ -60,6 +67,12 @@ class SettingsDataStore @Inject constructor(
         preferences[ALWAYS_SHOW_NOTIFICATION] ?: false // Default to false
     }.distinctUntilChanged()
 
+    val appTheme: Flow<AppThemeMode> = dataStore.data.map { preferences ->
+        preferences[APP_THEME]
+            ?.let { stored -> AppThemeMode.entries.find { it.name == stored } }
+            ?: AppThemeMode.SYSTEM
+    }.distinctUntilChanged()
+
     /**
      * Set whether to always show notifications
      */
@@ -67,6 +80,10 @@ class SettingsDataStore @Inject constructor(
         dataStore.edit { preferences ->
             preferences[ALWAYS_SHOW_NOTIFICATION] = enabled
         }
+    }
+
+    suspend fun setAppTheme(theme: AppThemeMode) {
+        dataStore.edit { preferences -> preferences[APP_THEME] = theme.name }
     }
 
     /**

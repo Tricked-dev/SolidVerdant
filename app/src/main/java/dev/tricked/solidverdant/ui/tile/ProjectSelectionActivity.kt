@@ -40,7 +40,9 @@ import dagger.hilt.android.AndroidEntryPoint
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
+import dev.tricked.solidverdant.data.local.AppThemeMode
 import dev.tricked.solidverdant.service.TimeTrackingNotificationService
+import dev.tricked.solidverdant.ui.components.ProjectTaskDropdown
 import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
 
 /**
@@ -59,7 +61,8 @@ class ProjectSelectionActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         setContent {
-            SolidVerdantTheme {
+            val appTheme by viewModel.appTheme.collectAsState(initial = AppThemeMode.SYSTEM)
+            SolidVerdantTheme(themeMode = appTheme) {
                 ProjectSelectionContent(
                     viewModel = viewModel,
                     onStartTracking = { projectId, taskId, description, projectName, taskName ->
@@ -171,18 +174,6 @@ fun StartTrackingForm(
 ) {
     var selection by remember { mutableStateOf<ProjectTaskSelection>(ProjectTaskSelection.NoProject) }
     var description by remember { mutableStateOf("") }
-    var expanded by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
-
-    val filteredProjects = remember(searchQuery, projects) {
-        if (searchQuery.isBlank()) projects
-        else projects.filter { it.name.contains(searchQuery, ignoreCase = true) }
-    }
-
-    val filteredTasks = remember(searchQuery, tasks) {
-        if (searchQuery.isBlank()) tasks
-        else tasks.filter { it.name.contains(searchQuery, ignoreCase = true) }
-    }
 
     val displayText = when (selection) {
         is ProjectTaskSelection.NoProject -> stringResource(R.string.no_project)
@@ -199,102 +190,20 @@ fun StartTrackingForm(
         modifier = Modifier.padding(bottom = 16.dp)
     )
 
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = {
-            expanded = it
-            if (!it) searchQuery = ""
-        }
-    ) {
-        OutlinedTextField(
-            value = displayText,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(stringResource(R.string.project_task)) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .menuAnchor(type = androidx.compose.material3.MenuAnchorType.PrimaryNotEditable),
-            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = {
-                expanded = false
-                searchQuery = ""
-            }
-        ) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                label = { Text(stringResource(R.string.search_placeholder)) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                singleLine = true
-            )
-
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.no_project)) },
-                onClick = {
-                    selection = ProjectTaskSelection.NoProject
-                    expanded = false
-                    searchQuery = ""
-                }
-            )
-
-            filteredProjects.forEach { project ->
-                val projectTasks = filteredTasks.filter { it.projectId == project.id }
-
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = project.name,
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    },
-                    onClick = {
-                        selection = ProjectTaskSelection.ProjectOnly(project)
-                        expanded = false
-                        searchQuery = ""
-                    }
-                )
-
-                projectTasks.forEach { task ->
-                    DropdownMenuItem(
-                        text = {
-                            Row {
-                                Spacer(modifier = Modifier.width(24.dp))
-                                Text(
-                                    text = task.name,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        },
-                        onClick = {
-                            selection = ProjectTaskSelection.ProjectWithTask(project, task)
-                            expanded = false
-                            searchQuery = ""
-                        }
-                    )
-                }
-            }
-
-            if (searchQuery.isNotBlank() && filteredProjects.isEmpty()) {
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            stringResource(R.string.no_results_found),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    },
-                    onClick = { }
-                )
+    ProjectTaskDropdown(
+        projects = projects,
+        tasks = tasks,
+        displayText = displayText,
+        onSelectionChanged = { projectId, taskId ->
+            val project = projects.find { it.id == projectId }
+            val task = tasks.find { it.id == taskId }
+            selection = when {
+                project == null -> ProjectTaskSelection.NoProject
+                task == null -> ProjectTaskSelection.ProjectOnly(project)
+                else -> ProjectTaskSelection.ProjectWithTask(project, task)
             }
         }
-    }
+    )
 
     Spacer(modifier = Modifier.height(12.dp))
 

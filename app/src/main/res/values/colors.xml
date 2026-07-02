@@ -9,6 +9,11 @@
     <color name="colorAccent">#2E7D32</color>
     <color name="colorTextPrimary">#000000</color>
     <color name="colorGrey">#757575</color>
+    <!-- Pre-Android 12 widget palette; overridden with dynamic system colors on API 31+. -->
+    <color name="widget_background_color">#263238</color>
+    <color name="widget_button_color">#C5E1A5</color>
+    <color name="widget_text_color">#FFFFFF</color>
+    <color name="widget_button_text_color">#37474F</color>
 
     <drawable name="completedTaskBackground">#CCCCCC</drawable>
 

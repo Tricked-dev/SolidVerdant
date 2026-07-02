@@ -1,5 +1,6 @@
 package dev.tricked.solidverdant.service
 
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -299,7 +300,7 @@ class TimeTrackingTileService : TileService() {
                     if (alwaysShow) {
                         TimeTrackingNotificationService.showIdle(this@TimeTrackingTileService)
                     } else {
-                        TimeTrackingNotificationService.stopTracking(this@TimeTrackingTileService)
+                        TimeTrackingNotificationService.hide(this@TimeTrackingTileService)
                     }
 
                     refreshTile()
@@ -345,7 +346,7 @@ class TimeTrackingTileService : TileService() {
                     if (alwaysShow) {
                         TimeTrackingNotificationService.showIdle(this@TimeTrackingTileService)
                     } else {
-                        TimeTrackingNotificationService.stopTracking(this@TimeTrackingTileService)
+                        TimeTrackingNotificationService.hide(this@TimeTrackingTileService)
                     }
 
                     refreshTile()
@@ -459,7 +460,7 @@ class TimeTrackingTileService : TileService() {
                             if (alwaysShow) {
                                 TimeTrackingNotificationService.showIdle(this@TimeTrackingTileService)
                             } else {
-                                TimeTrackingNotificationService.stopTracking(this@TimeTrackingTileService)
+                                TimeTrackingNotificationService.hide(this@TimeTrackingTileService)
                             }
                         } else {
                             applyState(tile, TileState.Inactive)
@@ -724,7 +725,7 @@ class TimeTrackingTileService : TileService() {
         return Pair(projectName, taskName)
     }
 
-    @Suppress("DEPRECATION")
+    @SuppressLint("StartActivityAndCollapseDeprecated")
     private fun showProjectSelection() {
         val intent = Intent(this, ProjectSelectionActivity::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -735,7 +736,6 @@ class TimeTrackingTileService : TileService() {
             startActivityAndCollapse(pendingIntent)
         } else {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            @Suppress("DEPRECATION")
             startActivityAndCollapse(intent)
         }
     }

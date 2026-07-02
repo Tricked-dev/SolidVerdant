@@ -78,27 +78,11 @@ class TimeTrackingNotificationService : Service() {
                 taskName = intent.getStringExtra(EXTRA_TASK_NAME)
                 description = intent.getStringExtra(EXTRA_DESCRIPTION)
 
-                if (!isForeground) {
-                    startForeground(NOTIFICATION_ID, buildNotification())
-                    isForeground = true
-                } else {
-                    notificationManager.notify(NOTIFICATION_ID, buildNotification())
-                }
+                publishNotification()
             }
 
             ACTION_SHOW_IDLE -> {
-                isTracking = false
-                startTime = null
-                projectName = null
-                taskName = null
-                description = null
-
-                if (!isForeground) {
-                    startForeground(NOTIFICATION_ID, buildNotification())
-                    isForeground = true
-                } else {
-                    notificationManager.notify(NOTIFICATION_ID, buildNotification())
-                }
+                showIdleNotification()
             }
 
             ACTION_STOP_TRACKING -> {
@@ -107,6 +91,10 @@ class TimeTrackingNotificationService : Service() {
 
             ACTION_PAUSE_TRACKING -> {
                 handlePauseTracking()
+            }
+
+            ACTION_SHOW_PAUSED -> {
+                showPausedNotification()
             }
 
             ACTION_RESUME_TRACKING -> {
@@ -119,14 +107,14 @@ class TimeTrackingNotificationService : Service() {
                 description = intent.getStringExtra(EXTRA_DESCRIPTION)
 
                 // Update notification with new info
-                if (isForeground) {
-                    notificationManager.notify(NOTIFICATION_ID, buildNotification())
-                }
+                refreshNotificationIfVisible()
             }
             ACTION_QUICK_START -> handleQuickStart(intent)
         }
 
-        return START_STICKY
+        // State is restored explicitly from the server by the app and BootReceiver. A sticky
+        // restart has no Intent extras to rebuild the timer and can replay stale notification state.
+        return START_NOT_STICKY
     }
 
     private fun handleQuickStart(intent: Intent) {
@@ -136,8 +124,7 @@ class TimeTrackingNotificationService : Service() {
         projectName = intent.getStringExtra(EXTRA_PROJECT_NAME)
         taskName = intent.getStringExtra(EXTRA_TASK_NAME)
         description = intent.getStringExtra(EXTRA_DESCRIPTION)
-        startForeground(NOTIFICATION_ID, buildNotification())
-        isForeground = true
+        publishNotification()
 
         serviceScope.launch {
             val membership = authRepository.getCurrentMembership()
@@ -157,7 +144,7 @@ class TimeTrackingNotificationService : Service() {
                 description = description.orEmpty()
             ).onSuccess { entry ->
                 startTime = Instant.parse(entry.start)
-                notificationManager.notify(NOTIFICATION_ID, buildNotification())
+                refreshNotificationIfVisible()
             }.onFailure { error ->
                 Timber.e(error, "Quick start failed")
                 stopService()
@@ -171,66 +158,63 @@ class TimeTrackingNotificationService : Service() {
         isTracking = false
 
         serviceScope.launch {
-            try {
-                // If paused, entry is already stopped - just clean up
-                if (wasPaused) {
-                    val alwaysShow = settingsDataStore.alwaysShowNotification.first()
-                    if (alwaysShow) {
-                        showIdle(this@TimeTrackingNotificationService)
-                    }
-                    stopService()
-                    return@launch
-                }
+            val stopped = if (wasPaused) {
+                Result.success(false)
+            } else {
+                stopActiveEntry()
+            }
 
-                // Get active time entry
-                authRepository.getActiveTimeEntry()
-                    .onSuccess { activeEntry ->
-                        if (activeEntry != null) {
-                            // Get user info for userId
-                            authRepository.getCurrentUser()
-                                .onSuccess { user ->
-                                    // Stop the active time entry
-                                    authRepository.stopTimeEntry(
-                                        organizationId = activeEntry.organizationId,
-                                        timeEntryId = activeEntry.id,
-                                        userId = user.id,
-                                        startTime = activeEntry.start
-                                    ).onSuccess {
-                                        // Update notification state based on settings
-                                        val alwaysShow = settingsDataStore.alwaysShowNotification.first()
-                                        if (alwaysShow) {
-                                            // Show idle notification
-                                            showIdle(this@TimeTrackingNotificationService)
-                                        }
-                                        // If not alwaysShow, stopService() in finally will clean up
-                                    }.onFailure { error ->
-                                        Timber.e(
-                                            error,
-                                            "Failed to stop time entry from notification"
-                                        )
-                                    }
-                                }.onFailure { error ->
-                                    Timber.e(error, "Failed to get user info")
-                                }
-                        } else {
-                            Timber.w("No active time entry to stop")
-                            // Check if we should show idle notification
-                            val alwaysShow = settingsDataStore.alwaysShowNotification.first()
-                            if (alwaysShow) {
-                                showIdle(this@TimeTrackingNotificationService)
-                            }
-                            // If not alwaysShow, stopService() in finally will clean up
-                        }
-                    }.onFailure { error ->
-                        Timber.e(error, "Failed to get active time entry")
-                    }
-            } finally {
+            stopped.onFailure { error ->
+                Timber.e(error, "Failed to stop time entry from notification")
+            }
+
+            if (stopped.isSuccess && settingsDataStore.alwaysShowNotification.first()) {
+                showIdleNotification()
+            } else {
                 stopService()
             }
         }
     }
 
+    /** Stop the account-wide active entry. Used only by explicit notification actions. */
+    private suspend fun stopActiveEntry(): Result<Boolean> {
+        val activeEntry = authRepository.getActiveTimeEntry()
+            .getOrElse { return Result.failure(it) }
+            ?: return Result.success(false)
+        val user = authRepository.getCurrentUser()
+            .getOrElse { return Result.failure(it) }
+
+        return authRepository.stopTimeEntry(
+            organizationId = activeEntry.organizationId,
+            timeEntryId = activeEntry.id,
+            userId = user.id,
+            startTime = activeEntry.start
+        ).map { true }
+    }
+
+    private fun showIdleNotification() {
+        isTracking = false
+        isPaused = false
+        startTime = null
+        projectName = null
+        taskName = null
+        description = null
+
+        publishNotification()
+    }
+
     private fun handlePauseTracking() {
+        showPausedNotification()
+
+        // Stop the active time entry via API in the background
+        serviceScope.launch {
+            stopActiveEntry().onFailure { error ->
+                Timber.e(error, "Failed to stop time entry during pause")
+            }
+        }
+    }
+
+    private fun showPausedNotification() {
         // Calculate elapsed time before pausing
         val now = Instant.now()
         pausedAt = now
@@ -244,40 +228,7 @@ class TimeTrackingNotificationService : Service() {
         isPaused = true
         isTracking = false
 
-        if (!isForeground) {
-            startForeground(NOTIFICATION_ID, buildNotification())
-            isForeground = true
-        } else {
-            notificationManager.notify(NOTIFICATION_ID, buildNotification())
-        }
-
-        // Stop the active time entry via API in the background
-        serviceScope.launch {
-            try {
-                authRepository.getActiveTimeEntry()
-                    .onSuccess { activeEntry ->
-                        if (activeEntry != null) {
-                            authRepository.getCurrentUser()
-                                .onSuccess { user ->
-                                    authRepository.stopTimeEntry(
-                                        organizationId = activeEntry.organizationId,
-                                        timeEntryId = activeEntry.id,
-                                        userId = user.id,
-                                        startTime = activeEntry.start
-                                    ).onFailure { error ->
-                                        Timber.e(error, "Failed to stop time entry during pause")
-                                    }
-                                }.onFailure { error ->
-                                    Timber.e(error, "Failed to get user info during pause")
-                                }
-                        }
-                    }.onFailure { error ->
-                        Timber.e(error, "Failed to get active time entry during pause")
-                    }
-            } catch (e: Exception) {
-                Timber.e(e, "Error during pause")
-            }
-        }
+        publishNotification()
     }
 
     private fun handleResumeTracking(intent: Intent) {
@@ -297,12 +248,7 @@ class TimeTrackingNotificationService : Service() {
             description = intent.getStringExtra(EXTRA_DESCRIPTION) ?: description
         }
 
-        if (!isForeground) {
-            startForeground(NOTIFICATION_ID, buildNotification())
-            isForeground = true
-        } else {
-            notificationManager.notify(NOTIFICATION_ID, buildNotification())
-        }
+        publishNotification()
 
         // Start a new time entry via API in the background
         serviceScope.launch {
@@ -326,7 +272,7 @@ class TimeTrackingNotificationService : Service() {
                 ).onSuccess { entry ->
                     Timber.d("Resumed tracking with new entry: ${entry.id}")
                     startTime = Instant.parse(entry.start)
-                    notificationManager.notify(NOTIFICATION_ID, buildNotification())
+                    refreshNotificationIfVisible()
                 }.onFailure { error ->
                     Timber.e(error, "Failed to start time entry during resume")
                 }
@@ -337,6 +283,23 @@ class TimeTrackingNotificationService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /** The single path for creating or replacing the foreground notification. */
+    private fun publishNotification() {
+        val notification = buildNotification()
+        if (isForeground) {
+            notificationManager.notify(NOTIFICATION_ID, notification)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+            isForeground = true
+        }
+    }
+
+    private fun refreshNotificationIfVisible() {
+        if (isForeground) {
+            notificationManager.notify(NOTIFICATION_ID, buildNotification())
+        }
+    }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -592,6 +555,8 @@ class TimeTrackingNotificationService : Service() {
             "dev.tricked.solidverdant.ACTION_STOP_TRACKING_NOTIFICATION"
         const val ACTION_PAUSE_TRACKING =
             "dev.tricked.solidverdant.ACTION_PAUSE_TRACKING_NOTIFICATION"
+        const val ACTION_SHOW_PAUSED =
+            "dev.tricked.solidverdant.ACTION_SHOW_PAUSED_NOTIFICATION"
         const val ACTION_RESUME_TRACKING =
             "dev.tricked.solidverdant.ACTION_RESUME_TRACKING_NOTIFICATION"
         const val ACTION_UPDATE_INFO = "dev.tricked.solidverdant.ACTION_UPDATE_INFO"
@@ -656,41 +621,18 @@ class TimeTrackingNotificationService : Service() {
         /**
          * Pause tracking - stops the time entry but keeps notification in paused state
          */
-        fun pauseTracking(context: Context) {
+        fun showPaused(context: Context) {
             val intent = Intent(context, TimeTrackingNotificationService::class.java).apply {
-                action = ACTION_PAUSE_TRACKING
-            }
-            context.startService(intent)
-        }
-
-        /**
-         * Resume tracking - starts a new session with the same info
-         */
-        fun resumeTracking(
-            context: Context,
-            startTime: Instant,
-            projectName: String? = null,
-            taskName: String? = null,
-            description: String? = null
-        ) {
-            val intent = Intent(context, TimeTrackingNotificationService::class.java).apply {
-                action = ACTION_RESUME_TRACKING
-                putExtra(EXTRA_START_TIME, startTime.toEpochMilli())
-                putExtra(EXTRA_PROJECT_NAME, projectName)
-                putExtra(EXTRA_TASK_NAME, taskName)
-                putExtra(EXTRA_DESCRIPTION, description)
+                action = ACTION_SHOW_PAUSED
             }
             context.startForegroundService(intent)
         }
 
         /**
-         * Stop the notification service
+         * Hide the notification without changing any server-side timer state.
          */
-        fun stopTracking(context: Context) {
-            val intent = Intent(context, TimeTrackingNotificationService::class.java).apply {
-                action = ACTION_STOP_TRACKING
-            }
-            context.startService(intent)
+        fun hide(context: Context) {
+            context.stopService(Intent(context, TimeTrackingNotificationService::class.java))
         }
 
         /**

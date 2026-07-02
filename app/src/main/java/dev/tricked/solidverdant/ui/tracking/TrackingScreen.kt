@@ -98,6 +98,8 @@ import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.User
+import dev.tricked.solidverdant.data.local.AppThemeMode
+import dev.tricked.solidverdant.ui.components.ProjectTaskDropdown as SharedProjectTaskDropdown
 import dev.tricked.solidverdant.util.NotificationPermissionHelper
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -117,7 +119,7 @@ sealed class ProjectTaskSelection {
 /**
  * Tracking screen displaying current time tracking state and history
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun TrackingScreen(
     user: User?,
@@ -127,7 +129,9 @@ fun TrackingScreen(
     clientId: String,
     uiState: TrackingUiState,
     alwaysShowNotifications: Boolean,
+    appTheme: AppThemeMode,
     onAlwaysShowNotificationsChange: (Boolean) -> Unit,
+    onAppThemeChange: (AppThemeMode) -> Unit,
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
     onMembershipChange: (Membership) -> Unit,
@@ -265,6 +269,39 @@ fun TrackingScreen(
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider()
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Text(
+                            text = stringResource(R.string.theme),
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                        Text(
+                            text = stringResource(R.string.theme_description),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                        FlowRow(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            AppThemeMode.entries.forEach { theme ->
+                                val label = when (theme) {
+                                    AppThemeMode.SYSTEM -> R.string.theme_system
+                                    AppThemeMode.LIGHT -> R.string.theme_light
+                                    AppThemeMode.NEO -> R.string.theme_neo
+                                }
+                                FilterChip(
+                                    selected = appTheme == theme,
+                                    onClick = { onAppThemeChange(theme) },
+                                    label = { Text(stringResource(label)) }
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
                         HorizontalDivider()
                         Spacer(modifier = Modifier.height(16.dp))
 
@@ -1008,9 +1045,6 @@ private fun ProjectTaskDropdown(
     onSelectionChanged: (projectId: String?, taskId: String?) -> Unit,
     enabled: Boolean
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
-
     // Determine current selection
     val selection = remember(selectedProjectId, selectedTaskId, projects, tasks) {
         when {
@@ -1042,138 +1076,15 @@ private fun ProjectTaskDropdown(
         is ProjectTaskSelection.ProjectWithTask -> "${selection.project.name} - ${selection.task.name}"
     }
 
-    // Filter projects and tasks based on search query
-    val filteredProjects = remember(searchQuery, projects) {
-        if (searchQuery.isBlank()) {
-            projects
-        } else {
-            projects.filter { it.name.contains(searchQuery, ignoreCase = true) }
-        }
-    }
-
-    val filteredTasks = remember(searchQuery, tasks) {
-        if (searchQuery.isBlank()) {
-            tasks
-        } else {
-            tasks.filter { it.name.contains(searchQuery, ignoreCase = true) }
-        }
-    }
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = {
-            if (enabled) {
-                expanded = it
-                if (!it) searchQuery = "" // Clear search when closing
-            }
-        }
-    ) {
-        OutlinedTextField(
-            value = displayText,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(stringResource(R.string.project_task)) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = enabled),
-            enabled = enabled,
-            shape = RoundedCornerShape(8.dp)
-        )
-
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = {
-                expanded = false
-                searchQuery = ""
-            }
-        ) {
-            // Search field
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = { Text(stringResource(R.string.search_placeholder)) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                singleLine = true
-            )
-
-            // No project option
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.no_project)) },
-                onClick = {
-                    onSelectionChanged(null, null)
-                    expanded = false
-                    searchQuery = ""
-                }
-            )
-
-            // Projects and their tasks
-            filteredProjects.forEach { project ->
-                val projectTasks = filteredTasks.filter { it.projectId == project.id }
-
-                // Project item with color dot
-                DropdownMenuItem(
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(12.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(android.graphics.Color.parseColor(project.color)))
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = project.name,
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                        }
-                    },
-                    onClick = {
-                        onSelectionChanged(project.id, null)
-                        expanded = false
-                        searchQuery = ""
-                    }
-                )
-
-                // Tasks for this project (indented)
-                projectTasks.forEach { task ->
-                    DropdownMenuItem(
-                        text = {
-                            Row {
-                                Spacer(modifier = Modifier.width(24.dp))
-                                Text(
-                                    text = task.name,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        },
-                        onClick = {
-                            onSelectionChanged(project.id, task.id)
-                            expanded = false
-                            searchQuery = ""
-                        }
-                    )
-                }
-            }
-
-            // Show message if no results
-            if (searchQuery.isNotBlank() && filteredProjects.isEmpty()) {
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            stringResource(R.string.no_results_found),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    },
-                    onClick = { }
-                )
-            }
-        }
-    }
+    SharedProjectTaskDropdown(
+        projects = projects,
+        tasks = tasks,
+        displayText = displayText,
+        onSelectionChanged = onSelectionChanged,
+        enabled = enabled,
+        showProjectColors = true,
+        rounded = true
+    )
 }
 
 /**

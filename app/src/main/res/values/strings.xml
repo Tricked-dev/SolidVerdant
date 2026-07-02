@@ -94,6 +94,11 @@
     <string name="quick_start">Quick Start</string>
     <string name="always_show_notifications">Always show notifications</string>
     <string name="always_show_notifications_description">Show persistent notification while tracking time</string>
+    <string name="theme">Theme</string>
+    <string name="theme_description">Choose the app color style</string>
+    <string name="theme_system">System</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_neo">Neo</string>
     <string name="pause">Pause</string>
     <string name="resume">Resume</string>
     <string name="paused">Paused</string>

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.tricked.solidverdant.data.local.CacheDataStore
+import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.remote.ApiClientFactory
@@ -31,11 +32,13 @@ data class ProjectSelectionUiState(
 class ProjectSelectionViewModel @Inject constructor(
     private val apiClientFactory: ApiClientFactory,
     private val authRepository: AuthRepository,
-    private val cacheDataStore: CacheDataStore
+    private val cacheDataStore: CacheDataStore,
+    settingsDataStore: SettingsDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProjectSelectionUiState())
     val uiState: StateFlow<ProjectSelectionUiState> = _uiState.asStateFlow()
+    val appTheme = settingsDataStore.appTheme
 
     fun loadProjects(forceRefresh: Boolean = false) {
         viewModelScope.launch {

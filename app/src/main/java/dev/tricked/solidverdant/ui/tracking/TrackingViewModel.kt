@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.tricked.solidverdant.data.local.SettingsDataStore
+import dev.tricked.solidverdant.data.local.AppThemeMode
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
@@ -67,8 +68,13 @@ class TrackingViewModel @Inject constructor(
     val uiState: StateFlow<TrackingUiState> = _uiState.asStateFlow()
 
     val alwaysShowNotifications = settingsDataStore.alwaysShowNotification
+    val appTheme = settingsDataStore.appTheme
 
     private var timerJob: Job? = null
+    private var loadDataJob: Job? = null
+    private var loadingOrganizationId: String? = null
+    private var activeEntryMonitorJob: Job? = null
+    private var monitoredOrganizationId: String? = null
     private var isInitialized = false
 
     init {
@@ -93,6 +99,10 @@ class TrackingViewModel @Inject constructor(
         }
     }
 
+    fun setAppTheme(theme: AppThemeMode) {
+        viewModelScope.launch { settingsDataStore.setAppTheme(theme) }
+    }
+
     /**
      * Update notification state based on tracking status and settings
      */
@@ -106,7 +116,7 @@ class TrackingViewModel @Inject constructor(
         } else if (alwaysShow) {
             TimeTrackingNotificationService.showIdle(context)
         } else {
-            TimeTrackingNotificationService.stopTracking(context)
+            TimeTrackingNotificationService.hide(context)
         }
     }
 
@@ -114,72 +124,139 @@ class TrackingViewModel @Inject constructor(
      * Load all data needed for the tracking screen
      */
     fun loadAllData(organizationId: String, memberId: String) {
-        viewModelScope.launch {
+        if (loadDataJob?.isActive == true && loadingOrganizationId == organizationId) {
+            return
+        }
+        loadDataJob?.cancel()
+        loadingOrganizationId = organizationId
+        loadDataJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
+                // Load organization-scoped labels before the active entry so its notification
+                // always has data from the correct organization.
                 coroutineScope {
                     listOf(
-                        async { loadActiveTimeEntry() },
                         async { loadTimeEntries(organizationId, memberId) },
                         async { loadProjects(organizationId) },
                         async { loadTasks(organizationId) },
                         async { loadTags(organizationId) }
                     ).awaitAll()
                 }
+                loadActiveTimeEntry(organizationId)
+                startActiveEntryMonitoring(organizationId)
             } finally {
                 _uiState.value = _uiState.value.copy(isLoading = false)
+                if (loadingOrganizationId == organizationId) {
+                    loadingOrganizationId = null
+                }
             }
+        }
+    }
+
+    /**
+     * Keep notification state in sync with timers started or stopped on another device while
+     * this ViewModel is alive. Changing organizations replaces the old monitor immediately.
+     */
+    private fun startActiveEntryMonitoring(organizationId: String) {
+        if (monitoredOrganizationId == organizationId && activeEntryMonitorJob?.isActive == true) {
+            return
+        }
+
+        activeEntryMonitorJob?.cancel()
+        monitoredOrganizationId = organizationId
+        activeEntryMonitorJob = viewModelScope.launch {
+            while (true) {
+                delay(ACTIVE_ENTRY_REFRESH_INTERVAL_MS)
+                loadActiveTimeEntry(organizationId, onlyIfChanged = true)
+            }
+        }
+    }
+
+    /** Pause network polling while the app is not visible. */
+    fun onAppBackgrounded() {
+        activeEntryMonitorJob?.cancel()
+        activeEntryMonitorJob = null
+    }
+
+    /** Resume polling, refreshing all visible data after a longer background pause. */
+    fun onAppForegrounded(
+        organizationId: String,
+        memberId: String,
+        refreshAll: Boolean
+    ) {
+        if (refreshAll) {
+            loadAllData(organizationId, memberId)
+        } else {
+            startActiveEntryMonitoring(organizationId)
         }
     }
 
     /**
      * Load the active time entry for the current user
      */
-    private suspend fun loadActiveTimeEntry() {
+    private suspend fun loadActiveTimeEntry(
+        organizationId: String,
+        onlyIfChanged: Boolean = false
+    ) {
             authRepository.getActiveTimeEntry()
                 .onSuccess { timeEntry ->
-                    val isTracking = timeEntry != null
+                    // The active-entry endpoint is account-wide. Only surface an entry for the
+                    // organization currently selected in the app.
+                    val currentTimeEntry = timeEntry?.takeIf {
+                        it.organizationId == organizationId
+                    }
+                    if (onlyIfChanged &&
+                        currentTimeEntry?.id == _uiState.value.currentTimeEntry?.id
+                    ) {
+                        if (currentTimeEntry != null) {
+                            TimeTrackingNotificationService.startTracking(
+                                context = context,
+                                startTime = Instant.parse(currentTimeEntry.start),
+                                projectName = _uiState.value.projects
+                                    .find { it.id == currentTimeEntry.projectId }?.name,
+                                taskName = _uiState.value.tasks
+                                    .find { it.id == currentTimeEntry.taskId }?.name,
+                                description = currentTimeEntry.description
+                            )
+                        } else {
+                            updateNotificationState()
+                        }
+                        return@onSuccess
+                    }
+                    val isTracking = currentTimeEntry != null
                     _uiState.value = _uiState.value.copy(
                         isTracking = isTracking,
-                        currentTimeEntry = timeEntry,
-                        editingDescription = timeEntry?.description ?: "",
-                        editingProjectId = timeEntry?.projectId,
-                        editingTaskId = timeEntry?.taskId,
-                        editingTags = timeEntry?.tags?.map { it.id } ?: emptyList(),
-                        editingBillable = timeEntry?.billable ?: false
+                        currentTimeEntry = currentTimeEntry,
+                        editingDescription = currentTimeEntry?.description ?: "",
+                        editingProjectId = currentTimeEntry?.projectId,
+                        editingTaskId = currentTimeEntry?.taskId,
+                        editingTags = currentTimeEntry?.tags?.map { it.id } ?: emptyList(),
+                        editingBillable = currentTimeEntry?.billable ?: false
                     )
 
                     // Update notification state based on tracking status and settings
-                    if (timeEntry != null) {
-                        // If tracking, show tracking notification with details
-                        val projectName =
-                            _uiState.value.projects.find { it.id == timeEntry.projectId }?.name
-                        val taskName = _uiState.value.tasks.find { it.id == timeEntry.taskId }?.name
+                    if (currentTimeEntry != null) {
+                        val projectName = _uiState.value.projects
+                            .find { it.id == currentTimeEntry.projectId }?.name
+                        val taskName = _uiState.value.tasks
+                            .find { it.id == currentTimeEntry.taskId }?.name
                         TimeTrackingNotificationService.startTracking(
                             context = context,
-                            startTime = Instant.parse(timeEntry.start),
+                            startTime = Instant.parse(currentTimeEntry.start),
                             projectName = projectName,
                             taskName = taskName,
-                            description = timeEntry.description
+                            description = currentTimeEntry.description
                         )
-                    } else {
-                        // Update notification state for non-tracking cases
-                        updateNotificationState()
-                    }
-
-                    // Update widget state
-                    if (timeEntry != null) {
-                        val projectName =
-                            _uiState.value.projects.find { it.id == timeEntry.projectId }?.name
-                        val taskName = _uiState.value.tasks.find { it.id == timeEntry.taskId }?.name
                         settingsDataStore.setWidgetTrackingState(
                             isTracking = true,
-                            startTimeEpochMillis = Instant.parse(timeEntry.start).toEpochMilli(),
+                            startTimeEpochMillis = Instant.parse(currentTimeEntry.start).toEpochMilli(),
                             projectName = projectName,
                             taskName = taskName,
-                            description = timeEntry.description
+                            description = currentTimeEntry.description
                         )
                     } else {
+                        // Update notification and widget state for non-tracking cases
+                        updateNotificationState()
                         settingsDataStore.setWidgetTrackingState(
                             isTracking = false
                         )
@@ -189,7 +266,7 @@ class TrackingViewModel @Inject constructor(
 
                     // Start timer if tracking
                     if (isTracking) {
-                        startTimer(timeEntry!!.start)
+                        startTimer(currentTimeEntry.start)
                     } else {
                         stopTimer()
                     }
@@ -585,7 +662,7 @@ class TrackingViewModel @Inject constructor(
                     Timber.d("Time entry paused successfully")
 
                     // Update notification to paused state
-                    TimeTrackingNotificationService.pauseTracking(context)
+                    TimeTrackingNotificationService.showPaused(context)
 
                     // Update widget state to idle
                     settingsDataStore.setWidgetTrackingState(isTracking = false)
@@ -622,7 +699,7 @@ class TrackingViewModel @Inject constructor(
                     val taskName = _uiState.value.tasks.find { it.id == timeEntry.taskId }?.name
 
                     // Update notification to tracking state
-                    TimeTrackingNotificationService.resumeTracking(
+                    TimeTrackingNotificationService.startTracking(
                         context = context,
                         startTime = Instant.parse(timeEntry.start),
                         projectName = projectName,
@@ -769,6 +846,12 @@ class TrackingViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        loadDataJob?.cancel()
+        activeEntryMonitorJob?.cancel()
         stopTimer()
+    }
+
+    private companion object {
+        const val ACTIVE_ENTRY_REFRESH_INTERVAL_MS = 10_000L
     }
 }

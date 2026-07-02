@@ -3,6 +3,7 @@ package dev.tricked.solidverdant
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -17,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import dagger.hilt.android.AndroidEntryPoint
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.local.AppThemeMode
 import dev.tricked.solidverdant.ui.auth.AuthViewModel
 import dev.tricked.solidverdant.ui.login.LoginScreen
 import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
@@ -32,21 +34,18 @@ class MainActivity : ComponentActivity() {
 
     private val authViewModel: AuthViewModel by viewModels()
     private val trackingViewModel: TrackingViewModel by viewModels()
+    private var stoppedAtElapsedRealtime: Long? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Initialize Timber for logging
-        if (BuildConfig.DEBUG) {
-            Timber.plant(Timber.DebugTree())
-        }
-
         // Handle deep links on creation
         handleIntent(intent)
 
         setContent {
-            SolidVerdantTheme {
+            val appTheme by trackingViewModel.appTheme.collectAsState(initial = AppThemeMode.SYSTEM)
+            SolidVerdantTheme(themeMode = appTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -64,6 +63,30 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleIntent(intent)
+    }
+
+    override fun onStart() {
+        super.onStart()
+
+        val backgroundDuration = stoppedAtElapsedRealtime?.let {
+            SystemClock.elapsedRealtime() - it
+        }
+        val membership = authViewModel.uiState.value.currentMembership
+        if (membership != null) {
+            trackingViewModel.onAppForegrounded(
+                organizationId = membership.organizationId,
+                memberId = membership.id,
+                refreshAll = backgroundDuration != null &&
+                    backgroundDuration >= RESUME_REFRESH_THRESHOLD_MS
+            )
+        }
+        stoppedAtElapsedRealtime = null
+    }
+
+    override fun onStop() {
+        stoppedAtElapsedRealtime = SystemClock.elapsedRealtime()
+        trackingViewModel.onAppBackgrounded()
+        super.onStop()
     }
 
     /**
@@ -90,6 +113,10 @@ class MainActivity : ComponentActivity() {
             authViewModel.handleOAuthCallback(code, state)
         }
     }
+
+    private companion object {
+        const val RESUME_REFRESH_THRESHOLD_MS = 30_000L
+    }
 }
 
 /**
@@ -105,6 +132,7 @@ fun SolidVerdantApp(
     val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
     val trackingUiState by trackingViewModel.uiState.collectAsState()
     val alwaysShowNotifications by trackingViewModel.alwaysShowNotifications.collectAsState(initial = false)
+    val appTheme by trackingViewModel.appTheme.collectAsState(initial = AppThemeMode.SYSTEM)
 
     // Load user data when logged in
     LaunchedEffect(isLoggedIn) {
@@ -114,7 +142,7 @@ fun SolidVerdantApp(
     }
 
     // Load all tracking data when user and membership are available
-    LaunchedEffect(authUiState.currentMembership, authUiState.user) {
+    LaunchedEffect(authUiState.currentMembership?.id) {
         val membership = authUiState.currentMembership
         if (membership != null) {
             trackingViewModel.loadAllData(
@@ -134,9 +162,11 @@ fun SolidVerdantApp(
                 clientId = configState.clientId,
                 uiState = trackingUiState,
                 alwaysShowNotifications = alwaysShowNotifications,
+                appTheme = appTheme,
                 onAlwaysShowNotificationsChange = { enabled ->
                     trackingViewModel.setAlwaysShowNotifications(enabled)
                 },
+                onAppThemeChange = trackingViewModel::setAppTheme,
                 onRefresh = {
                     authUiState.currentMembership?.let { membership ->
                         trackingViewModel.loadAllData(

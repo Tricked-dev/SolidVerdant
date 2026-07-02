@@ -56,9 +56,12 @@ class BootReceiver : BroadcastReceiver() {
                 }
 
                 // Check if there's an active time entry
+                val currentMembership = authRepository.getCurrentMembership()
                 val activeEntryResult = authRepository.getActiveTimeEntry()
                 activeEntryResult.onSuccess { timeEntry ->
-                    if (timeEntry != null) {
+                    if (timeEntry != null &&
+                        timeEntry.organizationId == currentMembership?.organizationId
+                    ) {
                         Timber.d("Active tracking found, restoring tracking notification")
                         TimeTrackingNotificationService.startTracking(
                             context = context,
@@ -68,7 +71,7 @@ class BootReceiver : BroadcastReceiver() {
                             description = timeEntry.description
                         )
                     } else if (settingsDataStore.alwaysShowNotification.first()) {
-                        Timber.d("No active tracking, showing idle notification")
+                        Timber.d("No active tracking for current membership, showing idle notification")
                         TimeTrackingNotificationService.showIdle(context)
                     }
                 }.onFailure { error ->

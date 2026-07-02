@@ -6,6 +6,7 @@
 <resources>
     <!-- App Name -->
     <string name="app_name">SolidGroen</string>
+    <string name="tile_label">Tijdregistratie</string>
 
     <!-- Login Screen -->
     <string name="solidtime_login">Solidtime Inloggen</string>
@@ -91,6 +92,23 @@
     <string name="quick_start">Snel Starten</string>
     <string name="always_show_notifications">Meldingen altijd tonen</string>
     <string name="always_show_notifications_description">Toon blijvende melding tijdens tijdregistratie</string>
+    <string name="theme">Thema</string>
+    <string name="theme_description">Kies de kleurstijl van de app</string>
+    <string name="theme_system">Systeem</string>
+    <string name="theme_light">Licht</string>
+    <string name="theme_neo">Neo</string>
+    <string name="pause">Pauzeren</string>
+    <string name="resume">Hervatten</string>
+    <string name="paused">Gepauzeerd</string>
+    <string name="notification_paused_title">Tijdregistratie (gepauzeerd)</string>
+    <string name="notification_paused_text">Tik op hervatten om een nieuwe sessie te starten</string>
+    <string name="notification_paused_tracked">Geregistreerd: %1$s</string>
+    <string name="notification_paused_since">Gepauzeerd gedurende</string>
+
+    <!-- Description Suggestions -->
+    <string name="recent_entries">Recente registraties</string>
+    <string name="no_project_label">Geen project</string>
+    <string name="continue_last_entry">Laatste registratie voortzetten</string>
 
     <!-- About / Verification -->
     <string name="about">Over</string>

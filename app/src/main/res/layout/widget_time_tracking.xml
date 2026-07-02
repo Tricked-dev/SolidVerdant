@@ -20,7 +20,7 @@
         android:text="00:00:00"
         android:textSize="32sp"
         android:textStyle="bold"
-        android:textColor="@android:color/system_accent1_100"
+        android:textColor="@color/widget_text_color"
         android:gravity="center"
         android:fontFamily="monospace" />
 
@@ -32,7 +32,7 @@
         android:layout_marginTop="8dp"
         android:text="Not tracking"
         android:textSize="14sp"
-        android:textColor="@android:color/system_accent1_100"
+        android:textColor="@color/widget_text_color"
         android:gravity="center"
         android:maxLines="2"
         android:ellipsize="end" />
@@ -46,6 +46,6 @@
         android:text="Start"
         android:textSize="14sp"
         android:background="@drawable/widget_button_background"
-        android:textColor="@android:color/system_neutral2_700" />
+        android:textColor="@color/widget_button_text_color" />
 
 </LinearLayout>

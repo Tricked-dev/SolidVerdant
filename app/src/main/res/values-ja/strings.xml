@@ -6,6 +6,7 @@
 <resources>
     <!-- App Name -->
     <string name="app_name">ソリッドグリーン</string>
+    <string name="tile_label">時間追跡</string>
 
     <!-- Login Screen -->
     <string name="solidtime_login">Solidtimeログイン</string>
@@ -91,6 +92,23 @@
     <string name="quick_start">クイックスタート</string>
     <string name="always_show_notifications">通知を常に表示</string>
     <string name="always_show_notifications_description">時間追跡中に継続的な通知を表示</string>
+    <string name="theme">テーマ</string>
+    <string name="theme_description">アプリの配色を選択</string>
+    <string name="theme_system">システム</string>
+    <string name="theme_light">ライト</string>
+    <string name="theme_neo">ネオ</string>
+    <string name="pause">一時停止</string>
+    <string name="resume">再開</string>
+    <string name="paused">一時停止中</string>
+    <string name="notification_paused_title">時間追跡（一時停止中）</string>
+    <string name="notification_paused_text">再開をタップして新しいセッションを開始</string>
+    <string name="notification_paused_tracked">追跡時間: %1$s</string>
+    <string name="notification_paused_since">一時停止してから</string>
+
+    <!-- Description Suggestions -->
+    <string name="recent_entries">最近のエントリ</string>
+    <string name="no_project_label">プロジェクトなし</string>
+    <string name="continue_last_entry">最後のエントリを続ける</string>
 
     <!-- About / Verification -->
     <string name="about">概要</string>
