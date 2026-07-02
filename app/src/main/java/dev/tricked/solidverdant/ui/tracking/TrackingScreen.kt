@@ -15,18 +15,21 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -67,6 +70,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -435,55 +439,42 @@ fun TrackingScreen(
                 onRefresh = onRefresh,
                 modifier = Modifier.padding(paddingValues)
             ) {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    item { Spacer(Modifier.height(8.dp)) }
+                val lastEntry = uiState.timeEntries
+                    .filter { it.end != null && !it.description.isNullOrBlank() }
+                    .maxByOrNull { it.start }
+                val groupedEntries = getGroupedEntries()
 
-                    // Error display
-                    if (uiState.error != null) {
+                BoxWithConstraints(Modifier.fillMaxSize()) {
+                    val wideLayout = maxWidth >= 840.dp
+                    val primaryContent: LazyListScope.() -> Unit = {
+                        item { Spacer(Modifier.height(8.dp)) }
+                        uiState.error?.let { error -> item { ErrorCard(error) } }
                         item {
-                            ErrorCard(error = uiState.error)
+                            TrackingControls(
+                                uiState = uiState,
+                                onDescriptionChange = onDescriptionChange,
+                                onProjectChange = onProjectChange,
+                                onTaskChange = onTaskChange,
+                                onTagsChange = onTagsChange,
+                                onBillableChange = onBillableChange,
+                                onStart = onStartTracking,
+                                onStop = onStopTracking,
+                                onPause = onPauseTracking,
+                                onResume = onResumeTracking,
+                                onUpdate = onUpdateCurrentEntry
+                            )
                         }
-                    }
-
-                    // Tracking controls
-                    item {
-                        TrackingControls(
-                            uiState = uiState,
-                            onDescriptionChange = onDescriptionChange,
-                            onProjectChange = onProjectChange,
-                            onTaskChange = onTaskChange,
-                            onTagsChange = onTagsChange,
-                            onBillableChange = onBillableChange,
-                            onStart = onStartTracking,
-                            onStop = onStopTracking,
-                            onPause = onPauseTracking,
-                            onResume = onResumeTracking,
-                            onUpdate = onUpdateCurrentEntry
-                        )
-                    }
-
-                    // Continue last entry button
-                    if (!uiState.isTracking && !uiState.isPaused) {
-                        val lastEntry = uiState.timeEntries
-                            .filter { it.end != null && !it.description.isNullOrBlank() }
-                            .maxByOrNull { it.start }
-                        lastEntry?.let { entry ->
+                        if (!uiState.isTracking && !uiState.isPaused && lastEntry != null) {
                             item(key = "continue_last") {
                                 ContinueLastEntryButton(
-                                    entry = entry,
+                                    entry = lastEntry,
                                     projects = uiState.projects,
                                     onContinue = {
-                                        onDescriptionChange(entry.description ?: "")
-                                        onProjectChange(entry.projectId)
-                                        onTaskChange(entry.taskId)
-                                        onTagsChange(entry.tags.map { it.id })
-                                        onBillableChange(entry.billable)
+                                        onDescriptionChange(lastEntry.description ?: "")
+                                        onProjectChange(lastEntry.projectId)
+                                        onTaskChange(lastEntry.taskId)
+                                        onTagsChange(lastEntry.tags.map { it.id })
+                                        onBillableChange(lastEntry.billable)
                                         onStartTracking()
                                     }
                                 )
@@ -491,50 +482,56 @@ fun TrackingScreen(
                         }
                     }
 
-                    // Time entries history
-                    val groupedEntries = getGroupedEntries()
-                    val filteredGroupedEntries = groupedEntries.mapValues { (_, entries) ->
-                        entries.filter { (it.duration ?: 0) > 0 }
-                    }.filterValues { it.isNotEmpty() }
-
-                    if (filteredGroupedEntries.isNotEmpty()) {
-                        filteredGroupedEntries.forEach { (date, entries) ->
-                            item(key = "header_$date") {
-                                DateHeader(date = date)
-                            }
-
-                            // Group entries by project and task
-                            val groupedByProjectTask = entries.groupBy {
-                                "${it.projectId}_${it.taskId}_${it.description ?: ""}"
-                            }
-
-                            groupedByProjectTask.forEach { (_, groupedEntries) ->
-                                item(key = "group_${groupedEntries.first().id}") {
-                                    CollapsibleTimeEntryGroup(
-                                        entries = groupedEntries,
-                                        projects = uiState.projects,
-                                        tasks = uiState.tasks,
-                                        onEdit = { entry -> showEditDialog = entry },
-                                        onDelete = { entry -> onDeleteEntry(entry.id) }
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // Empty state
-                    if (uiState.timeEntries.isEmpty() && !uiState.isLoading) {
-                        item {
-                            Text(
-                                text = stringResource(R.string.no_time_entries),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(32.dp)
+                    if (wideLayout) {
+                        Row(Modifier.fillMaxSize()) {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .weight(0.9f)
+                                    .fillMaxSize()
+                                    .padding(horizontal = 24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                content = primaryContent
                             )
+                            VerticalDivider(
+                                modifier = Modifier.fillMaxHeight(),
+                                color = MaterialTheme.colorScheme.outlineVariant
+                            )
+                            LazyColumn(
+                                modifier = Modifier
+                                    .weight(1.1f)
+                                    .fillMaxSize()
+                                    .padding(horizontal = 24.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                item { Spacer(Modifier.height(8.dp)) }
+                                trackingHistoryItems(
+                                    uiState = uiState,
+                                    groupedEntries = groupedEntries,
+                                    onEdit = { showEditDialog = it },
+                                    onDelete = { onDeleteEntry(it.id) }
+                                )
+                                item { Spacer(Modifier.height(16.dp)) }
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            primaryContent()
+                            trackingHistoryItems(
+                                uiState = uiState,
+                                groupedEntries = groupedEntries,
+                                onEdit = { showEditDialog = it },
+                                onDelete = { onDeleteEntry(it.id) }
+                            )
+                            item { Spacer(Modifier.height(16.dp)) }
                         }
                     }
-
-                    item { Spacer(Modifier.height(16.dp)) }
                 }
             }
         }
@@ -553,6 +550,44 @@ fun TrackingScreen(
                 showEditDialog = null
             }
         )
+    }
+}
+
+private fun LazyListScope.trackingHistoryItems(
+    uiState: TrackingUiState,
+    groupedEntries: Map<LocalDate, List<TimeEntry>>,
+    onEdit: (TimeEntry) -> Unit,
+    onDelete: (TimeEntry) -> Unit
+) {
+    val filteredGroups = groupedEntries.mapValues { (_, entries) ->
+        entries.filter { (it.duration ?: 0) > 0 }
+    }.filterValues { it.isNotEmpty() }
+
+    filteredGroups.forEach { (date, entries) ->
+        item(key = "header_$date") { DateHeader(date) }
+        entries.groupBy { "${it.projectId}_${it.taskId}_${it.description ?: ""}" }
+            .forEach { (_, entriesForProject) ->
+                item(key = "group_${entriesForProject.first().id}") {
+                    CollapsibleTimeEntryGroup(
+                        entries = entriesForProject,
+                        projects = uiState.projects,
+                        tasks = uiState.tasks,
+                        onEdit = onEdit,
+                        onDelete = onDelete
+                    )
+                }
+            }
+    }
+
+    if (uiState.timeEntries.isEmpty() && !uiState.isLoading) {
+        item {
+            Text(
+                text = stringResource(R.string.no_time_entries),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(32.dp)
+            )
+        }
     }
 }
 

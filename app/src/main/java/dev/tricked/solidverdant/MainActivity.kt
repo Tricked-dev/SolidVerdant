@@ -1,8 +1,13 @@
 package dev.tricked.solidverdant
 
+import android.app.HandoffActivityData
+import android.app.HandoffActivityDataRequestInfo
+import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.PersistableBundle
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -15,15 +20,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import dagger.hilt.android.AndroidEntryPoint
-import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.local.AppThemeMode
+import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.ui.auth.AuthViewModel
 import dev.tricked.solidverdant.ui.login.LoginScreen
 import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
 import dev.tricked.solidverdant.ui.tracking.TrackingScreen
 import dev.tricked.solidverdant.ui.tracking.TrackingViewModel
+import kotlinx.coroutines.launch
 import timber.log.Timber
 
 /**
@@ -35,6 +46,7 @@ class MainActivity : ComponentActivity() {
     private val authViewModel: AuthViewModel by viewModels()
     private val trackingViewModel: TrackingViewModel by viewModels()
     private var stoppedAtElapsedRealtime: Long? = null
+    private var handoffOrganizationId by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,6 +54,16 @@ class MainActivity : ComponentActivity() {
 
         // Handle deep links on creation
         handleIntent(intent)
+
+        if (Build.VERSION.SDK_INT >= 37) {
+            lifecycleScope.launch {
+                repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    authViewModel.isLoggedIn.collect { isLoggedIn ->
+                        setHandoffEnabled(isLoggedIn, null)
+                    }
+                }
+            }
+        }
 
         setContent {
             val appTheme by trackingViewModel.appTheme.collectAsState(initial = AppThemeMode.SYSTEM)
@@ -52,7 +74,9 @@ class MainActivity : ComponentActivity() {
                 ) {
                     SolidVerdantApp(
                         authViewModel = authViewModel,
-                        trackingViewModel = trackingViewModel
+                        trackingViewModel = trackingViewModel,
+                        handoffOrganizationId = handoffOrganizationId,
+                        onHandoffConsumed = { handoffOrganizationId = null }
                     )
                 }
             }
@@ -93,9 +117,26 @@ class MainActivity : ComponentActivity() {
      * Handle incoming intents (including deep links)
      */
     private fun handleIntent(intent: Intent?) {
+        handoffOrganizationId = intent?.getStringExtra(EXTRA_HANDOFF_ORGANIZATION_ID)
         intent?.data?.let { uri ->
             handleDeepLink(uri)
         }
+    }
+
+    override fun onHandoffActivityDataRequested(
+        handoffRequestInfo: HandoffActivityDataRequestInfo
+    ): HandoffActivityData {
+        val extras = PersistableBundle().apply {
+            authViewModel.uiState.value.currentMembership?.organizationId?.let {
+                putString(EXTRA_HANDOFF_ORGANIZATION_ID, it)
+            }
+        }
+        val builder = HandoffActivityData.Builder(ComponentName(this, MainActivity::class.java))
+            .setExtras(extras)
+        authViewModel.configState.value.endpoint
+            .takeIf { it.startsWith("https://") }
+            ?.let { builder.setFallbackUri(Uri.parse(it)) }
+        return builder.build()
     }
 
     /**
@@ -116,6 +157,7 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val RESUME_REFRESH_THRESHOLD_MS = 30_000L
+        const val EXTRA_HANDOFF_ORGANIZATION_ID = "handoff_organization_id"
     }
 }
 
@@ -125,7 +167,9 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun SolidVerdantApp(
     authViewModel: AuthViewModel,
-    trackingViewModel: TrackingViewModel
+    trackingViewModel: TrackingViewModel,
+    handoffOrganizationId: String? = null,
+    onHandoffConsumed: () -> Unit = {}
 ) {
     val authUiState by authViewModel.uiState.collectAsState()
     val configState by authViewModel.configState.collectAsState()
@@ -138,6 +182,17 @@ fun SolidVerdantApp(
     LaunchedEffect(isLoggedIn) {
         if (isLoggedIn) {
             authViewModel.loadUserData()
+        }
+    }
+
+    LaunchedEffect(handoffOrganizationId, authUiState.memberships) {
+        handoffOrganizationId?.let { organizationId ->
+            authUiState.memberships
+                .firstOrNull { it.organizationId == organizationId }
+                ?.let {
+                    authViewModel.selectMembership(it)
+                    onHandoffConsumed()
+                }
         }
     }
 

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Networking libraries that support Android 17 ECH will protect the TLS SNI. -->
+    <base-config cleartextTrafficPermitted="false">
+        <domainEncryption mode="enabled" />
+    </base-config>
+</network-security-config>

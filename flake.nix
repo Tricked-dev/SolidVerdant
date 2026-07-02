@@ -20,6 +20,8 @@
           };
         };
         android = pkgs.androidenv.composeAndroidPackages {
+          # API 37 is not yet packaged by this pinned nixpkgs revision. Developers
+          # can use a host-installed Android 17 SDK until nixpkgs catches up.
           platformVersions = [ "36" ];
           includeEmulator = true;
           includeSystemImages = true;
