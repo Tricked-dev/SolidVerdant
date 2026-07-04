@@ -187,6 +187,7 @@ fun StartTrackingForm(
     Text(
         text = stringResource(R.string.start_time_tracking),
         style = MaterialTheme.typography.titleLarge,
+        color = MaterialTheme.colorScheme.onSurface,
         modifier = Modifier.padding(bottom = 16.dp)
     )
 

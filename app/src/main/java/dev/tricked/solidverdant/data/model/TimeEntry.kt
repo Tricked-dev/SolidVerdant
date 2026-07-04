@@ -2,6 +2,13 @@ package dev.tricked.solidverdant.data.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.JsonTransformingSerializer
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Time entry representing a tracking session
@@ -19,6 +26,7 @@ data class TimeEntry(
     val taskId: String? = null,
     @SerialName("project_id")
     val projectId: String? = null,
+    @Serializable(with = TimeEntryTagsSerializer::class)
     val tags: List<Tag> = emptyList(),
     val billable: Boolean = false,
     @SerialName("organization_id")
@@ -31,8 +39,22 @@ data class TimeEntry(
 @Serializable
 data class Tag(
     val id: String,
-    val name: String
+    val name: String = ""
 )
+
+/** The API returns tag objects in some endpoints and tag IDs in time-entry lists. */
+object TimeEntryTagsSerializer : JsonTransformingSerializer<List<Tag>>(ListSerializer(Tag.serializer())) {
+    override fun transformDeserialize(element: kotlinx.serialization.json.JsonElement) =
+        JsonArray(
+            element.jsonArray.map { tag ->
+                if (tag is JsonPrimitive) {
+                    JsonObject(mapOf("id" to JsonPrimitive(tag.jsonPrimitive.content)))
+                } else {
+                    tag
+                }
+            }
+        )
+}
 
 /**
  * User profile information

@@ -1532,6 +1532,7 @@ private fun CompactTimeEntryRow(
 
             // Project • Task and time range on same line
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -1544,27 +1545,19 @@ private fun CompactTimeEntryRow(
                             .background(Color(android.graphics.Color.parseColor(project.color)))
                     )
                     Text(
-                        text = project.name,
+                        text = buildString {
+                            append(project.name)
+                            task?.let { append(" · ${it.name}") }
+                        },
+                        modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    if (task != null) {
-                        Text(
-                            "•",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 11.sp
-                        )
-                        Text(
-                            text = task.name,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 11.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                } else {
+                    Spacer(Modifier.weight(1f))
                 }
 
                 // Time range
@@ -1572,10 +1565,13 @@ private fun CompactTimeEntryRow(
                     text = formatTimeRange(entry.start, entry.end),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp
+                    fontSize = 11.sp,
+                    maxLines = 1
                 )
             }
         }
+
+        Spacer(Modifier.width(8.dp))
 
         // Right side: Duration and action icons
         Row(

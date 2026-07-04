@@ -58,21 +58,19 @@
 ## Screenshots
 
 <p align="center">
-  <img src="screenshots/click-to-start.png" width="30%" alt="click-to-start" />
-  <img src="screenshots/tracking.png" width="30%" alt="Tracking Screen" />
-  <img src="screenshots/started.png" width="30%" alt="started" />
+  <img src="screenshots/home.png" width="30%" alt="Time tracking history" />
+  <img src="screenshots/tracking-active.png" width="30%" alt="Active time tracking" />
+  <img src="screenshots/edit-entry.png" width="30%" alt="Edit a time entry" />
 </p>
 
-
 <p align="center">
-  <img src="screenshots/home.png" width="30%" alt="Home" />
-  <img src="screenshots/home2.png" width="30%" alt="Home Tracking" />
-  <img src="screenshots/notif.png" width="30%" alt="Notif" />
+  <img src="screenshots/click-to-start.png" width="30%" alt="Quick Settings tile" />
+  <img src="screenshots/start-entry.png" width="30%" alt="Start from the Quick Settings tile" />
+  <img src="screenshots/notif.png" width="30%" alt="Tracking notification" />
 </p>
 
-
 <p align="center">
-  <em>Login Screen • Time Tracking • Configuration</em>
+  <em>History • Active Timer • Edit Entry • Quick Settings • Start Entry • Notification</em>
 </p>
 
 ## Tech Stack

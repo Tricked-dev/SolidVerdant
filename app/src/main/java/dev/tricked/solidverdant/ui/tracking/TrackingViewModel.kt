@@ -209,12 +209,18 @@ class TrackingViewModel @Inject constructor(
                     val projectData = projects.await().getOrThrow().filter { !it.isArchived }
                     val taskData = tasks.await().getOrThrow().filter { !it.isDone }
                     val tagData = tags.await().getOrThrow()
-                    val activeData = active.await().getOrThrow()?.takeIf { it.organizationId == organizationId }
-                    val continueEntry = entryData.filter { it.end != null && !it.description.isNullOrBlank() }.maxByOrNull { it.start }
+                    val tagsById = tagData.associateBy { it.id }
+                    val entryDataWithTags = entryData.map { entry ->
+                        entry.copy(tags = entry.tags.map { tagsById[it.id] ?: it })
+                    }
+                    val activeData = active.await().getOrThrow()
+                        ?.takeIf { it.organizationId == organizationId }
+                        ?.let { entry -> entry.copy(tags = entry.tags.map { tagsById[it.id] ?: it }) }
+                    val continueEntry = entryDataWithTags.filter { it.end != null && !it.description.isNullOrBlank() }.maxByOrNull { it.start }
                     _uiState.value = _uiState.value.copy(
                         isTracking = activeData != null,
                         currentTimeEntry = activeData,
-                        timeEntries = entryData,
+                        timeEntries = entryDataWithTags,
                         hasLoadedTimeEntries = true,
                         cachedContinueEntry = continueEntry,
                         projects = projectData,
@@ -228,7 +234,7 @@ class TrackingViewModel @Inject constructor(
                     )
                     settingsDataStore.cacheContinueEntry(continueEntry)
                     snapshotRepository.updateTrackingSlice(
-                        organizationId, entryData, activeData,
+                        organizationId, entryDataWithTags, activeData,
                         projectData, taskData, tagData
                     )
                     if (activeData != null) startTimer(activeData.start) else stopTimer()
@@ -280,6 +286,11 @@ class TrackingViewModel @Inject constructor(
         if (refreshAll) {
             loadAllData(organizationId, memberId)
         } else {
+            // Returning from the tile picker is usually too brief to trigger a full refresh,
+            // but its quick-start request may have changed the active entry.
+            viewModelScope.launch {
+                loadActiveTimeEntry(organizationId, onlyIfChanged = true)
+            }
             startActiveEntryMonitoring(organizationId)
         }
     }

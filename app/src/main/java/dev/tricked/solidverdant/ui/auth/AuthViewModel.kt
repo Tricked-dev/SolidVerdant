@@ -3,6 +3,7 @@ package dev.tricked.solidverdant.ui.auth
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.tricked.solidverdant.data.local.UserCacheCleaner
 import dev.tricked.solidverdant.data.model.Membership
 import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.repository.AuthRepository
@@ -48,7 +49,8 @@ enum class AuthState { Unknown, LoggedIn, LoggedOut }
 @HiltViewModel
 class AuthViewModel @Inject constructor(
     private val authRepository: AuthRepository,
-    private val snapshotRepository: SnapshotRepository
+    private val snapshotRepository: SnapshotRepository,
+    private val userCacheCleaner: UserCacheCleaner
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AuthUiState())
@@ -262,8 +264,11 @@ class AuthViewModel @Inject constructor(
      */
     fun logout() {
         viewModelScope.launch {
-            authRepository.logout()
             snapshotRepository.clear()
+            userCacheCleaner.clear()
+            // Clear account-owned data before changing auth state. Once auth is cleared,
+            // navigation can dispose this ViewModel and cancel any remaining work.
+            authRepository.logout()
             _uiState.value = AuthUiState()
             Timber.d("User logged out")
         }
