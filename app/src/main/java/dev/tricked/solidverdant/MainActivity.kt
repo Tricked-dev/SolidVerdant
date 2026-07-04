@@ -352,6 +352,10 @@ fun SolidVerdantApp(
                         )
                     }
                 },
+                onLoadMoreEntries = trackingViewModel::loadMoreTimeEntries,
+                onLoadNewerEntries = trackingViewModel::loadNewerTimeEntries,
+                onJumpToDate = trackingViewModel::jumpToHistoryDate,
+                onHistoryJumpConsumed = trackingViewModel::consumeHistoryJump,
                 getGroupedEntries = {
                     trackingViewModel.getGroupedTimeEntries()
                 }

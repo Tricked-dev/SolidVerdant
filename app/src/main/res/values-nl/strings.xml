@@ -23,6 +23,10 @@
     <string name="reset_to_defaults">Standaardinstellingen Herstellen</string>
     <string name="save">Opslaan</string>
     <string name="cancel">Annuleren</string>
+    <string name="jump_to_date">Ga naar datum</string>
+    <string name="finding_date_entries">Registraties rond %1$s zoeken</string>
+    <string name="finding_date_hint">De datum zoeken en vervolgens de omliggende geschiedenis laden…</string>
+    <string name="rate_limit_wait">De serverlimiet is bereikt. Over %1$d seconden wordt het laden hervat…</string>
 
     <!-- Tracking Screen -->
     <string name="time_tracking">Tijdregistratie</string>

@@ -216,7 +216,16 @@ data class TagsResponse(
  */
 @Serializable
 data class TimeEntriesResponse(
-    val data: List<TimeEntry>
+    val data: List<TimeEntry>,
+    val meta: TimeEntriesMeta? = null
+)
+
+@Serializable
+data class TimeEntriesMeta(
+    val total: Int? = null,
+    @SerialName("current_page") val currentPage: Int? = null,
+    @SerialName("last_page") val lastPage: Int? = null,
+    @SerialName("per_page") val perPage: Int? = null
 )
 
 /**

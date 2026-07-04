@@ -119,7 +119,9 @@ interface SolidtimeApi {
     suspend fun getTimeEntries(
         @Path("organization") organizationId: String,
         @Query("member_id") memberId: String,
-        @Query("only_full_dates") onlyFullDates: Boolean = true
+        @Query("only_full_dates") onlyFullDates: Boolean = true,
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0
     ): TimeEntriesResponse
 
     /**

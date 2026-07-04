@@ -45,6 +45,14 @@ data class TrackingUiState(
     val currentTimeEntry: TimeEntry? = null,
     val timeEntries: List<TimeEntry> = emptyList(),
     val hasLoadedTimeEntries: Boolean = false,
+    val isLoadingMoreTimeEntries: Boolean = false,
+    val hasMoreTimeEntries: Boolean = false,
+    val totalTimeEntries: Int? = null,
+    val historyJumpDate: LocalDate? = null,
+    val historyJumpTarget: LocalDate? = null,
+    val historyJumpProgress: Float? = null,
+    val historyRateLimitWaitSeconds: Int? = null,
+    val canLoadNewerHistory: Boolean = false,
     val cachedContinueEntry: TimeEntry? = null,
     val projects: List<Project> = emptyList(),
     val tasks: List<Task> = emptyList(),
@@ -91,6 +99,11 @@ class TrackingViewModel @Inject constructor(
     private var loadingOrganizationId: String? = null
     private var activeEntryMonitorJob: Job? = null
     private var monitoredOrganizationId: String? = null
+    private var historyOrganizationId: String? = null
+    private var historyMemberId: String? = null
+    private var historyLoadStage = 0
+    private var historyOffset = 0
+    private var historyWindowStartOffset = 0
     private var isInitialized = false
 
     init {
@@ -132,11 +145,17 @@ class TrackingViewModel @Inject constructor(
 
     private fun hydrate(snapshot: ScreenSnapshot) {
         val active = snapshot.activeEntry
+        historyOrganizationId = snapshot.organizationId
+        historyMemberId = snapshot.currentMembershipId
+        historyLoadStage = 1
+        historyOffset = snapshot.timeEntries.size
+        historyWindowStartOffset = 0
         _uiState.value = _uiState.value.copy(
             isTracking = active != null,
             currentTimeEntry = active,
             timeEntries = snapshot.timeEntries,
             hasLoadedTimeEntries = true,
+            hasMoreTimeEntries = snapshot.timeEntries.isNotEmpty(),
             cachedContinueEntry = snapshot.timeEntries.filter { it.end != null && !it.description.isNullOrBlank() }.maxByOrNull { it.start },
             projects = snapshot.projects,
             tasks = snapshot.tasks,
@@ -154,7 +173,8 @@ class TrackingViewModel @Inject constructor(
         val state = _uiState.value
         snapshotRepository.updateTrackingSlice(
             organizationId = organizationId,
-            timeEntries = state.timeEntries,
+            // The complete fetched history is session-only; keep startup storage small.
+            timeEntries = state.timeEntries.take(SNAPSHOT_ENTRY_LIMIT),
             activeEntry = state.currentTimeEntry,
             projects = state.projects,
             tasks = state.tasks,
@@ -205,7 +225,8 @@ class TrackingViewModel @Inject constructor(
                     val tasks = async { authRepository.getTasks(organizationId) }
                     val tags = async { authRepository.getTags(organizationId) }
                     val active = async { authRepository.getActiveTimeEntry() }
-                    val entryData = entries.await().getOrThrow()
+                    val entryResponse = entries.await().getOrThrow()
+                    val entryData = entryResponse.data
                     val projectData = projects.await().getOrThrow().filter { !it.isArchived }
                     val taskData = tasks.await().getOrThrow().filter { !it.isDone }
                     val tagData = tags.await().getOrThrow()
@@ -217,11 +238,18 @@ class TrackingViewModel @Inject constructor(
                         ?.takeIf { it.organizationId == organizationId }
                         ?.let { entry -> entry.copy(tags = entry.tags.map { tagsById[it.id] ?: it }) }
                     val continueEntry = entryDataWithTags.filter { it.end != null && !it.description.isNullOrBlank() }.maxByOrNull { it.start }
+                    historyOrganizationId = organizationId
+                    historyMemberId = memberId
+                    historyLoadStage = 0
+                    historyOffset = entryDataWithTags.size
+                    historyWindowStartOffset = 0
                     _uiState.value = _uiState.value.copy(
                         isTracking = activeData != null,
                         currentTimeEntry = activeData,
                         timeEntries = entryDataWithTags,
                         hasLoadedTimeEntries = true,
+                        hasMoreTimeEntries = entryDataWithTags.size < (entryResponse.meta?.total ?: entryDataWithTags.size),
+                        totalTimeEntries = entryResponse.meta?.total,
                         cachedContinueEntry = continueEntry,
                         projects = projectData,
                         tasks = taskData,
@@ -396,13 +424,16 @@ class TrackingViewModel @Inject constructor(
      */
     private suspend fun loadTimeEntries(organizationId: String, memberId: String) {
             authRepository.getTimeEntries(organizationId, memberId)
-                .onSuccess { entries ->
+                .onSuccess { response ->
+                    val entries = response.data
                     val continueEntry = entries
                         .filter { it.end != null && !it.description.isNullOrBlank() }
                         .maxByOrNull { it.start }
                     _uiState.value = _uiState.value.copy(
                         timeEntries = entries,
                         hasLoadedTimeEntries = true,
+                        hasMoreTimeEntries = entries.size < (response.meta?.total ?: entries.size),
+                        totalTimeEntries = response.meta?.total,
                         cachedContinueEntry = continueEntry
                     )
                     settingsDataStore.cacheContinueEntry(continueEntry)
@@ -411,6 +442,225 @@ class TrackingViewModel @Inject constructor(
                     Timber.e(error, "Failed to load time entries")
                     _uiState.value = _uiState.value.copy(hasLoadedTimeEntries = true)
                 }
+    }
+
+    /** Load history progressively while retaining fetched entries for this app session. */
+    fun loadMoreTimeEntries() {
+        val organizationId = historyOrganizationId ?: return
+        val memberId = historyMemberId ?: return
+        val state = _uiState.value
+        if (state.isLoadingMoreTimeEntries || !state.hasMoreTimeEntries) return
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoadingMoreTimeEntries = true)
+            val (limit, offset) = when (historyLoadStage) {
+                0 -> FIRST_SCROLL_TOTAL to 0
+                1 -> MAX_PAGE_SIZE to 0
+                else -> MAX_PAGE_SIZE to historyOffset
+            }
+            authRepository.getTimeEntries(organizationId, memberId, limit, offset)
+                .onSuccess { response ->
+                    val tagsById = _uiState.value.tags.associateBy { it.id }
+                    val incoming = response.data.map { entry ->
+                        entry.copy(tags = entry.tags.map { tagsById[it.id] ?: it })
+                    }
+                    val merged = (_uiState.value.timeEntries + incoming)
+                        .distinctBy { it.id }
+                        .sortedByDescending { it.start }
+                    val total = response.meta?.total ?: _uiState.value.totalTimeEntries
+                    historyOffset = if (historyLoadStage <= 1) {
+                        incoming.size
+                    } else {
+                        historyOffset + incoming.size
+                    }
+                    historyLoadStage++
+                    _uiState.value = _uiState.value.copy(
+                        timeEntries = merged,
+                        isLoadingMoreTimeEntries = false,
+                        hasMoreTimeEntries = incoming.isNotEmpty() &&
+                            (total?.let { merged.size < it } ?: true),
+                        totalTimeEntries = total
+                    )
+                    // Once the user asks for more history, quickly fill the first maximum-sized
+                    // buffer so continued scrolling does not catch the network boundary.
+                    if (historyLoadStage == 1 && _uiState.value.hasMoreTimeEntries) {
+                        loadMoreTimeEntries()
+                    }
+                }
+                .onFailure { error ->
+                    Timber.e(error, "Failed to load more time entries")
+                    _uiState.value = _uiState.value.copy(
+                        isLoadingMoreTimeEntries = false,
+                        error = error.message ?: "Failed to load more entries"
+                    )
+                }
+        }
+    }
+
+    fun jumpToHistoryDate(date: LocalDate) {
+        val organizationId = historyOrganizationId ?: return
+        val memberId = historyMemberId ?: return
+        if (_uiState.value.isLoadingMoreTimeEntries) return
+        val loadedDates = _uiState.value.timeEntries.mapNotNull { entry ->
+            runCatching {
+                ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME).toLocalDate()
+            }.getOrNull()
+        }
+        val newestLoadedDate = loadedDates.maxOrNull()
+        val oldestLoadedDate = loadedDates.minOrNull()
+        if (newestLoadedDate != null && oldestLoadedDate != null &&
+            date in oldestLoadedDate..newestLoadedDate
+        ) {
+            // The screen resolves an empty selected day to the nearest loaded date header.
+            _uiState.value = _uiState.value.copy(historyJumpDate = date)
+            return
+        }
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isLoadingMoreTimeEntries = true,
+                historyJumpTarget = date,
+                historyJumpProgress = 0f
+            )
+            val total = _uiState.value.totalTimeEntries ?: getHistoryPageWithRateLimit(
+                organizationId, memberId, limit = 1, offset = 0
+            ).getOrElse { error ->
+                _uiState.value = _uiState.value.copy(
+                    isLoadingMoreTimeEntries = false,
+                    historyJumpTarget = null,
+                    historyJumpProgress = null,
+                    historyRateLimitWaitSeconds = null,
+                    error = error.message
+                )
+                return@launch
+            }.meta?.total ?: 0
+            var low = 0
+            var high = (total - 1).coerceAtLeast(0)
+            var matchOffset = 0
+            var exactMatch = false
+            val expectedProbes = if (total > 1) {
+                kotlin.math.ceil(kotlin.math.log2(total.toDouble())).toInt()
+            } else 1
+            var completedProbes = 0
+            while (low <= high) {
+                val middle = (low + high) ushr 1
+                val probe = getHistoryPageWithRateLimit(
+                    organizationId, memberId, limit = 1, offset = middle
+                ).getOrElse { error ->
+                    _uiState.value = _uiState.value.copy(
+                        isLoadingMoreTimeEntries = false,
+                        historyJumpTarget = null,
+                        historyJumpProgress = null,
+                        historyRateLimitWaitSeconds = null,
+                        error = error.message ?: "Failed to load date"
+                    )
+                    return@launch
+                }
+                val probeDate = probe.data.firstOrNull()?.let { entry ->
+                    runCatching {
+                        ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME).toLocalDate()
+                    }.getOrNull()
+                } ?: break
+                completedProbes++
+                _uiState.value = _uiState.value.copy(
+                    historyJumpProgress = (completedProbes.toFloat() / (expectedProbes + 1))
+                        .coerceAtMost(0.9f)
+                )
+                matchOffset = middle
+                when {
+                    probeDate > date -> low = middle + 1
+                    probeDate < date -> high = middle - 1
+                    else -> {
+                        exactMatch = true
+                        break
+                    }
+                }
+            }
+            if (!exactMatch) matchOffset = low.coerceIn(0, (total - 1).coerceAtLeast(0))
+            _uiState.value = _uiState.value.copy(historyJumpProgress = 0.92f)
+            val windowStart = (matchOffset - MAX_PAGE_SIZE / 2).coerceAtLeast(0)
+            val response = getHistoryPageWithRateLimit(
+                organizationId, memberId, limit = MAX_PAGE_SIZE, offset = windowStart
+            ).getOrElse { error ->
+                _uiState.value = _uiState.value.copy(
+                    isLoadingMoreTimeEntries = false,
+                    historyJumpTarget = null,
+                    historyJumpProgress = null,
+                    historyRateLimitWaitSeconds = null,
+                    error = error.message
+                )
+                return@launch
+            }
+            val tagsById = _uiState.value.tags.associateBy { it.id }
+            val window = response.data.map { entry ->
+                entry.copy(tags = entry.tags.map { tagsById[it.id] ?: it })
+            }
+            historyWindowStartOffset = windowStart
+            historyOffset = windowStart + window.size
+            historyLoadStage = 2
+            _uiState.value = _uiState.value.copy(
+                timeEntries = window,
+                totalTimeEntries = response.meta?.total ?: total,
+                hasMoreTimeEntries = historyOffset < total,
+                canLoadNewerHistory = windowStart > 0,
+                isLoadingMoreTimeEntries = false,
+                historyJumpTarget = null,
+                historyJumpProgress = null,
+                historyRateLimitWaitSeconds = null,
+                historyJumpDate = date
+            )
+        }
+    }
+
+    fun loadNewerTimeEntries() {
+        val organizationId = historyOrganizationId ?: return
+        val memberId = historyMemberId ?: return
+        if (_uiState.value.isLoadingMoreTimeEntries || historyWindowStartOffset <= 0) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoadingMoreTimeEntries = true)
+            val newStart = (historyWindowStartOffset - MAX_PAGE_SIZE).coerceAtLeast(0)
+            authRepository.getTimeEntries(
+                organizationId, memberId,
+                limit = historyWindowStartOffset - newStart,
+                offset = newStart
+            ).onSuccess { response ->
+                val tagsById = _uiState.value.tags.associateBy { it.id }
+                val incoming = response.data.map { entry ->
+                    entry.copy(tags = entry.tags.map { tagsById[it.id] ?: it })
+                }
+                historyWindowStartOffset = newStart
+                _uiState.value = _uiState.value.copy(
+                    timeEntries = (incoming + _uiState.value.timeEntries)
+                        .distinctBy { it.id }.sortedByDescending { it.start },
+                    isLoadingMoreTimeEntries = false,
+                    canLoadNewerHistory = newStart > 0
+                )
+            }.onFailure { error ->
+                _uiState.value = _uiState.value.copy(isLoadingMoreTimeEntries = false, error = error.message)
+            }
+        }
+    }
+
+    fun consumeHistoryJump() {
+        _uiState.value = _uiState.value.copy(historyJumpDate = null)
+    }
+
+    private suspend fun getHistoryPageWithRateLimit(
+        organizationId: String,
+        memberId: String,
+        limit: Int,
+        offset: Int
+    ): Result<dev.tricked.solidverdant.data.model.TimeEntriesResponse> {
+        repeat(3) {
+            val result = authRepository.getTimeEntries(organizationId, memberId, limit, offset)
+            val error = result.exceptionOrNull()
+            if (error !is retrofit2.HttpException || error.code() != 429) return result
+            val waitSeconds = error.response()?.headers()?.get("Retry-After")
+                ?.toIntOrNull()?.coerceIn(1, 60) ?: 5
+            _uiState.value = _uiState.value.copy(historyRateLimitWaitSeconds = waitSeconds)
+            delay(waitSeconds * 1_000L)
+            _uiState.value = _uiState.value.copy(historyRateLimitWaitSeconds = null)
+        }
+        return Result.failure(IllegalStateException("Rate limit retry exhausted"))
     }
 
     /**
@@ -977,5 +1227,8 @@ class TrackingViewModel @Inject constructor(
 
     private companion object {
         const val ACTIVE_ENTRY_REFRESH_INTERVAL_MS = 10_000L
+        const val FIRST_SCROLL_TOTAL = 150
+        const val MAX_PAGE_SIZE = 500
+        const val SNAPSHOT_ENTRY_LIMIT = 250
     }
 }

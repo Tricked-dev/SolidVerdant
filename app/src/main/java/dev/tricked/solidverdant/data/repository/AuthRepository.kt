@@ -6,6 +6,7 @@ import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.TimeEntriesResponse
 import dev.tricked.solidverdant.data.model.UpdateTimeEntryRequest
 import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.remote.ApiClientFactory
@@ -306,12 +307,24 @@ class AuthRepository @Inject constructor(
     /**
      * Get time entries for an organization
      */
-    suspend fun getTimeEntries(organizationId: String, memberId: String): Result<List<TimeEntry>> {
+    suspend fun getTimeEntries(
+        organizationId: String,
+        memberId: String,
+        limit: Int = 50,
+        offset: Int = 0,
+        onlyFullDates: Boolean = false
+    ): Result<TimeEntriesResponse> {
         return try {
             val endpoint = authDataStore.getEndpoint()
             val api = apiClientFactory.createApi(endpoint)
-            val response = api.getTimeEntries(organizationId, memberId, onlyFullDates = true)
-            Result.success(response.data)
+            val response = api.getTimeEntries(
+                organizationId,
+                memberId,
+                onlyFullDates = onlyFullDates,
+                limit = limit,
+                offset = offset
+            )
+            Result.success(response)
         } catch (e: Exception) {
             Timber.e(e, "Failed to get time entries")
             Result.failure(e)

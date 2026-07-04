@@ -25,6 +25,10 @@
     <string name="reset_to_defaults">Reset to Defaults</string>
     <string name="save">Save</string>
     <string name="cancel">Cancel</string>
+    <string name="jump_to_date">Go to date</string>
+    <string name="finding_date_entries">Finding entries around %1$s</string>
+    <string name="finding_date_hint">Locating the date, then loading its surrounding history…</string>
+    <string name="rate_limit_wait">Server rate limit reached. Resuming in %1$d seconds…</string>
 
     <!-- Tracking Screen -->
     <string name="time_tracking">Time Tracking</string>

@@ -38,10 +38,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Delete
@@ -63,6 +67,9 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenuItem
@@ -74,6 +81,7 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MenuAnchorType
@@ -84,19 +92,23 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -105,6 +117,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -130,7 +143,10 @@ import dev.tricked.solidverdant.util.NotificationPermissionHelper
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZonedDateTime
+import java.time.Instant
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.flow.filter
 import java.time.format.FormatStyle
 
 /**
@@ -175,13 +191,70 @@ fun TrackingScreen(
     onUpdateCurrentEntry: () -> Unit,
     onUpdatePastEntry: (TimeEntry, String?, String?, String?, List<String>, Boolean, String, String) -> Unit,
     onDeleteEntry: (String) -> Unit,
+    onLoadMoreEntries: () -> Unit,
+    onLoadNewerEntries: () -> Unit,
+    onJumpToDate: (LocalDate) -> Unit,
+    onHistoryJumpConsumed: () -> Unit,
     getGroupedEntries: () -> Map<LocalDate, List<TimeEntry>>
 ) {
     var showEditDialog by remember { mutableStateOf<TimeEntry?>(null) }
     var organizationMenuExpanded by remember { mutableStateOf(false) }
+    var hasUserScrolledHistory by remember { mutableStateOf(false) }
+    var calendarInitialDate by remember { mutableStateOf<LocalDate?>(null) }
     val context = LocalContext.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val wideHistoryListState = rememberLazyListState()
+    val compactListState = rememberLazyListState()
+    val historyScrollConnection = remember(onLoadMoreEntries) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (available.y != 0f) {
+                    hasUserScrolledHistory = true
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
+    LaunchedEffect(wideHistoryListState, uiState.timeEntries.size, uiState.hasMoreTimeEntries) {
+        snapshotFlow {
+            val info = wideHistoryListState.layoutInfo
+            hasUserScrolledHistory && info.totalItemsCount > 0 &&
+                (info.visibleItemsInfo.lastOrNull()?.index ?: -1) >=
+                info.totalItemsCount - HISTORY_PREFETCH_ITEMS
+        }.filter { it }.collect { onLoadMoreEntries() }
+    }
+    LaunchedEffect(compactListState, uiState.timeEntries.size, uiState.hasMoreTimeEntries) {
+        snapshotFlow {
+            val info = compactListState.layoutInfo
+            hasUserScrolledHistory && info.totalItemsCount > 0 &&
+                (info.visibleItemsInfo.lastOrNull()?.index ?: -1) >=
+                info.totalItemsCount - HISTORY_PREFETCH_ITEMS
+        }.filter { it }.collect { onLoadMoreEntries() }
+    }
+    LaunchedEffect(
+        wideHistoryListState,
+        uiState.timeEntries.size,
+        uiState.canLoadNewerHistory
+    ) {
+        snapshotFlow {
+            hasUserScrolledHistory && uiState.canLoadNewerHistory &&
+                (wideHistoryListState.layoutInfo.visibleItemsInfo.firstOrNull()?.index
+                    ?: Int.MAX_VALUE) <= HISTORY_PREFETCH_ITEMS
+        }.filter { it }.collect { onLoadNewerEntries() }
+    }
+    LaunchedEffect(
+        compactListState,
+        uiState.timeEntries.size,
+        uiState.canLoadNewerHistory
+    ) {
+        snapshotFlow {
+            hasUserScrolledHistory && uiState.canLoadNewerHistory &&
+                (compactListState.layoutInfo.visibleItemsInfo.firstOrNull()?.index
+                    ?: Int.MAX_VALUE) <= HISTORY_PREFETCH_ITEMS
+        }.filter { it }.collect { onLoadNewerEntries() }
+    }
 
     // Permission launcher for notification permission (Android 13+)
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -524,6 +597,19 @@ fun TrackingScreen(
                 }
                 val groupedEntries = getGroupedEntries()
 
+                LaunchedEffect(uiState.historyJumpDate, groupedEntries) {
+                    val target = uiState.historyJumpDate ?: return@LaunchedEffect
+                    val historyIndex = historyHeaderIndex(target, groupedEntries)
+                    if (historyIndex >= 0) {
+                        val primaryItemCount = 2 +
+                            (if (uiState.error != null) 1 else 0) +
+                            (if (!uiState.isTracking && !uiState.isPaused && lastEntry != null) 1 else 0)
+                        compactListState.scrollToItem(primaryItemCount + historyIndex)
+                        wideHistoryListState.scrollToItem(1 + historyIndex)
+                    }
+                    onHistoryJumpConsumed()
+                }
+
                 BoxWithConstraints(Modifier.fillMaxSize()) {
                     val wideLayout = maxWidth >= 840.dp
                     val primaryContent: LazyListScope.() -> Unit = {
@@ -578,9 +664,11 @@ fun TrackingScreen(
                                 color = MaterialTheme.colorScheme.outlineVariant
                             )
                             LazyColumn(
+                                state = wideHistoryListState,
                                 modifier = Modifier
                                     .weight(1.1f)
                                     .fillMaxSize()
+                                    .nestedScroll(historyScrollConnection)
                                     .padding(horizontal = 24.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
@@ -589,15 +677,18 @@ fun TrackingScreen(
                                     uiState = uiState,
                                     groupedEntries = groupedEntries,
                                     onEdit = { showEditDialog = it },
-                                    onDelete = { onDeleteEntry(it.id) }
+                                    onDelete = { onDeleteEntry(it.id) },
+                                    onDateClick = { calendarInitialDate = it }
                                 )
                                 item { Spacer(Modifier.height(16.dp)) }
                             }
                         }
                     } else {
                         LazyColumn(
+                            state = compactListState,
                             modifier = Modifier
                                 .fillMaxSize()
+                                .nestedScroll(historyScrollConnection)
                                 .padding(horizontal = 16.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -607,7 +698,8 @@ fun TrackingScreen(
                                 uiState = uiState,
                                 groupedEntries = groupedEntries,
                                 onEdit = { showEditDialog = it },
-                                onDelete = { onDeleteEntry(it.id) }
+                                onDelete = { onDeleteEntry(it.id) },
+                                onDateClick = { calendarInitialDate = it }
                             )
                             item { Spacer(Modifier.height(16.dp)) }
                         }
@@ -631,13 +723,89 @@ fun TrackingScreen(
             }
         )
     }
+
+    calendarInitialDate?.let { initialDate ->
+        androidx.compose.runtime.key(initialDate) {
+            val datePickerState = rememberDatePickerState(
+                initialSelectedDateMillis = initialDate.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+            )
+            DatePickerDialog(
+                onDismissRequest = { calendarInitialDate = null },
+                confirmButton = {
+                    TextButton(onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            onJumpToDate(Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate())
+                        }
+                        calendarInitialDate = null
+                    }) { Text(stringResource(R.string.jump_to_date)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { calendarInitialDate = null }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            ) { DatePicker(state = datePickerState) }
+        }
+    }
+
+    uiState.historyJumpTarget?.let { targetDate ->
+        Dialog(onDismissRequest = { }) {
+            Surface(shape = RoundedCornerShape(20.dp), tonalElevation = 6.dp) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = stringResource(
+                            R.string.finding_date_entries,
+                            formatDate(targetDate, LocalContext.current)
+                        ),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    LinearProgressIndicator(
+                        progress = { uiState.historyJumpProgress ?: 0f },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        text = uiState.historyRateLimitWaitSeconds?.let { seconds ->
+                            stringResource(R.string.rate_limit_wait, seconds)
+                        } ?: stringResource(R.string.finding_date_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+private const val HISTORY_PREFETCH_ITEMS = 75
+
+private fun historyHeaderIndex(
+    requestedDate: LocalDate,
+    groupedEntries: Map<LocalDate, List<TimeEntry>>
+): Int {
+    val groups = groupedEntries.mapValues { (_, entries) ->
+        entries.filter { (it.duration ?: 0) > 0 }
+    }.filterValues { it.isNotEmpty() }
+    val targetDate = groups.keys.minByOrNull { kotlin.math.abs(it.toEpochDay() - requestedDate.toEpochDay()) }
+        ?: return -1
+    var index = 0
+    for ((date, entries) in groups) {
+        if (date == targetDate) return index
+        index += 1 + entries.groupBy {
+            "${it.projectId}_${it.taskId}_${it.description ?: ""}"
+        }.size
+    }
+    return -1
 }
 
 private fun LazyListScope.trackingHistoryItems(
     uiState: TrackingUiState,
     groupedEntries: Map<LocalDate, List<TimeEntry>>,
     onEdit: (TimeEntry) -> Unit,
-    onDelete: (TimeEntry) -> Unit
+    onDelete: (TimeEntry) -> Unit,
+    onDateClick: (LocalDate) -> Unit
 ) {
     if (!uiState.hasLoadedTimeEntries && uiState.timeEntries.isEmpty()) {
         item(key = "history_loading_header") { HistoryLoadingHeader() }
@@ -656,7 +824,8 @@ private fun LazyListScope.trackingHistoryItems(
             DateHeader(
                 date = date,
                 entries = entries,
-                projects = uiState.projects
+                projects = uiState.projects,
+                onClick = { onDateClick(date) }
             )
         }
         entries.groupBy { "${it.projectId}_${it.taskId}_${it.description ?: ""}" }
@@ -671,6 +840,25 @@ private fun LazyListScope.trackingHistoryItems(
                     )
                 }
             }
+    }
+
+    if (uiState.hasMoreTimeEntries || uiState.isLoadingMoreTimeEntries) {
+        item(key = "history_pagination") {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                uiState.totalTimeEntries?.let { total ->
+                    Text(
+                        text = "  ${uiState.timeEntries.size} / $total",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
     }
 
     if (uiState.timeEntries.isEmpty() && uiState.hasLoadedTimeEntries && !uiState.isLoading) {
@@ -1349,7 +1537,8 @@ private fun TagsSelector(
 private fun DateHeader(
     date: LocalDate,
     entries: List<TimeEntry>,
-    projects: List<Project>
+    projects: List<Project>,
+    onClick: () -> Unit
 ) {
     val context = LocalContext.current
     val projectIds = entries.mapNotNull { it.projectId }.toSet()
@@ -1369,6 +1558,7 @@ private fun DateHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClick = onClick)
             .padding(top = 12.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
