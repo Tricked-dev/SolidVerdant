@@ -107,10 +107,13 @@
 
     <!-- Settings -->
     <string name="settings_menu">Settings</string>
+    <string name="choose_language">Choose language</string>
     <string name="server_information">Server information</string>
     <string name="quick_start">Quick Start</string>
     <string name="always_show_notifications">Always show notifications</string>
     <string name="always_show_notifications_description">Show persistent notification while tracking time</string>
+    <string name="optimistic_refresh">Optimistic refresh</string>
+    <string name="optimistic_refresh_description">Fetch data immediately using cached account info; uses a few extra API calls</string>
     <string name="theme">Theme</string>
     <string name="theme_description">Choose the app color style</string>
     <string name="theme_system">System</string>

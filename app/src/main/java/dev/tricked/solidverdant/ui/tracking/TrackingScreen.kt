@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -47,6 +48,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -101,6 +103,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -153,8 +156,10 @@ fun TrackingScreen(
     uiState: TrackingUiState,
     alwaysShowNotifications: Boolean,
     appTheme: AppThemeMode,
+    optimisticRefresh: Boolean,
     onAlwaysShowNotificationsChange: (Boolean) -> Unit,
     onAppThemeChange: (AppThemeMode) -> Unit,
+    onOptimisticRefreshChange: (Boolean) -> Unit,
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
     onMembershipChange: (Membership) -> Unit,
@@ -215,6 +220,35 @@ fun TrackingScreen(
                             style = MaterialTheme.typography.headlineSmall,
                             modifier = Modifier.padding(bottom = 16.dp)
                         )
+
+                        OutlinedButton(
+                            onClick = {
+                                val appUri = Uri.parse("package:${context.packageName}")
+                                val languageIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    Intent(Settings.ACTION_APP_LOCALE_SETTINGS, appUri)
+                                } else {
+                                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, appUri)
+                                }
+                                runCatching { context.startActivity(languageIntent) }
+                                    .onFailure {
+                                        context.startActivity(
+                                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, appUri)
+                                        )
+                                    }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Language,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.choose_language))
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         HorizontalDivider()
 
@@ -289,6 +323,22 @@ fun TrackingScreen(
                                 checked = alwaysShowNotifications,
                                 onCheckedChange = onAlwaysShowNotificationsChange
                             )
+                        }
+
+                        HorizontalDivider()
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(stringResource(R.string.optimistic_refresh), style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    stringResource(R.string.optimistic_refresh_description),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(checked = optimisticRefresh, onCheckedChange = onOptimisticRefreshChange)
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
@@ -442,10 +492,18 @@ fun TrackingScreen(
                                 )
                             }
                         }
+                        val syncTransition = rememberInfiniteTransition(label = "sync")
+                        val syncRotation by syncTransition.animateFloat(
+                            initialValue = 0f,
+                            targetValue = if (uiState.isSyncing) 360f else 0f,
+                            animationSpec = infiniteRepeatable(tween(900), RepeatMode.Restart),
+                            label = "sync rotation"
+                        )
                         IconButton(onClick = onRefresh) {
                             Icon(
                                 imageVector = Icons.Default.Refresh,
-                                contentDescription = stringResource(R.string.refresh)
+                                contentDescription = stringResource(R.string.refresh),
+                                modifier = Modifier.rotate(syncRotation)
                             )
                         }
                     }
@@ -454,7 +512,7 @@ fun TrackingScreen(
             containerColor = MaterialTheme.colorScheme.surface
         ) { paddingValues ->
             PullToRefreshBox(
-                isRefreshing = uiState.isLoading,
+                isRefreshing = uiState.isRefreshing,
                 onRefresh = onRefresh,
                 modifier = Modifier.padding(paddingValues)
             ) {
@@ -773,7 +831,7 @@ private fun TrackingControls(
                 timeEntries = uiState.timeEntries,
                 projects = uiState.projects,
                 tags = uiState.tags,
-                enabled = !uiState.isLoading,
+                enabled = !uiState.isMutating,
                 onEntryCopied = { entry ->
                     onDescriptionChange(entry.description ?: "")
                     onProjectChange(entry.projectId)
@@ -793,7 +851,7 @@ private fun TrackingControls(
                     onProjectChange(projectId)
                     onTaskChange(taskId)
                 },
-                enabled = !uiState.isLoading
+                enabled = !uiState.isMutating
             )
 
             // Tags selector
@@ -802,7 +860,7 @@ private fun TrackingControls(
                     selectedTagIds = uiState.editingTags,
                     availableTags = uiState.tags,
                     onTagsChanged = onTagsChange,
-                    enabled = !uiState.isLoading
+                    enabled = !uiState.isMutating
                 )
             }
 
@@ -814,7 +872,7 @@ private fun TrackingControls(
                 Checkbox(
                     checked = uiState.editingBillable,
                     onCheckedChange = onBillableChange,
-                    enabled = !uiState.isLoading
+                    enabled = !uiState.isMutating
                 )
                 Text(
                     text = stringResource(R.string.billable),
@@ -831,7 +889,7 @@ private fun TrackingControls(
                     Button(
                         onClick = onUpdate,
                         modifier = Modifier.weight(1f),
-                        enabled = !uiState.isLoading,
+                        enabled = !uiState.isMutating,
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(stringResource(R.string.update), fontWeight = FontWeight.SemiBold)
@@ -842,7 +900,7 @@ private fun TrackingControls(
                             onPause()
                         },
                         modifier = Modifier.weight(1f),
-                        enabled = !uiState.isLoading,
+                        enabled = !uiState.isMutating,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.tertiary,
                             contentColor = MaterialTheme.colorScheme.onTertiary
@@ -863,7 +921,7 @@ private fun TrackingControls(
                             onStop()
                         },
                         modifier = Modifier.weight(1f),
-                        enabled = !uiState.isLoading,
+                        enabled = !uiState.isMutating,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error,
                             contentColor = MaterialTheme.colorScheme.onError
@@ -885,7 +943,7 @@ private fun TrackingControls(
                             onResume()
                         },
                         modifier = Modifier.weight(1f),
-                        enabled = !uiState.isLoading,
+                        enabled = !uiState.isMutating,
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Icon(
@@ -902,7 +960,7 @@ private fun TrackingControls(
                             onStop()
                         },
                         modifier = Modifier.weight(1f),
-                        enabled = !uiState.isLoading,
+                        enabled = !uiState.isMutating,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error,
                             contentColor = MaterialTheme.colorScheme.onError
@@ -924,7 +982,7 @@ private fun TrackingControls(
                             onStart()
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !uiState.isLoading,
+                        enabled = !uiState.isMutating,
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Icon(

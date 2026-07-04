@@ -5,8 +5,8 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.tricked.solidverdant.data.model.Membership
 import dev.tricked.solidverdant.data.model.User
-import dev.tricked.solidverdant.data.local.CacheDataStore
 import dev.tricked.solidverdant.data.repository.AuthRepository
+import dev.tricked.solidverdant.data.repository.SnapshotRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -28,7 +28,8 @@ data class AuthUiState(
     val memberships: List<Membership> = emptyList(),
     val currentMembership: Membership? = null,
     val error: String? = null,
-    val authUrl: String? = null
+    val authUrl: String? = null,
+    val hasRevalidated: Boolean = false
 )
 
 /**
@@ -47,7 +48,7 @@ enum class AuthState { Unknown, LoggedIn, LoggedOut }
 @HiltViewModel
 class AuthViewModel @Inject constructor(
     private val authRepository: AuthRepository,
-    private val cacheDataStore: CacheDataStore
+    private val snapshotRepository: SnapshotRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AuthUiState())
@@ -73,7 +74,7 @@ class AuthViewModel @Inject constructor(
         // Load OAuth config on init
         loadOAuthConfig()
         viewModelScope.launch {
-            val snapshot = cacheDataStore.getScreenSnapshot()
+            val snapshot = snapshotRepository.read()
             if (snapshot != null) {
                 _uiState.value = _uiState.value.copy(
                     user = snapshot.user,
@@ -180,12 +181,14 @@ class AuthViewModel @Inject constructor(
                         user = user,
                         memberships = memberships,
                         currentMembership = currentMembership,
-                        isLoading = false
+                        isLoading = false,
+                        hasRevalidated = true
                     )
 
                     // Save current membership
                     currentMembership?.let {
                         authRepository.saveCurrentMembershipId(it.id)
+                        snapshotRepository.updateAuthSlice(user, memberships, it.id)
                     }
                 }
                 .onFailure { error ->
@@ -204,7 +207,12 @@ class AuthViewModel @Inject constructor(
 
         _uiState.value = _uiState.value.copy(currentMembership = membership)
         viewModelScope.launch {
-            cacheDataStore.clearCache()
+            snapshotRepository.clear()
+            _uiState.value.user?.let { user ->
+                snapshotRepository.updateAuthSlice(
+                    user, _uiState.value.memberships, membership.id
+                )
+            }
             authRepository.saveCurrentMembershipId(membership.id)
                 .onFailure { Timber.e(it, "Failed to save selected membership") }
         }
@@ -255,7 +263,7 @@ class AuthViewModel @Inject constructor(
     fun logout() {
         viewModelScope.launch {
             authRepository.logout()
-            cacheDataStore.clearCache()
+            snapshotRepository.clear()
             _uiState.value = AuthUiState()
             Timber.d("User logged out")
         }

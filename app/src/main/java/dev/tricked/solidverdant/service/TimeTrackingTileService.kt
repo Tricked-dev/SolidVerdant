@@ -18,7 +18,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.edit
 import dagger.hilt.android.AndroidEntryPoint
 import dev.tricked.solidverdant.R
-import dev.tricked.solidverdant.data.local.CacheDataStore
+import dev.tricked.solidverdant.data.repository.SnapshotRepository
 import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.ApiClientFactory
@@ -56,7 +56,7 @@ class TimeTrackingTileService : TileService() {
     lateinit var apiClientFactory: ApiClientFactory
 
     @Inject
-    lateinit var cacheDataStore: CacheDataStore
+    lateinit var snapshotRepository: SnapshotRepository
 
     @Inject
     lateinit var settingsDataStore: SettingsDataStore
@@ -697,8 +697,9 @@ class TimeTrackingTileService : TileService() {
             return Pair(cachedProject, cachedTask)
         }
 
-        var projects = cacheDataStore.getCachedProjects()
-        var tasks = cacheDataStore.getCachedTasks()
+        val snapshot = snapshotRepository.read()?.takeIf { it.organizationId == entry.organizationId }
+        var projects = snapshot?.projects
+        var tasks = snapshot?.tasks
 
         if ((entry.projectId != null && projects == null) || (entry.taskId != null && tasks == null)) {
             try {
@@ -708,12 +709,13 @@ class TimeTrackingTileService : TileService() {
 
                 if (projects == null) {
                     projects = api.getProjects(orgId).data
-                    cacheDataStore.cacheProjects(projects)
                 }
                 if (tasks == null) {
                     tasks = api.getTasks(orgId).data
-                    cacheDataStore.cacheTasks(tasks)
                 }
+                snapshotRepository.updateProjectsTasks(
+                    orgId, projects.orEmpty(), tasks.orEmpty()
+                )
             } catch (e: Exception) {
                 Timber.w(e, "Failed to load projects/tasks")
                 return Pair(null, null)

@@ -102,11 +102,14 @@
 
     <!-- Settings -->
     <string name="settings_menu">設定</string>
+    <string name="choose_language">言語を選択</string>
     <string name="server_information">サーバー情報</string>
     <string name="organization">組織</string>
     <string name="quick_start">クイックスタート</string>
     <string name="always_show_notifications">通知を常に表示</string>
     <string name="always_show_notifications_description">時間追跡中に継続的な通知を表示</string>
+    <string name="optimistic_refresh">楽観的な更新</string>
+    <string name="optimistic_refresh_description">保存済みのアカウント情報ですぐに取得します。API 呼び出しが少し増えます</string>
     <string name="theme">テーマ</string>
     <string name="theme_description">アプリの配色を選択</string>
     <string name="theme_system">システム</string>

@@ -32,6 +32,7 @@ import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.local.AppThemeMode
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.ui.auth.AuthViewModel
+import dev.tricked.solidverdant.ui.auth.AuthState
 import dev.tricked.solidverdant.ui.login.LoginScreen
 import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
 import dev.tricked.solidverdant.ui.tracking.TrackingScreen
@@ -188,15 +189,17 @@ fun SolidVerdantApp(
 ) {
     val authUiState by authViewModel.uiState.collectAsState()
     val configState by authViewModel.configState.collectAsState()
-    val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
+    val authState by authViewModel.authState.collectAsState()
     val trackingUiState by trackingViewModel.uiState.collectAsState()
     val alwaysShowNotifications by trackingViewModel.alwaysShowNotifications.collectAsState(initial = false)
     val appTheme by trackingViewModel.appTheme.collectAsState(initial = AppThemeMode.SYSTEM)
     val optimisticRefresh by trackingViewModel.optimisticRefresh.collectAsState(initial = true)
+    val hasSnapshot by trackingViewModel.hasSnapshot.collectAsState()
+    val snapshotHydrated by trackingViewModel.snapshotHydrated.collectAsState()
 
     // Load user data when logged in
-    LaunchedEffect(isLoggedIn) {
-        if (isLoggedIn) {
+    LaunchedEffect(authState) {
+        if (authState == AuthState.LoggedIn) {
             authViewModel.loadUserData()
         }
     }
@@ -213,9 +216,17 @@ fun SolidVerdantApp(
     }
 
     // Load all tracking data when user and membership are available
-    LaunchedEffect(authUiState.currentMembership?.id) {
+    LaunchedEffect(
+        authUiState.currentMembership?.id,
+        authUiState.hasRevalidated,
+        optimisticRefresh,
+        hasSnapshot,
+        snapshotHydrated
+    ) {
         val membership = authUiState.currentMembership
-        if (membership != null) {
+        val mayRefresh = snapshotHydrated && membership != null &&
+            (!hasSnapshot || optimisticRefresh || authUiState.hasRevalidated)
+        if (membership != null && mayRefresh) {
             trackingViewModel.loadAllData(
                 organizationId = membership.organizationId,
                 memberId = membership.id
@@ -224,7 +235,7 @@ fun SolidVerdantApp(
     }
 
     when {
-        isLoggedIn -> {
+        authState == AuthState.LoggedIn -> {
             TrackingScreen(
                 user = authUiState.user,
                 memberships = authUiState.memberships,
@@ -245,8 +256,6 @@ fun SolidVerdantApp(
                         trackingViewModel.loadAllData(
                             organizationId = membership.organizationId,
                             memberId = membership.id,
-                            user = authUiState.user,
-                            memberships = authUiState.memberships,
                             userInitiated = true
                         )
                     }
@@ -349,7 +358,7 @@ fun SolidVerdantApp(
             )
         }
 
-        else -> {
+        authState == AuthState.LoggedOut -> {
             LoginScreen(
                 uiState = authUiState,
                 configState = configState,
@@ -371,5 +380,7 @@ fun SolidVerdantApp(
                 }
             )
         }
+
+        else -> Unit
     }
 }

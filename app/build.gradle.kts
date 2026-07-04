@@ -148,4 +148,5 @@ dependencies {
 
     debugImplementation(composeBom)
     debugImplementation(libs.androidx.compose.ui.tooling.core)
+    testImplementation(libs.junit4)
 }

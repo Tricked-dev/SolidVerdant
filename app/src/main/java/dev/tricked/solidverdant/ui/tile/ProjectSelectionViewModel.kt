@@ -3,12 +3,12 @@ package dev.tricked.solidverdant.ui.tile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dev.tricked.solidverdant.data.local.CacheDataStore
 import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.remote.ApiClientFactory
 import dev.tricked.solidverdant.data.repository.AuthRepository
+import dev.tricked.solidverdant.data.repository.SnapshotRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,7 +32,7 @@ data class ProjectSelectionUiState(
 class ProjectSelectionViewModel @Inject constructor(
     private val apiClientFactory: ApiClientFactory,
     private val authRepository: AuthRepository,
-    private val cacheDataStore: CacheDataStore,
+    private val snapshotRepository: SnapshotRepository,
     settingsDataStore: SettingsDataStore
 ) : ViewModel() {
 
@@ -57,8 +57,9 @@ class ProjectSelectionViewModel @Inject constructor(
 
                 // Try cache first
                 if (!forceRefresh) {
-                    val cachedProjects = cacheDataStore.getCachedProjects()
-                    val cachedTasks = cacheDataStore.getCachedTasks()
+                    val snapshot = snapshotRepository.read()?.takeIf { it.organizationId == organizationId }
+                    val cachedProjects = snapshot?.projects
+                    val cachedTasks = snapshot?.tasks
 
                     if (cachedProjects != null && cachedTasks != null) {
                         Timber.d("Using cached projects and tasks")
@@ -79,8 +80,9 @@ class ProjectSelectionViewModel @Inject constructor(
                 val projectsResponse = api.getProjects(organizationId)
                 val tasksResponse = api.getTasks(organizationId)
 
-                cacheDataStore.cacheProjects(projectsResponse.data)
-                cacheDataStore.cacheTasks(tasksResponse.data)
+                snapshotRepository.updateProjectsTasks(
+                    organizationId, projectsResponse.data, tasksResponse.data
+                )
 
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -105,8 +107,9 @@ class ProjectSelectionViewModel @Inject constructor(
                 val projectsResponse = api.getProjects(organizationId)
                 val tasksResponse = api.getTasks(organizationId)
 
-                cacheDataStore.cacheProjects(projectsResponse.data)
-                cacheDataStore.cacheTasks(tasksResponse.data)
+                snapshotRepository.updateProjectsTasks(
+                    organizationId, projectsResponse.data, tasksResponse.data
+                )
 
                 _uiState.value = _uiState.value.copy(
                     projects = projectsResponse.data,

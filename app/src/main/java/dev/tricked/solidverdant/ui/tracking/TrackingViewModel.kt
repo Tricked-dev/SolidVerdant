@@ -7,10 +7,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.local.AppThemeMode
-import dev.tricked.solidverdant.data.local.CacheDataStore
 import dev.tricked.solidverdant.data.local.ScreenSnapshot
-import dev.tricked.solidverdant.data.model.Membership
-import dev.tricked.solidverdant.data.model.User
+import dev.tricked.solidverdant.data.repository.SnapshotRepository
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
@@ -21,7 +19,6 @@ import dev.tricked.solidverdant.widget.TimeTrackingWidget
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,7 +40,6 @@ data class TrackingUiState(
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
     val isSyncing: Boolean = false,
-    val isMutating: Boolean = false,
     val isTracking: Boolean = false,
     val isPaused: Boolean = false,
     val currentTimeEntry: TimeEntry? = null,
@@ -61,7 +57,10 @@ data class TrackingUiState(
     val editingTaskId: String? = null,
     val editingTags: List<String> = emptyList(),
     val editingBillable: Boolean = false
-)
+) {
+    /** Mutations retain the legacy internal flag; refresh/sync have independent flags. */
+    val isMutating: Boolean get() = isLoading
+}
 
 /**
  * ViewModel for time tracking operations
@@ -70,7 +69,7 @@ data class TrackingUiState(
 class TrackingViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val settingsDataStore: SettingsDataStore,
-    private val cacheDataStore: CacheDataStore,
+    private val snapshotRepository: SnapshotRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -84,6 +83,8 @@ class TrackingViewModel @Inject constructor(
     val optimisticRefresh = settingsDataStore.optimisticRefresh
     private val _snapshotHydrated = MutableStateFlow(false)
     val snapshotHydrated: StateFlow<Boolean> = _snapshotHydrated.asStateFlow()
+    private val _hasSnapshot = MutableStateFlow(false)
+    val hasSnapshot: StateFlow<Boolean> = _hasSnapshot.asStateFlow()
 
     private var timerJob: Job? = null
     private var loadDataJob: Job? = null
@@ -94,7 +95,10 @@ class TrackingViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            cacheDataStore.getScreenSnapshot()?.let { hydrate(it) }
+            snapshotRepository.read()?.let {
+                _hasSnapshot.value = true
+                hydrate(it)
+            }
             _snapshotHydrated.value = true
         }
         // Monitor settings changes and update notification state
@@ -146,6 +150,18 @@ class TrackingViewModel @Inject constructor(
         active?.let { startTimer(it.start) }
     }
 
+    private suspend fun persistTrackingSlice(organizationId: String) {
+        val state = _uiState.value
+        snapshotRepository.updateTrackingSlice(
+            organizationId = organizationId,
+            timeEntries = state.timeEntries,
+            activeEntry = state.currentTimeEntry,
+            projects = state.projects,
+            tasks = state.tasks,
+            tags = state.tags
+        )
+    }
+
     /**
      * Update notification state based on tracking status and settings
      */
@@ -169,8 +185,6 @@ class TrackingViewModel @Inject constructor(
     fun loadAllData(
         organizationId: String,
         memberId: String,
-        user: User? = null,
-        memberships: List<Membership> = emptyList(),
         userInitiated: Boolean = false
     ) {
         if (loadDataJob?.isActive == true && loadingOrganizationId == organizationId) {
@@ -181,7 +195,7 @@ class TrackingViewModel @Inject constructor(
         loadDataJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isRefreshing = userInitiated,
-                isSyncing = true,
+                isSyncing = !userInitiated,
                 error = null
             )
             try {
@@ -213,20 +227,10 @@ class TrackingViewModel @Inject constructor(
                         editingBillable = activeData?.billable ?: false
                     )
                     settingsDataStore.cacheContinueEntry(continueEntry)
-                    val currentMembership = memberships.firstOrNull { it.id == memberId }
-                    if (user != null && currentMembership != null) {
-                        cacheDataStore.saveScreenSnapshot(ScreenSnapshot(
-                            organizationId = organizationId,
-                            user = user,
-                            memberships = memberships,
-                            currentMembershipId = memberId,
-                            timeEntries = entryData,
-                            activeEntry = activeData,
-                            projects = projectData,
-                            tasks = taskData,
-                            tags = tagData
-                        ))
-                    }
+                    snapshotRepository.updateTrackingSlice(
+                        organizationId, entryData, activeData,
+                        projectData, taskData, tagData
+                    )
                     if (activeData != null) startTimer(activeData.start) else stopTimer()
                 }
                 startActiveEntryMonitoring(organizationId)
@@ -567,6 +571,7 @@ class TrackingViewModel @Inject constructor(
                             currentTimeEntry = timeEntry
                         )
                         startTimer(timeEntry.start)
+                        persistTrackingSlice(organizationId)
                         Timber.d("Time entry started successfully")
                     }
                 }
@@ -642,6 +647,7 @@ class TrackingViewModel @Inject constructor(
                     if (!_uiState.value.isTracking) {
                         startTimer(updated.start)
                     }
+                    persistTrackingSlice(organizationId)
                     Timber.d("Time entry updated successfully")
                 }
                 .onFailure { error ->
@@ -716,6 +722,7 @@ class TrackingViewModel @Inject constructor(
 
                     // Refresh only after the stop has been committed by the server.
                     loadTimeEntries(organizationId, memberId)
+                    persistTrackingSlice(organizationId)
                     _uiState.value = _uiState.value.copy(isLoading = false)
                 }
                 .onFailure { error ->
@@ -765,6 +772,7 @@ class TrackingViewModel @Inject constructor(
                     // Update widget state to idle
                     settingsDataStore.setWidgetTrackingState(isTracking = false)
                     TimeTrackingWidget.requestUpdate(context)
+                    persistTrackingSlice(organizationId)
                 }
                 .onFailure { error ->
                     Timber.e(error, "Failed to pause time entry")
@@ -829,6 +837,7 @@ class TrackingViewModel @Inject constructor(
                             currentTimeEntry = timeEntry
                         )
                         startTimer(timeEntry.start)
+                        persistTrackingSlice(organizationId)
                         Timber.d("Time entry resumed successfully with new entry")
                     }
                 }
@@ -883,6 +892,7 @@ class TrackingViewModel @Inject constructor(
                         isLoading = false,
                         timeEntries = updatedList
                     )
+                    persistTrackingSlice(organizationId)
                     Timber.d("Time entry updated successfully")
                 }
                 .onFailure { error ->
@@ -910,6 +920,7 @@ class TrackingViewModel @Inject constructor(
                         isLoading = false,
                         timeEntries = updatedList
                     )
+                    persistTrackingSlice(organizationId)
                     Timber.d("Time entry deleted successfully")
                 }
                 .onFailure { error ->

@@ -15,6 +15,11 @@ import javax.inject.Singleton
 
 private val Context.cacheDataStore by preferencesDataStore(name = "cache_prefs")
 
+internal fun decodeScreenSnapshot(encoded: String, json: Json): ScreenSnapshot? =
+    runCatching { json.decodeFromString<ScreenSnapshot>(encoded) }
+        .getOrNull()
+        ?.takeIf { it.version == ScreenSnapshot.CURRENT_VERSION }
+
 @Serializable
 data class ScreenSnapshot(
     val version: Int = CURRENT_VERSION,
@@ -40,18 +45,21 @@ class CacheDataStore @Inject constructor(
 ) {
     private companion object { val SNAPSHOT = stringPreferencesKey("screen_snapshot_v1") }
 
-    suspend fun getScreenSnapshot(): ScreenSnapshot? = try {
+    suspend fun readSnapshot(): ScreenSnapshot? = try {
         val encoded = context.cacheDataStore.data.first()[SNAPSHOT] ?: return null
-        json.decodeFromString<ScreenSnapshot>(encoded).takeIf {
-            it.version == ScreenSnapshot.CURRENT_VERSION
-        }.also { if (it == null) Timber.w("Discarding old screen snapshot") }
+        val decoded = decodeScreenSnapshot(encoded, json)
+        if (decoded == null) {
+            Timber.w("Discarding corrupt or old screen snapshot")
+            clearCache()
+        }
+        decoded
     } catch (error: Exception) {
         Timber.w(error, "Discarding corrupt screen snapshot")
         clearCache()
         null
     }
 
-    suspend fun saveScreenSnapshot(snapshot: ScreenSnapshot) {
+    suspend fun writeSnapshot(snapshot: ScreenSnapshot) {
         try {
             val value = snapshot.copy(
                 version = ScreenSnapshot.CURRENT_VERSION,
