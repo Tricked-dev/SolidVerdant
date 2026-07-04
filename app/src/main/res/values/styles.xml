@@ -7,6 +7,12 @@
 
     <!-- Base application theme. --><style name="AppTheme" parent="Base.AppTheme" />
 
+    <style name="Theme.App.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/colorPrimaryDark</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/logo_no_fill</item>
+        <item name="postSplashScreenTheme">@style/AppTheme</item>
+    </style>
+
     <style name="AppTheme.OverlapSystemBar" parent="Base.AppTheme">
         <item name="android:windowDrawsSystemBarBackgrounds">false</item>
         <item name="android:statusBarColor">@android:color/transparent</item>

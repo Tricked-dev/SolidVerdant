@@ -15,9 +15,12 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.tricked.solidverdant.data.model.TimeEntry
+import kotlinx.serialization.json.Json
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -37,10 +40,14 @@ class SettingsDataStore @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val dataStore = context.settingsDataStore
+    private val immediateCache = context.getSharedPreferences("immediate_ui_cache", Context.MODE_PRIVATE)
+    private val json = Json { ignoreUnknownKeys = true }
 
     companion object {
+        private const val CONTINUE_ENTRY_JSON = "continue_entry_json"
         private val ALWAYS_SHOW_NOTIFICATION = booleanPreferencesKey("always_show_notification")
         private val APP_THEME = stringPreferencesKey("app_theme")
+        private val OPTIMISTIC_REFRESH = booleanPreferencesKey("optimistic_refresh")
         private val WIDGET_IS_TRACKING = booleanPreferencesKey("widget_is_tracking")
         private val WIDGET_START_TIME = longPreferencesKey("widget_start_time")
         private val WIDGET_PROJECT_NAME = stringPreferencesKey("widget_project_name")
@@ -60,6 +67,19 @@ class SettingsDataStore @Inject constructor(
         }
     }
 
+    /** Read synchronously so the continue card can exist on the first rendered frame. */
+    fun getCachedContinueEntry(): TimeEntry? =
+        immediateCache.getString(CONTINUE_ENTRY_JSON, null)?.let { encoded ->
+            runCatching { json.decodeFromString<TimeEntry>(encoded) }.getOrNull()
+        }
+
+    fun cacheContinueEntry(entry: TimeEntry?) {
+        immediateCache.edit().apply {
+            if (entry == null) remove(CONTINUE_ENTRY_JSON)
+            else putString(CONTINUE_ENTRY_JSON, json.encodeToString(entry))
+        }.apply()
+    }
+
     /**
      * Flow that emits whether to always show notifications
      */
@@ -73,6 +93,12 @@ class SettingsDataStore @Inject constructor(
             ?: AppThemeMode.SYSTEM
     }.distinctUntilChanged()
 
+    val optimisticRefresh: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[OPTIMISTIC_REFRESH] ?: true
+    }.distinctUntilChanged()
+
+    suspend fun getAppTheme(): AppThemeMode = appTheme.first()
+
     /**
      * Set whether to always show notifications
      */
@@ -84,6 +110,10 @@ class SettingsDataStore @Inject constructor(
 
     suspend fun setAppTheme(theme: AppThemeMode) {
         dataStore.edit { preferences -> preferences[APP_THEME] = theme.name }
+    }
+
+    suspend fun setOptimisticRefresh(enabled: Boolean) {
+        dataStore.edit { preferences -> preferences[OPTIMISTIC_REFRESH] = enabled }
     }
 
     /**

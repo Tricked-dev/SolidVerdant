@@ -7,6 +7,10 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.local.AppThemeMode
+import dev.tricked.solidverdant.data.local.CacheDataStore
+import dev.tricked.solidverdant.data.local.ScreenSnapshot
+import dev.tricked.solidverdant.data.model.Membership
+import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
@@ -37,10 +41,15 @@ import javax.inject.Inject
  */
 data class TrackingUiState(
     val isLoading: Boolean = false,
+    val isRefreshing: Boolean = false,
+    val isSyncing: Boolean = false,
+    val isMutating: Boolean = false,
     val isTracking: Boolean = false,
     val isPaused: Boolean = false,
     val currentTimeEntry: TimeEntry? = null,
     val timeEntries: List<TimeEntry> = emptyList(),
+    val hasLoadedTimeEntries: Boolean = false,
+    val cachedContinueEntry: TimeEntry? = null,
     val projects: List<Project> = emptyList(),
     val tasks: List<Task> = emptyList(),
     val tags: List<Tag> = emptyList(),
@@ -61,14 +70,20 @@ data class TrackingUiState(
 class TrackingViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val settingsDataStore: SettingsDataStore,
+    private val cacheDataStore: CacheDataStore,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(TrackingUiState())
+    private val _uiState = MutableStateFlow(
+        TrackingUiState(cachedContinueEntry = settingsDataStore.getCachedContinueEntry())
+    )
     val uiState: StateFlow<TrackingUiState> = _uiState.asStateFlow()
 
     val alwaysShowNotifications = settingsDataStore.alwaysShowNotification
     val appTheme = settingsDataStore.appTheme
+    val optimisticRefresh = settingsDataStore.optimisticRefresh
+    private val _snapshotHydrated = MutableStateFlow(false)
+    val snapshotHydrated: StateFlow<Boolean> = _snapshotHydrated.asStateFlow()
 
     private var timerJob: Job? = null
     private var loadDataJob: Job? = null
@@ -78,6 +93,10 @@ class TrackingViewModel @Inject constructor(
     private var isInitialized = false
 
     init {
+        viewModelScope.launch {
+            cacheDataStore.getScreenSnapshot()?.let { hydrate(it) }
+            _snapshotHydrated.value = true
+        }
         // Monitor settings changes and update notification state
         viewModelScope.launch {
             settingsDataStore.alwaysShowNotification.collect { enabled ->
@@ -103,6 +122,30 @@ class TrackingViewModel @Inject constructor(
         viewModelScope.launch { settingsDataStore.setAppTheme(theme) }
     }
 
+    fun setOptimisticRefresh(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setOptimisticRefresh(enabled) }
+    }
+
+    private fun hydrate(snapshot: ScreenSnapshot) {
+        val active = snapshot.activeEntry
+        _uiState.value = _uiState.value.copy(
+            isTracking = active != null,
+            currentTimeEntry = active,
+            timeEntries = snapshot.timeEntries,
+            hasLoadedTimeEntries = true,
+            cachedContinueEntry = snapshot.timeEntries.filter { it.end != null && !it.description.isNullOrBlank() }.maxByOrNull { it.start },
+            projects = snapshot.projects,
+            tasks = snapshot.tasks,
+            tags = snapshot.tags,
+            editingDescription = active?.description.orEmpty(),
+            editingProjectId = active?.projectId,
+            editingTaskId = active?.taskId,
+            editingTags = active?.tags?.map { it.id }.orEmpty(),
+            editingBillable = active?.billable ?: false
+        )
+        active?.let { startTimer(it.start) }
+    }
+
     /**
      * Update notification state based on tracking status and settings
      */
@@ -123,29 +166,75 @@ class TrackingViewModel @Inject constructor(
     /**
      * Load all data needed for the tracking screen
      */
-    fun loadAllData(organizationId: String, memberId: String) {
+    fun loadAllData(
+        organizationId: String,
+        memberId: String,
+        user: User? = null,
+        memberships: List<Membership> = emptyList(),
+        userInitiated: Boolean = false
+    ) {
         if (loadDataJob?.isActive == true && loadingOrganizationId == organizationId) {
             return
         }
         loadDataJob?.cancel()
         loadingOrganizationId = organizationId
         loadDataJob = viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            _uiState.value = _uiState.value.copy(
+                isRefreshing = userInitiated,
+                isSyncing = true,
+                error = null
+            )
             try {
-                // Load organization-scoped labels before the active entry so its notification
-                // always has data from the correct organization.
                 coroutineScope {
-                    listOf(
-                        async { loadTimeEntries(organizationId, memberId) },
-                        async { loadProjects(organizationId) },
-                        async { loadTasks(organizationId) },
-                        async { loadTags(organizationId) }
-                    ).awaitAll()
+                    val entries = async { authRepository.getTimeEntries(organizationId, memberId) }
+                    val projects = async { authRepository.getProjects(organizationId) }
+                    val tasks = async { authRepository.getTasks(organizationId) }
+                    val tags = async { authRepository.getTags(organizationId) }
+                    val active = async { authRepository.getActiveTimeEntry() }
+                    val entryData = entries.await().getOrThrow()
+                    val projectData = projects.await().getOrThrow().filter { !it.isArchived }
+                    val taskData = tasks.await().getOrThrow().filter { !it.isDone }
+                    val tagData = tags.await().getOrThrow()
+                    val activeData = active.await().getOrThrow()?.takeIf { it.organizationId == organizationId }
+                    val continueEntry = entryData.filter { it.end != null && !it.description.isNullOrBlank() }.maxByOrNull { it.start }
+                    _uiState.value = _uiState.value.copy(
+                        isTracking = activeData != null,
+                        currentTimeEntry = activeData,
+                        timeEntries = entryData,
+                        hasLoadedTimeEntries = true,
+                        cachedContinueEntry = continueEntry,
+                        projects = projectData,
+                        tasks = taskData,
+                        tags = tagData,
+                        editingDescription = activeData?.description.orEmpty(),
+                        editingProjectId = activeData?.projectId,
+                        editingTaskId = activeData?.taskId,
+                        editingTags = activeData?.tags?.map { it.id }.orEmpty(),
+                        editingBillable = activeData?.billable ?: false
+                    )
+                    settingsDataStore.cacheContinueEntry(continueEntry)
+                    val currentMembership = memberships.firstOrNull { it.id == memberId }
+                    if (user != null && currentMembership != null) {
+                        cacheDataStore.saveScreenSnapshot(ScreenSnapshot(
+                            organizationId = organizationId,
+                            user = user,
+                            memberships = memberships,
+                            currentMembershipId = memberId,
+                            timeEntries = entryData,
+                            activeEntry = activeData,
+                            projects = projectData,
+                            tasks = taskData,
+                            tags = tagData
+                        ))
+                    }
+                    if (activeData != null) startTimer(activeData.start) else stopTimer()
                 }
-                loadActiveTimeEntry(organizationId)
                 startActiveEntryMonitoring(organizationId)
+            } catch (error: Exception) {
+                Timber.e(error, "Failed to refresh tracking data")
+                if (userInitiated) _uiState.value = _uiState.value.copy(error = error.message)
             } finally {
-                _uiState.value = _uiState.value.copy(isLoading = false)
+                _uiState.value = _uiState.value.copy(isRefreshing = false, isSyncing = false)
                 if (loadingOrganizationId == organizationId) {
                     loadingOrganizationId = null
                 }
@@ -293,10 +382,19 @@ class TrackingViewModel @Inject constructor(
     private suspend fun loadTimeEntries(organizationId: String, memberId: String) {
             authRepository.getTimeEntries(organizationId, memberId)
                 .onSuccess { entries ->
-                    _uiState.value = _uiState.value.copy(timeEntries = entries)
+                    val continueEntry = entries
+                        .filter { it.end != null && !it.description.isNullOrBlank() }
+                        .maxByOrNull { it.start }
+                    _uiState.value = _uiState.value.copy(
+                        timeEntries = entries,
+                        hasLoadedTimeEntries = true,
+                        cachedContinueEntry = continueEntry
+                    )
+                    settingsDataStore.cacheContinueEntry(continueEntry)
                 }
                 .onFailure { error ->
                     Timber.e(error, "Failed to load time entries")
+                    _uiState.value = _uiState.value.copy(hasLoadedTimeEntries = true)
                 }
     }
 
@@ -755,7 +853,9 @@ class TrackingViewModel @Inject constructor(
         projectId: String?,
         taskId: String?,
         tags: List<String>,
-        billable: Boolean
+        billable: Boolean,
+        start: String,
+        end: String
     ) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
@@ -764,7 +864,9 @@ class TrackingViewModel @Inject constructor(
                 description = description,
                 projectId = projectId,
                 taskId = taskId,
-                billable = billable
+                billable = billable,
+                start = start,
+                end = end
             )
 
             authRepository.updateTimeEntry(

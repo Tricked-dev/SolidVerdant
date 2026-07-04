@@ -11,6 +11,11 @@ import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +30,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -45,6 +52,10 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -57,10 +68,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -69,10 +82,13 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -84,6 +100,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -91,6 +108,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -149,7 +168,7 @@ fun TrackingScreen(
     onTagsChange: (List<String>) -> Unit,
     onBillableChange: (Boolean) -> Unit,
     onUpdateCurrentEntry: () -> Unit,
-    onUpdatePastEntry: (TimeEntry, String?, String?, String?, List<String>, Boolean) -> Unit,
+    onUpdatePastEntry: (TimeEntry, String?, String?, String?, List<String>, Boolean, String, String) -> Unit,
     onDeleteEntry: (String) -> Unit,
     getGroupedEntries: () -> Map<LocalDate, List<TimeEntry>>
 ) {
@@ -439,9 +458,12 @@ fun TrackingScreen(
                 onRefresh = onRefresh,
                 modifier = Modifier.padding(paddingValues)
             ) {
-                val lastEntry = uiState.timeEntries
+                val serverLastEntry = uiState.timeEntries
                     .filter { it.end != null && !it.description.isNullOrBlank() }
                     .maxByOrNull { it.start }
+                val lastEntry = serverLastEntry ?: uiState.cachedContinueEntry?.takeIf {
+                    it.organizationId == currentMembership?.organizationId
+                }
                 val groupedEntries = getGroupedEntries()
 
                 BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -545,8 +567,8 @@ fun TrackingScreen(
             tasks = uiState.tasks,
             tags = uiState.tags,
             onDismiss = { showEditDialog = null },
-            onSave = { description, projectId, taskId, tagIds, billable ->
-                onUpdatePastEntry(entry, description, projectId, taskId, tagIds, billable)
+            onSave = { description, projectId, taskId, tagIds, billable, start, end ->
+                onUpdatePastEntry(entry, description, projectId, taskId, tagIds, billable, start, end)
                 showEditDialog = null
             }
         )
@@ -559,12 +581,26 @@ private fun LazyListScope.trackingHistoryItems(
     onEdit: (TimeEntry) -> Unit,
     onDelete: (TimeEntry) -> Unit
 ) {
+    if (!uiState.hasLoadedTimeEntries && uiState.timeEntries.isEmpty()) {
+        item(key = "history_loading_header") { HistoryLoadingHeader() }
+        repeat(4) { index ->
+            item(key = "history_loading_$index") { HistoryLoadingEntry(index) }
+        }
+        return
+    }
+
     val filteredGroups = groupedEntries.mapValues { (_, entries) ->
         entries.filter { (it.duration ?: 0) > 0 }
     }.filterValues { it.isNotEmpty() }
 
     filteredGroups.forEach { (date, entries) ->
-        item(key = "header_$date") { DateHeader(date) }
+        item(key = "header_$date") {
+            DateHeader(
+                date = date,
+                entries = entries,
+                projects = uiState.projects
+            )
+        }
         entries.groupBy { "${it.projectId}_${it.taskId}_${it.description ?: ""}" }
             .forEach { (_, entriesForProject) ->
                 item(key = "group_${entriesForProject.first().id}") {
@@ -579,7 +615,7 @@ private fun LazyListScope.trackingHistoryItems(
             }
     }
 
-    if (uiState.timeEntries.isEmpty() && !uiState.isLoading) {
+    if (uiState.timeEntries.isEmpty() && uiState.hasLoadedTimeEntries && !uiState.isLoading) {
         item {
             Text(
                 text = stringResource(R.string.no_time_entries),
@@ -587,6 +623,82 @@ private fun LazyListScope.trackingHistoryItems(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(32.dp)
             )
+        }
+    }
+}
+
+@Composable
+private fun rememberGhostAlpha(): Float {
+    val transition = rememberInfiniteTransition(label = "history loading")
+    val alpha by transition.animateFloat(
+        initialValue = 0.42f,
+        targetValue = 0.78f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 850),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "ghost alpha"
+    )
+    return alpha
+}
+
+@Composable
+private fun GhostBlock(
+    modifier: Modifier,
+    alpha: Float
+) {
+    Box(
+        modifier = modifier
+            .alpha(alpha)
+            .background(
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f),
+                RoundedCornerShape(6.dp)
+            )
+    )
+}
+
+@Composable
+private fun HistoryLoadingHeader() {
+    val alpha = rememberGhostAlpha()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp, bottom = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        GhostBlock(Modifier.width(72.dp).height(12.dp), alpha)
+        GhostBlock(Modifier.width(150.dp).height(10.dp), alpha)
+    }
+}
+
+@Composable
+private fun HistoryLoadingEntry(index: Int) {
+    val alpha = rememberGhostAlpha()
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            GhostBlock(Modifier.size(10.dp), alpha)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
+                GhostBlock(
+                    Modifier
+                        .fillMaxWidth(if (index % 2 == 0) 0.62f else 0.45f)
+                        .height(13.dp),
+                    alpha
+                )
+                GhostBlock(Modifier.width(if (index % 2 == 0) 96.dp else 128.dp).height(10.dp), alpha)
+            }
+            GhostBlock(Modifier.width(58.dp).height(14.dp), alpha)
         }
     }
 }
@@ -874,19 +986,23 @@ private fun ContinueLastEntryButton(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            if (project != null) {
+            if (entry.projectId != null) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(Color(android.graphics.Color.parseColor(project.color)))
-                    )
+                    if (project != null) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(Color(android.graphics.Color.parseColor(project.color)))
+                        )
+                    } else {
+                        Spacer(Modifier.size(8.dp))
+                    }
                     Text(
-                        text = project.name,
+                        text = project?.name ?: " ",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1172,18 +1288,51 @@ private fun TagsSelector(
  * Date header for time entries
  */
 @Composable
-private fun DateHeader(date: LocalDate) {
+private fun DateHeader(
+    date: LocalDate,
+    entries: List<TimeEntry>,
+    projects: List<Project>
+) {
     val context = LocalContext.current
-    Text(
-        text = formatDate(date, context),
-        style = MaterialTheme.typography.labelLarge,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    val projectIds = entries.mapNotNull { it.projectId }.toSet()
+    val projectById = projects.associateBy { it.id }
+    val customerCount = projectIds.mapNotNull { projectById[it]?.clientId }.toSet().size
+    val totalDuration = entries.sumOf { it.duration ?: 0 }
+    val summary = buildList {
+        add(formatCompactDuration(totalDuration))
+        if (customerCount > 0) {
+            add(context.resources.getQuantityString(R.plurals.customer_count, customerCount, customerCount))
+        }
+        if (projectIds.isNotEmpty()) {
+            add(context.resources.getQuantityString(R.plurals.project_count, projectIds.size, projectIds.size))
+        }
+    }.joinToString(" · ")
+
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 12.dp, bottom = 6.dp),
-        fontSize = 12.sp
-    )
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = formatDate(date, context),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp,
+            maxLines = 1
+        )
+        Text(
+            text = summary,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+            fontSize = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+    }
 }
 
 /**
@@ -1417,7 +1566,7 @@ private fun CompactTimeEntryRow(
 }
 
 /**
- * Edit time entry dialog
+ * Edit time entry bottom sheet
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -1427,30 +1576,146 @@ private fun EditTimeEntryDialog(
     tasks: List<Task>,
     tags: List<Tag>,
     onDismiss: () -> Unit,
-    onSave: (String?, String?, String?, List<String>, Boolean) -> Unit
+    onSave: (String?, String?, String?, List<String>, Boolean, String, String) -> Unit
 ) {
     var description by remember { mutableStateOf(entry.description ?: "") }
     var projectId by remember { mutableStateOf(entry.projectId) }
     var taskId by remember { mutableStateOf(entry.taskId) }
     var selectedTags by remember { mutableStateOf(entry.tags.map { it.id }) }
     var billable by remember { mutableStateOf(entry.billable) }
+    val originalStart = remember(entry.id) { ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME) }
+    val originalEnd = remember(entry.id) {
+        entry.end?.let { ZonedDateTime.parse(it, DateTimeFormatter.ISO_DATE_TIME) }
+            ?: originalStart.plusSeconds((entry.duration ?: 0).toLong())
+    }
+    var startTime by remember(entry.id) { mutableStateOf(originalStart) }
+    var endTime by remember(entry.id) { mutableStateOf(originalEnd) }
+    var durationMinutes by remember(entry.id) {
+        mutableStateOf(java.time.Duration.between(originalStart, originalEnd).toMinutes().coerceAtLeast(1).toString())
+    }
+    var editingTime by remember { mutableStateOf<TimeField?>(null) }
+    val durationIsValid = durationMinutes.toLongOrNull()?.let { it > 0 } == true
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp)
+    fun setDuration(minutes: Long) {
+        val safeMinutes = minutes.coerceAtLeast(1)
+        durationMinutes = safeMinutes.toString()
+        endTime = startTime.plusMinutes(safeMinutes)
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
+                .imePadding()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
                 Text(
                     text = stringResource(R.string.edit_time_entry),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold
                 )
+
+                Text(
+                    text = stringResource(R.string.time_and_duration),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    TimeFieldButton(
+                        label = stringResource(R.string.start_time),
+                        value = startTime,
+                        onClick = { editingTime = TimeField.Start },
+                        modifier = Modifier.weight(1f)
+                    )
+                    TimeFieldButton(
+                        label = stringResource(R.string.end_time),
+                        value = endTime,
+                        onClick = { editingTime = TimeField.End },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = stringResource(R.string.total_time),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = formatEditableDuration(durationMinutes.toLongOrNull() ?: 0),
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            FilledTonalIconButton(
+                                onClick = { setDuration((durationMinutes.toLongOrNull() ?: 1) - 15) },
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Remove,
+                                    contentDescription = stringResource(R.string.decrease_15_minutes)
+                                )
+                            }
+                            OutlinedTextField(
+                                value = durationMinutes,
+                                onValueChange = { value ->
+                                    if (value.all(Char::isDigit)) {
+                                        durationMinutes = value
+                                        value.toLongOrNull()?.takeIf { it > 0 }?.let { endTime = startTime.plusMinutes(it) }
+                                    }
+                                },
+                                label = { Text(stringResource(R.string.minutes)) },
+                                suffix = { Text("min") },
+                                isError = !durationIsValid,
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            FilledTonalIconButton(
+                                onClick = { setDuration((durationMinutes.toLongOrNull() ?: 0) + 15) },
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Add,
+                                    contentDescription = stringResource(R.string.increase_15_minutes)
+                                )
+                            }
+                        }
+                    }
+                }
 
                 OutlinedTextField(
                     value = description,
@@ -1517,17 +1782,83 @@ private fun EditTimeEntryDialog(
                                 projectId,
                                 taskId,
                                 selectedTags,
-                                billable
+                                billable,
+                                startTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                                endTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
                             )
                         },
+                        enabled = durationIsValid,
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(stringResource(R.string.save), fontWeight = FontWeight.SemiBold)
                     }
                 }
-            }
         }
     }
+
+    editingTime?.let { field ->
+        val current = if (field == TimeField.Start) startTime else endTime
+        EntryTimePickerDialog(
+            title = stringResource(if (field == TimeField.Start) R.string.start_time else R.string.end_time),
+            initial = current,
+            onDismiss = { editingTime = null },
+            onConfirm = { hour, minute ->
+                if (field == TimeField.Start) {
+                    val minutes = durationMinutes.toLongOrNull() ?: 1
+                    startTime = startTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
+                    endTime = startTime.plusMinutes(minutes)
+                } else {
+                    var selectedEnd = endTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
+                    if (!selectedEnd.isAfter(startTime)) selectedEnd = selectedEnd.plusDays(1)
+                    endTime = selectedEnd
+                    durationMinutes = java.time.Duration.between(startTime, endTime).toMinutes().coerceAtLeast(1).toString()
+                }
+                editingTime = null
+            }
+        )
+    }
+}
+
+private enum class TimeField { Start, End }
+
+@Composable
+private fun TimeFieldButton(
+    label: String,
+    value: ZonedDateTime,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier.height(64.dp),
+        shape = RoundedCornerShape(12.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)
+    ) {
+        Icon(Icons.Default.AccessTime, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Column(horizontalAlignment = Alignment.Start) {
+            Text(label, style = MaterialTheme.typography.labelSmall)
+            Text(value.format(DateTimeFormatter.ofPattern("HH:mm")), style = MaterialTheme.typography.titleMedium)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EntryTimePickerDialog(
+    title: String,
+    initial: ZonedDateTime,
+    onDismiss: () -> Unit,
+    onConfirm: (Int, Int) -> Unit
+) {
+    val state = rememberTimePickerState(initialHour = initial.hour, initialMinute = initial.minute, is24Hour = true)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { TimePicker(state = state) },
+        confirmButton = { Button(onClick = { onConfirm(state.hour, state.minute) }) { Text(stringResource(R.string.done)) } },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
+    )
 }
 
 /**
@@ -1754,4 +2085,21 @@ private fun formatDuration(seconds: Int): String {
     val minutes = (seconds % 3600) / 60
     val secs = seconds % 60
     return String.format("%02d:%02d:%02d", hours, minutes, secs)
+}
+
+/** Format a day total without seconds to keep history headers compact. */
+private fun formatCompactDuration(seconds: Int): String {
+    val hours = seconds / 3600
+    val minutes = (seconds % 3600) / 60
+    return if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
+}
+
+private fun formatEditableDuration(minutes: Long): String {
+    val hours = minutes / 60
+    val remainingMinutes = minutes % 60
+    return when {
+        hours > 0 && remainingMinutes > 0 -> "${hours}h ${remainingMinutes}m"
+        hours > 0 -> "${hours}h"
+        else -> "${remainingMinutes}m"
+    }
 }

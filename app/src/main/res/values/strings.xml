@@ -74,6 +74,23 @@
     <string name="edit_time_entry">Edit Time Entry</string>
     <string name="today">Today</string>
     <string name="yesterday">Yesterday</string>
+    <string name="time_and_duration">Time and duration</string>
+    <string name="start_time">Start time</string>
+    <string name="end_time">End time</string>
+    <string name="duration_minutes">Duration (minutes)</string>
+    <string name="total_time">Total time</string>
+    <string name="minutes">Minutes</string>
+    <string name="decrease_15_minutes">Decrease by 15 minutes</string>
+    <string name="increase_15_minutes">Increase by 15 minutes</string>
+    <string name="done">Done</string>
+    <plurals name="customer_count">
+        <item quantity="one">%1$d customer</item>
+        <item quantity="other">%1$d customers</item>
+    </plurals>
+    <plurals name="project_count">
+        <item quantity="one">%1$d project</item>
+        <item quantity="other">%1$d projects</item>
+    </plurals>
 
     <!-- Notifications -->
     <string name="notification_channel_tracking_name">Time Tracking</string>

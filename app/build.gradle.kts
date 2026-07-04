@@ -101,6 +101,7 @@ dependencies {
 
     // App dependencies
     implementation(libs.androidx.annotation)
+    implementation(libs.androidx.core.splashscreen)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.timber)
 

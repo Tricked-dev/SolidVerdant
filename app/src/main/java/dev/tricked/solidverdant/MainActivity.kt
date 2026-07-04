@@ -12,6 +12,7 @@ import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -27,6 +28,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import dagger.hilt.android.AndroidEntryPoint
+import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.local.AppThemeMode
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.ui.auth.AuthViewModel
@@ -35,6 +37,8 @@ import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
 import dev.tricked.solidverdant.ui.tracking.TrackingScreen
 import dev.tricked.solidverdant.ui.tracking.TrackingViewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import javax.inject.Inject
 import timber.log.Timber
 
 /**
@@ -43,13 +47,24 @@ import timber.log.Timber
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
+    @Inject lateinit var settingsDataStore: SettingsDataStore
+
     private val authViewModel: AuthViewModel by viewModels()
     private val trackingViewModel: TrackingViewModel by viewModels()
     private var stoppedAtElapsedRealtime: Long? = null
     private var handoffOrganizationId by mutableStateOf<String?>(null)
+    private val startupTheme = MutableStateFlow<AppThemeMode?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splash = installSplashScreen()
         super.onCreate(savedInstanceState)
+        lifecycleScope.launch { startupTheme.value = settingsDataStore.getAppTheme() }
+        splash.setKeepOnScreenCondition {
+            authViewModel.authState.value == dev.tricked.solidverdant.ui.auth.AuthState.Unknown ||
+                !authViewModel.snapshotHydrated.value ||
+                !trackingViewModel.snapshotHydrated.value ||
+                startupTheme.value == null
+        }
         enableEdgeToEdge()
 
         // Handle deep links on creation
@@ -66,8 +81,8 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            val appTheme by trackingViewModel.appTheme.collectAsState(initial = AppThemeMode.SYSTEM)
-            SolidVerdantTheme(themeMode = appTheme) {
+            val appTheme by trackingViewModel.appTheme.collectAsState(initial = startupTheme.value)
+            appTheme?.let { resolvedTheme -> SolidVerdantTheme(themeMode = resolvedTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -79,7 +94,7 @@ class MainActivity : ComponentActivity() {
                         onHandoffConsumed = { handoffOrganizationId = null }
                     )
                 }
-            }
+            } }
         }
     }
 
@@ -177,6 +192,7 @@ fun SolidVerdantApp(
     val trackingUiState by trackingViewModel.uiState.collectAsState()
     val alwaysShowNotifications by trackingViewModel.alwaysShowNotifications.collectAsState(initial = false)
     val appTheme by trackingViewModel.appTheme.collectAsState(initial = AppThemeMode.SYSTEM)
+    val optimisticRefresh by trackingViewModel.optimisticRefresh.collectAsState(initial = true)
 
     // Load user data when logged in
     LaunchedEffect(isLoggedIn) {
@@ -218,15 +234,20 @@ fun SolidVerdantApp(
                 uiState = trackingUiState,
                 alwaysShowNotifications = alwaysShowNotifications,
                 appTheme = appTheme,
+                optimisticRefresh = optimisticRefresh,
                 onAlwaysShowNotificationsChange = { enabled ->
                     trackingViewModel.setAlwaysShowNotifications(enabled)
                 },
                 onAppThemeChange = trackingViewModel::setAppTheme,
+                onOptimisticRefreshChange = trackingViewModel::setOptimisticRefresh,
                 onRefresh = {
                     authUiState.currentMembership?.let { membership ->
                         trackingViewModel.loadAllData(
                             organizationId = membership.organizationId,
-                            memberId = membership.id
+                            memberId = membership.id,
+                            user = authUiState.user,
+                            memberships = authUiState.memberships,
+                            userInitiated = true
                         )
                     }
                 },
@@ -299,7 +320,7 @@ fun SolidVerdantApp(
                         )
                     }
                 },
-                onUpdatePastEntry = { entry: TimeEntry, description: String?, projectId: String?, taskId: String?, tags: List<String>, billable: Boolean ->
+                onUpdatePastEntry = { entry: TimeEntry, description: String?, projectId: String?, taskId: String?, tags: List<String>, billable: Boolean, start: String, end: String ->
                     authUiState.currentMembership?.let { membership ->
                         trackingViewModel.updatePastTimeEntry(
                             organizationId = membership.organizationId,
@@ -308,7 +329,9 @@ fun SolidVerdantApp(
                             projectId = projectId,
                             taskId = taskId,
                             tags = tags,
-                            billable = billable
+                            billable = billable,
+                            start = start,
+                            end = end
                         )
                     }
                 },

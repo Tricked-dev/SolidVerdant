@@ -12,6 +12,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
@@ -36,6 +39,8 @@ data class OAuthConfigState(
     val clientId: String = ""
 )
 
+enum class AuthState { Unknown, LoggedIn, LoggedOut }
+
 /**
  * ViewModel for authentication operations
  */
@@ -51,15 +56,35 @@ class AuthViewModel @Inject constructor(
     private val _configState = MutableStateFlow(OAuthConfigState())
     val configState: StateFlow<OAuthConfigState> = _configState.asStateFlow()
 
-    val isLoggedIn: StateFlow<Boolean> = authRepository.isLoggedIn.stateIn(
+    val authState: StateFlow<AuthState> = authRepository.isLoggedIn.map {
+        if (it) AuthState.LoggedIn else AuthState.LoggedOut
+    }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = false
+        started = SharingStarted.Eagerly,
+        initialValue = AuthState.Unknown
     )
+    val isLoggedIn: StateFlow<Boolean> = authState.map { it == AuthState.LoggedIn }.stateIn(
+        viewModelScope, SharingStarted.Eagerly, false
+    )
+    private val _snapshotHydrated = MutableStateFlow(false)
+    val snapshotHydrated: StateFlow<Boolean> = _snapshotHydrated.asStateFlow()
 
     init {
         // Load OAuth config on init
         loadOAuthConfig()
+        viewModelScope.launch {
+            val snapshot = cacheDataStore.getScreenSnapshot()
+            if (snapshot != null) {
+                _uiState.value = _uiState.value.copy(
+                    user = snapshot.user,
+                    memberships = snapshot.memberships,
+                    currentMembership = snapshot.memberships.firstOrNull {
+                        it.id == snapshot.currentMembershipId
+                    }
+                )
+            }
+            _snapshotHydrated.value = true
+        }
     }
 
     /**
@@ -139,26 +164,20 @@ class AuthViewModel @Inject constructor(
     fun loadUserData() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-
-            // Load user
-            authRepository.getCurrentUser()
-                .onSuccess { user ->
-                    _uiState.value = _uiState.value.copy(user = user)
-                }
-                .onFailure { error ->
+            coroutineScope {
+                val userResult = async { authRepository.getCurrentUser() }
+                val membershipsResult = async { authRepository.getMyMemberships() }
+                val user = userResult.await().getOrElse { error ->
                     Timber.e(error, "Failed to load user")
-                    _uiState.value = _uiState.value.copy(
-                        error = error.message ?: "Failed to load user data"
-                    )
+                    _uiState.value = _uiState.value.copy(isLoading = false, error = error.message)
+                    return@coroutineScope
                 }
-
-            // Load memberships
-            authRepository.getMyMemberships()
-                .onSuccess { memberships ->
+                membershipsResult.await().onSuccess { memberships ->
                     val savedMembershipId = authRepository.getCurrentMembershipId()
                     val currentMembership = memberships.firstOrNull { it.id == savedMembershipId }
                         ?: memberships.firstOrNull()
                     _uiState.value = _uiState.value.copy(
+                        user = user,
                         memberships = memberships,
                         currentMembership = currentMembership,
                         isLoading = false
@@ -176,6 +195,7 @@ class AuthViewModel @Inject constructor(
                         error = error.message ?: "Failed to load memberships"
                     )
                 }
+            }
         }
     }
 
@@ -235,6 +255,7 @@ class AuthViewModel @Inject constructor(
     fun logout() {
         viewModelScope.launch {
             authRepository.logout()
+            cacheDataStore.clearCache()
             _uiState.value = AuthUiState()
             Timber.d("User logged out")
         }

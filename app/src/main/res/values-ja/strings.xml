@@ -71,6 +71,21 @@
     <string name="edit_time_entry">時間エントリを編集</string>
     <string name="today">今日</string>
     <string name="yesterday">昨日</string>
+    <string name="time_and_duration">時刻と期間</string>
+    <string name="start_time">開始時刻</string>
+    <string name="end_time">終了時刻</string>
+    <string name="duration_minutes">期間（分）</string>
+    <string name="total_time">合計時間</string>
+    <string name="minutes">分</string>
+    <string name="decrease_15_minutes">15分減らす</string>
+    <string name="increase_15_minutes">15分増やす</string>
+    <string name="done">完了</string>
+    <plurals name="customer_count">
+        <item quantity="other">顧客 %1$d 件</item>
+    </plurals>
+    <plurals name="project_count">
+        <item quantity="other">プロジェクト %1$d 件</item>
+    </plurals>
 
     <!-- Notifications -->
     <string name="notification_channel_tracking_name">時間追跡</string>
