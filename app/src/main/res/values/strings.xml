@@ -23,12 +23,15 @@
     <string name="server_endpoint_placeholder">https://app.solidtime.io</string>
     <string name="client_id">Client ID</string>
     <string name="reset_to_defaults">Reset to Defaults</string>
+    <string name="paste_from_clipboard">Paste from clipboard</string>
     <string name="save">Save</string>
     <string name="cancel">Cancel</string>
     <string name="jump_to_date">Go to date</string>
     <string name="finding_date_entries">Finding entries around %1$s</string>
     <string name="finding_date_hint">Locating the date, then loading its surrounding history…</string>
     <string name="rate_limit_wait">Server rate limit reached. Resuming in %1$d seconds…</string>
+    <string name="network_unavailable">No internet connection. Changes may not sync.</string>
+    <string name="network_restored">Back online</string>
 
     <!-- Tracking Screen -->
     <string name="time_tracking">Time Tracking</string>

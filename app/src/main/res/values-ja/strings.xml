@@ -21,12 +21,15 @@
     <string name="server_endpoint_placeholder">https://app.solidtime.io</string>
     <string name="client_id">クライアントID</string>
     <string name="reset_to_defaults">デフォルトに戻す</string>
+    <string name="paste_from_clipboard">クリップボードから貼り付け</string>
     <string name="save">保存</string>
     <string name="cancel">キャンセル</string>
     <string name="jump_to_date">日付に移動</string>
     <string name="finding_date_entries">%1$s 前後のエントリを検索中</string>
     <string name="finding_date_hint">指定した日付を探し、その前後の履歴を読み込んでいます…</string>
     <string name="rate_limit_wait">サーバーのレート制限に達しました。%1$d 秒後に再開します…</string>
+    <string name="network_unavailable">インターネット接続がありません。変更が同期されない可能性があります。</string>
+    <string name="network_restored">オンラインに戻りました</string>
 
     <!-- Tracking Screen -->
     <string name="time_tracking">時間追跡</string>

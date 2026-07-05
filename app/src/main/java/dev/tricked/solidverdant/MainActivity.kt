@@ -34,6 +34,7 @@ import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.ui.auth.AuthViewModel
 import dev.tricked.solidverdant.ui.auth.AuthState
 import dev.tricked.solidverdant.ui.login.LoginScreen
+import dev.tricked.solidverdant.ui.components.NetworkAwareContent
 import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
 import dev.tricked.solidverdant.ui.tracking.TrackingScreen
 import dev.tricked.solidverdant.ui.tracking.TrackingViewModel
@@ -88,12 +89,14 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    SolidVerdantApp(
-                        authViewModel = authViewModel,
-                        trackingViewModel = trackingViewModel,
-                        handoffOrganizationId = handoffOrganizationId,
-                        onHandoffConsumed = { handoffOrganizationId = null }
-                    )
+                    NetworkAwareContent {
+                        SolidVerdantApp(
+                            authViewModel = authViewModel,
+                            trackingViewModel = trackingViewModel,
+                            handoffOrganizationId = handoffOrganizationId,
+                            onHandoffConsumed = { handoffOrganizationId = null }
+                        )
+                    }
                 }
             } }
         }
