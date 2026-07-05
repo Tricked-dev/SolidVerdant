@@ -35,11 +35,13 @@
             pkgs.bashInteractive
             pkgs.bun
             pkgs.nodejs
+            pkgs.jdk21
             android.androidsdk
           ];
 
           ANDROID_HOME = "${android.androidsdk}/libexec/android-sdk";
           ANDROID_SDK_ROOT = "${android.androidsdk}/libexec/android-sdk";
+          JAVA_HOME = "${pkgs.jdk21.home}";
           shellHook = ''
             export ANDROID_AVD_HOME="$HOME/.android/avd"
           '';

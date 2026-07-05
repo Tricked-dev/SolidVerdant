@@ -148,6 +148,8 @@
     <string name="copied_to_clipboard">Copied to clipboard</string>
     <string name="add_to_obtainium">Add to Obtainium</string>
     <string name="add_to_obtainium_description">Track updates via Obtainium</string>
+    <string name="install_obtainium">Install Obtainium</string>
+    <string name="install_obtainium_description">Install Obtainium to receive app updates</string>
 
     <!-- Widget -->
     <string name="widget_name">Time Tracker</string>

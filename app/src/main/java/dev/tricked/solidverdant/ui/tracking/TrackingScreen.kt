@@ -129,6 +129,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.core.net.toUri
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.tricked.solidverdant.BuildConfig
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.Project
@@ -2211,11 +2215,30 @@ private fun AboutSection(context: Context) {
 
     Spacer(modifier = Modifier.height(12.dp))
 
-    // Add to Obtainium button
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var obtainiumInstalled by remember { mutableStateOf(isObtainiumInstalled(context)) }
+
+    DisposableEffect(context, lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                obtainiumInstalled = isObtainiumInstalled(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Add to Obtainium, or help the user install it first.
     OutlinedButton(
         onClick = {
-            val obtainiumUrl = "https://apps.obtainium.imranr.dev/redirect.html?r=obtainium://app/%7B%22id%22%3A%22dev.tricked.solidverdant%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FTricked-dev%2FSolidVerdant%22%2C%22author%22%3A%22Tricked-dev%22%2C%22name%22%3A%22SolidVerdant%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22autoApkFilterByArch%5C%22%3Atrue%7D%22%7D"
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(obtainiumUrl))
+            val obtainiumUrl = if (obtainiumInstalled) {
+                OBTAINIUM_ADD_APP_URL
+            } else {
+                OBTAINIUM_INSTALL_URL
+            }
+            val intent = Intent(Intent.ACTION_VIEW, obtainiumUrl.toUri()).apply {
+                if (obtainiumInstalled) setPackage(OBTAINIUM_PACKAGE)
+            }
             context.startActivity(intent)
         },
         modifier = Modifier.fillMaxWidth(),
@@ -2223,16 +2246,43 @@ private fun AboutSection(context: Context) {
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = stringResource(R.string.add_to_obtainium),
+                text = stringResource(
+                    if (obtainiumInstalled) R.string.add_to_obtainium else R.string.install_obtainium
+                ),
                 fontWeight = FontWeight.SemiBold
             )
             Text(
-                text = stringResource(R.string.add_to_obtainium_description),
+                text = stringResource(
+                    if (obtainiumInstalled) {
+                        R.string.add_to_obtainium_description
+                    } else {
+                        R.string.install_obtainium_description
+                    }
+                ),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
+}
+
+private const val OBTAINIUM_PACKAGE = "dev.imranr.obtainium"
+private const val OBTAINIUM_INSTALL_URL = "https://obtainium.imranr.dev/"
+private const val OBTAINIUM_ADD_APP_URL = "obtainium://app/%7B%22id%22%3A%22dev.tricked.solidverdant%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FTricked-dev%2FSolidVerdant%22%2C%22author%22%3A%22Tricked-dev%22%2C%22name%22%3A%22SolidVerdant%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22autoApkFilterByArch%5C%22%3Atrue%7D%22%7D"
+
+private fun isObtainiumInstalled(context: Context): Boolean = try {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        context.packageManager.getPackageInfo(
+            OBTAINIUM_PACKAGE,
+            PackageManager.PackageInfoFlags.of(0)
+        )
+    } else {
+        @Suppress("DEPRECATION")
+        context.packageManager.getPackageInfo(OBTAINIUM_PACKAGE, 0)
+    }
+    true
+} catch (_: PackageManager.NameNotFoundException) {
+    false
 }
 
 /**

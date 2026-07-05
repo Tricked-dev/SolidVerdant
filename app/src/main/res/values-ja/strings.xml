@@ -144,6 +144,8 @@
     <string name="copied_to_clipboard">クリップボードにコピーしました</string>
     <string name="add_to_obtainium">Obtainiumに追加</string>
     <string name="add_to_obtainium_description">Obtainiumでアップデートを追跡</string>
+    <string name="install_obtainium">Obtainiumをインストール</string>
+    <string name="install_obtainium_description">Obtainiumをインストールしてアプリの更新を受け取る</string>
 
     <!-- Widget -->
     <string name="widget_name">時間トラッカー</string>
