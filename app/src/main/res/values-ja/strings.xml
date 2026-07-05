@@ -103,6 +103,10 @@
     <string name="notification_channel_idle_description">時間追跡をすぐに開始できる準備完了</string>
     <string name="notification_channel_error_name">同期の問題</string>
     <string name="notification_channel_error_description">同期の問題についての警告</string>
+    <string name="notification_tracking_action_failed">時間記録の操作に失敗しました</string>
+    <string name="notification_stop_failed">時間記録を停止できませんでした。実行中のタイマーは引き続き表示されます。</string>
+    <string name="notification_pause_failed">時間記録を一時停止できませんでした。タイマーは引き続き実行中です。</string>
+    <string name="notification_resume_failed">時間記録を再開できませんでした。一時停止のままです。</string>
     <string name="time_tracking_notification_title">時間追跡</string>
     <string name="notification_tracking_default">時間を追跡中</string>
     <string name="notification_quick_start_ready">時間追跡の準備完了</string>

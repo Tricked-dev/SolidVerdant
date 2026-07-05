@@ -10,6 +10,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -33,22 +36,47 @@ class AuthDataStore @Inject constructor(
         val CURRENT_MEMBERSHIP_ID = stringPreferencesKey("current_membership_id")
     }
 
+    private val secretCipher = AuthSecretCipher()
+    private val migrationMutex = Mutex()
+    @Volatile private var migrationComplete = false
+
+    private val secretKeys = listOf(
+        PreferencesKeys.ACCESS_TOKEN,
+        PreferencesKeys.REFRESH_TOKEN,
+        PreferencesKeys.CODE_VERIFIER,
+        PreferencesKeys.STATE
+    )
+
+    private fun secretFlow(key: Preferences.Key<String>): Flow<String?> = context.dataStore.data
+        .onStart { migratePlaintextSecrets() }
+        .map { preferences -> preferences[key]?.let(secretCipher::decrypt) }
+
+    private suspend fun migratePlaintextSecrets() {
+        if (migrationComplete) return
+        migrationMutex.withLock {
+            if (migrationComplete) return@withLock
+            context.dataStore.edit { preferences ->
+                secretKeys.forEach { key ->
+                    preferences[key]?.let { storedValue ->
+                        preferences[key] = secretCipher.encryptIfNeeded(storedValue)
+                    }
+                }
+            }
+            migrationComplete = true
+        }
+    }
+
     companion object {
         const val DEFAULT_ENDPOINT = "https://app.solidtime.io"
         const val DEFAULT_CLIENT_ID = "9c994748-c593-4a6d-951b-6849c829bc4e"
     }
 
     // Token flows
-    val accessToken: Flow<String?> = context.dataStore.data
-        .map { preferences -> preferences[PreferencesKeys.ACCESS_TOKEN] }
+    val accessToken: Flow<String?> = secretFlow(PreferencesKeys.ACCESS_TOKEN)
 
-    val refreshToken: Flow<String?> = context.dataStore.data
-        .map { preferences -> preferences[PreferencesKeys.REFRESH_TOKEN] }
+    val refreshToken: Flow<String?> = secretFlow(PreferencesKeys.REFRESH_TOKEN)
 
-    val isLoggedIn: Flow<Boolean> = context.dataStore.data
-        .map { preferences ->
-            !preferences[PreferencesKeys.ACCESS_TOKEN].isNullOrEmpty()
-        }
+    val isLoggedIn: Flow<Boolean> = accessToken.map { !it.isNullOrEmpty() }
 
     // OAuth config flows
     val endpoint: Flow<String> = context.dataStore.data
@@ -62,11 +90,9 @@ class AuthDataStore @Inject constructor(
         }
 
     // PKCE flows
-    val codeVerifier: Flow<String?> = context.dataStore.data
-        .map { preferences -> preferences[PreferencesKeys.CODE_VERIFIER] }
+    val codeVerifier: Flow<String?> = secretFlow(PreferencesKeys.CODE_VERIFIER)
 
-    val state: Flow<String?> = context.dataStore.data
-        .map { preferences -> preferences[PreferencesKeys.STATE] }
+    val state: Flow<String?> = secretFlow(PreferencesKeys.STATE)
 
     // Membership flow
     val currentMembershipId: Flow<String?> = context.dataStore.data
@@ -77,8 +103,8 @@ class AuthDataStore @Inject constructor(
      */
     suspend fun saveTokens(accessToken: String, refreshToken: String) {
         context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.ACCESS_TOKEN] = accessToken
-            preferences[PreferencesKeys.REFRESH_TOKEN] = refreshToken
+            preferences[PreferencesKeys.ACCESS_TOKEN] = secretCipher.encrypt(accessToken)
+            preferences[PreferencesKeys.REFRESH_TOKEN] = secretCipher.encrypt(refreshToken)
         }
     }
 
@@ -87,7 +113,7 @@ class AuthDataStore @Inject constructor(
      */
     suspend fun saveAccessToken(accessToken: String) {
         context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.ACCESS_TOKEN] = accessToken
+            preferences[PreferencesKeys.ACCESS_TOKEN] = secretCipher.encrypt(accessToken)
         }
     }
 
@@ -116,8 +142,8 @@ class AuthDataStore @Inject constructor(
      */
     suspend fun savePKCEData(codeVerifier: String, state: String) {
         context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.CODE_VERIFIER] = codeVerifier
-            preferences[PreferencesKeys.STATE] = state
+            preferences[PreferencesKeys.CODE_VERIFIER] = secretCipher.encrypt(codeVerifier)
+            preferences[PreferencesKeys.STATE] = secretCipher.encrypt(state)
         }
     }
 

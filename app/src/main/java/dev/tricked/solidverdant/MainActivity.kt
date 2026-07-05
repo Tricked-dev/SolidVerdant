@@ -1,18 +1,12 @@
 package dev.tricked.solidverdant
 
-import android.app.HandoffActivityData
-import android.app.HandoffActivityDataRequestInfo
-import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.os.PersistableBundle
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -24,9 +18,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.Lifecycle
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import dagger.hilt.android.AndroidEntryPoint
 import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.local.AppThemeMode
@@ -47,11 +40,11 @@ import timber.log.Timber
  * Main activity for SolidVerdant app
  */
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+open class MainActivity : ComponentActivity() {
 
     @Inject lateinit var settingsDataStore: SettingsDataStore
 
-    private val authViewModel: AuthViewModel by viewModels()
+    protected val authViewModel: AuthViewModel by viewModels()
     private val trackingViewModel: TrackingViewModel by viewModels()
     private var stoppedAtElapsedRealtime: Long? = null
     private var handoffOrganizationId by mutableStateOf<String?>(null)
@@ -72,18 +65,9 @@ class MainActivity : ComponentActivity() {
         // Handle deep links on creation
         handleIntent(intent)
 
-        if (Build.VERSION.SDK_INT >= 37) {
-            lifecycleScope.launch {
-                repeatOnLifecycle(Lifecycle.State.STARTED) {
-                    authViewModel.isLoggedIn.collect { isLoggedIn ->
-                        setHandoffEnabled(isLoggedIn, null)
-                    }
-                }
-            }
-        }
-
         setContent {
-            val appTheme by trackingViewModel.appTheme.collectAsState(initial = startupTheme.value)
+            val initialTheme by startupTheme.collectAsState()
+            val appTheme by trackingViewModel.appTheme.collectAsState(initial = initialTheme)
             appTheme?.let { resolvedTheme -> SolidVerdantTheme(themeMode = resolvedTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -142,22 +126,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onHandoffActivityDataRequested(
-        handoffRequestInfo: HandoffActivityDataRequestInfo
-    ): HandoffActivityData {
-        val extras = PersistableBundle().apply {
-            authViewModel.uiState.value.currentMembership?.organizationId?.let {
-                putString(EXTRA_HANDOFF_ORGANIZATION_ID, it)
-            }
-        }
-        val builder = HandoffActivityData.Builder(ComponentName(this, MainActivity::class.java))
-            .setExtras(extras)
-        authViewModel.configState.value.endpoint
-            .takeIf { it.startsWith("https://") }
-            ?.let { builder.setFallbackUri(Uri.parse(it)) }
-        return builder.build()
-    }
-
     /**
      * Handle OAuth callback deep link
      */
@@ -174,7 +142,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private companion object {
+    companion object {
         const val RESUME_REFRESH_THRESHOLD_MS = 30_000L
         const val EXTRA_HANDOFF_ORGANIZATION_ID = "handoff_organization_id"
     }

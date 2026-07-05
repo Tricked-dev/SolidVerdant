@@ -1,6 +1,7 @@
 package dev.tricked.solidverdant.data.remote
 
 import dev.tricked.solidverdant.data.local.AuthDataStore
+import dev.tricked.solidverdant.data.model.TokenResponse
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import okhttp3.Authenticator
@@ -13,135 +14,113 @@ import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * OkHttp Authenticator that automatically refreshes the access token when a 401 response is received
- *
- * Note: Uses runBlocking as a bridge between suspend functions and synchronous
- * OkHttp authenticator. This is a known pattern in Android networking.
- */
+internal interface TokenStorage {
+    suspend fun accessToken(): String?
+    suspend fun refreshToken(): String?
+    suspend fun endpoint(): String
+    suspend fun clientId(): String
+    suspend fun saveTokens(accessToken: String, refreshToken: String)
+}
+
+private class DataStoreTokenStorage(private val store: AuthDataStore) : TokenStorage {
+    override suspend fun accessToken() = store.getAccessToken()
+    override suspend fun refreshToken() = store.getRefreshToken()
+    override suspend fun endpoint() = store.getEndpoint()
+    override suspend fun clientId() = store.getClientId()
+    override suspend fun saveTokens(accessToken: String, refreshToken: String) =
+        store.saveTokens(accessToken, refreshToken)
+}
+
+internal fun interface TokenRefresher {
+    fun refresh(endpoint: String, clientId: String, refreshToken: String): TokenResponse?
+}
+
+private class HttpTokenRefresher(
+    private val json: Json,
+    private val client: OkHttpClient = OkHttpClient.Builder().build()
+) : TokenRefresher {
+    override fun refresh(endpoint: String, clientId: String, refreshToken: String): TokenResponse? {
+        val request = Request.Builder()
+            .url("${endpoint.removeSuffix("/")}/oauth/token")
+            .post(
+                FormBody.Builder()
+                    .add("grant_type", "refresh_token")
+                    .add("client_id", clientId)
+                    .add("refresh_token", refreshToken)
+                    .build()
+            )
+            .build()
+
+        return client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                Timber.w("Token refresh failed with code: ${response.code}")
+                return@use null
+            }
+            response.body?.string()?.let { json.decodeFromString<TokenResponse>(it) }
+        }
+    }
+}
+
+/** Refreshes an expired access token, allowing at most one refresh at a time. */
 @Singleton
-class TokenAuthenticator @Inject constructor(
-    private val authDataStore: AuthDataStore,
-    private val json: Json
+class TokenAuthenticator internal constructor(
+    private val storage: TokenStorage,
+    private val refresher: TokenRefresher
 ) : Authenticator {
+    @Inject
+    constructor(authDataStore: AuthDataStore, json: Json) : this(
+        DataStoreTokenStorage(authDataStore),
+        HttpTokenRefresher(json)
+    )
+
+    private val refreshLock = Any()
 
     override fun authenticate(route: Route?, response: Response): Request? {
-        // Prevent infinite loops - if we already tried refreshing twice, give up
-        if (responseCount(response) >= 2) {
-            Timber.w("Token refresh failed after 2 attempts, clearing tokens")
+        if (responseCount(response) >= 2) return null
+
+        val failedToken = response.request.header("Authorization")
+            ?.removePrefix("Bearer ")
+
+        return synchronized(refreshLock) {
             runBlocking {
-                authDataStore.clearTokens()
-            }
-            return null
-        }
-
-        // Get refresh token and client config
-        val refreshToken = runBlocking {
-            authDataStore.getRefreshToken()
-        }
-
-        val clientId = runBlocking {
-            authDataStore.getClientId()
-        }
-
-        val endpoint = runBlocking {
-            authDataStore.getEndpoint()
-        }
-
-        // If no refresh token, can't refresh
-        if (refreshToken.isNullOrEmpty()) {
-            Timber.w("No refresh token available, clearing tokens")
-            runBlocking {
-                authDataStore.clearTokens()
-            }
-            return null
-        }
-
-        // Attempt to refresh the token
-        return try {
-            val newTokens = refreshAccessToken(endpoint, clientId, refreshToken)
-
-            if (newTokens != null) {
-                // Save new tokens
-                runBlocking {
-                    authDataStore.saveTokens(newTokens.accessToken, newTokens.refreshToken)
+                // Another request may have completed the refresh while this request waited.
+                val currentToken = storage.accessToken()
+                if (!currentToken.isNullOrEmpty() && currentToken != failedToken) {
+                    return@runBlocking retry(response, currentToken)
                 }
 
-                // Retry the original request with new token
-                response.request.newBuilder()
-                    .header("Authorization", "Bearer ${newTokens.accessToken}")
-                    .build()
-            } else {
-                // Token refresh failed, clear tokens
-                runBlocking {
-                    authDataStore.clearTokens()
-                }
-                null
-            }
-        } catch (e: Exception) {
-            Timber.e(e, "Token refresh exception")
-            runBlocking {
-                authDataStore.clearTokens()
-            }
-            null
-        }
-    }
+                val refreshToken = storage.refreshToken()
+                if (refreshToken.isNullOrEmpty()) return@runBlocking null
 
-    /**
-     * Performs the token refresh HTTP request
-     */
-    private fun refreshAccessToken(
-        endpoint: String,
-        clientId: String,
-        refreshToken: String
-    ): dev.tricked.solidverdant.data.model.TokenResponse? {
-        return try {
-            val cleanEndpoint = endpoint.removeSuffix("/")
-            val tokenUrl = "$cleanEndpoint/oauth/token"
+                try {
+                    val tokens = refresher.refresh(
+                        storage.endpoint(),
+                        storage.clientId(),
+                        refreshToken
+                    ) ?: return@runBlocking null
 
-            val requestBody = FormBody.Builder()
-                .add("grant_type", "refresh_token")
-                .add("client_id", clientId)
-                .add("refresh_token", refreshToken)
-                .build()
-
-            val request = Request.Builder()
-                .url(tokenUrl)
-                .post(requestBody)
-                .build()
-
-            // Create a separate OkHttpClient without authenticator to avoid recursion
-            val client = OkHttpClient.Builder().build()
-            val tokenResponse = client.newCall(request).execute()
-
-            if (tokenResponse.isSuccessful) {
-                val body = tokenResponse.body?.string()
-                if (body != null) {
-                    json.decodeFromString<dev.tricked.solidverdant.data.model.TokenResponse>(body)
-                } else {
-                    Timber.w("Token refresh response body is null")
+                    storage.saveTokens(tokens.accessToken, tokens.refreshToken)
+                    retry(response, tokens.accessToken)
+                } catch (e: Exception) {
+                    // A network/server failure is not evidence that stored credentials are invalid.
+                    Timber.e(e, "Token refresh failed")
                     null
                 }
-            } else {
-                Timber.w("Token refresh failed with code: ${tokenResponse.code}")
-                null
             }
-        } catch (e: Exception) {
-            Timber.e(e, "Token refresh request failed")
-            null
         }
     }
 
-    /**
-     * Counts how many times we've tried to authenticate this request
-     */
+    private fun retry(response: Response, token: String): Request = response.request.newBuilder()
+        .header("Authorization", "Bearer $token")
+        .build()
+
     private fun responseCount(response: Response): Int {
-        var result = 1
-        var priorResponse = response.priorResponse
-        while (priorResponse != null) {
-            result++
-            priorResponse = priorResponse.priorResponse
+        var count = 1
+        var prior = response.priorResponse
+        while (prior != null) {
+            count++
+            prior = prior.priorResponse
         }
-        return result
+        return count
     }
 }

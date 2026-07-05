@@ -83,7 +83,7 @@
 - **Networking**: Retrofit + OkHttp
 - **Serialization**: Kotlinx Serialization
 - **Async**: Kotlin Coroutines + Flow
-- **Storage**: DataStore Preferences
+- **Storage**: DataStore Preferences with Android Keystore-backed AES-GCM encryption for OAuth secrets
 
 ### Key Libraries
 - **Jetpack Compose** - Declarative UI framework
@@ -91,7 +91,7 @@
 - **Retrofit** - Type-safe HTTP client
 - **OkHttp** - HTTP interceptors and authentication
 - **Kotlinx Serialization** - JSON serialization
-- **DataStore** - Encrypted preference storage
+- **DataStore + Android Keystore** - Tokens and transient PKCE values are encrypted with AES-GCM; non-secret app settings remain ordinary preferences
 - **Custom Tabs** - Secure OAuth browser flow
 - **Timber** - Logging
 

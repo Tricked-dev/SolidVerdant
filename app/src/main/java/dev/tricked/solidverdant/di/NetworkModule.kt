@@ -4,6 +4,7 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import dev.tricked.solidverdant.BuildConfig
 import dev.tricked.solidverdant.data.remote.AuthInterceptor
 import dev.tricked.solidverdant.data.remote.TokenAuthenticator
 import kotlinx.serialization.json.Json
@@ -30,9 +31,7 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideLoggingInterceptor(): HttpLoggingInterceptor {
-        return HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
-        }
+        return createLoggingInterceptor(BuildConfig.DEBUG)
     }
 
     @Provides
@@ -56,5 +55,20 @@ object NetworkModule {
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .build()
+    }
+}
+
+internal fun createLoggingInterceptor(
+    isDebug: Boolean,
+    logger: HttpLoggingInterceptor.Logger = HttpLoggingInterceptor.Logger.DEFAULT
+): HttpLoggingInterceptor = HttpLoggingInterceptor(logger).apply {
+    redactHeader("Authorization")
+    redactHeader("Proxy-Authorization")
+    redactHeader("Cookie")
+    redactHeader("Set-Cookie")
+    level = if (isDebug) {
+        HttpLoggingInterceptor.Level.BODY
+    } else {
+        HttpLoggingInterceptor.Level.NONE
     }
 }

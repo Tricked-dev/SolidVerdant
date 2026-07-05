@@ -105,6 +105,10 @@
     <string name="notification_channel_idle_description">Klaar om snel tijdregistratie te starten</string>
     <string name="notification_channel_error_name">Synchronisatieproblemen</string>
     <string name="notification_channel_error_description">Waarschuwingen over synchronisatieproblemen</string>
+    <string name="notification_tracking_action_failed">Tijdregistratieactie mislukt</string>
+    <string name="notification_stop_failed">Kan de tijdregistratie niet stoppen. Je actieve timer blijft zichtbaar.</string>
+    <string name="notification_pause_failed">Kan de tijdregistratie niet pauzeren. Je actieve timer loopt nog.</string>
+    <string name="notification_resume_failed">Kan de tijdregistratie niet hervatten. De registratie blijft gepauzeerd.</string>
     <string name="time_tracking_notification_title">Tijdregistratie</string>
     <string name="notification_tracking_default">Tijd registreren</string>
     <string name="notification_quick_start_ready">Klaar om tijd te registreren</string>

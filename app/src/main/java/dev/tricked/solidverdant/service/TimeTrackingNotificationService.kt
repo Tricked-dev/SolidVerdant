@@ -56,6 +56,7 @@ class TimeTrackingNotificationService : Service() {
     private var isForeground: Boolean = false
     private var pausedAt: Instant? = null
     private var elapsedBeforePauseSeconds: Long = 0
+    private var mutationInProgress: Boolean = false
 
     private val notificationManager: NotificationManager by lazy {
         getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -153,9 +154,9 @@ class TimeTrackingNotificationService : Service() {
     }
 
     private fun handleStopTracking() {
+        if (mutationInProgress) return
         val wasPaused = isPaused
-        isPaused = false
-        isTracking = false
+        mutationInProgress = true
 
         serviceScope.launch {
             val stopped = if (wasPaused) {
@@ -164,16 +165,78 @@ class TimeTrackingNotificationService : Service() {
                 stopActiveEntry()
             }
 
-            stopped.onFailure { error ->
-                Timber.e(error, "Failed to stop time entry from notification")
-            }
-
-            if (stopped.isSuccess && settingsDataStore.alwaysShowNotification.first()) {
-                showIdleNotification()
-            } else {
-                stopService()
-            }
+            stopped.fold(
+                onSuccess = {
+                    mutationInProgress = false
+                    notificationManager.cancel(NOTIFICATION_ID_ERROR)
+                    if (settingsDataStore.alwaysShowNotification.first()) {
+                        showIdleNotification()
+                    } else {
+                        stopService()
+                    }
+                },
+                onFailure = { error ->
+                    mutationInProgress = false
+                    Timber.e(error, "Failed to stop time entry from notification")
+                    showMutationError(R.string.notification_stop_failed)
+                }
+            )
         }
+    }
+
+    private fun showMutationError(messageRes: Int) {
+        val openAppIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val openAppPendingIntent = PendingIntent.getActivity(
+            this,
+            4,
+            openAppIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID_ERROR)
+            .setContentTitle(getString(R.string.notification_tracking_action_failed))
+            .setContentText(getString(messageRes))
+            .setSmallIcon(R.drawable.ic_timer)
+            .setAutoCancel(true)
+            .setContentIntent(openAppPendingIntent)
+            .setCategory(NotificationCompat.CATEGORY_ERROR)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .build()
+        notificationManager.notify(NOTIFICATION_ID_ERROR, notification)
+    }
+
+    private fun confirmPausedState() {
+        val now = Instant.now()
+        pausedAt = now
+        elapsedBeforePauseSeconds = startTime?.let { now.epochSecond - it.epochSecond } ?: 0
+        isPaused = true
+        isTracking = false
+        publishNotification()
+    }
+
+    private suspend fun resumeActiveEntry(
+        requestedProjectName: String?,
+        requestedTaskName: String?,
+        requestedDescription: String?
+    ): Result<Instant> = runCatching {
+        val user = authRepository.getCurrentUser().getOrThrow()
+        val membership = authRepository.getCurrentMembership()
+            ?: error("No current membership")
+        val projects = authRepository.getProjects(membership.organizationId).getOrThrow()
+        val tasks = authRepository.getTasks(membership.organizationId).getOrThrow()
+        val projectId = projects.find { it.name == requestedProjectName }?.id
+        val taskId = tasks.find { it.name == requestedTaskName }?.id
+
+        val entry = authRepository.startTimeEntry(
+            organizationId = membership.organizationId,
+            memberId = membership.id,
+            userId = user.id,
+            projectId = projectId,
+            taskId = taskId,
+            description = requestedDescription.orEmpty()
+        ).getOrThrow()
+        Instant.parse(entry.start)
     }
 
     /** Stop the account-wide active entry. Used only by explicit notification actions. */
@@ -204,13 +267,21 @@ class TimeTrackingNotificationService : Service() {
     }
 
     private fun handlePauseTracking() {
-        showPausedNotification()
-
-        // Stop the active time entry via API in the background
+        if (mutationInProgress) return
+        mutationInProgress = true
         serviceScope.launch {
-            stopActiveEntry().onFailure { error ->
-                Timber.e(error, "Failed to stop time entry during pause")
-            }
+            stopActiveEntry().fold(
+                onSuccess = {
+                    mutationInProgress = false
+                    notificationManager.cancel(NOTIFICATION_ID_ERROR)
+                    confirmPausedState()
+                },
+                onFailure = { error ->
+                    mutationInProgress = false
+                    Timber.e(error, "Failed to stop time entry during pause")
+                    showMutationError(R.string.notification_pause_failed)
+                }
+            )
         }
     }
 
@@ -232,53 +303,36 @@ class TimeTrackingNotificationService : Service() {
     }
 
     private fun handleResumeTracking(intent: Intent) {
-        // Immediately show tracking notification
-        isPaused = false
-        isTracking = true
-        startTime = Instant.now()
+        if (mutationInProgress) return
 
-        // Use provided values, fall back to saved values from pause
-        if (intent.hasExtra(EXTRA_PROJECT_NAME)) {
-            projectName = intent.getStringExtra(EXTRA_PROJECT_NAME) ?: projectName
-        }
-        if (intent.hasExtra(EXTRA_TASK_NAME)) {
-            taskName = intent.getStringExtra(EXTRA_TASK_NAME) ?: taskName
-        }
-        if (intent.hasExtra(EXTRA_DESCRIPTION)) {
-            description = intent.getStringExtra(EXTRA_DESCRIPTION) ?: description
-        }
+        val requestedProjectName = intent.getStringExtra(EXTRA_PROJECT_NAME) ?: projectName
+        val requestedTaskName = intent.getStringExtra(EXTRA_TASK_NAME) ?: taskName
+        val requestedDescription = intent.getStringExtra(EXTRA_DESCRIPTION) ?: description
 
-        publishNotification()
-
-        // Start a new time entry via API in the background
+        mutationInProgress = true
         serviceScope.launch {
-            try {
-                val user = authRepository.getCurrentUser().getOrNull() ?: return@launch
-                val membership = authRepository.getCurrentMembership() ?: return@launch
-
-                // Find project/task IDs from names if needed
-                val projects = authRepository.getProjects(membership.organizationId).getOrNull()
-                val tasks = authRepository.getTasks(membership.organizationId).getOrNull()
-                val projectId = projects?.find { it.name == projectName }?.id
-                val taskId = tasks?.find { it.name == taskName }?.id
-
-                authRepository.startTimeEntry(
-                    organizationId = membership.organizationId,
-                    memberId = membership.id,
-                    userId = user.id,
-                    projectId = projectId,
-                    taskId = taskId,
-                    description = description ?: ""
-                ).onSuccess { entry ->
-                    Timber.d("Resumed tracking with new entry: ${entry.id}")
-                    startTime = Instant.parse(entry.start)
-                    refreshNotificationIfVisible()
-                }.onFailure { error ->
+            resumeActiveEntry(
+                requestedProjectName,
+                requestedTaskName,
+                requestedDescription
+            ).fold(
+                onSuccess = { resumedAt ->
+                    mutationInProgress = false
+                    notificationManager.cancel(NOTIFICATION_ID_ERROR)
+                    projectName = requestedProjectName
+                    taskName = requestedTaskName
+                    description = requestedDescription
+                    startTime = resumedAt
+                    isPaused = false
+                    isTracking = true
+                    publishNotification()
+                },
+                onFailure = { error ->
+                    mutationInProgress = false
                     Timber.e(error, "Failed to start time entry during resume")
+                    showMutationError(R.string.notification_resume_failed)
                 }
-            } catch (e: Exception) {
-                Timber.e(e, "Error during resume")
-            }
+            )
         }
     }
 

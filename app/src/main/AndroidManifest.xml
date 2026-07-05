@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <queries>
         <package android:name="dev.imranr.obtainium" />
@@ -26,21 +27,45 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize"
-            android:theme="@style/Theme.App.Starting">
+            android:theme="@style/Theme.App.Starting" />
 
-            <!-- Main launcher intent -->
+        <!-- Routes launcher and OAuth intents to the API-safe activity on Android 16 and below. -->
+        <activity-alias
+            android:name=".LegacyMainActivity"
+            android:enabled="@bool/legacy_entry_enabled"
+            android:exported="true"
+            android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-
-            <!-- OAuth2 callback deep link -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
-
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="oauth"
+                    android:pathPrefix="/callback"
+                    android:scheme="solidtime" />
+            </intent-filter>
+        </activity-alias>
 
+        <activity
+            android:name=".HandoffMainActivity"
+            android:enabled="@bool/handoff_activity_enabled"
+            android:exported="true"
+            android:launchMode="singleTask"
+            tools:targetApi="37"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.App.Starting">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:host="oauth"
                     android:pathPrefix="/callback"
