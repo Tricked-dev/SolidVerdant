@@ -7,6 +7,7 @@
     <!-- App Name -->
     <string name="app_name">SolidGroen</string>
     <string name="tile_label">Tijdregistratie</string>
+    <string name="sync_error">Sommige wijzigingen konden niet worden gesynchroniseerd. Ze worden automatisch opnieuw geprobeerd.</string>
 
     <!-- Login Screen -->
     <string name="solidtime_login">Solidtime Inloggen</string>
@@ -76,6 +77,8 @@
     <string name="delete">Verwijderen</string>
     <string name="no_description">Geen beschrijving</string>
     <string name="edit_time_entry">Tijdregistratie Bewerken</string>
+    <string name="add_time_entry">Tijdregistratie Toevoegen</string>
+    <string name="entry_date">Datum</string>
     <string name="today">Vandaag</string>
     <string name="yesterday">Gisteren</string>
     <string name="time_and_duration">Tijd en duur</string>

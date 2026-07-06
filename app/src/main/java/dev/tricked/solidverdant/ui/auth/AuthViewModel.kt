@@ -4,10 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.tricked.solidverdant.data.local.UserCacheCleaner
+import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.model.Membership
 import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.repository.AuthRepository
-import dev.tricked.solidverdant.data.repository.SnapshotRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -49,11 +49,20 @@ enum class AuthState { Unknown, LoggedIn, LoggedOut }
 @HiltViewModel
 class AuthViewModel @Inject constructor(
     private val authRepository: AuthRepository,
-    private val snapshotRepository: SnapshotRepository,
-    private val userCacheCleaner: UserCacheCleaner
+    private val userCacheCleaner: UserCacheCleaner,
+    private val settingsDataStore: SettingsDataStore,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(AuthUiState())
+    private val _uiState = MutableStateFlow(
+        settingsDataStore.getCachedAuth()?.let { cached ->
+            AuthUiState(
+                user = cached.user,
+                memberships = cached.memberships,
+                currentMembership = cached.memberships.firstOrNull { it.id == cached.currentMembershipId }
+                    ?: cached.memberships.firstOrNull(),
+            )
+        } ?: AuthUiState()
+    )
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
     private val _configState = MutableStateFlow(OAuthConfigState())
@@ -75,19 +84,9 @@ class AuthViewModel @Inject constructor(
     init {
         // Load OAuth config on init
         loadOAuthConfig()
-        viewModelScope.launch {
-            val snapshot = snapshotRepository.read()
-            if (snapshot != null) {
-                _uiState.value = _uiState.value.copy(
-                    user = snapshot.user,
-                    memberships = snapshot.memberships,
-                    currentMembership = snapshot.memberships.firstOrNull {
-                        it.id == snapshot.currentMembershipId
-                    }
-                )
-            }
-            _snapshotHydrated.value = true
-        }
+        // Room is the read source-of-truth now; auth/memberships are (re)loaded from the
+        // network via loadUserData() once logged in. Nothing to hydrate synchronously.
+        _snapshotHydrated.value = true
     }
 
     /**
@@ -186,11 +185,11 @@ class AuthViewModel @Inject constructor(
                         isLoading = false,
                         hasRevalidated = true
                     )
+                    settingsDataStore.cacheAuth(user, memberships, currentMembership?.id)
 
                     // Save current membership
                     currentMembership?.let {
                         authRepository.saveCurrentMembershipId(it.id)
-                        snapshotRepository.updateAuthSlice(user, memberships, it.id)
                     }
                 }
                 .onFailure { error ->
@@ -208,13 +207,10 @@ class AuthViewModel @Inject constructor(
         if (membership.id == _uiState.value.currentMembership?.id) return
 
         _uiState.value = _uiState.value.copy(currentMembership = membership)
+        _uiState.value.user?.let { user ->
+            settingsDataStore.cacheAuth(user, _uiState.value.memberships, membership.id)
+        }
         viewModelScope.launch {
-            snapshotRepository.clear()
-            _uiState.value.user?.let { user ->
-                snapshotRepository.updateAuthSlice(
-                    user, _uiState.value.memberships, membership.id
-                )
-            }
             authRepository.saveCurrentMembershipId(membership.id)
                 .onFailure { Timber.e(it, "Failed to save selected membership") }
         }
@@ -264,7 +260,6 @@ class AuthViewModel @Inject constructor(
      */
     fun logout() {
         viewModelScope.launch {
-            snapshotRepository.clear()
             userCacheCleaner.clear()
             // Clear account-owned data before changing auth state. Once auth is cleared,
             // navigation can dispose this ViewModel and cancel any remaining work.

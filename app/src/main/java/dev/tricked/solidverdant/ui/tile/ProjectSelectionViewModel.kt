@@ -8,7 +8,7 @@ import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.remote.ApiClientFactory
 import dev.tricked.solidverdant.data.repository.AuthRepository
-import dev.tricked.solidverdant.data.repository.SnapshotRepository
+import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,7 +32,7 @@ data class ProjectSelectionUiState(
 class ProjectSelectionViewModel @Inject constructor(
     private val apiClientFactory: ApiClientFactory,
     private val authRepository: AuthRepository,
-    private val snapshotRepository: SnapshotRepository,
+    private val timeEntryRepository: TimeEntryRepository,
     settingsDataStore: SettingsDataStore
 ) : ViewModel() {
 
@@ -55,13 +55,12 @@ class ProjectSelectionViewModel @Inject constructor(
                     return@launch
                 }
 
-                // Try cache first
+                // Try the Room read cache first
                 if (!forceRefresh) {
-                    val snapshot = snapshotRepository.read()?.takeIf { it.organizationId == organizationId }
-                    val cachedProjects = snapshot?.projects
-                    val cachedTasks = snapshot?.tasks
+                    val cachedProjects = timeEntryRepository.observeProjects(organizationId).first()
+                    val cachedTasks = timeEntryRepository.observeTasks(organizationId).first()
 
-                    if (cachedProjects != null && cachedTasks != null) {
+                    if (cachedProjects.isNotEmpty() || cachedTasks.isNotEmpty()) {
                         Timber.d("Using cached projects and tasks")
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
@@ -79,10 +78,6 @@ class ProjectSelectionViewModel @Inject constructor(
                 val api = apiClientFactory.createApi(endpoint)
                 val projectsResponse = api.getProjects(organizationId)
                 val tasksResponse = api.getTasks(organizationId)
-
-                snapshotRepository.updateProjectsTasks(
-                    organizationId, projectsResponse.data, tasksResponse.data
-                )
 
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -106,10 +101,6 @@ class ProjectSelectionViewModel @Inject constructor(
                 val api = apiClientFactory.createApi(endpoint)
                 val projectsResponse = api.getProjects(organizationId)
                 val tasksResponse = api.getTasks(organizationId)
-
-                snapshotRepository.updateProjectsTasks(
-                    organizationId, projectsResponse.data, tasksResponse.data
-                )
 
                 _uiState.value = _uiState.value.copy(
                     projects = projectsResponse.data,

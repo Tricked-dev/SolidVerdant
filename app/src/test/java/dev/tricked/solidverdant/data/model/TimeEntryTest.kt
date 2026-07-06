@@ -1,7 +1,9 @@
 package dev.tricked.solidverdant.data.model
 
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TimeEntryTest {
@@ -21,5 +23,20 @@ class TimeEntryTest {
         )
 
         assertEquals(listOf(Tag(id = "tag-id", name = "focus")), response.data.single().tags)
+    }
+
+    @Test fun startRequestSerializesEndWhenProvided() {
+        // encodeDefaults = true matches the Json instance provided by NetworkModule
+        val encodingJson = Json { encodeDefaults = true }
+        val request = StartTimeEntryRequest(
+            memberId = "member",
+            start = "2026-07-06T08:00:00Z",
+            end = "2026-07-06T09:30:00Z"
+        )
+
+        val encoded = encodingJson.encodeToString(request)
+
+        assertTrue(encoded.contains(""""end":"2026-07-06T09:30:00Z""""))
+        assertTrue(encoded.contains(""""member_id":"member""""))
     }
 }

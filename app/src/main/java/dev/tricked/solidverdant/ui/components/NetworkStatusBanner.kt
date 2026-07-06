@@ -38,7 +38,16 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 fun NetworkAwareContent(content: @Composable () -> Unit) {
     val context = LocalContext.current
     val isOnline by produceState(initialValue = context.hasValidatedInternet(), context) {
-        context.connectivityFlow().collect { value = it }
+        context.connectivityFlow().collect { reportedOnline ->
+            if (reportedOnline) {
+                value = true
+            } else {
+                // Network hand-offs and process thaw briefly report no active network.
+                // Confirm the outage before showing a persistent offline banner.
+                delay(OFFLINE_CONFIRMATION_DELAY_MS)
+                value = context.hasValidatedInternet()
+            }
+        }
     }
     var hasBeenOffline by remember { mutableStateOf(!isOnline) }
     var showRestored by remember { mutableStateOf(false) }
@@ -121,3 +130,4 @@ private fun Context.hasValidatedInternet(): Boolean {
 }
 
 private const val RESTORED_MESSAGE_DURATION_MS = 3_000L
+private const val OFFLINE_CONFIRMATION_DELAY_MS = 1_500L

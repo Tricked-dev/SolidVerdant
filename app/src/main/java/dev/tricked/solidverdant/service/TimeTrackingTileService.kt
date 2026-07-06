@@ -18,7 +18,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.edit
 import dagger.hilt.android.AndroidEntryPoint
 import dev.tricked.solidverdant.R
-import dev.tricked.solidverdant.data.repository.SnapshotRepository
+import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.ApiClientFactory
@@ -56,7 +56,7 @@ class TimeTrackingTileService : TileService() {
     lateinit var apiClientFactory: ApiClientFactory
 
     @Inject
-    lateinit var snapshotRepository: SnapshotRepository
+    lateinit var timeEntryRepository: TimeEntryRepository
 
     @Inject
     lateinit var settingsDataStore: SettingsDataStore
@@ -432,23 +432,35 @@ class TimeTrackingTileService : TileService() {
                             ) ||
                                     activeEntry.taskId != prefs.getString(PREF_LAST_TASK_ID, null)
 
-                            if (entryChanged) {
-                                val (projectName, taskName) = loadNames(activeEntry)
-                                cacheActiveEntry(activeEntry, projectName, taskName)
-                                applyState(
-                                    tile,
-                                    TileState.Active(projectName, taskName, activeEntry.description)
-                                )
-
-                                // Start notification for externally started tracking
-                                TimeTrackingNotificationService.startTracking(
-                                    context = this@TimeTrackingTileService,
-                                    startTime = Instant.parse(activeEntry.start),
-                                    projectName = projectName,
-                                    taskName = taskName,
-                                    description = activeEntry.description
+                            val (projectName, taskName) = if (entryChanged) {
+                                loadNames(activeEntry).also { (project, task) ->
+                                    cacheActiveEntry(activeEntry, project, task)
+                                }
+                            } else {
+                                Pair(
+                                    prefs.getString(PREF_LAST_PROJECT_NAME, null),
+                                    prefs.getString(PREF_LAST_TASK_NAME, null)
                                 )
                             }
+
+                            applyState(
+                                tile,
+                                TileState.Active(projectName, taskName, activeEntry.description)
+                            )
+
+                            // (Re)assert the tracking notification whenever an entry is
+                            // active - not only when it changed. The notification may have
+                            // been dismissed, killed by the system, or lost across a process
+                            // restart while the same entry is still running. startTracking is
+                            // idempotent (silent channel + setOnlyAlertOnce + stable start
+                            // time), so re-posting a visible notification is a no-op.
+                            TimeTrackingNotificationService.startTracking(
+                                context = this@TimeTrackingTileService,
+                                startTime = Instant.parse(activeEntry.start),
+                                projectName = projectName,
+                                taskName = taskName,
+                                description = activeEntry.description
+                            )
                         } else if (cachedId != null) {
                             // Network succeeded, no active entry - stopped externally
                             Timber.d("Entry stopped externally, clearing cache")
@@ -697,9 +709,11 @@ class TimeTrackingTileService : TileService() {
             return Pair(cachedProject, cachedTask)
         }
 
-        val snapshot = snapshotRepository.read()?.takeIf { it.organizationId == entry.organizationId }
-        var projects = snapshot?.projects
-        var tasks = snapshot?.tasks
+        // Read the Room cache first; fall back to the network when it is empty.
+        var projects = timeEntryRepository.observeProjects(entry.organizationId).first()
+            .takeIf { it.isNotEmpty() }
+        var tasks = timeEntryRepository.observeTasks(entry.organizationId).first()
+            .takeIf { it.isNotEmpty() }
 
         if ((entry.projectId != null && projects == null) || (entry.taskId != null && tasks == null)) {
             try {
@@ -713,9 +727,6 @@ class TimeTrackingTileService : TileService() {
                 if (tasks == null) {
                     tasks = api.getTasks(orgId).data
                 }
-                snapshotRepository.updateProjectsTasks(
-                    orgId, projects.orEmpty(), tasks.orEmpty()
-                )
             } catch (e: Exception) {
                 Timber.w(e, "Failed to load projects/tasks")
                 return Pair(null, null)

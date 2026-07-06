@@ -102,14 +102,6 @@ class TimeTrackingNotificationService : Service() {
                 handleResumeTracking(intent)
             }
 
-            ACTION_UPDATE_INFO -> {
-                projectName = intent.getStringExtra(EXTRA_PROJECT_NAME)
-                taskName = intent.getStringExtra(EXTRA_TASK_NAME)
-                description = intent.getStringExtra(EXTRA_DESCRIPTION)
-
-                // Update notification with new info
-                refreshNotificationIfVisible()
-            }
             ACTION_QUICK_START -> handleQuickStart(intent)
         }
 
@@ -613,7 +605,6 @@ class TimeTrackingNotificationService : Service() {
             "dev.tricked.solidverdant.ACTION_SHOW_PAUSED_NOTIFICATION"
         const val ACTION_RESUME_TRACKING =
             "dev.tricked.solidverdant.ACTION_RESUME_TRACKING_NOTIFICATION"
-        const val ACTION_UPDATE_INFO = "dev.tricked.solidverdant.ACTION_UPDATE_INFO"
         const val ACTION_QUICK_START = "dev.tricked.solidverdant.ACTION_QUICK_START"
 
         const val EXTRA_START_TIME = "start_time"
@@ -689,22 +680,5 @@ class TimeTrackingNotificationService : Service() {
             context.stopService(Intent(context, TimeTrackingNotificationService::class.java))
         }
 
-        /**
-         * Update tracking information (project, task, description)
-         */
-        fun updateTrackingInfo(
-            context: Context,
-            projectName: String? = null,
-            taskName: String? = null,
-            description: String? = null
-        ) {
-            val intent = Intent(context, TimeTrackingNotificationService::class.java).apply {
-                action = ACTION_UPDATE_INFO
-                putExtra(EXTRA_PROJECT_NAME, projectName)
-                putExtra(EXTRA_TASK_NAME, taskName)
-                putExtra(EXTRA_DESCRIPTION, description)
-            }
-            context.startService(intent)
-        }
     }
 }

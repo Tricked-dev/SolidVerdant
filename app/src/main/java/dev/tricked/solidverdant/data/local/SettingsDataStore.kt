@@ -17,11 +17,17 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.User
+import dev.tricked.solidverdant.data.model.Membership
+import dev.tricked.solidverdant.data.model.Project
+import dev.tricked.solidverdant.data.model.Task
+import dev.tricked.solidverdant.data.model.Tag
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.Serializable
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -46,6 +52,11 @@ class SettingsDataStore @Inject constructor(
 
     companion object {
         private const val CONTINUE_ENTRY_JSON = "continue_entry_json"
+        private const val USER_JSON = "user_json"
+        private const val MEMBERSHIPS_JSON = "memberships_json"
+        private const val CURRENT_MEMBERSHIP_ID = "current_membership_id"
+        private const val CACHED_APP_THEME = "app_theme"
+        private const val TRACKING_STATE_JSON = "tracking_state_json"
         private val ALWAYS_SHOW_NOTIFICATION = booleanPreferencesKey("always_show_notification")
         private val APP_THEME = stringPreferencesKey("app_theme")
         private val OPTIMISTIC_REFRESH = booleanPreferencesKey("optimistic_refresh")
@@ -79,6 +90,60 @@ class SettingsDataStore @Inject constructor(
             if (entry == null) remove(CONTINUE_ENTRY_JSON)
             else putString(CONTINUE_ENTRY_JSON, json.encodeToString(entry))
         }.apply()
+    }
+
+    data class CachedAuth(
+        val user: User,
+        val memberships: List<Membership>,
+        val currentMembershipId: String?,
+    )
+
+    fun getCachedAuth(): CachedAuth? = runCatching {
+        val user = json.decodeFromString<User>(immediateCache.getString(USER_JSON, null) ?: return null)
+        val memberships = json.decodeFromString<List<Membership>>(
+            immediateCache.getString(MEMBERSHIPS_JSON, null) ?: return null
+        )
+        CachedAuth(user, memberships, immediateCache.getString(CURRENT_MEMBERSHIP_ID, null))
+    }.getOrNull()
+
+    fun cacheAuth(user: User, memberships: List<Membership>, currentMembershipId: String?) {
+        immediateCache.edit()
+            .putString(USER_JSON, json.encodeToString(user))
+            .putString(MEMBERSHIPS_JSON, json.encodeToString(memberships))
+            .apply {
+                if (currentMembershipId == null) remove(CURRENT_MEMBERSHIP_ID)
+                else putString(CURRENT_MEMBERSHIP_ID, currentMembershipId)
+            }
+            .apply()
+    }
+
+    fun cacheCurrentMembership(id: String) {
+        immediateCache.edit().putString(CURRENT_MEMBERSHIP_ID, id).apply()
+    }
+
+    fun getCachedAppTheme(): AppThemeMode = immediateCache.getString(CACHED_APP_THEME, null)
+        ?.let { stored -> AppThemeMode.entries.find { it.name == stored } }
+        ?: AppThemeMode.SYSTEM
+
+    @Serializable
+    data class CachedTrackingState(
+        val organizationId: String,
+        val timeEntries: List<TimeEntry>,
+        val projects: List<Project>,
+        val tasks: List<Task>,
+        val tags: List<Tag>,
+        val activeEntry: TimeEntry?,
+    )
+
+    fun getCachedTrackingState(): CachedTrackingState? =
+        immediateCache.getString(TRACKING_STATE_JSON, null)?.let { encoded ->
+            runCatching { json.decodeFromString<CachedTrackingState>(encoded) }.getOrNull()
+        }
+
+    fun cacheTrackingState(state: CachedTrackingState) {
+        immediateCache.edit()
+            .putString(TRACKING_STATE_JSON, json.encodeToString(state))
+            .apply()
     }
 
     /** Clear cached account data while preserving the user's app preferences. */
@@ -124,6 +189,7 @@ class SettingsDataStore @Inject constructor(
     }
 
     suspend fun setAppTheme(theme: AppThemeMode) {
+        immediateCache.edit().putString(CACHED_APP_THEME, theme.name).apply()
         dataStore.edit { preferences -> preferences[APP_THEME] = theme.name }
     }
 

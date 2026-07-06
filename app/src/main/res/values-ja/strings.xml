@@ -7,6 +7,7 @@
     <!-- App Name -->
     <string name="app_name">ソリッドグリーン</string>
     <string name="tile_label">時間追跡</string>
+    <string name="sync_error">一部の変更を同期できませんでした。自動的に再試行されます。</string>
 
     <!-- Login Screen -->
     <string name="solidtime_login">Solidtimeログイン</string>
@@ -76,6 +77,8 @@
     <string name="delete">削除</string>
     <string name="no_description">説明なし</string>
     <string name="edit_time_entry">時間エントリを編集</string>
+    <string name="add_time_entry">時間エントリを追加</string>
+    <string name="entry_date">日付</string>
     <string name="today">今日</string>
     <string name="yesterday">昨日</string>
     <string name="time_and_duration">時刻と期間</string>

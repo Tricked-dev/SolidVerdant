@@ -115,13 +115,14 @@ data class MembershipsResponse(
 )
 
 /**
- * Request to start a new time entry
+ * Request to start a new time entry, or create a completed one when [end] is set
  */
 @Serializable
 data class StartTimeEntryRequest(
     @SerialName("member_id")
     val memberId: String,
     val start: String,
+    val end: String? = null,
     val description: String = "",
     @SerialName("project_id")
     val projectId: String? = null,

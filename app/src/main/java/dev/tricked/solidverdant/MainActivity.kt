@@ -28,9 +28,15 @@ import dev.tricked.solidverdant.ui.auth.AuthViewModel
 import dev.tricked.solidverdant.ui.auth.AuthState
 import dev.tricked.solidverdant.ui.login.LoginScreen
 import dev.tricked.solidverdant.ui.components.NetworkAwareContent
+import dev.tricked.solidverdant.ui.components.SyncStatusOverlay
+import dev.tricked.solidverdant.sync.SyncStatusReporter
 import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
 import dev.tricked.solidverdant.ui.tracking.TrackingScreen
 import dev.tricked.solidverdant.ui.tracking.TrackingViewModel
+import dev.tricked.solidverdant.ui.navigation.MainNavHost
+import dev.tricked.solidverdant.ui.calendar.CalendarScreen
+import dev.tricked.solidverdant.ui.statistics.StatisticsScreen
+import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import javax.inject.Inject
@@ -44,21 +50,21 @@ open class MainActivity : ComponentActivity() {
 
     @Inject lateinit var settingsDataStore: SettingsDataStore
 
+    @Inject lateinit var syncStatusReporter: SyncStatusReporter
+
     protected val authViewModel: AuthViewModel by viewModels()
     private val trackingViewModel: TrackingViewModel by viewModels()
     private var stoppedAtElapsedRealtime: Long? = null
     private var handoffOrganizationId by mutableStateOf<String?>(null)
-    private val startupTheme = MutableStateFlow<AppThemeMode?>(null)
+    private val startupTheme = MutableStateFlow(AppThemeMode.SYSTEM)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
         super.onCreate(savedInstanceState)
+        startupTheme.value = settingsDataStore.getCachedAppTheme()
         lifecycleScope.launch { startupTheme.value = settingsDataStore.getAppTheme() }
         splash.setKeepOnScreenCondition {
-            authViewModel.authState.value == dev.tricked.solidverdant.ui.auth.AuthState.Unknown ||
-                !authViewModel.snapshotHydrated.value ||
-                !trackingViewModel.snapshotHydrated.value ||
-                startupTheme.value == null
+            authViewModel.authState.value == dev.tricked.solidverdant.ui.auth.AuthState.Unknown
         }
         enableEdgeToEdge()
 
@@ -68,21 +74,25 @@ open class MainActivity : ComponentActivity() {
         setContent {
             val initialTheme by startupTheme.collectAsState()
             val appTheme by trackingViewModel.appTheme.collectAsState(initial = initialTheme)
-            appTheme?.let { resolvedTheme -> SolidVerdantTheme(themeMode = resolvedTheme) {
+            val syncStatus by syncStatusReporter.status.collectAsState()
+            val resolvedTheme = appTheme ?: initialTheme
+            SolidVerdantTheme(themeMode = resolvedTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
                     NetworkAwareContent {
-                        SolidVerdantApp(
-                            authViewModel = authViewModel,
-                            trackingViewModel = trackingViewModel,
-                            handoffOrganizationId = handoffOrganizationId,
-                            onHandoffConsumed = { handoffOrganizationId = null }
-                        )
+                        SyncStatusOverlay(syncStatus) {
+                            SolidVerdantApp(
+                                authViewModel = authViewModel,
+                                trackingViewModel = trackingViewModel,
+                                handoffOrganizationId = handoffOrganizationId,
+                                onHandoffConsumed = { handoffOrganizationId = null }
+                            )
+                        }
                     }
                 }
-            } }
+            }
         }
     }
 
@@ -207,6 +217,11 @@ fun SolidVerdantApp(
 
     when {
         authState == AuthState.LoggedIn -> {
+            val navController = rememberNavController()
+            val currentMembership = authUiState.currentMembership
+            MainNavHost(
+                navController = navController,
+                trackContent = {
             TrackingScreen(
                 user = authUiState.user,
                 memberships = authUiState.memberships,
@@ -315,6 +330,24 @@ fun SolidVerdantApp(
                         )
                     }
                 },
+                onCreateEntry = { description: String?, projectId: String?, taskId: String?, tags: List<String>, billable: Boolean, start: String, end: String ->
+                    authUiState.currentMembership?.let { membership ->
+                        authUiState.user?.let { user ->
+                            trackingViewModel.createManualTimeEntry(
+                                organizationId = membership.organizationId,
+                                memberId = membership.id,
+                                userId = user.id,
+                                description = description,
+                                projectId = projectId,
+                                taskId = taskId,
+                                tags = tags,
+                                billable = billable,
+                                start = start,
+                                end = end
+                            )
+                        }
+                    }
+                },
                 onDeleteEntry = { timeEntryId ->
                     authUiState.currentMembership?.let { membership ->
                         trackingViewModel.deleteTimeEntry(
@@ -330,6 +363,35 @@ fun SolidVerdantApp(
                 getGroupedEntries = {
                     trackingViewModel.getGroupedTimeEntries()
                 }
+            )
+                },
+                calendarContent = {
+                    if (currentMembership != null) {
+                        CalendarScreen(
+                            organizationId = currentMembership.organizationId,
+                            memberId = currentMembership.id,
+                            projects = trackingUiState.projects,
+                            tasks = trackingUiState.tasks,
+                            tags = trackingUiState.tags,
+                            onSaveEntry = { entry, description, projectId, taskId, entryTags, billable, start, end ->
+                                trackingViewModel.updatePastTimeEntry(
+                                    organizationId = currentMembership.organizationId,
+                                    timeEntry = entry,
+                                    description = description,
+                                    projectId = projectId,
+                                    taskId = taskId,
+                                    tags = entryTags,
+                                    billable = billable,
+                                    start = start,
+                                    end = end,
+                                )
+                            },
+                        )
+                    }
+                },
+                statsContent = {
+                    StatisticsScreen()
+                },
             )
         }
 

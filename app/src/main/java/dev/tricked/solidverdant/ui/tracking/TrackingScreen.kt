@@ -1,4 +1,4 @@
-package dev.tricked.solidverdant.ui.tracking
+﻿package dev.tricked.solidverdant.ui.tracking
 
 import android.Manifest
 import android.content.ClipData
@@ -60,6 +60,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -78,6 +79,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -147,6 +149,7 @@ import dev.tricked.solidverdant.util.NotificationPermissionHelper
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZonedDateTime
+import java.time.ZoneId
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -194,6 +197,7 @@ fun TrackingScreen(
     onBillableChange: (Boolean) -> Unit,
     onUpdateCurrentEntry: () -> Unit,
     onUpdatePastEntry: (TimeEntry, String?, String?, String?, List<String>, Boolean, String, String) -> Unit,
+    onCreateEntry: (String?, String?, String?, List<String>, Boolean, String, String) -> Unit,
     onDeleteEntry: (String) -> Unit,
     onLoadMoreEntries: () -> Unit,
     onLoadNewerEntries: () -> Unit,
@@ -202,6 +206,7 @@ fun TrackingScreen(
     getGroupedEntries: () -> Map<LocalDate, List<TimeEntry>>
 ) {
     var showEditDialog by remember { mutableStateOf<TimeEntry?>(null) }
+    var showAddDialog by remember { mutableStateOf(false) }
     var organizationMenuExpanded by remember { mutableStateOf(false) }
     var hasUserScrolledHistory by remember { mutableStateOf(false) }
     var calendarInitialDate by remember { mutableStateOf<LocalDate?>(null) }
@@ -325,7 +330,7 @@ fun TrackingScreen(
                             Text(stringResource(R.string.choose_language))
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         HorizontalDivider()
 
@@ -554,6 +559,12 @@ fun TrackingScreen(
                         }
                     },
                     actions = {
+                        IconButton(onClick = { showAddDialog = true }) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = stringResource(R.string.add_time_entry)
+                            )
+                        }
                         // Notification permission button (Android 13+) - only show if not granted
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                             !NotificationPermissionHelper.hasNotificationPermission(context)
@@ -715,8 +726,9 @@ fun TrackingScreen(
 
     // Edit dialog
     showEditDialog?.let { entry ->
-        EditTimeEntryDialog(
+        TimeEntryFormSheet(
             entry = entry,
+            suggestedStart = null,
             projects = uiState.projects,
             tasks = uiState.tasks,
             tags = uiState.tags,
@@ -724,6 +736,32 @@ fun TrackingScreen(
             onSave = { description, projectId, taskId, tagIds, billable, start, end ->
                 onUpdatePastEntry(entry, description, projectId, taskId, tagIds, billable, start, end)
                 showEditDialog = null
+            }
+        )
+    }
+
+    // Add-entry dialog
+    if (showAddDialog) {
+        val suggestedStart = remember(uiState.timeEntries) {
+            val now = ZonedDateTime.now(ZoneId.systemDefault())
+            uiState.timeEntries
+                .mapNotNull { it.end }
+                .mapNotNull { runCatching { ZonedDateTime.parse(it, DateTimeFormatter.ISO_DATE_TIME) }.getOrNull() }
+                .maxOrNull()
+                ?.withZoneSameInstant(ZoneId.systemDefault())
+                ?.takeIf { it.toLocalDate() == now.toLocalDate() && it.isBefore(now) }
+                ?: now.minusHours(1)
+        }
+        TimeEntryFormSheet(
+            entry = null,
+            suggestedStart = suggestedStart,
+            projects = uiState.projects,
+            tasks = uiState.tasks,
+            tags = uiState.tags,
+            onDismiss = { showAddDialog = false },
+            onSave = { description, projectId, taskId, tagIds, billable, start, end ->
+                onCreateEntry(description, projectId, taskId, tagIds, billable, start, end)
+                showAddDialog = false
             }
         )
     }
@@ -1438,7 +1476,7 @@ private fun DescriptionFieldWithSuggestions(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ProjectTaskDropdown(
+internal fun ProjectTaskDropdown(
     selectedProjectId: String?,
     selectedTaskId: String?,
     projects: List<Project>,
@@ -1493,7 +1531,7 @@ private fun ProjectTaskDropdown(
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TagsSelector(
+internal fun TagsSelector(
     selectedTagIds: List<String>,
     availableTags: List<Tag>,
     onTagsChanged: (List<String>) -> Unit,
@@ -1724,7 +1762,7 @@ private fun CompactTimeEntryRow(
 
             Spacer(Modifier.height(2.dp))
 
-            // Project • Task and time range on same line
+            // Project â€¢ Task and time range on same line
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1814,34 +1852,44 @@ private fun CompactTimeEntryRow(
 }
 
 /**
- * Edit time entry bottom sheet
+ * Create/edit time entry bottom sheet. [entry] null = create mode.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun EditTimeEntryDialog(
-    entry: TimeEntry,
+private fun TimeEntryFormSheet(
+    entry: TimeEntry?, // null = create mode
+    suggestedStart: ZonedDateTime?, // create mode: pre-filled start (end of last entry / now-1h)
     projects: List<Project>,
     tasks: List<Task>,
     tags: List<Tag>,
     onDismiss: () -> Unit,
     onSave: (String?, String?, String?, List<String>, Boolean, String, String) -> Unit
 ) {
-    var description by remember { mutableStateOf(entry.description ?: "") }
-    var projectId by remember { mutableStateOf(entry.projectId) }
-    var taskId by remember { mutableStateOf(entry.taskId) }
-    var selectedTags by remember { mutableStateOf(entry.tags.map { it.id }) }
-    var billable by remember { mutableStateOf(entry.billable) }
-    val originalStart = remember(entry.id) { ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME) }
-    val originalEnd = remember(entry.id) {
-        entry.end?.let { ZonedDateTime.parse(it, DateTimeFormatter.ISO_DATE_TIME) }
-            ?: originalStart.plusSeconds((entry.duration ?: 0).toLong())
+    var description by remember { mutableStateOf(entry?.description ?: "") }
+    var projectId by remember { mutableStateOf(entry?.projectId) }
+    var taskId by remember { mutableStateOf(entry?.taskId) }
+    var selectedTags by remember { mutableStateOf(entry?.tags?.map { it.id } ?: emptyList<String>()) }
+    var billable by remember { mutableStateOf(entry?.billable ?: false) }
+    val originalStart = remember(entry?.id) {
+        entry?.let { ZonedDateTime.parse(it.start, DateTimeFormatter.ISO_DATE_TIME) }
+            ?: (suggestedStart ?: ZonedDateTime.now(ZoneId.systemDefault()).minusHours(1))
+                .withSecond(0).withNano(0)
     }
-    var startTime by remember(entry.id) { mutableStateOf(originalStart) }
-    var endTime by remember(entry.id) { mutableStateOf(originalEnd) }
-    var durationMinutes by remember(entry.id) {
+    val originalEnd = remember(entry?.id) {
+        when {
+            entry?.end != null -> ZonedDateTime.parse(entry.end, DateTimeFormatter.ISO_DATE_TIME)
+            entry != null -> originalStart.plusSeconds((entry.duration ?: 0).toLong())
+            else -> ZonedDateTime.now(originalStart.zone).withSecond(0).withNano(0)
+                .let { if (it.isAfter(originalStart)) it else originalStart.plusMinutes(1) }
+        }
+    }
+    var startTime by remember(entry?.id) { mutableStateOf(originalStart) }
+    var endTime by remember(entry?.id) { mutableStateOf(originalEnd) }
+    var durationMinutes by remember(entry?.id) {
         mutableStateOf(java.time.Duration.between(originalStart, originalEnd).toMinutes().coerceAtLeast(1).toString())
     }
     var editingTime by remember { mutableStateOf<TimeField?>(null) }
+    var showDatePicker by remember { mutableStateOf(false) }
     val durationIsValid = durationMinutes.toLongOrNull()?.let { it > 0 } == true
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -1867,7 +1915,7 @@ private fun EditTimeEntryDialog(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
                 Text(
-                    text = stringResource(R.string.edit_time_entry),
+                    text = stringResource(if (entry == null) R.string.add_time_entry else R.string.edit_time_entry),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -1877,6 +1925,25 @@ private fun EditTimeEntryDialog(
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                if (entry == null) {
+                    OutlinedButton(
+                        onClick = { showDatePicker = true },
+                        modifier = Modifier.fillMaxWidth().height(64.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)
+                    ) {
+                        Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Column(horizontalAlignment = Alignment.Start, modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.entry_date), style = MaterialTheme.typography.labelSmall)
+                            Text(
+                                startTime.format(DateTimeFormatter.ofPattern("EEE, d MMM yyyy")),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                    }
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -2064,6 +2131,31 @@ private fun EditTimeEntryDialog(
                 editingTime = null
             }
         )
+    }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = startTime.toLocalDate()
+                .atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val newDate = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
+                        startTime = startTime.with(newDate)
+                        endTime = startTime.plusMinutes(durationMinutes.toLongOrNull() ?: 1)
+                    }
+                    showDatePicker = false
+                }) { Text(stringResource(R.string.save)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        ) { DatePicker(state = datePickerState) }
     }
 }
 
@@ -2389,8 +2481,9 @@ private fun formatCompactDuration(seconds: Int): String {
 }
 
 private fun formatEditableDuration(minutes: Long): String {
-    val hours = minutes / 60
-    val remainingMinutes = minutes % 60
+    val safeMinutes = minutes.coerceAtLeast(0)
+    val hours = safeMinutes / 60
+    val remainingMinutes = safeMinutes % 60
     return when {
         hours > 0 && remainingMinutes > 0 -> "${hours}h ${remainingMinutes}m"
         hours > 0 -> "${hours}h"

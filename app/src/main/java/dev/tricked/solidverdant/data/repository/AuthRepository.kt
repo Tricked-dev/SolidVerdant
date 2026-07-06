@@ -250,6 +250,64 @@ class AuthRepository @Inject constructor(
     }
 
     /**
+     * Create a completed time entry with an explicit start and end (manual entry).
+     * Does not affect any currently running entry.
+     */
+    suspend fun createTimeEntry(
+        organizationId: String,
+        memberId: String,
+        userId: String,
+        start: String,
+        end: String,
+        description: String = "",
+        projectId: String? = null,
+        taskId: String? = null,
+        tags: List<String> = emptyList(),
+        billable: Boolean = false
+    ): Result<TimeEntry> {
+        return try {
+            val endpoint = authDataStore.getEndpoint()
+            val api = apiClientFactory.createApi(endpoint)
+
+            val request = dev.tricked.solidverdant.data.model.StartTimeEntryRequest(
+                memberId = memberId,
+                start = start,
+                end = end,
+                description = description,
+                projectId = projectId,
+                taskId = taskId,
+                billable = false
+            )
+
+            val created = api.startTimeEntry(organizationId, request).data!!
+
+            // Mirror the start-tracking flow: billable and tags are applied via a
+            // follow-up update rather than on create.
+            val final = if (tags.isNotEmpty() || billable) {
+                val updateRequest = UpdateTimeEntryRequest(
+                    userId = userId,
+                    start = created.start,
+                    end = created.end,
+                    description = created.description,
+                    projectId = created.projectId,
+                    taskId = created.taskId,
+                    billable = billable,
+                    tags = tags
+                )
+                api.updateTimeEntry(organizationId, created.id, updateRequest).data!!
+            } else {
+                created
+            }
+
+            Timber.d("Manual time entry created: ${final.id}")
+            Result.success(final)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to create manual time entry")
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Stop the active time entry
      */
     suspend fun stopTimeEntry(

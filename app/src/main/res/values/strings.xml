@@ -7,6 +7,14 @@
     <!-- App Name -->
     <string name="app_name">SolidVerdant</string>
 
+    <!-- Sync -->
+    <string name="sync_error">Some changes couldn\'t be synced. They\'ll retry automatically.</string>
+
+    <!-- Bottom Navigation -->
+    <string name="nav_track">Track</string>
+    <string name="nav_calendar">Calendar</string>
+    <string name="nav_stats">Stats</string>
+
     <!-- Tile -->
     <string name="tile_label">Time Tracking</string>
 
@@ -79,6 +87,8 @@
     <string name="delete">Delete</string>
     <string name="no_description">No description</string>
     <string name="edit_time_entry">Edit Time Entry</string>
+    <string name="add_time_entry">Add Time Entry</string>
+    <string name="entry_date">Date</string>
     <string name="today">Today</string>
     <string name="yesterday">Yesterday</string>
     <string name="time_and_duration">Time and duration</string>

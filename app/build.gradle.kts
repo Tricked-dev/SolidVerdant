@@ -121,6 +121,18 @@ dependencies {
     // DataStore for preferences
     implementation(libs.androidx.dataStore.preferences)
 
+    // Room (offline cache + outbox)
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
+
+    // WorkManager (background sync)
+    implementation(libs.androidx.work.ktx)
+
+    // Hilt WorkManager integration
+    implementation(libs.hilt.ext.work)
+    ksp(libs.hilt.ext.compiler)
+
     // Browser for Custom Tabs (OAuth)
     implementation(libs.androidx.browser)
 
@@ -141,6 +153,7 @@ dependencies {
     implementation(libs.androidx.compose.material.iconsExtended)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.compose.material3.windowSizeClass)
     implementation(libs.androidx.lifecycle.runtimeCompose)
     implementation(libs.androidx.lifecycle.viewModelCompose)
     implementation(libs.accompanist.appcompat.theme)
@@ -148,5 +161,18 @@ dependencies {
 
     debugImplementation(composeBom)
     debugImplementation(libs.androidx.compose.ui.tooling.core)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
     testImplementation(libs.junit4)
+    testImplementation(libs.turbine)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.mockk)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.room.testing)
+    testImplementation(libs.androidx.work.testing)
+    testImplementation(libs.androidx.test.core.ktx)
+
+    androidTestImplementation(composeBom)
+    androidTestImplementation(libs.androidx.compose.ui.test.junit)
+    androidTestImplementation(libs.androidx.navigation.testing)
+    androidTestImplementation(libs.junit4)
 }
