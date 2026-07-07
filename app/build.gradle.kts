@@ -64,6 +64,22 @@ android {
             // Override package name for release builds
             resValue("string", "app_package_name", "dev.tricked.solidverdant")
         }
+
+        // Release-signed, separately-installable test build for quick device testing of a
+        // branch. Named "qa" (not "test") to avoid colliding with the unit-test `src/test`
+        // source set; the app id is dev.tricked.solidverdant.test so it sits alongside the
+        // release (.) and debug (.dev) installs. Minify is left off for fast, reliable test
+        // builds — flip isMinifyEnabled/isShrinkResources on to mirror the exact release artifact.
+        create("qa") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".test"
+            versionNameSuffix = "-test"
+            isMinifyEnabled = false
+            isShrinkResources = false
+            signingConfig = signingConfigs.getByName("release")
+
+            resValue("string", "app_package_name", "dev.tricked.solidverdant.test")
+        }
     }
 
     buildFeatures {
