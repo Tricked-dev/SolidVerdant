@@ -6,6 +6,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import androidx.compose.runtime.Stable
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.local.AppThemeMode
@@ -67,7 +68,8 @@ internal object HistoryWindow {
 /**
  * UI state for tracking screen
  */
-data class TrackingUiState(
+@Stable
+ data class TrackingUiState(
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
     val isSyncing: Boolean = false,

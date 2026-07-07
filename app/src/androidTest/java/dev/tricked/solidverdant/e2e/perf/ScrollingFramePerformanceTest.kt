@@ -48,11 +48,13 @@ class ScrollingFramePerformanceTest {
         val down = measureFrames(scenario) {
             repeat(6) { history.performTouchInput { swipeUp(durationMillis = 300) } }
         }
-        history.performScrollToIndex(40)
+        // Scroll deep into the list using gestures (not measured) so the up-swipes
+        // have room to produce frames.
+        repeat(6) { history.performTouchInput { swipeUp(durationMillis = 300) } }
         rule.waitForIdle()
         UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).waitForIdle(2_000)
         val up = measureFrames(scenario) {
-            repeat(6) { history.performTouchInput { swipeDown(durationMillis = 300) } }
+            repeat(10) { history.performTouchInput { swipeDown(durationMillis = 300) } }
         }
         val tabs = measureFrames(scenario) {
             listOf("stats", "track", "calendar", "track", "review", "track").forEach { route ->

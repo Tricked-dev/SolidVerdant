@@ -2,6 +2,7 @@ package dev.tricked.solidverdant.data.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import androidx.compose.runtime.Stable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -13,8 +14,9 @@ import kotlinx.serialization.json.jsonPrimitive
 /**
  * Time entry representing a tracking session
  */
-@Serializable
-data class TimeEntry(
+@Stable
+ @Serializable
+ data class TimeEntry(
     val id: String,
     val description: String? = null,
     @SerialName("user_id")
@@ -36,8 +38,9 @@ data class TimeEntry(
 /**
  * Tag associated with a time entry
  */
-@Serializable
-data class Tag(
+@Stable
+ @Serializable
+ data class Tag(
     val id: String,
     val name: String = ""
 )
@@ -153,8 +156,9 @@ data class StopTimeEntryRequest(
 /**
  * Project information
  */
-@Serializable
-data class Project(
+@Stable
+ @Serializable
+ data class Project(
     val id: String,
     val name: String,
     val color: String,
@@ -174,8 +178,9 @@ data class Project(
     val isPublic: Boolean = false
 )
 
-@Serializable
-data class Client(
+@Stable
+ @Serializable
+ data class Client(
     val id: String,
     val name: String,
     @SerialName("is_archived") val isArchived: Boolean = false,
@@ -184,8 +189,9 @@ data class Client(
 /**
  * Task information
  */
-@Serializable
-data class Task(
+@Stable
+ @Serializable
+ data class Task(
     val id: String,
     val name: String,
     @SerialName("is_done")

@@ -778,16 +778,20 @@ fun TrackingScreen(
                 onRefresh = onRefresh,
                 modifier = Modifier.padding(paddingValues)
             ) {
-                val serverLastEntry = uiState.timeEntries
-                    .filter { it.end != null && !it.description.isNullOrBlank() }
-                    .maxByOrNull { it.start }
-                val lastEntry = serverLastEntry ?: uiState.cachedContinueEntry?.takeIf {
-                    it.organizationId == currentMembership?.organizationId
+                val serverLastEntry = remember(uiState.timeEntries) {
+                    uiState.timeEntries
+                        .filter { it.end != null && !it.description.isNullOrBlank() }
+                        .maxByOrNull { it.start }
+                }
+                val lastEntry = remember(serverLastEntry, uiState.cachedContinueEntry, currentMembership) {
+                    serverLastEntry ?: uiState.cachedContinueEntry?.takeIf {
+                        it.organizationId == currentMembership?.organizationId
+                    }
                 }
                 val preparedHistory by produceState(
                     initialValue = PreparedHistory.Empty,
                     uiState.timeEntries, uiState.projects, uiState.tasks, uiState.clients,
-                    uiState.syncOperations, historyFilter,
+                    historyFilter,
                 ) {
                     value = withContext(Dispatchers.Default) {
                         val grouped = EntryTrustRules.filter(
@@ -832,6 +836,9 @@ fun TrackingScreen(
                     }
                 }
                 val overlapCount = uiState.overlapCount
+                val onHistoryEdit = remember<(TimeEntry) -> Unit> { { entry -> showEditDialog = entry } }
+                val onHistoryDelete = remember<(TimeEntry) -> Unit> { { entry -> deletedEntry = entry; onDeleteEntry(entry.id) } }
+                val onHistoryDateClick = remember<(LocalDate) -> Unit> { { date -> calendarInitialDate = date } }
 
                 LaunchedEffect(uiState.historyJumpDate, groupedEntries) {
                     val target = uiState.historyJumpDate ?: return@LaunchedEffect
@@ -848,11 +855,10 @@ fun TrackingScreen(
 
                 BoxWithConstraints(Modifier.fillMaxSize()) {
                     val wideLayout = maxWidth >= 840.dp
+                    val elapsed by elapsedSeconds.collectAsState()
                     val primaryContent: LazyListScope.() -> Unit = {
                         item { Spacer(Modifier.height(8.dp)) }
-                        uiState.error?.let { error -> item { ErrorCard(error) } }
                         item {
-                            val elapsed by elapsedSeconds.collectAsState()
                             TrackingControls(
                                 uiState = uiState,
                                 elapsedSeconds = elapsed,
@@ -869,7 +875,6 @@ fun TrackingScreen(
                             )
                         }
                         item(key = "long_timer_warning") {
-                            val elapsed by elapsedSeconds.collectAsState()
                             if (uiState.isTracking && elapsed >= longTimerHours * 3600L &&
                                 elapsed >= longTimerSnoozedUntil) {
                                 LongTimerWarning(
@@ -960,9 +965,9 @@ fun TrackingScreen(
                                     projectsById = historyProjectsById,
                                     tasksById = historyTasksById,
                                     syncStatusByEntryId = syncStatusByEntryId,
-                                    onEdit = { showEditDialog = it },
-                                    onDelete = { deletedEntry = it; onDeleteEntry(it.id) },
-                                    onDateClick = { calendarInitialDate = it }
+                                    onEdit = onHistoryEdit,
+                                    onDelete = onHistoryDelete,
+                                    onDateClick = onHistoryDateClick
                                 )
                                 item { Spacer(Modifier.height(16.dp)) }
                             }
@@ -989,9 +994,9 @@ fun TrackingScreen(
                                 projectsById = historyProjectsById,
                                 tasksById = historyTasksById,
                                 syncStatusByEntryId = syncStatusByEntryId,
-                                onEdit = { showEditDialog = it },
-                                onDelete = { deletedEntry = it; onDeleteEntry(it.id) },
-                                onDateClick = { calendarInitialDate = it }
+                                onEdit = onHistoryEdit,
+                                onDelete = onHistoryDelete,
+                                onDateClick = onHistoryDateClick
                             )
                             item { Spacer(Modifier.height(16.dp)) }
                         }
@@ -2211,22 +2216,19 @@ private fun DateHeader(
     val context = LocalContext.current
     val headerStats = remember(entries, projectsById) {
         val projectIds = entries.mapNotNull { it.projectId }.toSet()
-        Triple(
-            projectIds,
-            projectIds.mapNotNull { projectsById[it]?.clientId }.toSet().size,
-            entries.sumOf { it.duration ?: 0 },
-        )
+        val customerCount = projectIds.mapNotNull { projectsById[it]?.clientId }.toSet().size
+        val totalDuration = entries.sumOf { it.duration ?: 0 }
+        val summary = buildList {
+            add(formatCompactDuration(totalDuration))
+            if (customerCount > 0) {
+                add(context.resources.getQuantityString(R.plurals.customer_count, customerCount, customerCount))
+            }
+            if (projectIds.isNotEmpty()) {
+                add(context.resources.getQuantityString(R.plurals.project_count, projectIds.size, projectIds.size))
+            }
+        }.joinToString(" · ")
+        summary
     }
-    val (projectIds, customerCount, totalDuration) = headerStats
-    val summary = buildList {
-        add(formatCompactDuration(totalDuration))
-        if (customerCount > 0) {
-            add(context.resources.getQuantityString(R.plurals.customer_count, customerCount, customerCount))
-        }
-        if (projectIds.isNotEmpty()) {
-            add(context.resources.getQuantityString(R.plurals.project_count, projectIds.size, projectIds.size))
-        }
-    }.joinToString(" · ")
 
     Row(
         modifier = Modifier
@@ -2245,7 +2247,7 @@ private fun DateHeader(
             maxLines = 1
         )
         Text(
-            text = summary,
+            text = headerStats,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
             fontSize = 11.sp,
