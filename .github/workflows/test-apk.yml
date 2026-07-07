@@ -38,7 +38,7 @@ jobs:
       - name: Upload test APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: solidverdant-test-apk-${{ github.ref_name }}
+          name: solidverdant-test-apk
           path: app/build/outputs/apk/qa/*.apk
           if-no-files-found: error
           retention-days: 14
