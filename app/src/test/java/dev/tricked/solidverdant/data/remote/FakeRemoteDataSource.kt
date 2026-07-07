@@ -17,7 +17,9 @@ class FakeRemoteDataSource(
     var active: TimeEntry? = null,
     var memberships: List<Membership> = emptyList(),
     var failNextWrite: Boolean = false,
-    var startResult: (TimeEntry) -> TimeEntry = { it }
+    var startResult: (TimeEntry) -> TimeEntry = { it },
+    var stopResult: (TimeEntry) -> TimeEntry = { it },
+    var updateResult: (TimeEntry) -> TimeEntry = { it },
 ) : RemoteDataSource {
     val started = mutableListOf<Triple<String, String?, String?>>()
     val deleted = mutableListOf<String>()
@@ -40,11 +42,13 @@ class FakeRemoteDataSource(
             taskId = taskId, organizationId = organizationId
         )))
     }
+    override suspend fun createTimeEntry(organizationId: String, memberId: String, userId: String, entry: TimeEntry, tags: List<String>) =
+        if (failNextWrite) Result.failure(java.io.IOException("offline")) else Result.success(startResult(entry))
     override suspend fun stopTimeEntry(organizationId: String, timeEntryId: String, userId: String, startTime: String) =
         if (failNextWrite) Result.failure(java.io.IOException("offline"))
-        else Result.success(TimeEntry(id = timeEntryId, userId = userId, start = startTime, end = "2026-01-01T10:00:00Z", organizationId = organizationId))
+        else Result.success(stopResult(TimeEntry(id = timeEntryId, userId = userId, start = startTime, end = "2026-01-01T10:00:00Z", organizationId = organizationId)))
     override suspend fun updateTimeEntry(organizationId: String, timeEntry: TimeEntry, tags: List<String>) =
-        if (failNextWrite) Result.failure(java.io.IOException("offline")) else Result.success(timeEntry)
+        if (failNextWrite) Result.failure(java.io.IOException("offline")) else Result.success(updateResult(timeEntry))
     override suspend fun deleteTimeEntry(organizationId: String, timeEntryId: String): Result<Unit> {
         if (failNextWrite) return Result.failure(java.io.IOException("offline"))
         deleted += timeEntryId

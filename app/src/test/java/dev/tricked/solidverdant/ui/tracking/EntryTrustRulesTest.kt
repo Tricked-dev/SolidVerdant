@@ -1,6 +1,9 @@
 package dev.tricked.solidverdant.ui.tracking
 
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.Project
+import dev.tricked.solidverdant.data.model.Client
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -49,5 +52,24 @@ class EntryTrustRulesTest {
         assertFalse(EntryTrustRules.isLongRunning(
             entry("b", "2026-07-06T09:00:01Z", null), Duration.ofHours(3), now,
         ))
+    }
+
+    @Test fun `history filter matches client and non billable entries`() {
+        val billable = entry("a", "2026-07-06T08:00:00Z", "2026-07-06T09:00:00Z")
+            .copy(projectId = "p1", billable = true)
+        val nonBillable = entry("b", "2026-07-06T09:00:00Z", "2026-07-06T10:00:00Z")
+            .copy(projectId = "p2", billable = false)
+        val projects = listOf(
+            Project("p1", "One", "#000000", clientId = "c1"),
+            Project("p2", "Two", "#000000", clientId = "c2"),
+        )
+        val filtered = EntryTrustRules.filter(
+            listOf(billable, nonBillable),
+            HistoryFilter(clientId = "c2", billable = false),
+            projects = projects,
+            tasks = emptyList(),
+            clients = listOf(Client("c1", "First"), Client("c2", "Second")),
+        )
+        assertEquals(listOf("b"), filtered.map { it.id })
     }
 }

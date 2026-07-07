@@ -19,6 +19,7 @@ import dev.tricked.solidverdant.data.remote.RemoteDataSource
 import dev.tricked.solidverdant.sync.StartPayload
 import dev.tricked.solidverdant.sync.StopPayload
 import dev.tricked.solidverdant.sync.UpdatePayload
+import dev.tricked.solidverdant.sync.CreatePayload
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -239,8 +240,26 @@ class TimeEntryRepository @Inject constructor(
         )
     }
 
-    suspend fun undoDelete(entry: TimeEntry): Boolean {
-        if (outboxDao.cancelLatestDelete(entry.id) == 0) return false
+    suspend fun undoDelete(entry: TimeEntry, memberId: String?): Boolean {
+        if (outboxDao.cancelLatestDelete(entry.id) == 0) {
+            val end = entry.end ?: return false
+            val membership = memberId ?: return false
+            val now = clock.nowMs()
+            val restored = entry.copy(id = "local-restore-${java.util.UUID.randomUUID()}")
+            timeEntryDao.upsert(restored.toEntity(updatedAt = now, syncState = SyncState.PENDING))
+            timeEntryDao.replaceTagRefs(restored.id, entry.tags.map { it.id })
+            outboxDao.insert(OutboxEntity(
+                opType = OutboxOpType.CREATE,
+                organizationId = entry.organizationId,
+                timeEntryId = restored.id,
+                createdAtMs = now,
+                payloadJson = json.encodeToString(CreatePayload(
+                    membership, entry.userId, entry.start, end, entry.description.orEmpty(),
+                    entry.projectId, entry.taskId, entry.billable, entry.tags.map { it.id },
+                )),
+            ))
+            return true
+        }
         val existing = timeEntryDao.getById(entry.id)
         if (existing == null) {
             val state = if (entry.id.startsWith("local-")) SyncState.PENDING else SyncState.SYNCED
@@ -251,6 +270,8 @@ class TimeEntryRepository @Inject constructor(
         }
         return true
     }
+
+    suspend fun prepareRetry(entryId: String): Boolean = outboxDao.resetForRetry(entryId) > 0
 
     private fun nowIso(): String = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC)
         .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'"))

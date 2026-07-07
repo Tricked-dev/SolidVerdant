@@ -56,6 +56,7 @@ open class MainActivity : ComponentActivity() {
     private val trackingViewModel: TrackingViewModel by viewModels()
     private var stoppedAtElapsedRealtime: Long? = null
     private var handoffOrganizationId by mutableStateOf<String?>(null)
+    private var editActiveEntryRequested by mutableStateOf(false)
     private val startupTheme = MutableStateFlow(AppThemeMode.SYSTEM)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -87,7 +88,9 @@ open class MainActivity : ComponentActivity() {
                                 authViewModel = authViewModel,
                                 trackingViewModel = trackingViewModel,
                                 handoffOrganizationId = handoffOrganizationId,
-                                onHandoffConsumed = { handoffOrganizationId = null }
+                                onHandoffConsumed = { handoffOrganizationId = null },
+                                editActiveEntryRequested = editActiveEntryRequested,
+                                onEditActiveEntryConsumed = { editActiveEntryRequested = false },
                             )
                         }
                     }
@@ -131,6 +134,10 @@ open class MainActivity : ComponentActivity() {
      */
     private fun handleIntent(intent: Intent?) {
         handoffOrganizationId = intent?.getStringExtra(EXTRA_HANDOFF_ORGANIZATION_ID)
+        if (intent?.getBooleanExtra(EXTRA_EDIT_ACTIVE_ENTRY, false) == true) {
+            editActiveEntryRequested = true
+            intent.removeExtra(EXTRA_EDIT_ACTIVE_ENTRY)
+        }
         intent?.data?.let { uri ->
             handleDeepLink(uri)
         }
@@ -155,6 +162,7 @@ open class MainActivity : ComponentActivity() {
     companion object {
         const val RESUME_REFRESH_THRESHOLD_MS = 30_000L
         const val EXTRA_HANDOFF_ORGANIZATION_ID = "handoff_organization_id"
+        const val EXTRA_EDIT_ACTIVE_ENTRY = "edit_active_entry"
     }
 }
 
@@ -166,7 +174,9 @@ fun SolidVerdantApp(
     authViewModel: AuthViewModel,
     trackingViewModel: TrackingViewModel,
     handoffOrganizationId: String? = null,
-    onHandoffConsumed: () -> Unit = {}
+    onHandoffConsumed: () -> Unit = {},
+    editActiveEntryRequested: Boolean = false,
+    onEditActiveEntryConsumed: () -> Unit = {},
 ) {
     val authUiState by authViewModel.uiState.collectAsState()
     val configState by authViewModel.configState.collectAsState()
@@ -234,6 +244,8 @@ fun SolidVerdantApp(
                 appTheme = appTheme,
                 optimisticRefresh = optimisticRefresh,
                 longTimerHours = longTimerHours,
+                editActiveEntryRequested = editActiveEntryRequested,
+                onEditActiveEntryConsumed = onEditActiveEntryConsumed,
                 onAlwaysShowNotificationsChange = { enabled ->
                     trackingViewModel.setAlwaysShowNotifications(enabled)
                 },
@@ -361,6 +373,7 @@ fun SolidVerdantApp(
                 },
                 onUndoDelete = trackingViewModel::undoDelete,
                 onRetrySync = trackingViewModel::retrySync,
+                onRetrySyncEntry = trackingViewModel::retrySync,
                 onLoadMoreEntries = trackingViewModel::loadMoreTimeEntries,
                 onLoadNewerEntries = trackingViewModel::loadNewerTimeEntries,
                 onJumpToDate = trackingViewModel::jumpToHistoryDate,

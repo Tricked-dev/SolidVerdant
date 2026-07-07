@@ -113,6 +113,14 @@ class TimeTrackingNotificationService : Service() {
                 scheduleLongTimerWarning(snoozeSeconds = 3600)
             }
 
+            ACTION_REFRESH_LONG_TIMER -> {
+                if (isTracking) {
+                    longTimerWarningVisible = false
+                    publishNotification()
+                    scheduleLongTimerWarning()
+                }
+            }
+
             ACTION_QUICK_START -> handleQuickStart(intent)
         }
 
@@ -479,9 +487,17 @@ class TimeTrackingNotificationService : Service() {
                 Intent(this, TimeTrackingNotificationService::class.java).apply { action = ACTION_KEEP_RUNNING },
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
+            val adjustPendingIntent = PendingIntent.getActivity(
+                this, 6,
+                Intent(this, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    putExtra(MainActivity.EXTRA_EDIT_ACTIVE_ENTRY, true)
+                },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
             builder.addAction(R.drawable.ic_stop, getString(R.string.stop_now), stopPendingIntent)
                 .addAction(R.drawable.ic_timer, getString(R.string.keep_running), keepPendingIntent)
-                .addAction(R.drawable.ic_edit, getString(R.string.adjust_end_time), openAppPendingIntent)
+                .addAction(R.drawable.ic_edit, getString(R.string.adjust_end_time), adjustPendingIntent)
         } else {
             builder.addAction(R.drawable.ic_timer, getString(R.string.pause), pausePendingIntent)
                 .addAction(R.drawable.ic_timer, getString(R.string.stop_tracking), stopPendingIntent)
@@ -643,6 +659,7 @@ class TimeTrackingNotificationService : Service() {
             "dev.tricked.solidverdant.ACTION_RESUME_TRACKING_NOTIFICATION"
         const val ACTION_QUICK_START = "dev.tricked.solidverdant.ACTION_QUICK_START"
         const val ACTION_KEEP_RUNNING = "dev.tricked.solidverdant.ACTION_KEEP_RUNNING"
+        const val ACTION_REFRESH_LONG_TIMER = "dev.tricked.solidverdant.ACTION_REFRESH_LONG_TIMER"
 
         const val EXTRA_START_TIME = "start_time"
         const val EXTRA_PROJECT_NAME = "project_name"
@@ -715,6 +732,18 @@ class TimeTrackingNotificationService : Service() {
          */
         fun hide(context: Context) {
             context.stopService(Intent(context, TimeTrackingNotificationService::class.java))
+        }
+
+        fun refreshLongTimerWarning(context: Context) {
+            context.startService(Intent(context, TimeTrackingNotificationService::class.java).apply {
+                action = ACTION_REFRESH_LONG_TIMER
+            })
+        }
+
+        fun snoozeLongTimerWarning(context: Context) {
+            context.startService(Intent(context, TimeTrackingNotificationService::class.java).apply {
+                action = ACTION_KEEP_RUNNING
+            })
         }
 
     }

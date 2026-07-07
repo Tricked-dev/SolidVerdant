@@ -4,6 +4,9 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import dev.tricked.solidverdant.data.local.db.AppDatabase
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
+import dev.tricked.solidverdant.data.local.db.SyncState
+import dev.tricked.solidverdant.data.local.db.toEntity
+import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.FakeRemoteDataSource
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.flow.first
@@ -54,8 +57,25 @@ class TimeEntryRepositoryWriteTest {
         val entry = repo.startEntry("org1", "m", "u", null, null, "x", emptyList())
         repo.deleteEntry(entry)
 
-        assertTrue(repo.undoDelete(entry))
+        assertTrue(repo.undoDelete(entry, "m"))
         assertEquals(entry.id, repo.observeActiveEntry("org1").first()?.id)
         assertTrue(db.outboxDao().peekAll().none { it.opType == OutboxOpType.DELETE })
+    }
+
+    @Test fun undo_after_server_delete_enqueues_offline_recreation() = runTest {
+        val entry = TimeEntry(
+            id = "server-1", userId = "u", organizationId = "org1",
+            start = "2026-07-07T08:00:00Z", end = "2026-07-07T09:00:00Z",
+            description = "work",
+        )
+        db.timeEntryDao().upsert(entry.toEntity(1L, SyncState.SYNCED))
+        repo.deleteEntry(entry)
+        db.outboxDao().peekAll().forEach { db.outboxDao().delete(it) }
+        db.timeEntryDao().deleteById(entry.id)
+
+        assertTrue(repo.undoDelete(entry, "member"))
+        val recreated = repo.observeTimeEntries("org1").first().single()
+        assertTrue(recreated.id.startsWith("local-restore-"))
+        assertEquals(OutboxOpType.CREATE, db.outboxDao().peekAll().single().opType)
     }
 }

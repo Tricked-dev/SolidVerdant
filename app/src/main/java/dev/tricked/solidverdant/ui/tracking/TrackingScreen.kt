@@ -52,6 +52,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Delete
@@ -79,6 +81,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenuItem
@@ -113,6 +116,7 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
@@ -160,15 +164,19 @@ import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.local.AppThemeMode
 import dev.tricked.solidverdant.ui.components.ProjectTaskDropdown as SharedProjectTaskDropdown
 import dev.tricked.solidverdant.util.NotificationPermissionHelper
+import dev.tricked.solidverdant.service.TimeTrackingNotificationService
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZonedDateTime
 import java.time.ZoneId
 import java.time.Instant
 import java.time.ZoneOffset
+import java.time.DayOfWeek
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.flow.filter
 import java.time.format.FormatStyle
+import java.time.format.TextStyle
+import java.util.Locale
 
 /**
  * Represents a selection of project and/or task
@@ -195,6 +203,8 @@ fun TrackingScreen(
     appTheme: AppThemeMode,
     optimisticRefresh: Boolean,
     longTimerHours: Int,
+    editActiveEntryRequested: Boolean,
+    onEditActiveEntryConsumed: () -> Unit,
     onAlwaysShowNotificationsChange: (Boolean) -> Unit,
     onAppThemeChange: (AppThemeMode) -> Unit,
     onOptimisticRefreshChange: (Boolean) -> Unit,
@@ -217,6 +227,7 @@ fun TrackingScreen(
     onDeleteEntry: (String) -> Unit,
     onUndoDelete: (TimeEntry) -> Unit,
     onRetrySync: () -> Unit,
+    onRetrySyncEntry: (String) -> Unit,
     onLoadMoreEntries: () -> Unit,
     onLoadNewerEntries: () -> Unit,
     onJumpToDate: (LocalDate) -> Unit,
@@ -237,6 +248,17 @@ fun TrackingScreen(
     val scope = rememberCoroutineScope()
     val wideHistoryListState = rememberLazyListState()
     val compactListState = rememberLazyListState()
+
+    LaunchedEffect(editActiveEntryRequested, uiState.currentTimeEntry) {
+        if (editActiveEntryRequested) {
+            uiState.currentTimeEntry?.let { showEditDialog = it }
+            if (uiState.currentTimeEntry != null) onEditActiveEntryConsumed()
+        }
+    }
+
+    LaunchedEffect(historyFilter.startDate) {
+        historyFilter.startDate?.let(onJumpToDate)
+    }
 
     LaunchedEffect(deletedEntry) {
         val entry = deletedEntry ?: return@LaunchedEffect
@@ -331,19 +353,22 @@ fun TrackingScreen(
                             .verticalScroll(rememberScrollState())
                     ) {
                         user?.let { account ->
+                            var profileImageFailed by remember(account.profilePhotoUrl) { mutableStateOf(false) }
+                            val profileDescription = stringResource(R.string.profile_picture)
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                if (account.profilePhotoUrl.isNotBlank()) {
+                                if (account.profilePhotoUrl.isNotBlank() && !profileImageFailed) {
                                     AsyncImage(
                                         model = account.profilePhotoUrl,
-                                        contentDescription = stringResource(R.string.profile_picture),
+                                        contentDescription = profileDescription,
+                                        onError = { profileImageFailed = true },
                                         modifier = Modifier.size(48.dp).clip(CircleShape)
                                     )
                                 } else {
                                     Surface(
-                                        modifier = Modifier.size(48.dp),
+                                        modifier = Modifier.size(48.dp).semantics { contentDescription = profileDescription },
                                         shape = CircleShape,
                                         color = MaterialTheme.colorScheme.primaryContainer
                                     ) {
@@ -359,11 +384,20 @@ fun TrackingScreen(
                                 Column(Modifier.padding(start = 12.dp)) {
                                     Text(account.name, style = MaterialTheme.typography.titleMedium)
                                     Text(account.email, style = MaterialTheme.typography.bodySmall)
-                                    Text(
-                                        "${account.timezone} · ${account.weekStart.replaceFirstChar { it.uppercase() }}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                    val weekStart = remember(account.weekStart) {
+                                        runCatching { DayOfWeek.valueOf(account.weekStart.uppercase()) }
+                                            .getOrNull()?.getDisplayName(TextStyle.FULL, Locale.getDefault())
+                                    }
+                                    val profileDetails = listOfNotNull(
+                                        account.timezone.takeIf { it.isNotBlank() }, weekStart,
+                                    ).joinToString(" · ")
+                                    if (profileDetails.isNotBlank()) {
+                                        Text(
+                                            profileDetails,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -755,7 +789,10 @@ fun TrackingScreen(
                                 LongTimerWarning(
                                     hours = longTimerHours,
                                     onStop = onStopTracking,
-                                    onKeepRunning = { longTimerSnoozedUntil = uiState.elapsedSeconds + 3600L },
+                                    onKeepRunning = {
+                                        longTimerSnoozedUntil = uiState.elapsedSeconds + 3600L
+                                        TimeTrackingNotificationService.snoozeLongTimerWarning(context)
+                                    },
                                     onAdjust = { uiState.currentTimeEntry?.let { showEditDialog = it } },
                                 )
                             }
@@ -808,7 +845,7 @@ fun TrackingScreen(
                                 item { Spacer(Modifier.height(8.dp)) }
                                 item { HistoryFilters(historyFilter, uiState) { historyFilter = it } }
                                 if (uiState.syncOperations.isNotEmpty()) {
-                                    item { SyncCenter(uiState.syncOperations, onRetrySync) }
+                                    item { SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry) }
                                 }
                                 trackingHistoryItems(
                                     uiState = uiState,
@@ -833,7 +870,7 @@ fun TrackingScreen(
                             primaryContent()
                             item { HistoryFilters(historyFilter, uiState) { historyFilter = it } }
                             if (uiState.syncOperations.isNotEmpty()) {
-                                item { SyncCenter(uiState.syncOperations, onRetrySync) }
+                                item { SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry) }
                             }
                             trackingHistoryItems(
                                 uiState = uiState,
@@ -947,13 +984,15 @@ fun TrackingScreen(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun HistoryFilters(filter: HistoryFilter, uiState: TrackingUiState, onChange: (HistoryFilter) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
+    var showDateRangePicker by remember { mutableStateOf(false) }
     val activeCount = listOfNotNull(
         filter.query.takeIf { it.isNotBlank() }, filter.billable, filter.runningOnly.takeIf { it },
-        filter.syncStatus, filter.startDate, filter.projectId, filter.taskId, filter.tagId,
+        filter.syncStatus, filter.startDate, filter.endDate, filter.clientId, filter.projectId, filter.taskId, filter.tagId,
+        filter.missingProjectOnly.takeIf { it }, filter.missingDescriptionOnly.takeIf { it },
         filter.needsCategorization.takeIf { it },
     ).size
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -995,6 +1034,11 @@ private fun HistoryFilters(filter: HistoryFilter, uiState: TrackingUiState, onCh
                 label = { Text(stringResource(R.string.billable)) },
             )
             FilterChip(
+                selected = filter.billable == false,
+                onClick = { onChange(filter.copy(billable = if (filter.billable == false) null else false)) },
+                label = { Text(stringResource(R.string.non_billable)) },
+            )
+            FilterChip(
                 selected = filter.runningOnly,
                 onClick = { onChange(filter.copy(runningOnly = !filter.runningOnly)) },
                 label = { Text(stringResource(R.string.running_entries)) },
@@ -1016,18 +1060,41 @@ private fun HistoryFilters(filter: HistoryFilter, uiState: TrackingUiState, onCh
                 label = { Text(stringResource(R.string.stats_last_7_days)) },
             )
             FilterChip(
+                selected = filter.startDate != null && filter.endDate != null &&
+                    !(filter.startDate == today && filter.endDate == today) &&
+                    !(filter.startDate == today.minusDays(6) && filter.endDate == today),
+                onClick = { showDateRangePicker = true },
+                label = { Text(stringResource(R.string.stats_custom)) },
+            )
+            FilterChip(
                 selected = filter.needsCategorization,
                 onClick = { onChange(filter.copy(needsCategorization = !filter.needsCategorization)) },
                 label = { Text(stringResource(R.string.needs_categorization)) },
+            )
+            FilterChip(
+                selected = filter.missingProjectOnly,
+                onClick = { onChange(filter.copy(missingProjectOnly = !filter.missingProjectOnly)) },
+                label = { Text(stringResource(R.string.without_project)) },
+            )
+            FilterChip(
+                selected = filter.missingDescriptionOnly,
+                onClick = { onChange(filter.copy(missingDescriptionOnly = !filter.missingDescriptionOnly)) },
+                label = { Text(stringResource(R.string.without_description)) },
             )
             if (filter != HistoryFilter()) {
                 TextButton(onClick = { onChange(HistoryFilter()) }) { Text(stringResource(R.string.clear_filters)) }
             }
                 }
                 FilterDropdown(
+            label = stringResource(R.string.client),
+            selectedId = filter.clientId,
+            options = uiState.clients.map { it.id to it.name },
+            onSelect = { onChange(filter.copy(clientId = it, projectId = null, taskId = null)) },
+        )
+                FilterDropdown(
             label = stringResource(R.string.project),
             selectedId = filter.projectId,
-            options = uiState.projects.map { it.id to it.name },
+            options = uiState.projects.filter { filter.clientId == null || it.clientId == filter.clientId }.map { it.id to it.name },
             onSelect = { onChange(filter.copy(projectId = it, taskId = null)) },
         )
                 if (filter.projectId != null) {
@@ -1046,6 +1113,29 @@ private fun HistoryFilters(filter: HistoryFilter, uiState: TrackingUiState, onCh
                 )
             }
         }
+    }
+    if (showDateRangePicker) {
+        val pickerState = rememberDateRangePickerState(
+            initialSelectedStartDateMillis = filter.startDate?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(),
+            initialSelectedEndDateMillis = filter.endDate?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(),
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDateRangePicker = false },
+            confirmButton = {
+                TextButton(
+                    enabled = pickerState.selectedStartDateMillis != null && pickerState.selectedEndDateMillis != null,
+                    onClick = {
+                        val start = pickerState.selectedStartDateMillis?.let { Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }
+                        val end = pickerState.selectedEndDateMillis?.let { Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }
+                        if (start != null && end != null) onChange(filter.copy(startDate = start, endDate = end))
+                        showDateRangePicker = false
+                    },
+                ) { Text(stringResource(R.string.apply)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDateRangePicker = false }) { Text(stringResource(R.string.cancel)) }
+            },
+        ) { DateRangePicker(state = pickerState) }
     }
 }
 
@@ -1077,7 +1167,11 @@ private fun FilterDropdown(
 }
 
 @Composable
-private fun SyncCenter(operations: List<TimeEntryRepository.SyncOperation>, onRetry: () -> Unit) {
+private fun SyncCenter(
+    operations: List<TimeEntryRepository.SyncOperation>,
+    onRetry: () -> Unit,
+    onRetryEntry: (String) -> Unit,
+) {
     val failed = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.FAILED }
     val retrying = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.RETRYING }
     Card(Modifier.fillMaxWidth()) {
@@ -1097,11 +1191,24 @@ private fun SyncCenter(operations: List<TimeEntryRepository.SyncOperation>, onRe
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                operations.firstOrNull { it.error != null }?.error?.let {
-                    Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
-                }
             }
             if (failed > 0 || retrying > 0) TextButton(onClick = onRetry) { Text(stringResource(R.string.retry)) }
+        }
+        operations.filter { it.status == TimeEntryRepository.EntrySyncStatus.FAILED }.forEach { operation ->
+            HorizontalDivider()
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.sync_entry_failed),
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                TextButton(onClick = { onRetryEntry(operation.entryId) }) {
+                    Text(stringResource(R.string.retry))
+                }
+            }
         }
     }
 }

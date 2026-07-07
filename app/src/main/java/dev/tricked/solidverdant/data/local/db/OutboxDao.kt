@@ -32,4 +32,7 @@ interface OutboxDao {
 
     @Query("DELETE FROM outbox WHERE id = (SELECT MAX(id) FROM outbox WHERE timeEntryId = :entryId AND opType = 'DELETE')")
     suspend fun cancelLatestDelete(entryId: String): Int
+
+    @Query("UPDATE outbox SET attemptCount = 0, lastError = NULL WHERE timeEntryId = :entryId")
+    suspend fun resetForRetry(entryId: String): Int
 }

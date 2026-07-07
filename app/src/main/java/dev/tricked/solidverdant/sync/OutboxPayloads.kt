@@ -13,6 +13,19 @@ data class StartPayload(
 )
 
 @Serializable
+data class CreatePayload(
+    val memberId: String,
+    val userId: String,
+    val start: String,
+    val end: String,
+    val description: String,
+    val projectId: String?,
+    val taskId: String?,
+    val billable: Boolean,
+    val tagIds: List<String>,
+)
+
+@Serializable
 data class StopPayload(val userId: String, val start: String)
 
 @Serializable

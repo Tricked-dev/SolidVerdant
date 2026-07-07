@@ -7,6 +7,9 @@ import androidx.work.testing.TestListenableWorkerBuilder
 import dev.tricked.solidverdant.data.local.db.AppDatabase
 import dev.tricked.solidverdant.data.local.db.OutboxEntity
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
+import dev.tricked.solidverdant.data.local.db.SyncState
+import dev.tricked.solidverdant.data.local.db.toEntity
+import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.FakeRemoteDataSource
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.test.runTest
@@ -64,5 +67,22 @@ class SyncWorkerTest {
         val result = buildWorker().doWork()
         assertEquals(ListenableWorker.Result.retry(), result)
         assertEquals(1, db.outboxDao().peekAll().size)
+    }
+
+    @Test fun stop_success_persists_authoritative_server_entry_as_synced() = runTest {
+        val local = TimeEntry(
+            id = "server-1", userId = "u1", organizationId = "org1",
+            start = "2026-07-07T08:00:00Z", end = "2026-07-07T09:00:00Z",
+        )
+        db.timeEntryDao().upsert(local.toEntity(updatedAt = 1L, syncState = SyncState.PENDING))
+        db.outboxDao().insert(OutboxEntity(
+            opType = OutboxOpType.STOP, organizationId = "org1", timeEntryId = local.id,
+            createdAtMs = 1L, payloadJson = json.encodeToString(StopPayload("u1", local.start))))
+        remote.stopResult = { local.copy(duration = 3600) }
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+        val stored = db.timeEntryDao().getById(local.id)
+        assertEquals(SyncState.SYNCED, stored?.syncState)
+        assertEquals(3600, stored?.duration)
     }
 }

@@ -4,6 +4,24 @@
      file, You can obtain one at https://mozilla.org/MPL/2.0/.
 -->
 <resources>
+    <string name="non_billable">Non-billable</string>
+    <string name="client">Client</string>
+    <string name="without_project">Without project</string>
+    <string name="without_description">Without description</string>
+    <string name="stats_cached_refresh_failed">Couldn’t refresh this range. Showing available offline data.</string>
+    <string name="connection_ready">Solidtime API reached; OAuth configuration is ready.</string>
+    <string name="connection_missing_client_id">OAuth client ID is missing.</string>
+    <string name="connection_invalid_url">The server URL is invalid.</string>
+    <string name="connection_complete_url_required">Use a complete server URL without credentials, query parameters, or fragments.</string>
+    <string name="connection_https_required">HTTPS is required for non-local servers.</string>
+    <string name="connection_api_not_found">Server reached, but the Solidtime API was not found.</string>
+    <string name="connection_server_error">Server reached, but returned an internal error (%1$d).</string>
+    <string name="connection_unexpected_response">Server returned an unexpected response (%1$d).</string>
+    <string name="connection_tls_failed">TLS certificate validation failed.</string>
+    <string name="connection_dns_failed">The server name could not be resolved.</string>
+    <string name="connection_failed">Could not connect to the server.</string>
+    <string name="connection_test_failed">The connection test failed.</string>
+    <string name="sync_entry_failed">This change has not reached the server.</string>
     <string name="search_and_filter">Search &amp; filter</string><string name="active_filters_count">%1$d active filters</string>
     <string name="long_timer_notification_title">Long timer check</string><string name="long_timer_notification_text">This timer reached your configured duration limit.</string>
     <string name="all_items">All %1$s</string>

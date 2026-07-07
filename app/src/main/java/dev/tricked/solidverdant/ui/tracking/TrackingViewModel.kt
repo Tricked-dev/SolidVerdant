@@ -171,7 +171,12 @@ class TrackingViewModel @Inject constructor(
     }
 
     fun setLongTimerHours(hours: Int) {
-        viewModelScope.launch { settingsDataStore.setLongTimerHours(hours) }
+        viewModelScope.launch {
+            settingsDataStore.setLongTimerHours(hours)
+            if (_uiState.value.isTracking) {
+                TimeTrackingNotificationService.refreshLongTimerWarning(context)
+            }
+        }
     }
 
     /**
@@ -1195,13 +1200,21 @@ class TrackingViewModel @Inject constructor(
 
     fun undoDelete(entry: TimeEntry) {
         viewModelScope.launch {
-            if (!timeEntryRepository.undoDelete(entry)) {
+            if (!timeEntryRepository.undoDelete(entry, historyMemberId)) {
                 _uiState.value = _uiState.value.copy(error = context.getString(R.string.undo_delete_too_late))
+            } else {
+                syncTrigger.requestSync()
             }
         }
     }
 
     fun retrySync() = syncTrigger.requestSync()
+
+    fun retrySync(entryId: String) {
+        viewModelScope.launch {
+            if (timeEntryRepository.prepareRetry(entryId)) syncTrigger.requestSync()
+        }
+    }
 
     /**
      * Clear error message

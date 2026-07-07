@@ -4,6 +4,24 @@
      file, You can obtain one at https://mozilla.org/MPL/2.0/.
 -->
 <resources>
+    <string name="non_billable">Niet-declarabel</string>
+    <string name="client">Klant</string>
+    <string name="without_project">Zonder project</string>
+    <string name="without_description">Zonder beschrijving</string>
+    <string name="stats_cached_refresh_failed">Dit bereik kon niet worden vernieuwd. Beschikbare offlinegegevens worden getoond.</string>
+    <string name="connection_ready">De Solidtime-API is bereikbaar; de OAuth-configuratie is gereed.</string>
+    <string name="connection_missing_client_id">De OAuth-client-ID ontbreekt.</string>
+    <string name="connection_invalid_url">De server-URL is ongeldig.</string>
+    <string name="connection_complete_url_required">Gebruik een volledige server-URL zonder inloggegevens, queryparameters of fragmenten.</string>
+    <string name="connection_https_required">HTTPS is vereist voor niet-lokale servers.</string>
+    <string name="connection_api_not_found">De server is bereikbaar, maar de Solidtime-API is niet gevonden.</string>
+    <string name="connection_server_error">De server is bereikbaar, maar gaf een interne fout (%1$d).</string>
+    <string name="connection_unexpected_response">De server gaf een onverwacht antwoord (%1$d).</string>
+    <string name="connection_tls_failed">De validatie van het TLS-certificaat is mislukt.</string>
+    <string name="connection_dns_failed">De servernaam kon niet worden gevonden.</string>
+    <string name="connection_failed">Er kon geen verbinding met de server worden gemaakt.</string>
+    <string name="connection_test_failed">De verbindingstest is mislukt.</string>
+    <string name="sync_entry_failed">Deze wijziging heeft de server niet bereikt.</string>
     <string name="search_and_filter">Zoeken en filteren</string><string name="active_filters_count">%1$d actieve filters</string>
     <string name="long_timer_notification_title">Controle lange timer</string><string name="long_timer_notification_text">Deze timer heeft de ingestelde duur bereikt.</string>
     <string name="all_items">Alle %1$s</string>

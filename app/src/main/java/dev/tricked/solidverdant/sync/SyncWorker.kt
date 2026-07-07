@@ -69,9 +69,24 @@ class SyncWorker @AssistedInject constructor(
                 reconcile(op.timeEntryId, server)
                 Outcome.SUCCESS
             }
+            OutboxOpType.CREATE -> {
+                val p = json.decodeFromString<CreatePayload>(op.payloadJson)
+                val local = TimeEntry(
+                    id = op.timeEntryId, userId = p.userId, organizationId = op.organizationId,
+                    start = p.start, end = p.end, description = p.description,
+                    projectId = p.projectId, taskId = p.taskId, billable = p.billable,
+                )
+                val server = remote.createTimeEntry(
+                    op.organizationId, p.memberId, p.userId, local, p.tagIds,
+                ).getOrThrow()
+                reconcile(op.timeEntryId, server)
+                timeEntryDao.replaceTagRefs(server.id, p.tagIds)
+                Outcome.SUCCESS
+            }
             OutboxOpType.STOP -> {
                 val p = json.decodeFromString<StopPayload>(op.payloadJson)
-                remote.stopTimeEntry(op.organizationId, op.timeEntryId, p.userId, p.start).getOrThrow()
+                val server = remote.stopTimeEntry(op.organizationId, op.timeEntryId, p.userId, p.start).getOrThrow()
+                persistSynced(server)
                 Outcome.SUCCESS
             }
             OutboxOpType.UPDATE -> {
@@ -81,7 +96,8 @@ class SyncWorker @AssistedInject constructor(
                     start = p.start, end = p.end, projectId = p.projectId, taskId = p.taskId,
                     billable = p.billable, organizationId = op.organizationId
                 )
-                remote.updateTimeEntry(op.organizationId, entry, p.tagIds).getOrThrow()
+                val server = remote.updateTimeEntry(op.organizationId, entry, p.tagIds).getOrThrow()
+                persistSynced(server, p.tagIds)
                 Outcome.SUCCESS
             }
             OutboxOpType.DELETE -> {
@@ -106,6 +122,13 @@ class SyncWorker @AssistedInject constructor(
             outboxDao.rekeyReferences(localId, server.id)
         }
         timeEntryDao.upsert(server.toEntity(updatedAt = clock.nowMs(), syncState = SyncState.SYNCED))
+        timeEntryDao.replaceTagRefs(server.id, server.tags.map { it.id })
+    }
+
+    private suspend fun persistSynced(server: TimeEntry, fallbackTagIds: List<String>? = null) {
+        timeEntryDao.upsert(server.toEntity(updatedAt = clock.nowMs(), syncState = SyncState.SYNCED))
+        val tagIds = server.tags.map { it.id }.ifEmpty { fallbackTagIds.orEmpty() }
+        timeEntryDao.replaceTagRefs(server.id, tagIds)
     }
 
     private fun classify(e: Exception): Outcome = when {

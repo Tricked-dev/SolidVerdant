@@ -4,6 +4,24 @@
      file, You can obtain one at https://mozilla.org/MPL/2.0/.
 -->
 <resources>
+    <string name="non_billable">請求対象外</string>
+    <string name="client">クライアント</string>
+    <string name="without_project">プロジェクトなし</string>
+    <string name="without_description">説明なし</string>
+    <string name="stats_cached_refresh_failed">この期間を更新できませんでした。利用可能なオフラインデータを表示しています。</string>
+    <string name="connection_ready">Solidtime APIに接続しました。OAuth設定を使用できます。</string>
+    <string name="connection_missing_client_id">OAuthクライアントIDがありません。</string>
+    <string name="connection_invalid_url">サーバーURLが無効です。</string>
+    <string name="connection_complete_url_required">認証情報、クエリ、フラグメントを含まない完全なサーバーURLを使用してください。</string>
+    <string name="connection_https_required">ローカル以外のサーバーにはHTTPSが必要です。</string>
+    <string name="connection_api_not_found">サーバーには接続できましたが、Solidtime APIが見つかりません。</string>
+    <string name="connection_server_error">サーバーで内部エラーが発生しました（%1$d）。</string>
+    <string name="connection_unexpected_response">サーバーから予期しない応答が返されました（%1$d）。</string>
+    <string name="connection_tls_failed">TLS証明書の検証に失敗しました。</string>
+    <string name="connection_dns_failed">サーバー名を解決できませんでした。</string>
+    <string name="connection_failed">サーバーに接続できませんでした。</string>
+    <string name="connection_test_failed">接続テストに失敗しました。</string>
+    <string name="sync_entry_failed">この変更はサーバーに届いていません。</string>
     <string name="search_and_filter">検索と絞り込み</string><string name="active_filters_count">有効なフィルター: %1$d</string>
     <string name="long_timer_notification_title">長時間タイマーの確認</string><string name="long_timer_notification_text">このタイマーは設定した時間制限に達しました。</string>
     <string name="all_items">すべての%1$s</string>

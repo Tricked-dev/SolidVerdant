@@ -15,6 +15,7 @@ data class HistoryFilter(
     val query: String = "",
     val billable: Boolean? = null,
     val projectId: String? = null,
+    val clientId: String? = null,
     val taskId: String? = null,
     val tagId: String? = null,
     val runningOnly: Boolean = false,
@@ -88,6 +89,7 @@ object EntryTrustRules {
             (query.isBlank() || searchable.any { it.contains(query, ignoreCase = true) }) &&
                 (filter.billable == null || entry.billable == filter.billable) &&
                 (filter.projectId == null || entry.projectId == filter.projectId) &&
+                (filter.clientId == null || clientIdByProject[entry.projectId] == filter.clientId) &&
                 (filter.taskId == null || entry.taskId == filter.taskId) &&
                 (filter.tagId == null || entry.tags.any { it.id == filter.tagId }) &&
                 (!filter.runningOnly || entry.end == null) &&

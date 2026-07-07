@@ -19,6 +19,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -80,6 +81,26 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
     ) {
         RangeChips(state.range, viewModel::setRange)
 
+        if (state.isRefreshing) {
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+        }
+        if (state.refreshFailed) {
+            Card(Modifier.fillMaxWidth()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        stringResource(R.string.stats_cached_refresh_failed),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    TextButton(onClick = viewModel::refresh) { Text(stringResource(R.string.retry)) }
+                }
+            }
+        }
+
         if (state.isEmpty) {
             Text(
                 stringResource(R.string.stats_empty),
@@ -95,13 +116,13 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.stats_by_project), style = MaterialTheme.typography.titleMedium)
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     DonutChart(
                         slices = s.perProject.map { hexToColor(it.colorHex) to it.seconds.toFloat() },
                         modifier = Modifier.size(140.dp),
                     )
-                    Column(Modifier.padding(start = 16.dp)) {
-                        s.perProject.take(6).forEach { p ->
+                    Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+                        s.perProject.forEach { p ->
                             val pct = if (s.totalSeconds > 0) p.seconds * 100 / s.totalSeconds else 0
                             Text(
                                 "${p.projectName} — ${formatDuration(p.seconds)} ($pct%)",

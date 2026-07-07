@@ -1,5 +1,6 @@
 package dev.tricked.solidverdant.ui.auth
 
+import dev.tricked.solidverdant.R
 import androidx.lifecycle.ViewModel
 import android.content.Context
 import coil.imageLoader
@@ -13,6 +14,7 @@ import dev.tricked.solidverdant.data.model.Membership
 import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.data.remote.ConnectionTester
+import dev.tricked.solidverdant.data.remote.ConnectionTestCode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -250,7 +252,20 @@ class AuthViewModel @Inject constructor(
             _configState.value = _configState.value.copy(isTesting = true, testSuccess = null, testMessage = null)
             val result = connectionTester.test(endpoint.removeSuffix("/"), clientId)
             _configState.value = _configState.value.copy(
-                isTesting = false, testSuccess = result.success, testMessage = result.message,
+                isTesting = false, testSuccess = result.success, testMessage = when (result.code) {
+                    ConnectionTestCode.READY -> context.getString(R.string.connection_ready)
+                    ConnectionTestCode.MISSING_CLIENT_ID -> context.getString(R.string.connection_missing_client_id)
+                    ConnectionTestCode.INVALID_URL -> context.getString(R.string.connection_invalid_url)
+                    ConnectionTestCode.COMPLETE_URL_REQUIRED -> context.getString(R.string.connection_complete_url_required)
+                    ConnectionTestCode.HTTPS_REQUIRED -> context.getString(R.string.connection_https_required)
+                    ConnectionTestCode.API_NOT_FOUND -> context.getString(R.string.connection_api_not_found)
+                    ConnectionTestCode.SERVER_ERROR -> context.getString(R.string.connection_server_error, result.httpStatus)
+                    ConnectionTestCode.UNEXPECTED_RESPONSE -> context.getString(R.string.connection_unexpected_response, result.httpStatus)
+                    ConnectionTestCode.TLS_FAILED -> context.getString(R.string.connection_tls_failed)
+                    ConnectionTestCode.DNS_FAILED -> context.getString(R.string.connection_dns_failed)
+                    ConnectionTestCode.CONNECTION_FAILED -> context.getString(R.string.connection_failed)
+                    ConnectionTestCode.TEST_FAILED -> context.getString(R.string.connection_test_failed)
+                },
             )
         }
     }

@@ -5,42 +5,52 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.URI
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import javax.net.ssl.SSLException
 
-data class ConnectionTestResult(val success: Boolean, val message: String)
+enum class ConnectionTestCode {
+    READY, MISSING_CLIENT_ID, INVALID_URL, COMPLETE_URL_REQUIRED, HTTPS_REQUIRED,
+    API_NOT_FOUND, SERVER_ERROR, UNEXPECTED_RESPONSE, TLS_FAILED, DNS_FAILED,
+    CONNECTION_FAILED, TEST_FAILED,
+}
+
+data class ConnectionTestResult(val code: ConnectionTestCode, val httpStatus: Int? = null) {
+    val success: Boolean get() = code == ConnectionTestCode.READY
+}
 
 @Singleton
 class ConnectionTester @Inject constructor(private val client: OkHttpClient) {
     suspend fun test(endpoint: String, clientId: String): ConnectionTestResult = withContext(Dispatchers.IO) {
-        if (clientId.isBlank()) return@withContext ConnectionTestResult(false, "OAuth client ID is missing")
+        if (clientId.isBlank()) return@withContext ConnectionTestResult(ConnectionTestCode.MISSING_CLIENT_ID)
         val uri = runCatching { URI(endpoint) }.getOrNull()
-            ?: return@withContext ConnectionTestResult(false, "The server URL is invalid")
-        if (uri.host.isNullOrBlank() || uri.scheme !in setOf("http", "https"))
-            return@withContext ConnectionTestResult(false, "Use a complete http:// or https:// server URL")
+            ?: return@withContext ConnectionTestResult(ConnectionTestCode.INVALID_URL)
+        if (uri.host.isNullOrBlank() || uri.scheme !in setOf("http", "https") ||
+            uri.userInfo != null || uri.query != null || uri.fragment != null)
+            return@withContext ConnectionTestResult(ConnectionTestCode.COMPLETE_URL_REQUIRED)
         if (uri.scheme != "https" && uri.host !in setOf("localhost", "127.0.0.1", "10.0.2.2"))
-            return@withContext ConnectionTestResult(false, "HTTPS is required for non-local servers")
+            return@withContext ConnectionTestResult(ConnectionTestCode.HTTPS_REQUIRED)
         val url = endpoint.trimEnd('/') + "/api/v1/users/me"
         try {
-            client.newBuilder().followRedirects(false).build().newCall(
+            client.newBuilder().followRedirects(false).callTimeout(15, TimeUnit.SECONDS).build().newCall(
                 Request.Builder().url(url).header("Accept", "application/json").get().build()
             ).execute().use { response ->
                 when (response.code) {
-                    200, 401, 403 -> ConnectionTestResult(true, "Solidtime API reached; OAuth configuration is ready")
-                    404 -> ConnectionTestResult(false, "Server reached, but the Solidtime API was not found")
-                    in 500..599 -> ConnectionTestResult(false, "Server reached, but it returned an internal error (${response.code})")
-                    else -> ConnectionTestResult(false, "Unexpected server response (${response.code})")
+                    200, 401, 403 -> ConnectionTestResult(ConnectionTestCode.READY, response.code)
+                    404 -> ConnectionTestResult(ConnectionTestCode.API_NOT_FOUND, response.code)
+                    in 500..599 -> ConnectionTestResult(ConnectionTestCode.SERVER_ERROR, response.code)
+                    else -> ConnectionTestResult(ConnectionTestCode.UNEXPECTED_RESPONSE, response.code)
                 }
             }
         } catch (e: SSLException) {
-            ConnectionTestResult(false, "TLS certificate validation failed")
+            ConnectionTestResult(ConnectionTestCode.TLS_FAILED)
         } catch (e: java.net.UnknownHostException) {
-            ConnectionTestResult(false, "Server name could not be resolved")
+            ConnectionTestResult(ConnectionTestCode.DNS_FAILED)
         } catch (e: java.net.ConnectException) {
-            ConnectionTestResult(false, "Could not connect to the server")
+            ConnectionTestResult(ConnectionTestCode.CONNECTION_FAILED)
         } catch (e: Exception) {
-            ConnectionTestResult(false, e.message ?: "Connection test failed")
+            ConnectionTestResult(ConnectionTestCode.TEST_FAILED)
         }
     }
 }

@@ -3,7 +3,7 @@ package dev.tricked.solidverdant.data.local.db
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-enum class OutboxOpType { START, STOP, UPDATE, DELETE }
+enum class OutboxOpType { START, CREATE, STOP, UPDATE, DELETE }
 
 @Entity(tableName = "outbox")
 data class OutboxEntity(

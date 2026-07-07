@@ -19,6 +19,7 @@ interface RemoteDataSource {
     suspend fun getActiveTimeEntry(): Result<TimeEntry?>
     suspend fun getMyMemberships(): Result<List<Membership>>
     suspend fun startTimeEntry(organizationId: String, memberId: String, userId: String, projectId: String?, taskId: String?, description: String): Result<TimeEntry>
+    suspend fun createTimeEntry(organizationId: String, memberId: String, userId: String, entry: TimeEntry, tags: List<String>): Result<TimeEntry>
     suspend fun stopTimeEntry(organizationId: String, timeEntryId: String, userId: String, startTime: String): Result<TimeEntry>
     suspend fun updateTimeEntry(organizationId: String, timeEntry: TimeEntry, tags: List<String>): Result<TimeEntry>
     suspend fun deleteTimeEntry(organizationId: String, timeEntryId: String): Result<Unit>
@@ -37,6 +38,11 @@ class AuthRemoteDataSource @Inject constructor(
     override suspend fun getMyMemberships() = authRepository.getMyMemberships()
     override suspend fun startTimeEntry(organizationId: String, memberId: String, userId: String, projectId: String?, taskId: String?, description: String) =
         authRepository.startTimeEntry(organizationId, memberId, userId, projectId, taskId, description)
+    override suspend fun createTimeEntry(organizationId: String, memberId: String, userId: String, entry: TimeEntry, tags: List<String>) =
+        authRepository.createTimeEntry(
+            organizationId, memberId, userId, entry.start, requireNotNull(entry.end),
+            entry.description.orEmpty(), entry.projectId, entry.taskId, tags, entry.billable,
+        )
     override suspend fun stopTimeEntry(organizationId: String, timeEntryId: String, userId: String, startTime: String) =
         authRepository.stopTimeEntry(organizationId, timeEntryId, userId, startTime)
     override suspend fun updateTimeEntry(organizationId: String, timeEntry: TimeEntry, tags: List<String>) =

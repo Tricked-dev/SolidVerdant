@@ -3,9 +3,9 @@ package dev.tricked.solidverdant.ui.statistics
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.AuthRepository
+import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -28,6 +29,8 @@ data class StatisticsUiState(
     val range: StatRange = StatRange.ThisWeek,
     val summary: StatisticsSummary = EMPTY_SUMMARY,
     val isEmpty: Boolean = false,
+    val isRefreshing: Boolean = false,
+    val refreshFailed: Boolean = false,
 ) {
     companion object {
         val EMPTY_SUMMARY = StatisticsSummary(0, 0, 0, 0, 0, emptyList(), emptyList())
@@ -37,28 +40,33 @@ data class StatisticsUiState(
 /**
  * ViewModel for the Statistics screen.
  *
- * Feature #6 (`TimeEntryRepository`) is not present, so the read source of truth uses the
- * documented fallback: the two `observe*` flows are thin adapters backed by one-shot
- * `AuthRepository` calls. When Feature #6 lands, swap these two adapters for the repository's
- * `observeTimeEntries` / `observeProjects` Flows — nothing else in this file changes.
+ * Room supplies an immediate offline result while a bounded, server-filtered request refreshes
+ * the selected range. A failed refresh never turns cached data into a false empty state.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class StatisticsViewModel @Inject constructor(
     private val authRepository: AuthRepository,
+    private val timeEntryRepository: TimeEntryRepository,
 ) : ViewModel() {
 
     private val zone: ZoneId = ZoneId.systemDefault()
     private val rangeFlow = MutableStateFlow<StatRange>(StatRange.ThisWeek)
     private val refreshTrigger = MutableStateFlow(0)
 
-    // --- Feature #6 fallback adapter ---
-    private fun observeTimeEntries(
+    private data class RemoteEntries(
+        val entries: List<TimeEntry>? = null,
+        val isLoading: Boolean = false,
+        val failed: Boolean = false,
+    )
+
+    private fun loadRemoteEntries(
         organizationId: String,
         memberId: String,
         range: ClosedRange<LocalDate>,
-    ): Flow<List<TimeEntry>> =
+    ): Flow<RemoteEntries> =
         flow {
+            emit(RemoteEntries(isLoading = true))
             val entries = mutableListOf<TimeEntry>()
             val start = range.start.atStartOfDay(zone).toInstant().toString()
             val end = range.endInclusive.plusDays(1).atStartOfDay(zone).toInstant().toString()
@@ -67,36 +75,31 @@ class StatisticsViewModel @Inject constructor(
                 val page = authRepository.getTimeEntries(
                     organizationId, memberId, limit = 500, offset = offset,
                     start = start, end = end,
-                ).getOrNull() ?: break
+                ).getOrThrow()
                 entries += page.data
                 offset += page.data.size
                 val total = page.meta?.total ?: page.data.size
             } while (page.data.size == 500 && offset < total)
-            emit(entries)
+            emit(RemoteEntries(entries = entries))
+        }.catch {
+            emit(RemoteEntries(failed = true))
         }.flowOn(Dispatchers.IO)
 
-    private fun observeProjects(organizationId: String): Flow<List<Project>> =
-        flow {
-            emit(authRepository.getProjects(organizationId).getOrDefault(emptyList()))
-        }.flowOn(Dispatchers.IO)
-    // --- end fallback adapter ---
-
-    private val membershipFlow = refreshTrigger.flatMapLatest {
-        flow { emit(authRepository.getCurrentMembership()) }.flowOn(Dispatchers.IO)
-    }
+    private val membershipFlow = flow { emit(authRepository.getCurrentMembership()) }.flowOn(Dispatchers.IO)
 
     val uiState: StateFlow<StatisticsUiState> =
         membershipFlow.flatMapLatest { membership ->
             if (membership == null) {
                 flowOf(StatisticsUiState(isLoading = false, isEmpty = true))
             } else {
-                rangeFlow.flatMapLatest { range ->
+                combine(rangeFlow, refreshTrigger) { range, _ -> range }.flatMapLatest { range ->
                     val resolved = range.resolve(LocalDate.now(zone))
                     combine(
-                        observeTimeEntries(membership.organizationId, membership.id, resolved),
-                        observeProjects(membership.organizationId),
-                    ) { entries, projects ->
-                    val today = LocalDate.now(zone)
+                        timeEntryRepository.observeTimeEntries(membership.organizationId),
+                        timeEntryRepository.observeProjects(membership.organizationId),
+                        loadRemoteEntries(membership.organizationId, membership.id, resolved),
+                    ) { cachedEntries, projects, remote ->
+                    val entries = remote.entries ?: cachedEntries
                     val summary = withContext(Dispatchers.Default) {
                         StatisticsAggregator.compute(
                             entries = entries,
@@ -109,6 +112,8 @@ class StatisticsViewModel @Inject constructor(
                     }
                     StatisticsUiState(
                         isLoading = false,
+                        isRefreshing = remote.isLoading,
+                        refreshFailed = remote.failed,
                         range = range,
                         summary = summary,
                         isEmpty = summary.entryCount == 0,
@@ -126,7 +131,7 @@ class StatisticsViewModel @Inject constructor(
         rangeFlow.value = range
     }
 
-    /** Re-fetches entries/projects from the API (fallback replacement for repository re-emit). */
+    /** Re-fetches the selected range while keeping cached results visible. */
     fun refresh() {
         refreshTrigger.value += 1
     }
