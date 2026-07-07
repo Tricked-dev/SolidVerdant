@@ -40,6 +40,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.ui.theme.Dimens
 
 /**
  * Persistent filter bar: a "Filters" button that opens the editing sheet, a legible summary of the
@@ -55,22 +56,22 @@ fun StatFilterBar(
     modifier: Modifier = Modifier,
 ) {
     var showSheet by remember { mutableStateOf(false) }
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
             modifier = Modifier.fillMaxWidth(),
         ) {
             FilledTonalButton(
                 onClick = { showSheet = true },
-                modifier = Modifier.heightIn(min = 48.dp),
+                modifier = Modifier.heightIn(min = Dimens.MinTouchTarget),
             ) {
                 Icon(
                     Icons.Default.FilterList,
                     contentDescription = stringResource(R.string.stats2_filters_content_description),
                     modifier = Modifier.size(18.dp),
                 )
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(Dimens.Space8))
                 Text(stringResource(R.string.stats2_filters))
             }
             if (filters.isActive) {
@@ -85,14 +86,14 @@ fun StatFilterBar(
                 )
                 TextButton(
                     onClick = onClearFilters,
-                    modifier = Modifier.heightIn(min = 48.dp),
+                    modifier = Modifier.heightIn(min = Dimens.MinTouchTarget),
                 ) {
                     Icon(
                         Icons.Default.Close,
                         contentDescription = stringResource(R.string.stats2_clear_filters_content_description),
                         modifier = Modifier.size(18.dp),
                     )
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(Dimens.Space4))
                     Text(stringResource(R.string.stats2_clear_filters))
                 }
             } else {
@@ -130,7 +131,7 @@ private fun ActiveFilterChips(
     val clientName = catalog.clients.associate { it.id to it.name }
     val taskName = catalog.tasks.associate { it.id to it.name }
     val tagName = catalog.tags.associate { it.id to it.name }
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
         if (filters.billable != BillableFilter.All) {
             RemovableChip(billableLabel(filters.billable)) {
                 onFiltersChange(filters.copy(billable = BillableFilter.All))
@@ -182,9 +183,9 @@ private fun StatFilterSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(horizontal = Dimens.Space16)
+                .padding(bottom = Dimens.Space24),
+            verticalArrangement = Arrangement.spacedBy(Dimens.Space12),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -260,7 +261,7 @@ private fun FilterSection(
     selected: Set<String>,
     onToggle: (String) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Dimens.Space4)) {
         Text(title, style = MaterialTheme.typography.titleSmall)
         if (options.isEmpty()) {
             Text(
@@ -269,7 +270,7 @@ private fun FilterSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
                 options.forEach { (id, name) ->
                     FilterChip(
                         selected = id in selected,

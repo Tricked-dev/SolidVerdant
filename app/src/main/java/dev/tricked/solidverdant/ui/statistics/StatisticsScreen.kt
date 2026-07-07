@@ -25,7 +25,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
@@ -57,16 +56,36 @@ import androidx.compose.ui.res.stringResource
 import dev.tricked.solidverdant.R
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.tricked.solidverdant.ui.components.EmptyState
+import dev.tricked.solidverdant.ui.components.LoadingState
+import dev.tricked.solidverdant.ui.components.SectionCard
 import dev.tricked.solidverdant.ui.statistics.charts.DonutChart
+import dev.tricked.solidverdant.ui.theme.Dimens
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
-fun hexToColor(hex: String): Color = try {
+/** Diameter of the by-project donut. A chart dimension owned by the caller, not screen chrome. */
+private val DonutSize = 140.dp
+
+/**
+ * Neutral fallback for a project whose stored hex is blank or unparseable. Statistics render sites
+ * pass a theme token instead (see [hexToColor]); this literal only backs the default for non-Compose
+ * callers (the calendar) that cannot resolve a theme colour.
+ */
+private val UnknownProjectColor = Color(0xFF9E9E9E)
+
+/**
+ * Parses a project colour hex into a [Color], falling back to [fallback] when the value is blank or
+ * unparseable. Statistics call sites pass `MaterialTheme.colorScheme.outline` so swatches route
+ * through a theme token and never bake a raw grey; the default keeps existing non-Compose callers
+ * working unchanged.
+ */
+fun hexToColor(hex: String, fallback: Color = UnknownProjectColor): Color = try {
     Color(android.graphics.Color.parseColor(hex))
 } catch (t: Throwable) {
-    Color(0xFF9E9E9E)
+    fallback
 }
 
 fun formatDuration(seconds: Long): String {
@@ -111,41 +130,48 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
 
     Box(Modifier.fillMaxSize()) {
         if (state.isLoading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
+            LoadingState(modifier = Modifier.fillMaxSize())
         } else {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .statusBarsPadding()
                     .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                    .padding(Dimens.Space16),
+                verticalArrangement = Arrangement.spacedBy(Dimens.Space16),
             ) {
-                RangeChips(state.range, viewModel::setRange)
-
-                StatFilterBar(
-                    filters = state.filters,
-                    catalog = state.catalog,
-                    onFiltersChange = viewModel::setFilters,
-                    onClearFilters = viewModel::clearFilters,
-                )
-
-                ExportButton(
-                    exporting = exportState is ExportState.Running,
-                    onExport = viewModel::export,
-                )
+                // Persistent controls panel: range, filters and export share one card so they read
+                // as a single tool strip instead of mismatched controls floating on bare background.
+                SectionCard {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
+                    ) {
+                        Box(Modifier.weight(1f)) {
+                            RangeChips(state.range, viewModel::setRange)
+                        }
+                        ExportAction(
+                            exporting = exportState is ExportState.Running,
+                            onExport = viewModel::export,
+                        )
+                    }
+                    StatFilterBar(
+                        filters = state.filters,
+                        catalog = state.catalog,
+                        onFiltersChange = viewModel::setFilters,
+                        onClearFilters = viewModel::clearFilters,
+                    )
+                }
 
                 if (state.isRefreshing) {
                     LinearProgressIndicator(Modifier.fillMaxWidth())
                 }
                 if (state.refreshFailed) {
-                    Card(Modifier.fillMaxWidth()) {
+                    SectionCard {
                         Row(
-                            Modifier.fillMaxWidth().padding(12.dp),
+                            Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
                         ) {
                             Text(
                                 stringResource(R.string.stats_cached_refresh_failed),
@@ -158,10 +184,9 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
                 }
 
                 if (state.isEmpty) {
-                    Text(
-                        stringResource(R.string.stats_empty),
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.padding(top = 32.dp),
+                    EmptyState(
+                        text = stringResource(R.string.stats_empty),
+                        modifier = Modifier.padding(top = Dimens.Space32),
                     )
                     // A previous period with data is still worth showing even when the current
                     // (possibly over-filtered) range is empty.
@@ -172,47 +197,42 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
 
                     state.comparison?.let { StatComparisonCard(it) }
 
-                    Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(stringResource(R.string.stats_by_project), style = MaterialTheme.typography.titleMedium)
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                DonutChart(
-                                    slices = s.perProject.map { hexToColor(it.colorHex) to it.seconds.toFloat() },
-                                    modifier = Modifier.size(140.dp),
+                    SectionCard(title = stringResource(R.string.stats_by_project)) {
+                        val swatchFallback = MaterialTheme.colorScheme.outline
+                        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                            DonutChart(
+                                slices = s.perProject.map { hexToColor(it.colorHex, swatchFallback) to it.seconds.toFloat() },
+                                modifier = Modifier.size(DonutSize),
+                            )
+                        }
+                        Column(Modifier.fillMaxWidth()) {
+                            s.perProject.forEach { p ->
+                                val pct = if (s.totalSeconds > 0) p.seconds * 100 / s.totalSeconds else 0
+                                ProjectLegendRow(
+                                    projectName = p.projectName,
+                                    colorHex = p.colorHex,
+                                    valueText = "${formatDuration(p.seconds)} ($pct%)",
+                                    onClick = {
+                                        viewModel.openProjectDrillDown(p.projectId, p.projectName, p.colorHex)
+                                    },
                                 )
-                                Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-                                    s.perProject.forEach { p ->
-                                        val pct = if (s.totalSeconds > 0) p.seconds * 100 / s.totalSeconds else 0
-                                        ProjectLegendRow(
-                                            projectName = p.projectName,
-                                            colorHex = p.colorHex,
-                                            valueText = "${formatDuration(p.seconds)} ($pct%)",
-                                            onClick = {
-                                                viewModel.openProjectDrillDown(p.projectId, p.projectName, p.colorHex)
-                                            },
-                                        )
-                                    }
-                                }
                             }
                         }
                     }
 
-                    Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(stringResource(R.string.stats_trend), style = MaterialTheme.typography.titleMedium)
-                            InteractiveBarChart(
-                                bars = s.trend,
-                                barColor = MaterialTheme.colorScheme.primary,
-                                onBarClick = { bucket ->
-                                    val end = when (state.granularity) {
-                                        TrendGranularity.DAY -> bucket.startDate
-                                        TrendGranularity.WEEK -> bucket.startDate.plusDays(6)
-                                    }
-                                    viewModel.openTrendDrillDown(bucket.label, bucket.startDate, end)
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
+                    SectionCard(title = stringResource(R.string.stats_trend)) {
+                        InteractiveBarChart(
+                            bars = s.trend,
+                            barColor = MaterialTheme.colorScheme.primary,
+                            onBarClick = { bucket ->
+                                val end = when (state.granularity) {
+                                    TrendGranularity.DAY -> bucket.startDate
+                                    TrendGranularity.WEEK -> bucket.startDate.plusDays(6)
+                                }
+                                viewModel.openTrendDrillDown(bucket.label, bucket.startDate, end)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
                 }
             }
@@ -230,11 +250,11 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
 }
 
 @Composable
-private fun ExportButton(exporting: Boolean, onExport: () -> Unit) {
-    FilledTonalButton(
+private fun ExportAction(exporting: Boolean, onExport: () -> Unit) {
+    TextButton(
         onClick = onExport,
         enabled = !exporting,
-        modifier = Modifier.heightIn(min = 48.dp),
+        modifier = Modifier.heightIn(min = Dimens.MinTouchTarget),
     ) {
         if (exporting) {
             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -245,7 +265,7 @@ private fun ExportButton(exporting: Boolean, onExport: () -> Unit) {
                 modifier = Modifier.size(18.dp),
             )
         }
-        Spacer(Modifier.width(6.dp))
+        Spacer(Modifier.width(Dimens.Space8))
         Text(stringResource(if (exporting) R.string.stats2_exporting else R.string.stats2_export))
     }
 }
@@ -258,28 +278,35 @@ private fun ProjectLegendRow(
     onClick: () -> Unit,
 ) {
     val cd = stringResource(R.string.stats2_drilldown_project_content_description, projectName)
+    val swatchFallback = MaterialTheme.colorScheme.outline
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 48.dp)
+            .heightIn(min = Dimens.MinTouchTarget)
             .clickable(role = Role.Button, onClick = onClick)
             .semantics(mergeDescendants = true) { contentDescription = "$cd, $valueText" }
-            .padding(vertical = 4.dp),
+            .padding(vertical = Dimens.Space4),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
     ) {
-        Box(
-            Modifier
-                .size(10.dp)
-                .clip(androidx.compose.foundation.shape.CircleShape)
-                .background(hexToColor(colorHex)),
-        )
+        ProjectSwatch(hexToColor(colorHex, swatchFallback))
         Text(
             "$projectName — $valueText",
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f),
         )
     }
+}
+
+/** The single project colour dot used across statistics rows (legend, comparison, drill-down). */
+@Composable
+internal fun ProjectSwatch(color: Color) {
+    Box(
+        Modifier
+            .size(Dimens.Space12)
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .background(color),
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -295,7 +322,7 @@ private fun RangeChips(current: StatRange, onSelect: (StatRange) -> Unit) {
         R.string.stats_this_month to StatRange.ThisMonth,
         R.string.stats_previous_month to StatRange.PreviousMonth,
     )
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
         options.forEach { (label, range) ->
             FilterChip(selected = current == range, onClick = { onSelect(range) }, label = { Text(stringResource(label)) })
         }
@@ -337,12 +364,12 @@ private fun Long.toUtcDate(): LocalDate = Instant.ofEpochMilli(this).atZone(Zone
 
 @Composable
 private fun KpiGrid(s: StatisticsSummary) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
             KpiTile(stringResource(R.string.stats_total), formatDuration(s.totalSeconds), Modifier.weight(1f))
             KpiTile(stringResource(R.string.stats_entries), s.entryCount.toString(), Modifier.weight(1f))
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
             KpiTile(stringResource(R.string.stats_average_day), formatDuration(s.avgSecondsPerDay), Modifier.weight(1f))
             KpiTile(stringResource(R.string.billable), formatDuration(s.billableSeconds), Modifier.weight(1f))
         }
@@ -352,7 +379,7 @@ private fun KpiGrid(s: StatisticsSummary) {
 @Composable
 private fun KpiTile(label: String, value: String, modifier: Modifier = Modifier) {
     Card(modifier) {
-        Column(Modifier.padding(16.dp)) {
+        Column(Modifier.padding(Dimens.CardContentPadding)) {
             Text(value, style = MaterialTheme.typography.headlineSmall)
             Text(label, style = MaterialTheme.typography.labelMedium)
         }

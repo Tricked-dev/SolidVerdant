@@ -30,12 +30,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.ui.theme.Dimens
+
+/** Plotted height of the bars, matched to the static [charts.BarChart] so the two read identically. */
+private val BarChartHeight = 140.dp
 
 /**
- * A trend chart whose bars are individually tappable so a segment drills into its entries, instead
- * of a decorative Canvas. Each bar is a focusable button with a spoken label ("<bucket>: <duration>")
- * so the interaction works with TalkBack, where per-pixel Canvas taps would not. Bars keep at least
- * a finger-width and the row scrolls horizontally when a long range produces more bars than fit.
+ * The tappable sibling of [charts.BarChart]: it keeps that chart's proportions — a full [BarChartHeight]
+ * plot with bars that fill their column and share one [Dimens.CornerRadius] on top — and adds only an
+ * interaction layer. Each bar is a focusable button with a spoken label ("<bucket>: <duration>") so the
+ * drill-down works with TalkBack, where per-pixel Canvas taps would not. Bars keep at least a finger
+ * width and the row scrolls horizontally when a long range produces more bars than fit.
  */
 @Composable
 fun InteractiveBarChart(
@@ -46,13 +51,11 @@ fun InteractiveBarChart(
 ) {
     if (bars.isEmpty()) return
     val max = bars.maxOf { it.seconds }.coerceAtLeast(1L)
-    val barHeight = 132.dp
     BoxWithConstraints(modifier.fillMaxWidth()) {
-        // Give each bar a comfortable touch width, but let them shrink to fit when there are only a
-        // few so short ranges are not needlessly cramped into a scroll.
-        val minBarWidth = 44.dp
+        // Give each bar a full finger-width touch target, but let them shrink to fill the width when
+        // there are only a few so short ranges are not needlessly cramped into a scroll.
         val fitWidth = maxWidth / bars.size
-        val barWidth = if (fitWidth >= minBarWidth) fitWidth else minBarWidth
+        val barWidth = if (fitWidth >= Dimens.MinTouchTarget) fitWidth else Dimens.MinTouchTarget
         val scroll = rememberScrollState()
         Row(
             modifier = Modifier.horizontalScroll(scroll),
@@ -67,24 +70,24 @@ fun InteractiveBarChart(
                 Column(
                     modifier = Modifier
                         .width(barWidth)
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(Dimens.CornerRadius))
                         .clickable(role = Role.Button) { onBarClick(bucket) }
                         .semantics(mergeDescendants = true) { contentDescription = label }
-                        .padding(horizontal = 2.dp, vertical = 4.dp),
+                        .padding(horizontal = Dimens.Space4, vertical = Dimens.Space4),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Bottom,
                 ) {
                     Box(
                         modifier = Modifier
-                            .height(barHeight)
+                            .height(BarChartHeight)
                             .fillMaxWidth(),
                         contentAlignment = Alignment.BottomCenter,
                     ) {
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth(0.7f)
+                                .fillMaxWidth()
                                 .fillMaxHeight(fraction)
-                                .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp))
+                                .clip(RoundedCornerShape(topStart = Dimens.CornerRadius, topEnd = Dimens.CornerRadius))
                                 .background(barColor),
                         )
                     }
@@ -94,7 +97,7 @@ fun InteractiveBarChart(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        modifier = Modifier.fillMaxWidth().padding(top = Dimens.Space4),
                     )
                 }
             }

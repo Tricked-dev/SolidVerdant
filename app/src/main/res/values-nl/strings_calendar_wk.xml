@@ -10,6 +10,10 @@
     <string name="calendar_all_day">Hele dag</string>
     <string name="calendar_entry_untitled">Geen omschrijving</string>
     <string name="calendar_entry_a11y">Tijdregistratie: %1$s</string>
+    <string name="calendar_no_entries">Geen geregistreerde tijd</string>
+    <string name="calendar_loading_entries">Registraties laden…</string>
+    <string name="calendar_overlay_settings">Instellingen agenda-overlay</string>
+    <string name="calendar_overlay_title">Agenda-afspraken</string>
 
     <!-- Overlay-instellingen -->
     <string name="calendar_overlay_show">Agenda-afspraken tonen</string>

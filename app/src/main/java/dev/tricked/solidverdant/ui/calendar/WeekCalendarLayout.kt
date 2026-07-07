@@ -6,18 +6,70 @@
 
 package dev.tricked.solidverdant.ui.calendar
 
+import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.data.calendar.DeviceCalendarEvent
+import dev.tricked.solidverdant.data.model.TimeEntry
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 
 /** Seconds in a 24h day. All timed layout fractions are expressed relative to this. */
 const val SECONDS_PER_DAY: Long = 86_400L
 
 /** Minimum visible height for a timed block so a very short event stays perceivable. */
 const val MIN_BLOCK_HEIGHT_FRACTION: Float = 0.012f
+
+/** Minimum visible fraction for a tracked entry so a very short entry stays legible/tappable. */
+const val MIN_ENTRY_HEIGHT_FRACTION: Float = 0.02f
+
+// --- Shared time-grid metrics ------------------------------------------------------------------
+// ONE grid geometry for both the week grid and the month/day timeline so entries and hour lines
+// align identically across views. Pick these over per-view magic numbers.
+
+/** Height of a single hour row in the timed grid. */
+val CalendarHourHeight = 48.dp
+
+/** Width of the leading gutter holding the hour labels (also the left inset for entry blocks). */
+val CalendarGutterWidth = 48.dp
+
+/** Full height of a 24h day column. */
+val CalendarTotalHeight = CalendarHourHeight * 24
+
+/**
+ * Vertical placement of a tracked [entry] within [day], as `topFraction to heightFraction` of a
+ * 24h column. Unparseable starts fall back to the day start; a running entry (no end) extends to
+ * [now]. The height is floored at [MIN_ENTRY_HEIGHT_FRACTION] so very short entries stay visible.
+ */
+fun timelineOffsets(
+    entry: TimeEntry,
+    day: LocalDate,
+    now: Instant,
+    zone: ZoneId = ZoneId.systemDefault(),
+): Pair<Float, Float> {
+    val dayStart = day.atStartOfDay(zone).toInstant()
+    val secondsInDay = SECONDS_PER_DAY.toFloat()
+    val start = try {
+        ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME).toInstant()
+    } catch (_: Exception) {
+        dayStart
+    }
+    val end = entry.end?.let {
+        try {
+            ZonedDateTime.parse(it, DateTimeFormatter.ISO_DATE_TIME).toInstant()
+        } catch (_: Exception) {
+            now
+        }
+    } ?: now
+    val topSec = (start.epochSecond - dayStart.epochSecond).coerceIn(0, SECONDS_PER_DAY)
+    val endSec = (end.epochSecond - dayStart.epochSecond).coerceIn(0, SECONDS_PER_DAY)
+    val top = topSec / secondsInDay
+    val height = ((endSec - topSec) / secondsInDay).coerceAtLeast(MIN_ENTRY_HEIGHT_FRACTION)
+    return top to height
+}
 
 /**
  * A device-calendar event positioned within a single day column.

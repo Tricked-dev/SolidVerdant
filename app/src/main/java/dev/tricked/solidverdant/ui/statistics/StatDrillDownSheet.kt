@@ -1,6 +1,5 @@
 package dev.tricked.solidverdant.ui.statistics
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,10 +7,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -20,13 +17,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.ui.theme.Dimens
 import java.time.format.DateTimeFormatter
 
 private val drillDateFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM")
@@ -48,23 +45,18 @@ fun StatDrillDownSheet(
             is DrillDownTarget.TrendSlice -> t.label
         }
         val accentColor = when (val t = state.target) {
-            is DrillDownTarget.ProjectSlice -> hexToColor(t.colorHex)
+            is DrillDownTarget.ProjectSlice -> hexToColor(t.colorHex, MaterialTheme.colorScheme.outline)
             is DrillDownTarget.TrendSlice -> MaterialTheme.colorScheme.primary
         }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(horizontal = Dimens.Space16)
+                .padding(bottom = Dimens.Space24),
+            verticalArrangement = Arrangement.spacedBy(Dimens.Space8),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box(
-                    Modifier
-                        .size(12.dp)
-                        .clip(CircleShape)
-                        .background(accentColor),
-                )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
+                ProjectSwatch(accentColor)
                 Text(
                     title,
                     style = MaterialTheme.typography.titleLarge,
@@ -76,7 +68,7 @@ fun StatDrillDownSheet(
 
             when {
                 state.isLoading -> {
-                    Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.fillMaxWidth().padding(Dimens.Space24), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
                     }
                 }
@@ -84,7 +76,7 @@ fun StatDrillDownSheet(
                     Text(
                         stringResource(R.string.stats2_drilldown_empty),
                         style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(vertical = 16.dp),
+                        modifier = Modifier.padding(vertical = Dimens.Space16),
                     )
                 }
                 else -> {
@@ -128,16 +120,11 @@ private fun DrillDownRowItem(row: DrillDownRow) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 10.dp),
+            .padding(vertical = Dimens.Space12),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(Dimens.Space12),
     ) {
-        Box(
-            Modifier
-                .size(10.dp)
-                .clip(CircleShape)
-                .background(hexToColor(row.colorHex)),
-        )
+        ProjectSwatch(hexToColor(row.colorHex, MaterialTheme.colorScheme.outline))
         Column(Modifier.weight(1f)) {
             val description = row.description?.takeIf { it.isNotBlank() }
             Text(

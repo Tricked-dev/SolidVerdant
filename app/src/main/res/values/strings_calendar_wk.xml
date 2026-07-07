@@ -10,6 +10,10 @@
     <string name="calendar_all_day">All day</string>
     <string name="calendar_entry_untitled">No description</string>
     <string name="calendar_entry_a11y">Time entry: %1$s</string>
+    <string name="calendar_no_entries">No tracked time</string>
+    <string name="calendar_loading_entries">Loading entries…</string>
+    <string name="calendar_overlay_settings">Calendar overlay settings</string>
+    <string name="calendar_overlay_title">Calendar events</string>
 
     <!-- Overlay controls -->
     <string name="calendar_overlay_show">Show calendar events</string>

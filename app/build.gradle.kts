@@ -13,6 +13,7 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.detekt)
 }
 
 val appVersionName: String = project.findProperty("app.versionName") as String
@@ -113,6 +114,48 @@ kotlin {
 // Export Room schemas so migrations can be validated and tested (exportSchema = true).
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
+}
+
+// Detekt: design-drift / static-analysis guardrail.
+//
+// IMPORTANT: detekt is intentionally NOT wired into the default build path. Applying the
+// plugin normally binds the `detekt` task to `check`; we detach it below so `assembleDebug`,
+// `check`, and every other routine task stay unaffected. Run it explicitly on demand:
+//
+//     ./gradlew detekt
+//
+// The baseline (config/detekt/baseline.xml) is generated separately and is NOT hand-written:
+//
+//     ./gradlew detektBaseline
+//
+// It is referenced only when present so a fresh checkout without a baseline still configures.
+detekt {
+    // Layer our overrides on top of detekt's shipped defaults instead of replacing the ruleset.
+    buildUponDefaultConfig = true
+    config.setFrom(files("$rootDir/config/detekt/detekt.yml"))
+
+    // Guard the baseline: a missing baseline file would otherwise fail configuration.
+    val detektBaseline = file("$rootDir/config/detekt/baseline.xml")
+    if (detektBaseline.exists()) {
+        baseline = detektBaseline
+    }
+}
+
+// Keep detekt off the default verification path: remove the `detekt` dependency that the
+// plugin adds to `check`. (assembleDebug does not depend on check regardless, so it is
+// unaffected either way — this just keeps `check` fast and detekt strictly opt-in.)
+tasks.named("check").configure {
+    setDependsOn(
+        dependsOn.filterNot { dependency ->
+            val name = when (dependency) {
+                is TaskProvider<*> -> dependency.name
+                is Task -> dependency.name
+                is String -> dependency
+                else -> ""
+            }
+            name.startsWith("detekt")
+        },
+    )
 }
 
 /*

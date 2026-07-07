@@ -11,15 +11,23 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -32,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import dev.tricked.solidverdant.ui.theme.Dimens
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -59,6 +68,10 @@ fun CalendarScreen(
     LaunchedEffect(organizationId, memberId) { viewModel.setOrganization(organizationId, memberId) }
     val state by viewModel.uiState.collectAsState()
     var editing by remember { mutableStateOf<TimeEntry?>(null) }
+    // Progressive disclosure: the overlay controls live behind an app-bar toggle instead of a
+    // persistent bar, so the default calendar keeps its full height for the grid.
+    var showOverlaySheet by remember { mutableStateOf(false) }
+    val overlaySheetState = rememberModalBottomSheetState()
 
     val context = LocalContext.current
     val activity = context as? Activity
@@ -112,16 +125,30 @@ fun CalendarScreen(
                 CalendarViewMode.DAY to R.string.calendar_view_day,
             )
         }
-        SingleChoiceSegmentedButtonRow(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space12, vertical = Dimens.Space8),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
         ) {
-            modes.forEachIndexed { index, (mode, labelRes) ->
-                SegmentedButton(
-                    selected = state.viewMode == mode,
-                    onClick = { viewModel.setViewMode(mode) },
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
-                ) {
-                    Text(stringResource(labelRes))
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.weight(1f)) {
+                modes.forEachIndexed { index, (mode, labelRes) ->
+                    SegmentedButton(
+                        selected = state.viewMode == mode,
+                        onClick = { viewModel.setViewMode(mode) },
+                        shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
+                    ) {
+                        Text(stringResource(labelRes))
+                    }
+                }
+            }
+            // Overlay controls apply to the time-grid (week/day) views only.
+            if (state.viewMode != CalendarViewMode.MONTH) {
+                IconButton(onClick = { showOverlaySheet = true }) {
+                    Icon(
+                        Icons.Default.Layers,
+                        contentDescription = stringResource(R.string.calendar_overlay_settings),
+                        tint = if (state.overlayEnabled) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
@@ -140,15 +167,6 @@ fun CalendarScreen(
             )
 
             else -> {
-                CalendarOverlayControls(
-                    state = state,
-                    showRationale = showRationale,
-                    onToggleOverlay = toggleOverlay,
-                    onRequestPermission = requestPermission,
-                    onOpenAppSettings = openAppSettings,
-                    onToggleCalendar = viewModel::toggleCalendarSelected,
-                    onRetry = viewModel::retryOverlay,
-                )
                 BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     val availableWidth = maxWidth
                     // Fall back to a 3-day layout on narrow phones (gap analysis #20).
@@ -183,6 +201,26 @@ fun CalendarScreen(
                 editing = null
             },
         )
+    }
+
+    if (showOverlaySheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showOverlaySheet = false },
+            sheetState = overlaySheetState,
+        ) {
+            CalendarOverlayControls(
+                state = state,
+                showRationale = showRationale,
+                onToggleOverlay = toggleOverlay,
+                onRequestPermission = requestPermission,
+                onOpenAppSettings = openAppSettings,
+                onToggleCalendar = viewModel::toggleCalendarSelected,
+                onRetry = viewModel::retryOverlay,
+                modifier = Modifier
+                    .padding(horizontal = Dimens.Space16)
+                    .padding(bottom = Dimens.Space24),
+            )
+        }
     }
 }
 

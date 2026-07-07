@@ -24,7 +24,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -42,6 +41,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.ui.components.SectionCard
+import dev.tricked.solidverdant.ui.theme.Dimens
 
 /**
  * Opt-in device-calendar overlay controls: the on/off switch, the runtime-permission education and
@@ -59,42 +60,40 @@ fun CalendarOverlayControls(
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
+    SectionCard(
         modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+        title = stringResource(R.string.calendar_overlay_title),
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = stringResource(R.string.calendar_overlay_show),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(
-                    checked = state.overlayEnabled,
-                    onCheckedChange = onToggleOverlay,
-                )
-            }
+        Row(
+            modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.MinTouchTarget),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.calendar_overlay_show),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f),
+            )
+            Switch(
+                checked = state.overlayEnabled,
+                onCheckedChange = onToggleOverlay,
+            )
+        }
 
-            if (state.overlayEnabled) {
-                when {
-                    !state.hasCalendarPermission ->
-                        PermissionSection(
-                            permanentlyDenied = state.permissionRequested && !showRationale,
-                            onRequestPermission = onRequestPermission,
-                            onOpenAppSettings = onOpenAppSettings,
-                        )
+        if (state.overlayEnabled) {
+            when {
+                !state.hasCalendarPermission ->
+                    PermissionSection(
+                        permanentlyDenied = state.permissionRequested && !showRationale,
+                        onRequestPermission = onRequestPermission,
+                        onOpenAppSettings = onOpenAppSettings,
+                    )
 
-                    state.availableCalendars.isEmpty() ->
-                        StatusText(stringResource(R.string.calendar_overlay_no_calendars))
+                state.availableCalendars.isEmpty() ->
+                    StatusText(stringResource(R.string.calendar_overlay_no_calendars))
 
-                    else ->
-                        CalendarPickerSection(state = state, onToggleCalendar = onToggleCalendar, onRetry = onRetry)
-                }
+                else ->
+                    CalendarPickerSection(state = state, onToggleCalendar = onToggleCalendar, onRetry = onRetry)
             }
         }
     }

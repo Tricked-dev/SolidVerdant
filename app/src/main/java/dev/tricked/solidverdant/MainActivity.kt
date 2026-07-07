@@ -27,8 +27,7 @@ import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.ui.auth.AuthViewModel
 import dev.tricked.solidverdant.ui.auth.AuthState
 import dev.tricked.solidverdant.ui.login.LoginScreen
-import dev.tricked.solidverdant.ui.components.NetworkAwareContent
-import dev.tricked.solidverdant.ui.components.SyncStatusOverlay
+import dev.tricked.solidverdant.ui.components.AppStatusOverlay
 import dev.tricked.solidverdant.sync.SyncStatusReporter
 import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
 import dev.tricked.solidverdant.ui.tracking.TrackingScreen
@@ -86,17 +85,18 @@ open class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    NetworkAwareContent {
-                        SyncStatusOverlay(syncStatus) {
-                            SolidVerdantApp(
-                                authViewModel = authViewModel,
-                                trackingViewModel = trackingViewModel,
-                                handoffOrganizationId = handoffOrganizationId,
-                                onHandoffConsumed = { handoffOrganizationId = null },
-                                editActiveEntryRequested = editActiveEntryRequested,
-                                onEditActiveEntryConsumed = { editActiveEntryRequested = false },
-                            )
-                        }
+                    AppStatusOverlay(
+                        syncStatus = syncStatus,
+                        onRetrySync = { trackingViewModel.retrySync() },
+                    ) {
+                        SolidVerdantApp(
+                            authViewModel = authViewModel,
+                            trackingViewModel = trackingViewModel,
+                            handoffOrganizationId = handoffOrganizationId,
+                            onHandoffConsumed = { handoffOrganizationId = null },
+                            editActiveEntryRequested = editActiveEntryRequested,
+                            onEditActiveEntryConsumed = { editActiveEntryRequested = false },
+                        )
                     }
                 }
             }

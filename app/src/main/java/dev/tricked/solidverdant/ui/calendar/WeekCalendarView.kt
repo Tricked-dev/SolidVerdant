@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
@@ -53,6 +54,11 @@ import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.calendar.DeviceCalendarEvent
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.ui.components.EmptyState
+import dev.tricked.solidverdant.ui.components.EntryBlock
+import dev.tricked.solidverdant.ui.components.LoadingState
+import dev.tricked.solidverdant.ui.statistics.hexToColor
+import dev.tricked.solidverdant.ui.theme.Dimens
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -60,15 +66,15 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 
-private val WEEK_HOUR_HEIGHT = 48.dp
-private val WEEK_GUTTER_WIDTH = 46.dp
-private val WEEK_TOTAL_HEIGHT = WEEK_HOUR_HEIGHT * 24
-
 /**
  * Google-Calendar-style multi-day time grid. Renders [CalendarUiState.visibleDays] as columns with
  * device-calendar events drawn as faded, read-only background blocks behind the tracked time
  * entries. Overlap packing, midnight-spanning clipping, and all-day handling come from
  * [WeekCalendarLayout]; this file is presentation only.
+ *
+ * The hour gutter, gridlines, hour height and the tracked-entry blocks come from the shared grid
+ * primitives ([HourGridlines], [CalendarHourHeight], [EntryBlock]) so the week grid and the month
+ * day-timeline read as one product.
  */
 @Composable
 fun WeekCalendarView(
@@ -95,18 +101,24 @@ fun WeekCalendarView(
         days.associateWith { allDayEventsForDay(state.overlayEvents, it) }
     }
     val hasAnyAllDay = allDayByDay.values.any { it.isNotEmpty() }
+    val hasTrackedEntries = remember(state.bucketsByDate, days) {
+        days.any { state.bucketsByDate[it]?.entries?.isNotEmpty() == true }
+    }
+    val hasContent = hasTrackedEntries || state.overlayEvents.isNotEmpty()
 
     Column(modifier = modifier.fillMaxWidth()) {
         WeekNavHeader(days = days, viewMode = state.viewMode, locale = locale,
             onPrevious = onPrevious, onNext = onNext, onToday = onToday)
 
-        if (state.isLoading) {
+        // Subtle top-line refresh only when content is already on screen; a first, empty load uses
+        // the full-content LoadingState below instead.
+        if (state.isLoading && hasContent) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         }
 
         // Day-of-week / date header aligned with the grid gutter.
         Row(modifier = Modifier.fillMaxWidth()) {
-            Spacer(Modifier.width(WEEK_GUTTER_WIDTH))
+            Spacer(Modifier.width(CalendarGutterWidth))
             days.forEach { day ->
                 DayHeaderCell(
                     day = day,
@@ -125,55 +137,75 @@ fun WeekCalendarView(
             HairLine()
         }
 
-        val initialScroll = with(LocalDensity.current) { (WEEK_HOUR_HEIGHT * 7).roundToPx() }
-        val scrollState = rememberScrollState(initial = initialScroll)
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .verticalScroll(scrollState),
-        ) {
-            Box(modifier = Modifier.fillMaxWidth().height(WEEK_TOTAL_HEIGHT)) {
-                // Hour gridlines + labels in the gutter.
-                for (hour in 0..23) {
-                    Text(
-                        text = "%02d:00".format(hour),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .offset(y = WEEK_HOUR_HEIGHT * hour)
-                            .width(WEEK_GUTTER_WIDTH)
-                            .padding(end = 4.dp),
-                        textAlign = TextAlign.End,
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            when {
+                state.isLoading && !hasContent ->
+                    LoadingState(
+                        modifier = Modifier.align(Alignment.Center),
+                        label = stringResource(R.string.calendar_loading_entries),
                     )
-                    Spacer(
-                        modifier = Modifier
-                            .offset(x = WEEK_GUTTER_WIDTH, y = WEEK_HOUR_HEIGHT * hour)
-                            .fillMaxWidth()
-                            .height(1.dp)
-                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                    )
-                }
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(WEEK_TOTAL_HEIGHT)
-                        .padding(start = WEEK_GUTTER_WIDTH),
-                ) {
-                    days.forEach { day ->
-                        DayColumn(
-                            day = day,
-                            isToday = day == today,
-                            now = now,
-                            zone = zone,
-                            eventBlocks = timedByDay[day].orEmpty(),
-                            entries = state.bucketsByDate[day]?.entries.orEmpty(),
-                            projects = projects,
-                            onEntryClick = onEntryClick,
-                            modifier = Modifier.weight(1f).fillMaxHeight(),
-                        )
-                    }
+                !hasContent ->
+                    EmptyState(
+                        text = stringResource(R.string.calendar_no_entries),
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+
+                else -> WeekGrid(
+                    days = days,
+                    today = today,
+                    now = now,
+                    zone = zone,
+                    timedByDay = timedByDay,
+                    state = state,
+                    projects = projects,
+                    onEntryClick = onEntryClick,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeekGrid(
+    days: List<LocalDate>,
+    today: LocalDate,
+    now: Instant,
+    zone: ZoneId,
+    timedByDay: Map<LocalDate, List<EventBlock>>,
+    state: CalendarUiState,
+    projects: List<Project>,
+    onEntryClick: (TimeEntry) -> Unit,
+) {
+    val initialScroll = with(LocalDensity.current) { (CalendarHourHeight * 7).roundToPx() }
+    val scrollState = rememberScrollState(initial = initialScroll)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState),
+    ) {
+        Box(modifier = Modifier.fillMaxWidth().height(CalendarTotalHeight)) {
+            // Shared hour gutter + gridlines.
+            HourGridlines()
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(CalendarTotalHeight)
+                    .padding(start = CalendarGutterWidth),
+            ) {
+                days.forEach { day ->
+                    DayColumn(
+                        day = day,
+                        isToday = day == today,
+                        now = now,
+                        zone = zone,
+                        eventBlocks = timedByDay[day].orEmpty(),
+                        entries = state.bucketsByDate[day]?.entries.orEmpty(),
+                        projects = projects,
+                        onEntryClick = onEntryClick,
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                    )
                 }
             }
         }
@@ -190,7 +222,7 @@ private fun WeekNavHeader(
     onToday: () -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space4),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClick = onPrevious) {
@@ -234,12 +266,12 @@ private fun DayHeaderCell(
     }
     Column(
         modifier = modifier
-            .heightIn(min = 48.dp)
-            .padding(2.dp)
+            .heightIn(min = Dimens.MinTouchTarget)
+            .padding(Dimens.Space2)
             .clip(MaterialTheme.shapes.small)
             .then(if (bg != Color.Unspecified) Modifier.background(bg) else Modifier)
             .clickable(onClick = onSelect)
-            .padding(vertical = 4.dp)
+            .padding(vertical = Dimens.Space4)
             .testTag("week-day-header-$day"),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -270,7 +302,7 @@ private fun AllDayRow(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 28.dp)
-            .padding(vertical = 2.dp),
+            .padding(vertical = Dimens.Space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -278,7 +310,7 @@ private fun AllDayRow(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
-            modifier = Modifier.width(WEEK_GUTTER_WIDTH).padding(end = 4.dp),
+            modifier = Modifier.width(CalendarGutterWidth).padding(end = Dimens.Space4),
             textAlign = TextAlign.End,
         )
         days.forEach { day ->
@@ -297,7 +329,7 @@ private fun AllDayRow(
                             .padding(vertical = 1.dp)
                             .clip(MaterialTheme.shapes.extraSmall)
                             .background(base.copy(alpha = 0.16f))
-                            .padding(horizontal = 4.dp, vertical = 1.dp),
+                            .padding(horizontal = Dimens.Space4, vertical = 1.dp),
                     )
                 }
             }
@@ -336,10 +368,10 @@ private fun DayColumn(
                 modifier = Modifier
                     .offset(
                         x = slotWidth * block.column,
-                        y = WEEK_TOTAL_HEIGHT * block.startFraction,
+                        y = CalendarTotalHeight * block.startFraction,
                     )
                     .width(slotWidth)
-                    .height((WEEK_TOTAL_HEIGHT * block.heightFraction).coerceAtLeast(14.dp))
+                    .height((CalendarTotalHeight * block.heightFraction).coerceAtLeast(14.dp))
                     .padding(0.5.dp)
                     .clip(MaterialTheme.shapes.extraSmall)
                     .background(base.copy(alpha = 0.14f))
@@ -357,54 +389,88 @@ private fun DayColumn(
             }
         }
 
-        // Tracked time entries drawn on top, opaque enough to stay legible over events.
+        // Tracked time entries drawn on top with the shared EntryBlock treatment.
         entries.forEach { entry ->
             val (top, height) = timelineOffsets(entry, day, now, zone)
             val base = projects.firstOrNull { it.id == entry.projectId }?.color
-                ?.let { runCatching { Color(android.graphics.Color.parseColor(it)) }.getOrNull() }
+                ?.let { hexToColor(it) }
                 ?: MaterialTheme.colorScheme.primary
             val label = entry.description?.ifBlank { null } ?: noDescription
             val a11y = stringResource(R.string.calendar_entry_a11y, label)
-            Box(
+            EntryBlock(
+                color = base,
+                title = label,
                 modifier = Modifier
-                    .offset(y = WEEK_TOTAL_HEIGHT * top)
-                    .fillMaxWidth()
-                    .height((WEEK_TOTAL_HEIGHT * height).coerceAtLeast(20.dp))
-                    .padding(0.5.dp)
-                    .clip(MaterialTheme.shapes.small)
-                    .background(base.copy(alpha = 0.9f))
+                    .offset(y = CalendarTotalHeight * top)
+                    .padding(horizontal = 0.5.dp)
+                    .height((CalendarTotalHeight * height).coerceAtLeast(Dimens.EntryMinHeight))
                     .clickable(onClick = { onEntryClick(entry) })
                     .testTag("week-entry-${entry.id}")
-                    .padding(horizontal = 4.dp, vertical = 2.dp)
                     .semantics { contentDescription = a11y },
-            ) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+            )
         }
 
         // Current-time indicator on today's column.
         if (isToday) {
-            val fraction = (now.epochSecond -
-                day.atStartOfDay(zone).toInstant().epochSecond)
-                .toFloat() / SECONDS_PER_DAY
-            if (fraction in 0f..1f) {
-                Box(
-                    modifier = Modifier
-                        .offset(y = WEEK_TOTAL_HEIGHT * fraction)
-                        .fillMaxWidth()
-                        .height(2.dp)
-                        .background(MaterialTheme.colorScheme.error)
-                        .clearAndSetSemantics { },
-                )
-            }
+            CurrentTimeMarker(now = now, day = day, zone = zone)
         }
+    }
+}
+
+/**
+ * Shared hour gutter + horizontal gridlines for the day/week time grid. Draws 24 right-aligned
+ * hour labels in a [CalendarGutterWidth] gutter and a per-hour hairline (via `outlineVariant`)
+ * across the full width. Used by both the week grid and the month day-timeline.
+ */
+@Composable
+internal fun HourGridlines(modifier: Modifier = Modifier) {
+    val lineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+    Box(modifier = modifier.fillMaxWidth().height(CalendarTotalHeight)) {
+        for (hour in 0..23) {
+            Text(
+                text = "%02d:00".format(hour),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .offset(y = CalendarHourHeight * hour)
+                    .width(CalendarGutterWidth)
+                    .padding(end = Dimens.Space4),
+                textAlign = TextAlign.End,
+            )
+            Spacer(
+                modifier = Modifier
+                    .offset(x = CalendarGutterWidth, y = CalendarHourHeight * hour)
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(lineColor),
+            )
+        }
+    }
+}
+
+/**
+ * The red "now" line for [day], positioned by the current instant within the 24h column. Renders
+ * nothing when [now] falls outside [day]. Pass a start padding via [modifier] to align it past the
+ * hour gutter in single-column layouts.
+ */
+@Composable
+internal fun CurrentTimeMarker(
+    now: Instant,
+    day: LocalDate,
+    zone: ZoneId,
+    modifier: Modifier = Modifier,
+) {
+    val fraction = (now.epochSecond - day.atStartOfDay(zone).toInstant().epochSecond)
+        .toFloat() / SECONDS_PER_DAY
+    if (fraction in 0f..1f) {
+        Box(
+            modifier = modifier
+                .offset(y = CalendarTotalHeight * fraction)
+                .fillMaxWidth()
+                .height(2.dp)
+                .background(MaterialTheme.colorScheme.error)
+                .clearAndSetSemantics { },
+        )
     }
 }
 

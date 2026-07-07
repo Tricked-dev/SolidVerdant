@@ -48,6 +48,16 @@ If the intended behavior, product policy, or acceptance criteria needed for a co
 - Interactive controls need stable content descriptions and at least a 48 dp touch target.
 - Layouts must remain usable with large font/display scaling and keyboard or TalkBack navigation.
 
+### Anti-drift rules for feature UI
+
+These keep feature screens consistent with the shared design system. They are enforced best-effort by detekt (`./gradlew detekt`, opt-in and outside the default build).
+
+- Compose from the shared kit. Build screens from the components in `ui/theme` and `ui/components`; do not fork bespoke variants of things the kit already provides.
+- No hardcoded design values in feature code. Never write `Color(0x..)`, raw `fontSize = ..sp`, or magic `..dp` in feature packages. Pull spacing and sizing from `Dimens`, colors from `MaterialTheme.colorScheme` / `SemanticColors`, and type from `MaterialTheme.typography`. Raw literals belong only in `ui/theme`, where the tokens are defined.
+- Reuse before you build. Check `ui/components` first; when a component genuinely does not exist, add the new shared piece to `ui/components` rather than inlining it in a screen.
+- Progressive disclosure. The default, healthy state shows nothing extra — no always-on chrome, counters, or banners that bloat the screen. Power features live behind an affordance (icon, toggle, or sheet) and appear only when they apply.
+- Use the shared status views. Render loading, empty, and error states with the shared `LoadingState`, `EmptyState`, and `ErrorState` from `ui/components` instead of re-inventing per-screen placeholders.
+
 ## Verification
 
 Use the pinned development environment:

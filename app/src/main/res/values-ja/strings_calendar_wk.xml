@@ -10,6 +10,10 @@
     <string name="calendar_all_day">終日</string>
     <string name="calendar_entry_untitled">説明なし</string>
     <string name="calendar_entry_a11y">記録: %1$s</string>
+    <string name="calendar_no_entries">記録された時間はありません</string>
+    <string name="calendar_loading_entries">記録を読み込み中…</string>
+    <string name="calendar_overlay_settings">カレンダーオーバーレイの設定</string>
+    <string name="calendar_overlay_title">カレンダーの予定</string>
 
     <!-- オーバーレイの設定 -->
     <string name="calendar_overlay_show">カレンダーの予定を表示</string>

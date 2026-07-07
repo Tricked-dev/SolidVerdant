@@ -81,7 +81,9 @@ fun computeComparison(
         ProjectChange(
             projectId = id,
             projectName = cur?.projectName ?: prev?.projectName,
-            colorHex = cur?.colorHex ?: prev?.colorHex ?: "#9E9E9E",
+            // Empty when neither period carried a colour; the renderer resolves it to the neutral
+            // outline token rather than baking a grey literal here.
+            colorHex = cur?.colorHex ?: prev?.colorHex ?: "",
             current = cur?.seconds ?: 0L,
             previous = prev?.seconds ?: 0L,
         )

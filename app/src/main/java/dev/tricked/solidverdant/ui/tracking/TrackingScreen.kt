@@ -171,6 +171,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.tricked.solidverdant.data.local.AppThemeMode
 import dev.tricked.solidverdant.ui.components.ProjectTaskDropdown as SharedProjectTaskDropdown
+import dev.tricked.solidverdant.ui.components.SectionCard
+import dev.tricked.solidverdant.ui.components.SyncChip
+import dev.tricked.solidverdant.ui.theme.Dimens
 import dev.tricked.solidverdant.util.NotificationPermissionHelper
 import dev.tricked.solidverdant.service.TimeTrackingNotificationService
 import kotlinx.coroutines.launch
@@ -1219,14 +1222,23 @@ private fun SyncCenter(
 ) {
     val failed = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.FAILED }
     val retrying = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.RETRYING }
-    Card(Modifier.fillMaxWidth()) {
+    val summaryStatus = when {
+        failed > 0 -> TimeEntryRepository.EntrySyncStatus.FAILED
+        retrying > 0 -> TimeEntryRepository.EntrySyncStatus.RETRYING
+        else -> TimeEntryRepository.EntrySyncStatus.PENDING
+    }
+    SectionCard(title = stringResource(R.string.sync_center)) {
         Row(
-            Modifier.fillMaxWidth().padding(12.dp),
+            Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(Dimens.Space12),
         ) {
-            Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.sync_center), style = MaterialTheme.typography.titleSmall)
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
+            ) {
+                SyncChip(status = summaryStatus, showLabel = false)
                 Text(
                     when {
                         failed > 0 -> stringResource(R.string.sync_failed_count, failed)
@@ -1237,13 +1249,16 @@ private fun SyncCenter(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (failed > 0 || retrying > 0) TextButton(onClick = onRetry) { Text(stringResource(R.string.retry)) }
+            if (failed > 0 || retrying > 0) {
+                TextButton(onClick = onRetry) { Text(stringResource(R.string.retry)) }
+            }
         }
         operations.filter { it.status == TimeEntryRepository.EntrySyncStatus.FAILED }.forEach { operation ->
             HorizontalDivider()
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
             ) {
                 Text(
                     stringResource(R.string.sync_entry_failed),
@@ -2112,8 +2127,7 @@ private fun CollapsibleTimeEntryGroup(
                 entry = entries.first(),
                 projects = projects,
                 tasks = tasks,
-                syncStatus = syncOperations.lastOrNull { it.entryId == entries.first().id }?.status
-                    ?: TimeEntryRepository.EntrySyncStatus.SYNCED,
+                syncStatus = syncOperations.lastOrNull { it.entryId == entries.first().id }?.status,
                 onEdit = { onEdit(entries.first()) },
                 onDelete = { onDelete(entries.first()) },
                 count = null
@@ -2127,7 +2141,7 @@ private fun CollapsibleTimeEntryGroup(
                     projects = projects,
                     tasks = tasks,
                     syncStatus = entries.mapNotNull { entry -> syncOperations.lastOrNull { it.entryId == entry.id }?.status }
-                        .maxByOrNull { it.ordinal } ?: TimeEntryRepository.EntrySyncStatus.SYNCED,
+                        .maxByOrNull { it.ordinal },
                     onEdit = { isExpanded = true },
                     onDelete = { /* Don't allow deleting grouped entries */ },
                     count = entries.size,
@@ -2140,8 +2154,7 @@ private fun CollapsibleTimeEntryGroup(
                         entry = entry,
                         projects = projects,
                         tasks = tasks,
-                        syncStatus = syncOperations.lastOrNull { it.entryId == entry.id }?.status
-                            ?: TimeEntryRepository.EntrySyncStatus.SYNCED,
+                        syncStatus = syncOperations.lastOrNull { it.entryId == entry.id }?.status,
                         onEdit = { onEdit(entry) },
                         onDelete = { onDelete(entry) },
                         count = null,
@@ -2212,8 +2225,7 @@ private fun CompactTimeEntryRow(
                     text = count.toString(),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp
+                    fontWeight = FontWeight.Bold
                 )
             }
             Spacer(Modifier.width(8.dp))
@@ -2258,7 +2270,6 @@ private fun CompactTimeEntryRow(
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -2271,7 +2282,6 @@ private fun CompactTimeEntryRow(
                     text = formatTimeRange(entry.start, entry.end),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp,
                     maxLines = 1
                 )
             }
@@ -2284,27 +2294,15 @@ private fun CompactTimeEntryRow(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (syncStatus != null) {
-                val label = when (syncStatus) {
-                    TimeEntryRepository.EntrySyncStatus.SYNCED -> stringResource(R.string.sync_synced)
-                    TimeEntryRepository.EntrySyncStatus.PENDING -> stringResource(R.string.sync_pending)
-                    TimeEntryRepository.EntrySyncStatus.RETRYING -> stringResource(R.string.sync_retrying)
-                    TimeEntryRepository.EntrySyncStatus.FAILED -> stringResource(R.string.sync_failed)
-                }
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED)
-                        MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                )
-            }
+            // Kit chip renders nothing for SYNCED (and null); only PENDING /
+            // RETRYING / FAILED surface, so a healthy row stays clutter-free.
+            syncStatus?.let { SyncChip(status = it) }
             // Duration (use totalDuration if grouped, otherwise entry duration)
             Text(
                 text = formatDuration(totalDuration ?: entry.duration ?: 0),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 14.sp
+                color = MaterialTheme.colorScheme.onSurface
             )
 
             // Only show action buttons if not grouped or if expanded

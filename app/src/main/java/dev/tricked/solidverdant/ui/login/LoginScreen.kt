@@ -1,6 +1,10 @@
 package dev.tricked.solidverdant.ui.login
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -10,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -70,6 +75,12 @@ fun LoginScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.solidtime_login)) },
                 actions = {
+                    IconButton(onClick = { openAppLanguageSettings(context) }) {
+                        Icon(
+                            imageVector = Icons.Default.Language,
+                            contentDescription = stringResource(R.string.choose_language)
+                        )
+                    }
                     IconButton(onClick = { showConfigDialog = true }) {
                         Icon(
                             imageVector = Icons.Default.Settings,
@@ -177,6 +188,24 @@ private fun ErrorCard(
             )
         }
     }
+}
+
+/**
+ * Open the system per-app language picker (Android 13+), falling back to the app details
+ * screen on older versions. Mirrors the language affordance on the Track screen so users can
+ * switch language before signing in.
+ */
+private fun openAppLanguageSettings(context: Context) {
+    val appUri = Uri.parse("package:${context.packageName}")
+    val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        Intent(Settings.ACTION_APP_LOCALE_SETTINGS, appUri)
+    } else {
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, appUri)
+    }
+    runCatching { context.startActivity(intent) }
+        .onFailure {
+            context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, appUri))
+        }
 }
 
 /**

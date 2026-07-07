@@ -2,6 +2,8 @@ package dev.tricked.solidverdant.ui.config
 
 import android.content.ClipboardManager
 import android.content.Context
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -85,6 +87,7 @@ fun ConfigScreen(
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .imePadding()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
@@ -123,15 +126,18 @@ fun ConfigScreen(
                 )
             }
 
+            // Test is the primary action → full width so its (long, localized) label never
+            // gets clipped; the two secondary actions split a second row. Avoids the previous
+            // three-across layout where long labels overflowed horizontally.
+            FilledTonalButton(
+                onClick = { onTestConnection(endpoint, clientId) },
+                enabled = endpoint.isNotBlank() && clientId.isNotBlank() && !configState.isTesting,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(stringResource(if (configState.isTesting) R.string.testing_connection else R.string.test_connection)) }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                FilledTonalButton(
-                    onClick = { onTestConnection(endpoint, clientId) },
-                    enabled = endpoint.isNotBlank() && clientId.isNotBlank() && !configState.isTesting,
-                    modifier = Modifier.weight(1f),
-                ) { Text(stringResource(if (configState.isTesting) R.string.testing_connection else R.string.test_connection)) }
                 FilledTonalButton(
                     onClick = ::pasteConfig,
                     modifier = Modifier.weight(1f)
