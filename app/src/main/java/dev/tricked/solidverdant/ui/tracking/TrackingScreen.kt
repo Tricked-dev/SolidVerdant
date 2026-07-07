@@ -139,6 +139,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -878,6 +879,7 @@ fun TrackingScreen(
                                 modifier = Modifier
                                     .weight(1.1f)
                                     .fillMaxSize()
+                                    .testTag(TrackingTestTags.HISTORY_LIST)
                                     .nestedScroll(historyScrollConnection)
                                     .padding(horizontal = 24.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -902,6 +904,7 @@ fun TrackingScreen(
                             state = compactListState,
                             modifier = Modifier
                                 .fillMaxSize()
+                                .testTag(TrackingTestTags.HISTORY_LIST)
                                 .nestedScroll(historyScrollConnection)
                                 .padding(horizontal = 16.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -1323,7 +1326,7 @@ private fun historyHeaderIndex(
     return -1
 }
 
-private fun LazyListScope.trackingHistoryItems(
+internal fun LazyListScope.trackingHistoryItems(
     uiState: TrackingUiState,
     groupedEntries: Map<LocalDate, List<TimeEntry>>,
     onEdit: (TimeEntry) -> Unit,
@@ -1478,7 +1481,7 @@ private fun HistoryLoadingEntry(index: Int) {
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun TrackingControls(
+internal fun TrackingControls(
     uiState: TrackingUiState,
     onDescriptionChange: (String) -> Unit,
     onProjectChange: (String?) -> Unit,
@@ -1632,7 +1635,7 @@ private fun TrackingControls(
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             onStop()
                         },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).testTag(TrackingTestTags.STOP_BUTTON),
                         enabled = !uiState.isMutating,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error,
@@ -1671,7 +1674,7 @@ private fun TrackingControls(
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             onStop()
                         },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).testTag(TrackingTestTags.STOP_BUTTON),
                         enabled = !uiState.isMutating,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error,
@@ -1693,7 +1696,7 @@ private fun TrackingControls(
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             onStart()
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.START_BUTTON),
                         enabled = !uiState.isMutating,
                         shape = RoundedCornerShape(8.dp)
                     ) {
@@ -2206,6 +2209,7 @@ private fun CompactTimeEntryRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .testTag(TrackingTestTags.ENTRY_ROW)
             .then(if (isIndented) Modifier.padding(start = 16.dp) else Modifier)
             .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
             .padding(horizontal = 12.dp, vertical = 10.dp)

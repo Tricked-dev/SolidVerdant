@@ -1,0 +1,37 @@
+package dev.tricked.solidverdant.e2e.robots
+
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.ComposeTestRule
+import androidx.compose.ui.test.onFirst
+
+/**
+ * Base for screen robots. Robots expose high-level, intention-revealing actions/assertions over the
+ * [ComposeTestRule] and encapsulate matching (prefer testTags via [dev.tricked.solidverdant.e2e.TestTags]).
+ *
+ * All waits use [ComposeTestRule.waitUntil] — never Thread.sleep — so tests stay deterministic.
+ */
+abstract class Robot(protected val composeRule: ComposeTestRule) {
+
+    protected fun waitUntilTagExists(tag: String, timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
+        composeRule.waitUntil(timeoutMs) {
+            composeRule.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    protected fun waitUntilTextExists(text: String, timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
+        composeRule.waitUntil(timeoutMs) {
+            composeRule.onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    protected fun nodesWithTag(tag: String) = composeRule.onAllNodes(hasTestTag(tag))
+
+    protected fun firstNodeWithTag(tag: String): SemanticsNodeInteraction =
+        composeRule.onAllNodes(hasTestTag(tag)).onFirst()
+
+    companion object {
+        const val DEFAULT_TIMEOUT_MS = 10_000L
+    }
+}

@@ -195,7 +195,7 @@ fun InboxPane() {
 }
 
 @Composable
-private fun InboxHeader(
+internal fun InboxHeader(
     issueCount: Int,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
@@ -338,7 +338,7 @@ private fun DismissibleIssue(
 }
 
 @Composable
-private fun InboxIssueCard(
+internal fun InboxIssueCard(
     issue: InboxIssue,
     preventOverlap: Boolean,
     projectsById: Map<String, Project>,

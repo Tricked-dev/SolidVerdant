@@ -245,7 +245,7 @@ private fun EmptyState(canCreate: Boolean, onCreate: () -> Unit) {
 }
 
 @Composable
-private fun TemplateRow(
+internal fun TemplateRow(
     template: EntryTemplate,
     resolution: TemplateResolution,
     projectTaskSummary: String?,

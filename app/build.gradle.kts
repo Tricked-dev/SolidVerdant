@@ -14,6 +14,7 @@ plugins {
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.detekt)
+    alias(libs.plugins.roborazzi)
 }
 
 val appVersionName: String = project.findProperty("app.versionName") as String
@@ -38,7 +39,7 @@ android {
         applicationId = "dev.tricked.solidverdant"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "dev.tricked.solidverdant.HiltTestRunner"
         versionCode = appVersionCode
         versionName = appVersionName
 
@@ -86,6 +87,15 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    // Robolectric needs the merged Android resources/assets/manifest on the JVM classpath so it
+    // can inflate themes and load string/plural resources. Required by the Roborazzi screenshot
+    // suite in src/test (dev.tricked.solidverdant.screenshots).
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
     }
 
     compileOptions {
@@ -237,10 +247,28 @@ dependencies {
     testImplementation(libs.androidx.work.testing)
     testImplementation(libs.androidx.test.core.ktx)
 
+    // Roborazzi + Compose screenshot testing on the JVM (no device/emulator).
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit)
+    testImplementation(libs.androidx.compose.ui.test.manifest)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.junit.rule)
+
     androidTestImplementation(composeBom)
     androidTestImplementation(libs.androidx.compose.ui.test.junit)
     androidTestImplementation(libs.androidx.navigation.testing)
     androidTestImplementation(libs.junit4)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.espresso.core)
+
+    // On-device (instrumented) E2E test harness.
+    androidTestImplementation(libs.hilt.android.testing)
+    kspAndroidTest(libs.hilt.compiler)
+    androidTestImplementation(libs.androidx.work.testing)
+    androidTestImplementation(libs.androidx.test.rules)
+    androidTestImplementation(libs.androidx.test.ext)
+    androidTestImplementation(libs.androidx.test.espresso.intents)
+    androidTestImplementation(libs.okhttp.mockwebserver)
+    androidTestImplementation(libs.kotlinx.coroutines.test)
 }

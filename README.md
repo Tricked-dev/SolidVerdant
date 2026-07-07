@@ -57,20 +57,29 @@
 
 ## Screenshots
 
-<p align="center">
-  <img src="screenshots/home.png" width="30%" alt="Time tracking history" />
-  <img src="screenshots/tracking-active.png" width="30%" alt="Active time tracking" />
-  <img src="screenshots/edit-entry.png" width="30%" alt="Edit a time entry" />
-</p>
+The shots below are generated on the JVM (no device) by the Roborazzi + Robolectric suite — see
+[Testing](#testing). Run `./gradlew :app:recordRoborazziDebug` to regenerate them.
+
+<table>
+  <tr>
+    <td align="center"><img src="screenshots/readme/track.png" width="240" alt="Track screen with a running timer and history" /><br /><sub><b>Track</b><br />Running timer &amp; history</sub></td>
+    <td align="center"><img src="screenshots/readme/history.png" width="240" alt="History list grouped by day" /><br /><sub><b>History</b><br />Entries grouped by day</sub></td>
+    <td align="center"><img src="screenshots/readme/calendar-month.png" width="240" alt="Calendar month view" /><br /><sub><b>Calendar — Month</b><br />Month overview</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/readme/calendar-week.png" width="240" alt="Calendar week view with overlay events" /><br /><sub><b>Calendar — Week</b><br />Week with calendar overlay</sub></td>
+    <td align="center"><img src="screenshots/readme/statistics.png" width="240" alt="Statistics with KPIs and charts" /><br /><sub><b>Statistics</b><br />KPIs, filters &amp; charts</sub></td>
+    <td align="center"><img src="screenshots/readme/inbox.png" width="240" alt="Time Inbox review issue cards" /><br /><sub><b>Time Inbox</b><br />Review issue cards</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/readme/review.png" width="240" alt="End-of-day guided review" /><br /><sub><b>End-of-day Review</b><br />Guided cleanup</sub></td>
+    <td align="center"><img src="screenshots/readme/edit-entry.png" width="240" alt="Edit time entry sheet" /><br /><sub><b>Edit Entry</b><br />Create / edit sheet</sub></td>
+    <td align="center"><img src="screenshots/readme/templates.png" width="240" alt="Templates and favorites" /><br /><sub><b>Templates</b><br />Favorites &amp; quick starts</sub></td>
+  </tr>
+</table>
 
 <p align="center">
-  <img src="screenshots/click-to-start.png" width="30%" alt="Quick Settings tile" />
-  <img src="screenshots/start-entry.png" width="30%" alt="Start from the Quick Settings tile" />
-  <img src="screenshots/notif.png" width="30%" alt="Tracking notification" />
-</p>
-
-<p align="center">
-  <em>History • Active Timer • Edit Entry • Quick Settings • Start Entry • Notification</em>
+  <em>Rendered in the Neo dark theme. The full light/dark × phone/tablet matrix lives in <code>screenshots/generated/</code>.</em>
 </p>
 
 ## Tech Stack
@@ -145,6 +154,14 @@ Run instrumentation tests:
 ```bash
 ./gradlew connectedAndroidTest
 ```
+
+Generate the README screenshots (pure JVM, no device/emulator — Roborazzi + Robolectric):
+```bash
+./gradlew :app:recordRoborazziDebug
+```
+This renders every screen across a light/dark × phone/tablet matrix into `screenshots/generated/`
+and writes the Neo-dark phone hero set to `screenshots/readme/`.
+
 ## Verification
 
 You can verify the authenticity of SolidVerdant APKs using the signing certificate hash below. This works with [AppVerifier](https://github.com/soupslurpr/AppVerifier) or [Obtainium](https://github.com/ImranR98/Obtainium)'s built-in verification.

@@ -363,7 +363,7 @@ private fun RangeChips(current: StatRange, onSelect: (StatRange) -> Unit) {
 private fun Long.toUtcDate(): LocalDate = Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate()
 
 @Composable
-private fun KpiGrid(s: StatisticsSummary) {
+internal fun KpiGrid(s: StatisticsSummary) {
     Column(verticalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
         Row(horizontalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
             KpiTile(stringResource(R.string.stats_total), formatDuration(s.totalSeconds), Modifier.weight(1f))

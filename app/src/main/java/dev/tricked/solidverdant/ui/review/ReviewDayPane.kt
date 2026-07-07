@@ -133,7 +133,7 @@ fun ReviewDayPane() {
 }
 
 @Composable
-private fun ReviewContent(
+internal fun ReviewContent(
     state: ReviewDayUiState,
     onStop: () -> Unit,
     onKeepRunning: () -> Unit,
