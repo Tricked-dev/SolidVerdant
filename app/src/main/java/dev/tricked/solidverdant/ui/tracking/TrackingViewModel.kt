@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -304,7 +305,7 @@ class TrackingViewModel @Inject constructor(
                     clients = catalog.second,
                     active = active
                 )
-            }.collect { data ->
+            }.distinctUntilChanged().collect { data ->
                 val overlapCount = withContext(Dispatchers.Default) {
                     EntryTrustRules.overlapCount(data.entries)
                 }
@@ -375,9 +376,11 @@ class TrackingViewModel @Inject constructor(
             }
         }
         syncCollectorJob = viewModelScope.launch {
-            timeEntryRepository.observeSyncOperations(organizationId).collect { operations ->
-                _uiState.value = _uiState.value.copy(syncOperations = operations)
-            }
+            timeEntryRepository.observeSyncOperations(organizationId)
+                .distinctUntilChanged()
+                .collect { operations ->
+                    _uiState.value = _uiState.value.copy(syncOperations = operations)
+                }
         }
     }
 

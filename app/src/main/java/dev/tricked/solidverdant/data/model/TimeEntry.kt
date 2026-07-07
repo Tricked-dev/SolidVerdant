@@ -62,8 +62,9 @@ object TimeEntryTagsSerializer : JsonTransformingSerializer<List<Tag>>(ListSeria
 /**
  * User profile information
  */
-@Serializable
-data class User(
+@Stable
+ @Serializable
+ data class User(
     val id: String,
     val name: String,
     val email: String,
@@ -77,8 +78,9 @@ data class User(
 /**
  * Organization membership information
  */
-@Serializable
-data class Membership(
+@Stable
+ @Serializable
+ data class Membership(
     val id: String,
     val role: String,
     val organization: Organization
@@ -91,8 +93,9 @@ data class Membership(
 /**
  * Organization information
  */
-@Serializable
-data class Organization(
+@Stable
+ @Serializable
+ data class Organization(
     val id: String,
     val name: String,
     val currency: String,

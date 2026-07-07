@@ -29,10 +29,12 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
 
+import androidx.compose.runtime.Stable
 /**
  * UI state for authentication screens
  */
-data class AuthUiState(
+@Stable
+ data class AuthUiState(
     val isLoading: Boolean = false,
     val user: User? = null,
     val memberships: List<Membership> = emptyList(),
@@ -45,7 +47,8 @@ data class AuthUiState(
 /**
  * UI state for OAuth configuration
  */
-data class OAuthConfigState(
+@Stable
+ data class OAuthConfigState(
     val endpoint: String = "",
     val clientId: String = "",
     val isTesting: Boolean = false,

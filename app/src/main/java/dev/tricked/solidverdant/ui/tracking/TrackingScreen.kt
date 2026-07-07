@@ -128,6 +128,7 @@ import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -855,10 +856,10 @@ fun TrackingScreen(
 
                 BoxWithConstraints(Modifier.fillMaxSize()) {
                     val wideLayout = maxWidth >= 840.dp
-                    val elapsed by elapsedSeconds.collectAsState()
                     val primaryContent: LazyListScope.() -> Unit = {
                         item { Spacer(Modifier.height(8.dp)) }
                         item {
+                            val elapsed by elapsedSeconds.collectAsState()
                             TrackingControls(
                                 uiState = uiState,
                                 elapsedSeconds = elapsed,
@@ -875,6 +876,7 @@ fun TrackingScreen(
                             )
                         }
                         item(key = "long_timer_warning") {
+                            val elapsed by elapsedSeconds.collectAsState()
                             if (uiState.isTracking && elapsed >= longTimerHours * 3600L &&
                                 elapsed >= longTimerSnoozedUntil) {
                                 LongTimerWarning(
@@ -1526,25 +1528,30 @@ internal fun LazyListScope.trackingHistoryItems(
     )
 }
 
-internal data class HistoryDay(
-    val date: LocalDate,
-    val entries: List<TimeEntry>,
-    val groups: List<List<TimeEntry>>,
-)
+@Immutable
+ internal data class HistoryDay(
+     val date: LocalDate,
+     val entries: List<TimeEntry>,
+     val groups: List<List<TimeEntry>>,
+ )
 
-internal sealed interface HistoryListItem {
-    data class Header(val day: HistoryDay) : HistoryListItem
-    data class Group(val entries: List<TimeEntry>) : HistoryListItem
-}
+@Immutable
+ internal sealed interface HistoryListItem {
+    @Immutable
+     data class Header(val day: HistoryDay) : HistoryListItem
+    @Immutable
+     data class Group(val entries: List<TimeEntry>) : HistoryListItem
+ }
 
-private data class PreparedHistory(
-    val groupedEntries: Map<LocalDate, List<TimeEntry>>,
-    val listItems: List<HistoryListItem>,
-) {
-    companion object {
-        val Empty = PreparedHistory(emptyMap(), emptyList())
-    }
-}
+@Immutable
+ private data class PreparedHistory(
+     val groupedEntries: Map<LocalDate, List<TimeEntry>>,
+     val listItems: List<HistoryListItem>,
+ ) {
+     companion object {
+         val Empty = PreparedHistory(emptyMap(), emptyList())
+     }
+ }
 
 @Composable
 private fun rememberGhostAlpha(): Float {
@@ -1629,7 +1636,7 @@ private fun HistoryLoadingEntry(index: Int) {
 @Composable
 internal fun TrackingControls(
     uiState: TrackingUiState,
-    elapsedSeconds: Long = uiState.elapsedSeconds,
+    elapsedSeconds: Long = 0L,
     onDescriptionChange: (String) -> Unit,
     onProjectChange: (String?) -> Unit,
     onTaskChange: (String?) -> Unit,
@@ -1697,7 +1704,7 @@ internal fun TrackingControls(
                 onEntryCopied = { entry ->
                     onDescriptionChange(entry.description ?: "")
                     onProjectChange(entry.projectId)
-                    onTaskChange(entry.taskId)
+    elapsedSeconds: Long = uiState.elapsedSeconds,
                     onTagsChange(entry.tags.map { it.id })
                     onBillableChange(entry.billable)
                 }
@@ -2271,6 +2278,13 @@ private fun CollapsibleTimeEntryGroup(
     onDelete: (TimeEntry) -> Unit
 ) {
     var isExpanded by remember { mutableStateOf(false) }
+    val worstSyncStatus = remember(entries, syncStatusByEntryId) {
+        entries.mapNotNull { entry -> syncStatusByEntryId[entry.id] }
+            .maxByOrNull { it.ordinal }
+    }
+    val totalDuration = remember(entries) {
+        entries.sumOf { it.duration ?: 0 }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (entries.size == 1) {
@@ -2292,12 +2306,11 @@ private fun CollapsibleTimeEntryGroup(
                     entry = entries.first(),
                     project = projectsById[entries.first().projectId],
                     task = tasksById[entries.first().taskId],
-                    syncStatus = entries.mapNotNull { entry -> syncStatusByEntryId[entry.id] }
-                        .maxByOrNull { it.ordinal },
+                    syncStatus = worstSyncStatus,
                     onEdit = { isExpanded = true },
                     onDelete = { /* Don't allow deleting grouped entries */ },
                     count = entries.size,
-                    totalDuration = entries.sumOf { it.duration ?: 0 }
+                    totalDuration = totalDuration
                 )
             } else {
                 // Show all entries
@@ -2419,11 +2432,14 @@ private fun CompactTimeEntryRow(
                             .clip(CircleShape)
                             .background(projectColor ?: MaterialTheme.colorScheme.outline)
                     )
-                    Text(
-                        text = buildString {
+                    val projectTaskText = remember(project?.name, task?.name) {
+                        buildString {
                             append(project.name)
                             task?.let { append(" · ${it.name}") }
-                        },
+                        }
+                    }
+                    Text(
+                        text = projectTaskText,
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
