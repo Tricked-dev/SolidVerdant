@@ -21,7 +21,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,10 +28,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -76,6 +73,7 @@ fun ProjectTaskDropdown(
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             modifier = Modifier
                 .fillMaxWidth()
+                .testTag("project_task_selector")
                 .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled),
             enabled = enabled,
             shape = if (rounded) RoundedCornerShape(8.dp) else OutlinedTextFieldDefaultsShape
@@ -122,14 +120,7 @@ private fun ProjectTaskPickerDialog(
                 it.id in matchingTaskProjectIds
         }
     }
-    val focusRequester = remember { FocusRequester() }
-    val keyboardController = LocalSoftwareKeyboardController.current
-
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-        keyboardController?.show()
-    }
-
+    val filteredTasksByProject = remember(filteredTasks) { filteredTasks.groupBy { it.projectId } }
     Dialog(onDismissRequest = onClose) {
         Surface(
             modifier = Modifier
@@ -139,7 +130,7 @@ private fun ProjectTaskPickerDialog(
             tonalElevation = 6.dp
         ) {
             androidx.compose.foundation.lazy.LazyColumn(
-                modifier = Modifier.padding(vertical = 12.dp)
+                modifier = Modifier.padding(vertical = 12.dp).testTag("project_task_list")
             ) {
                 item {
                     Text(
@@ -155,7 +146,6 @@ private fun ProjectTaskPickerDialog(
                         placeholder = { Text(stringResource(R.string.search_placeholder)) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .focusRequester(focusRequester)
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp)
@@ -194,7 +184,7 @@ private fun ProjectTaskPickerDialog(
                         )
                     }
 
-                    filteredTasks.filter { it.projectId == project.id }.forEach { task ->
+                    filteredTasksByProject[project.id].orEmpty().forEach { task ->
                         item(key = "task_${task.id}") {
             DropdownMenuItem(
                 text = {

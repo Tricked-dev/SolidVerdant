@@ -28,16 +28,31 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
         nodesWithTag(TestTags.TRACK_ENTRY_ROW).fetchSemanticsNodes().size
 
     fun tapStart(): TrackRobot = apply {
-        waitUntilTagExists(TestTags.TRACK_START_BUTTON)
-        firstNodeWithTag(TestTags.TRACK_START_BUTTON).performClick()
+        waitUntilEnabledTagExists(TestTags.TRACK_START_BUTTON)
+        firstEnabledNodeWithTag(TestTags.TRACK_START_BUTTON).performClick()
     }
 
     fun tapStop(): TrackRobot = apply {
-        waitUntilTagExists(TestTags.TRACK_STOP_BUTTON)
-        firstNodeWithTag(TestTags.TRACK_STOP_BUTTON).performClick()
+        waitUntilEnabledTagExists(TestTags.TRACK_STOP_BUTTON)
+        firstEnabledNodeWithTag(TestTags.TRACK_STOP_BUTTON).performClick()
     }
 
     fun assertStopButtonVisible(): TrackRobot = apply {
         waitUntilTagExists(TestTags.TRACK_STOP_BUTTON)
+    }
+
+    fun openSettings(): TrackRobot = apply {
+        waitUntilTagExists(TestTags.TRACK_SETTINGS_BUTTON)
+        firstNodeWithTag(TestTags.TRACK_SETTINGS_BUTTON).performClick()
+        waitUntilTagExists(TestTags.TRACK_LOGOUT_BUTTON)
+    }
+
+    fun logout(): TrackRobot = apply {
+        firstNodeWithTag(TestTags.TRACK_LOGOUT_BUTTON).performClick()
+    }
+
+    fun assertLoginVisible(): TrackRobot = apply {
+        waitUntilTagExists(TestTags.LOGIN_BUTTON)
+        firstNodeWithTag(TestTags.LOGIN_BUTTON).assertIsDisplayed()
     }
 }

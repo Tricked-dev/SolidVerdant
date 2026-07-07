@@ -11,4 +11,6 @@ object TrackingTestTags {
     const val ENTRY_ROW = "track_entry_row"
     const val START_BUTTON = "track_start_button"
     const val STOP_BUTTON = "track_stop_button"
+    const val SETTINGS_BUTTON = "track_settings_button"
+    const val LOGOUT_BUTTON = "track_logout_button"
 }

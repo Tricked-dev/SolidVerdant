@@ -16,6 +16,9 @@ import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.components.SingletonComponent
 import dev.tricked.solidverdant.MainActivity
 import dev.tricked.solidverdant.data.local.AuthDataStore
+import dev.tricked.solidverdant.data.local.SettingsDataStore
+import dev.tricked.solidverdant.data.local.db.AppDatabase
+import dev.tricked.solidverdant.data.local.db.TemplateEntity
 import dev.tricked.solidverdant.e2e.di.TestClock
 import dev.tricked.solidverdant.e2e.mock.MockSolidtimeServer
 import dev.tricked.solidverdant.sync.SyncScheduler
@@ -72,6 +75,8 @@ class E2eRule(private val test: Any) : TestRule {
         fun authDataStore(): AuthDataStore
         fun workerFactory(): HiltWorkerFactory
         fun testClock(): TestClock
+        fun database(): AppDatabase
+        fun settingsDataStore(): SettingsDataStore
     }
 
     /** Configuration that must run after Hilt is up but before the activity launches. */
@@ -87,6 +92,11 @@ class E2eRule(private val test: Any) : TestRule {
 
                     // Boot the app logged-in and aimed at the mock backend.
                     runBlocking {
+                        // Room is process/package persistent and may contain a previous stress run.
+                        // Every E2E test owns its complete world, so clear account data before the
+                        // test seeds local-only fixtures or launches the activity.
+                        entryPoint.database().clearAllTables()
+                        entryPoint.settingsDataStore().clearCachedData()
                         authDataStore.clearAll()
                         authDataStore.saveOAuthConfig(mockServer.baseUrl(), "test-client")
                         authDataStore.saveTokens("test-access-token", "test-refresh-token")
@@ -108,6 +118,11 @@ class E2eRule(private val test: Any) : TestRule {
                     } finally {
                         scenario?.close()
                         runBlocking { authDataStore.clearAll() }
+                        // WorkManager is process-global. Close its test database so the next test
+                        // can initialize it with that test's fresh Hilt graph and worker factory.
+                        // Without this, workers in later tests retain dependencies from the first
+                        // test component and can tear down the activity mid-flow.
+                        WorkManagerTestInitHelper.closeWorkDatabase()
                         mockServer.shutdown()
                     }
                 }
@@ -134,5 +149,26 @@ class E2eRule(private val test: Any) : TestRule {
         val wm = WorkManager.getInstance(context)
         val infos = wm.getWorkInfosForUniqueWork(SyncScheduler.UNIQUE_NAME).get()
         infos.forEach { info -> testDriver?.setAllConstraintsMet(info.id) }
+    }
+
+    /** Seed a large local-only collection that has no server endpoint. */
+    fun seedTemplates(count: Int = 180) = runBlocking {
+        entryPoint.database().templateDao().upsertAll(
+            (0 until count).map { index ->
+                TemplateEntity(
+                    id = "stress-template-$index",
+                    organizationId = MockSolidtimeServer.DEFAULT_ORG_ID,
+                    name = "Template ${index.toString().padStart(3, '0')}",
+                    projectId = "project-${index % 120}",
+                    taskId = "task-${index % 480}",
+                    description = "Stress template $index",
+                    tagIds = "tag-${index % 160}",
+                    billable = index % 2 == 0,
+                    isFavorite = index < 20,
+                    sortOrder = index,
+                    createdAtMs = index.toLong(),
+                )
+            },
+        )
     }
 }

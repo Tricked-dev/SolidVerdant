@@ -74,6 +74,7 @@ class SettingsDataStore @Inject constructor(
         private const val CURRENT_MEMBERSHIP_ID = "current_membership_id"
         private const val CACHED_APP_THEME = "app_theme"
         private const val TRACKING_STATE_JSON = "tracking_state_json"
+        private const val REVIEW_BADGE_COUNT_PREFIX = "review_badge_count_"
         private val ALWAYS_SHOW_NOTIFICATION = booleanPreferencesKey("always_show_notification")
         private val APP_THEME = stringPreferencesKey("app_theme")
         private val OPTIMISTIC_REFRESH = booleanPreferencesKey("optimistic_refresh")
@@ -162,6 +163,7 @@ class SettingsDataStore @Inject constructor(
         val tasks: List<Task>,
         val tags: List<Tag>,
         val activeEntry: TimeEntry?,
+        val overlapCount: Int = 0,
     )
 
     fun getCachedTrackingState(): CachedTrackingState? =
@@ -172,6 +174,15 @@ class SettingsDataStore @Inject constructor(
     fun cacheTrackingState(state: CachedTrackingState) {
         immediateCache.edit()
             .putString(TRACKING_STATE_JSON, json.encodeToString(state))
+            .apply()
+    }
+
+    fun getCachedReviewBadgeCount(organizationId: String): Int =
+        immediateCache.getInt(REVIEW_BADGE_COUNT_PREFIX + organizationId, 0)
+
+    fun cacheReviewBadgeCount(organizationId: String, count: Int) {
+        immediateCache.edit()
+            .putInt(REVIEW_BADGE_COUNT_PREFIX + organizationId, count.coerceAtLeast(0))
             .apply()
     }
 

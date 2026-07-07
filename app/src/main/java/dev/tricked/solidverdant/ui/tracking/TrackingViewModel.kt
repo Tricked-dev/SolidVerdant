@@ -28,6 +28,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.time.Instant
 import java.time.LocalDate
@@ -73,6 +75,7 @@ data class TrackingUiState(
     val isPaused: Boolean = false,
     val currentTimeEntry: TimeEntry? = null,
     val timeEntries: List<TimeEntry> = emptyList(),
+    val overlapCount: Int = 0,
     val hasLoadedTimeEntries: Boolean = false,
     val isLoadingMoreTimeEntries: Boolean = false,
     val hasMoreTimeEntries: Boolean = false,
@@ -120,6 +123,7 @@ class TrackingViewModel @Inject constructor(
                 isTracking = cached.activeEntry != null,
                 currentTimeEntry = cached.activeEntry,
                 timeEntries = cached.timeEntries,
+                overlapCount = cached.overlapCount,
                 hasLoadedTimeEntries = true,
                 cachedContinueEntry = cached.timeEntries
                     .firstOrNull { it.end != null && !it.description.isNullOrBlank() }
@@ -148,6 +152,8 @@ class TrackingViewModel @Inject constructor(
     val hasSnapshot: StateFlow<Boolean> = _hasSnapshot.asStateFlow()
 
     private var timerJob: Job? = null
+    private val _elapsedSeconds = MutableStateFlow(0L)
+    val elapsedSeconds: StateFlow<Long> = _elapsedSeconds.asStateFlow()
     private var loadDataJob: Job? = null
     private var loadingOrganizationId: String? = null
     private var activeEntryMonitorJob: Job? = null
@@ -297,6 +303,9 @@ class TrackingViewModel @Inject constructor(
                     active = active
                 )
             }.collect { data ->
+                val overlapCount = withContext(Dispatchers.Default) {
+                    EntryTrustRules.overlapCount(data.entries)
+                }
                 val continueEntry = data.entries
                     .filter { it.end != null && !it.description.isNullOrBlank() }
                     .maxByOrNull { it.start }
@@ -313,6 +322,7 @@ class TrackingViewModel @Inject constructor(
                 }
                 _uiState.value = currentState.copy(
                     timeEntries = displayedEntries,
+                    overlapCount = overlapCount,
                     projects = data.projects,
                     tasks = data.tasks,
                     tags = data.tags,
@@ -351,6 +361,7 @@ class TrackingViewModel @Inject constructor(
                             tasks = data.tasks,
                             tags = data.tags,
                             activeEntry = data.active,
+                            overlapCount = overlapCount,
                         )
                     )
                     _hasSnapshot.value = true
@@ -759,7 +770,7 @@ class TrackingViewModel @Inject constructor(
                     // Clamp: a device clock behind the entry's start would otherwise yield a
                     // negative elapsed value and render as garbage (e.g. "-1:-5:-3").
                     val elapsed = (now.epochSecond - startInstant.epochSecond).coerceAtLeast(0)
-                    _uiState.value = _uiState.value.copy(elapsedSeconds = elapsed)
+                    _elapsedSeconds.value = elapsed
                     delay(1000) // Update every second
                 }
             } catch (e: CancellationException) {
@@ -777,7 +788,7 @@ class TrackingViewModel @Inject constructor(
     private fun stopTimer() {
         timerJob?.cancel()
         timerJob = null
-        _uiState.value = _uiState.value.copy(elapsedSeconds = 0)
+        _elapsedSeconds.value = 0
     }
 
     /**

@@ -27,6 +27,7 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicInteger
+import java.time.Instant
 
 /**
  * A stateful fake of the Solidtime backend built on [MockWebServer].
@@ -115,6 +116,57 @@ class MockSolidtimeServer {
 
     fun addTimeEntry(entry: TimeEntry) {
         timeEntries += entry
+    }
+
+    /** Deterministic large dataset used by scrolling and composition stress tests. */
+    fun presetStressWorld(
+        entryCount: Int = 250,
+        projectCount: Int = 120,
+        taskCount: Int = 480,
+        tagCount: Int = 160,
+    ) {
+        presetLoggedInWorld(seededEntry = null)
+        clients.clear()
+        clients += (0 until 40).map { Client("client-$it", "Client ${it.toString().padStart(3, '0')}") }
+        projects.clear()
+        projects += (0 until projectCount).map {
+            Project(
+                id = "project-$it",
+                name = "Project ${it.toString().padStart(3, '0')}",
+                color = "#4F46E5",
+                clientId = "client-${it % 40}",
+            )
+        }
+        tasks.clear()
+        tasks += (0 until taskCount).map {
+            Task(
+                id = "task-$it",
+                name = "Task ${it.toString().padStart(3, '0')}",
+                projectId = "project-${it % projectCount}",
+                createdAt = "2026-01-01T00:00:00Z",
+                updatedAt = "2026-01-01T00:00:00Z",
+            )
+        }
+        tags.clear()
+        tags += (0 until tagCount).map { Tag("tag-$it", "Tag ${it.toString().padStart(3, '0')}") }
+        val newest = Instant.parse("2026-07-07T16:00:00Z")
+        timeEntries.clear()
+        timeEntries += (0 until entryCount).map { index ->
+            val start = newest.minusSeconds(index * 1_800L)
+            TimeEntry(
+                id = "stress-entry-$index",
+                description = "Stress entry ${index.toString().padStart(3, '0')}",
+                userId = DEFAULT_USER_ID,
+                start = start.toString(),
+                end = start.plusSeconds(1_500).toString(),
+                duration = 1_500,
+                projectId = "project-${index % projectCount}",
+                taskId = "task-${index % taskCount}",
+                tags = listOf(Tag("tag-${index % tagCount}")),
+                billable = index % 2 == 0,
+                organizationId = DEFAULT_ORG_ID,
+            )
+        }
     }
 
     // ---- Assertions ---------------------------------------------------------------------------

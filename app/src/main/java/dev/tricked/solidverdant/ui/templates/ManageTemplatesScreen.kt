@@ -41,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -104,7 +105,7 @@ fun ManageTemplatesScreen(
                     onCreate = { showCreate = true },
                 )
                 else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().testTag("templates_list"),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(
                         start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp,
                     ),

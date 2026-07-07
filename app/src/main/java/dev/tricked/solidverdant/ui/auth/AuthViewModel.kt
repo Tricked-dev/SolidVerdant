@@ -23,7 +23,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -293,11 +295,14 @@ class AuthViewModel @Inject constructor(
     /**
      * Logout the user
      */
+    @OptIn(coil.annotation.ExperimentalCoilApi::class)
     fun logout() {
         viewModelScope.launch {
             _uiState.value.user?.profilePhotoUrl?.takeIf { it.isNotBlank() }?.let { url ->
                 context.imageLoader.memoryCache?.remove(MemoryCache.Key(url))
-                context.imageLoader.diskCache?.remove(url)
+                withContext(Dispatchers.IO) {
+                    context.imageLoader.diskCache?.remove(url)
+                }
             }
             userCacheCleaner.clear()
             // Clear account-owned data before changing auth state. Once auth is cleared,

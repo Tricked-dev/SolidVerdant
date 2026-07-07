@@ -269,6 +269,7 @@ dependencies {
     androidTestImplementation(libs.androidx.test.rules)
     androidTestImplementation(libs.androidx.test.ext)
     androidTestImplementation(libs.androidx.test.espresso.intents)
+    androidTestImplementation(libs.androidx.test.uiautomator)
     androidTestImplementation(libs.okhttp.mockwebserver)
     androidTestImplementation(libs.kotlinx.coroutines.test)
 }

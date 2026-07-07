@@ -30,6 +30,8 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.time.DayOfWeek
 import java.time.ZoneId
@@ -141,13 +143,15 @@ class InboxViewModel @Inject constructor(
                 }
                 return@collect
             }
-            val now = clock.nowMs()
-            val config = data.settings.toConfig(data.longTimerHours)
-            val activeDismissed = data.dismissals
-                .filter { now - it.dismissedAtMs <= retentionMs }
-                .map { it.issueKey }
-                .toSet()
-            val issues = InboxAnalyzer.analyze(data.entries, config, activeDismissed, now, zone)
+            val (now, config, issues) = withContext(Dispatchers.Default) {
+                val now = clock.nowMs()
+                val config = data.settings.toConfig(data.longTimerHours)
+                val activeDismissed = data.dismissals
+                    .filter { now - it.dismissedAtMs <= retentionMs }
+                    .map { it.issueKey }
+                    .toSet()
+                Triple(now, config, InboxAnalyzer.analyze(data.entries, config, activeDismissed, now, zone))
+            }
             pruneExpiredDismissals(data.dismissals, now)
             _uiState.update {
                 it.copy(

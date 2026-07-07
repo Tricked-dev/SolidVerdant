@@ -1,6 +1,7 @@
 package dev.tricked.solidverdant.e2e
 
 import dev.tricked.solidverdant.ui.tracking.TrackingTestTags
+import dev.tricked.solidverdant.ui.login.LoginTestTags
 
 /**
  * Central registry of stable Compose testTags used by the E2E robots.
@@ -14,4 +15,7 @@ object TestTags {
     const val TRACK_ENTRY_ROW = TrackingTestTags.ENTRY_ROW
     const val TRACK_START_BUTTON = TrackingTestTags.START_BUTTON
     const val TRACK_STOP_BUTTON = TrackingTestTags.STOP_BUTTON
+    const val TRACK_SETTINGS_BUTTON = TrackingTestTags.SETTINGS_BUTTON
+    const val TRACK_LOGOUT_BUTTON = TrackingTestTags.LOGOUT_BUTTON
+    const val LOGIN_BUTTON = LoginTestTags.LOGIN_BUTTON
 }

@@ -186,8 +186,8 @@ class StatisticsViewModel @Inject constructor(
                             filtersFlow,
                         ) { cachedEntries, catalog, remote, filters ->
                             val entries = remote.entries ?: cachedEntries
-                            val filtered = StatisticsAggregator.applyFilters(entries, catalog.projects, filters)
                             val computed = withContext(Dispatchers.Default) {
+                                val filtered = StatisticsAggregator.applyFilters(entries, catalog.projects, filters)
                                 val current = StatisticsAggregator.compute(
                                     entries = filtered,
                                     projects = catalog.projects,
@@ -204,13 +204,18 @@ class StatisticsViewModel @Inject constructor(
                                     zone = zone,
                                     granularity = granularityFor(previous),
                                 )
-                                current to computeComparison(current, prior, previous)
+                                Triple(current, computeComparison(current, prior, previous), filtered)
                             }
-                            val (summary, comparison) = computed
+                            val (summary, comparison, filtered) = computed
+                            val exportEntries = withContext(Dispatchers.Default) {
+                                filtered.filter {
+                                    StatisticsAggregator.clippedSeconds(
+                                        it, zone, resolved.start, resolved.endInclusive,
+                                    ) != null
+                                }
+                            }
                             exportInput = ExportInput(
-                                entries = filtered.filter {
-                                    StatisticsAggregator.clippedSeconds(it, zone, resolved.start, resolved.endInclusive) != null
-                                },
+                                entries = exportEntries,
                                 catalog = catalog,
                                 rangeStart = resolved.start,
                                 rangeEnd = resolved.endInclusive,

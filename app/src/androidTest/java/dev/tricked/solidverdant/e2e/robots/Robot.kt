@@ -3,6 +3,7 @@ package dev.tricked.solidverdant.e2e.robots
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.onFirst
 
@@ -30,6 +31,16 @@ abstract class Robot(protected val composeRule: ComposeTestRule) {
 
     protected fun firstNodeWithTag(tag: String): SemanticsNodeInteraction =
         composeRule.onAllNodes(hasTestTag(tag)).onFirst()
+
+    protected fun waitUntilEnabledTagExists(tag: String, timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
+        val matcher = hasTestTag(tag) and isEnabled()
+        composeRule.waitUntil(timeoutMs) {
+            composeRule.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    protected fun firstEnabledNodeWithTag(tag: String): SemanticsNodeInteraction =
+        composeRule.onAllNodes(hasTestTag(tag) and isEnabled()).onFirst()
 
     companion object {
         const val DEFAULT_TIMEOUT_MS = 10_000L

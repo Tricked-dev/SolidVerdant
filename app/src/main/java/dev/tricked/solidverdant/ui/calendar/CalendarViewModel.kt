@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import java.time.DayOfWeek
 import java.time.Instant
@@ -74,6 +75,7 @@ class CalendarViewModel @Inject constructor(
 
     private var organizationId: String? = null
     private var memberId: String? = null
+    private var entriesJob: Job? = null
 
     /** Locale's first day of week so the grid honours regional week-start conventions. */
     private val weekStart: DayOfWeek = WeekFields.of(Locale.getDefault()).firstDayOfWeek
@@ -132,9 +134,13 @@ class CalendarViewModel @Inject constructor(
     }
 
     fun setOrganization(organizationId: String, memberId: String = "") {
+        if (this.organizationId == organizationId && this.memberId == memberId && entriesJob?.isActive == true) {
+            return
+        }
         this.organizationId = organizationId
         this.memberId = memberId
-        viewModelScope.launch {
+        entriesJob?.cancel()
+        entriesJob = viewModelScope.launch {
             reader.observeTimeEntries(organizationId).collect { entries ->
                 // Aggregate off the main thread: a large month can hold thousands of entries and
                 // groupBy/sumOf here would otherwise jank or ANR the UI thread.

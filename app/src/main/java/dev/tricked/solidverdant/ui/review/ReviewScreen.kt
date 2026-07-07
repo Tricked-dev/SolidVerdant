@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
@@ -57,7 +58,10 @@ fun ReviewScreen(
         TopAppBar(
             title = { Text(stringResource(R.string.review_title)) },
             actions = {
-                IconButton(onClick = { menuExpanded = true }) {
+                IconButton(
+                    onClick = { menuExpanded = true },
+                    modifier = Modifier.testTag("review_more_actions"),
+                ) {
                     Icon(
                         imageVector = Icons.Outlined.MoreVert,
                         contentDescription = stringResource(R.string.review_more_actions),
@@ -82,6 +86,7 @@ fun ReviewScreen(
                         },
                     )
                     DropdownMenuItem(
+                        modifier = Modifier.testTag("review_manage_templates"),
                         text = { Text(stringResource(R.string.review_menu_manage_templates)) },
                         onClick = {
                             menuExpanded = false

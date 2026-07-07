@@ -263,6 +263,7 @@ fun SolidVerdantApp(
                 serverEndpoint = configState.endpoint,
                 clientId = configState.clientId,
                 uiState = trackingUiState,
+                elapsedSeconds = trackingViewModel.elapsedSeconds,
                 alwaysShowNotifications = alwaysShowNotifications,
                 appTheme = appTheme,
                 optimisticRefresh = optimisticRefresh,
