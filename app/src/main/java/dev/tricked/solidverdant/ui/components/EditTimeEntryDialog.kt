@@ -1,11 +1,14 @@
 package dev.tricked.solidverdant.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -72,6 +75,7 @@ fun EditTimeEntryDialog(
     onSave: (String?, String?, String?, List<String>, Boolean, String, String) -> Unit,
     existingEntries: List<TimeEntry> = emptyList(),
     preventOverlap: Boolean = false,
+    inlinePresentation: Boolean = false,
 ) {
     var description by remember { mutableStateOf(entry.description ?: "") }
     var projectId by remember { mutableStateOf(entry.projectId) }
@@ -116,11 +120,7 @@ fun EditTimeEntryDialog(
         endTime = startTime.plusMinutes(safeMinutes)
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
-    ) {
+    val sheetContent: @Composable () -> Unit = {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -308,6 +308,32 @@ fun EditTimeEntryDialog(
                         Text(stringResource(R.string.save), fontWeight = FontWeight.SemiBold)
                     }
                 }
+        }
+    }
+
+    if (inlinePresentation) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f)),
+            contentAlignment = Alignment.BottomCenter,
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().fillMaxHeight(0.9f),
+                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                color = MaterialTheme.colorScheme.surface,
+            ) {
+                sheetContent()
+            }
+        }
+    } else {
+        ModalBottomSheet(
+            onDismissRequest = onDismiss,
+            sheetState = sheetState,
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        ) {
+            sheetContent()
         }
     }
 

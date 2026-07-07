@@ -60,7 +60,7 @@ fun EntryBlock(
                 horizontal = Dimens.EntryPaddingHorizontal,
                 vertical = Dimens.EntryPaddingVertical,
             ),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Top,
     ) {
         Spacer(
             Modifier

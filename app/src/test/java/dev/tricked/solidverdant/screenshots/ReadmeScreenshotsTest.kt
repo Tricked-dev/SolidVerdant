@@ -1,6 +1,7 @@
 package dev.tricked.solidverdant.screenshots
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -30,6 +31,7 @@ import dev.tricked.solidverdant.ui.calendar.CalendarViewMode
 import dev.tricked.solidverdant.ui.calendar.DayBucket
 import dev.tricked.solidverdant.ui.calendar.MonthCalendarView
 import dev.tricked.solidverdant.ui.calendar.WeekCalendarView
+import dev.tricked.solidverdant.ui.navigation.Screen as NavScreen
 import dev.tricked.solidverdant.ui.components.EditTimeEntryDialog
 import dev.tricked.solidverdant.ui.review.InboxHeader
 import dev.tricked.solidverdant.ui.review.InboxIssueCard
@@ -72,11 +74,12 @@ import java.time.DayOfWeek
  * Run with:  ./gradlew :app:recordRoborazziDebug
  *
  * Every screen is rendered across the [ScreenshotMatrix] (theme x device) into
- * screenshots/generated/, and the Neo-dark + phone variant is additionally written to
- * screenshots/readme/ as the cohesive hero set referenced by README.md.
+ * .github/screenshots/generated/, and the Neo-dark + phone variant is additionally written to
+ * .github/screenshots/readme/ as the cohesive hero set referenced by README.md.
  *
- * All screens are hosted by calling the real top-level (or content) composable directly with
- * fabricated realistic state and no-op callbacks; no Hilt, navigation or ViewModel is booted.
+ * Every feature is rendered inside the production app scaffold and bottom navigation, using its
+ * real top-level (or content) composable with deterministic state and no-op callbacks. Hilt and
+ * ViewModels are intentionally not booted so captures remain deterministic and offline.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -95,23 +98,42 @@ class ReadmeScreenshotsTest {
                         theme = theme,
                         device = device,
                         filePath = ScreenshotHost.outputPath(
-                            "screenshots", "generated", "${screen.name}-${theme.id}-${device.id}.png",
+                            ".github", "screenshots", "generated", "${screen.name}-${theme.id}-${device.id}.png",
                         ),
-                        content = screen.content,
+                        content = {
+                            ScreenshotHost.AppShell(
+                                destination = destinationFor(screen.name),
+                                inboxBadgeCount = if (screen.name == "inbox") 4 else 0,
+                                content = screen.content,
+                            )
+                        },
                     )
                     if (theme == ScreenshotMatrix.readmeTheme && device == ScreenshotMatrix.readmeDevice) {
                         ScreenshotHost.capture(
                             theme = theme,
                             device = device,
                             filePath = ScreenshotHost.outputPath(
-                                "screenshots", "readme", "${screen.name}.png",
+                                ".github", "screenshots", "readme", "${screen.name}.png",
                             ),
-                            content = screen.content,
+                            content = {
+                                ScreenshotHost.AppShell(
+                                    destination = destinationFor(screen.name),
+                                    inboxBadgeCount = if (screen.name == "inbox") 4 else 0,
+                                    content = screen.content,
+                                )
+                            },
                         )
                     }
                 }
             }
         }
+    }
+
+    private fun destinationFor(screenName: String): NavScreen = when (screenName) {
+        "calendar-month", "calendar-week" -> NavScreen.Calendar
+        "statistics" -> NavScreen.Stats
+        "inbox", "review", "templates" -> NavScreen.Review
+        else -> NavScreen.Track
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -290,7 +312,14 @@ class ReadmeScreenshotsTest {
                 isLoading = false,
                 overlayEnabled = true,
                 bucketsByDate = mapOf(
-                    mon to DayBucket(mon, listOf(entry("w1", "Deep work", "2026-06-08T09:00:00Z", "2026-06-08T12:00:00Z", 10_800, taskId = "t1")), 10_800),
+                    mon to DayBucket(
+                        mon,
+                        listOf(
+                            entry("w1", "Deep work", "2026-06-08T09:00:00Z", "2026-06-08T12:00:00Z", 10_800, taskId = "t1"),
+                            entry("w3", "Design review", "2026-06-08T10:00:00Z", "2026-06-08T11:30:00Z", 5_400, taskId = "t2"),
+                        ),
+                        16_200,
+                    ),
                     tue to DayBucket(tue, listOf(entry("w2", "Design system", "2026-06-09T10:00:00Z", "2026-06-09T11:30:00Z", 5_400, taskId = "t2")), 5_400),
                 ),
                 overlayEvents = listOf(
@@ -460,16 +489,35 @@ class ReadmeScreenshotsTest {
                 taskId = "t1",
                 entryTags = listOf(tags[0]),
             )
-            EditTimeEntryDialog(
-                entry = editing,
+            val backgroundState = TrackingUiState(
                 projects = projects,
                 tasks = tasks,
                 tags = tags,
-                onDismiss = {},
-                onSave = { _, _, _, _, _, _, _ -> },
-                existingEntries = historyEntries,
-                preventOverlap = true,
+                timeEntries = historyEntries,
+                hasLoadedTimeEntries = true,
             )
+            Box(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+                    trackingHistoryItems(
+                        uiState = backgroundState,
+                        groupedEntries = groupedHistory(),
+                        onEdit = {},
+                        onDelete = {},
+                        onDateClick = {},
+                    )
+                }
+                EditTimeEntryDialog(
+                    entry = editing,
+                    projects = projects,
+                    tasks = tasks,
+                    tags = tags,
+                    onDismiss = {},
+                    onSave = { _, _, _, _, _, _, _ -> },
+                    existingEntries = historyEntries,
+                    preventOverlap = true,
+                    inlinePresentation = true,
+                )
+            }
         },
         // 9. Templates / favorites.
         Screen("templates") {

@@ -46,51 +46,19 @@ fun MainNavHost(
         bottomBar = {
             val backStackEntry by navController.currentBackStackEntryAsState()
             val currentRoute = backStackEntry?.destination?.route
-            NavigationBar {
-                bottomNavScreens.forEach { screen ->
-                    NavigationBarItem(
-                        selected = currentRoute == screen.route,
-                        onClick = {
-                            if (currentRoute != screen.route) {
-                                navController.navigate(screen.route) {
-                                    popUpTo(Screen.Track.route) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }
-                        },
-                        icon = {
-                            if (screen == Screen.Review && inboxBadgeCount > 0) {
-                                BadgedBox(
-                                    badge = {
-                                        Badge {
-                                            Text(
-                                                text = if (inboxBadgeCount > 99) {
-                                                    stringResource(R.string.review_badge_overflow)
-                                                } else {
-                                                    inboxBadgeCount.toString()
-                                                },
-                                            )
-                                        }
-                                    },
-                                ) {
-                                    Icon(
-                                        screen.icon,
-                                        contentDescription = pluralStringResource(
-                                            R.plurals.review_pending_badge_description,
-                                            inboxBadgeCount,
-                                            inboxBadgeCount,
-                                        ),
-                                    )
-                                }
-                            } else {
-                                Icon(screen.icon, contentDescription = null)
-                            }
-                        },
-                        label = { Text(stringResource(screen.labelRes)) },
-                    )
-                }
-            }
+            MainNavigationBar(
+                currentRoute = currentRoute,
+                inboxBadgeCount = inboxBadgeCount,
+                onNavigate = { screen ->
+                    if (currentRoute != screen.route) {
+                        navController.navigate(screen.route) {
+                            popUpTo(Screen.Track.route) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                },
+            )
         },
     ) { innerPadding ->
         NavHost(
@@ -118,6 +86,52 @@ fun MainNavHost(
             composable(ReviewRoutes.ManageTemplates) {
                 ManageTemplatesScreen(onBack = { navController.popBackStack() })
             }
+        }
+    }
+}
+
+/** Shared production bottom navigation, also used by full-app screenshot rendering. */
+@Composable
+internal fun MainNavigationBar(
+    currentRoute: String?,
+    inboxBadgeCount: Int,
+    onNavigate: (Screen) -> Unit,
+) {
+    NavigationBar {
+        bottomNavScreens.forEach { screen ->
+            NavigationBarItem(
+                selected = currentRoute == screen.route,
+                onClick = { onNavigate(screen) },
+                icon = {
+                    if (screen == Screen.Review && inboxBadgeCount > 0) {
+                        BadgedBox(
+                            badge = {
+                                Badge {
+                                    Text(
+                                        text = if (inboxBadgeCount > 99) {
+                                            stringResource(R.string.review_badge_overflow)
+                                        } else {
+                                            inboxBadgeCount.toString()
+                                        },
+                                    )
+                                }
+                            },
+                        ) {
+                            Icon(
+                                screen.icon,
+                                contentDescription = pluralStringResource(
+                                    R.plurals.review_pending_badge_description,
+                                    inboxBadgeCount,
+                                    inboxBadgeCount,
+                                ),
+                            )
+                        }
+                    } else {
+                        Icon(screen.icon, contentDescription = null)
+                    }
+                },
+                label = { Text(stringResource(screen.labelRes)) },
+            )
         }
     }
 }

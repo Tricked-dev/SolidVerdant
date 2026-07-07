@@ -16,6 +16,8 @@ import java.time.DayOfWeek
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private val Context.inboxDataStore: DataStore<Preferences> by preferencesDataStore(name = "inbox_settings")
+
 /**
  * Local, device-scoped configuration for the Time Inbox checks (gap analysis #17).
  *
@@ -29,7 +31,6 @@ import javax.inject.Singleton
 class InboxSettingsDataStore @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
-    private val Context.inboxDataStore: DataStore<Preferences> by preferencesDataStore(name = "inbox_settings")
     private val dataStore = context.inboxDataStore
 
     val settings: Flow<InboxSettings> = dataStore.data.map { prefs ->

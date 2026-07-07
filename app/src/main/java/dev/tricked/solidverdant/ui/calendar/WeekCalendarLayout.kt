@@ -88,6 +88,15 @@ data class EventBlock(
     val continuesAfter: Boolean,
 )
 
+/** A tracked entry positioned and overlap-packed within a single day column. */
+data class TrackedEntryBlock(
+    val entry: TimeEntry,
+    val startFraction: Float,
+    val heightFraction: Float,
+    val column: Int,
+    val columnCount: Int,
+)
+
 /**
  * The first day of the week containing [reference] for the given [weekStart].
  * Mirrors the lead-day math used by the month grid so both views agree on week boundaries.
@@ -236,6 +245,51 @@ fun layoutTimedEvents(
             columnCount = colCount,
             continuesBefore = c.event.startUtcMs < dayStartMs,
             continuesAfter = c.event.endUtcMs > dayEndMs,
+        )
+    }
+}
+
+/**
+ * Lays out tracked entries for [day], clipping entries at day boundaries and placing concurrent
+ * entries in adjacent columns. Ordering is stable so the same input always produces the same
+ * lanes, including after process recreation or an offline refresh.
+ */
+fun layoutTrackedEntries(
+    entries: List<TimeEntry>,
+    day: LocalDate,
+    now: Instant,
+    zone: ZoneId = ZoneId.systemDefault(),
+): List<TrackedEntryBlock> {
+    data class Clipped(val entry: TimeEntry, val startSec: Long, val endSec: Long)
+
+    val dayStart = day.atStartOfDay(zone).toInstant()
+    val clipped = entries.mapNotNull { entry ->
+        val start = try {
+            ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME).toInstant()
+        } catch (_: Exception) {
+            dayStart
+        }
+        val end = entry.end?.let {
+            try {
+                ZonedDateTime.parse(it, DateTimeFormatter.ISO_DATE_TIME).toInstant()
+            } catch (_: Exception) {
+                now
+            }
+        } ?: now
+        clampToDaySeconds(start.toEpochMilli(), end.toEpochMilli(), day, zone)
+            ?.let { (startSec, endSec) -> Clipped(entry, startSec, endSec) }
+    }.sortedWith(compareBy({ it.startSec }, { -it.endSec }, { it.entry.id }))
+
+    val packing = packOverlaps(clipped.map { it.startSec to it.endSec })
+    return clipped.mapIndexed { index, item ->
+        val (column, columnCount) = packing[index]
+        TrackedEntryBlock(
+            entry = item.entry,
+            startFraction = item.startSec.toFloat() / SECONDS_PER_DAY,
+            heightFraction = ((item.endSec - item.startSec).toFloat() / SECONDS_PER_DAY)
+                .coerceAtLeast(MIN_ENTRY_HEIGHT_FRACTION),
+            column = column,
+            columnCount = columnCount,
         )
     }
 }

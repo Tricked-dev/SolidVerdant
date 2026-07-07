@@ -5,6 +5,7 @@ local.properties
 .DS_Store
 build
 captures
+.github/screenshots/generated/
 .externalNativeBuild
 solidtime-desktop
 da

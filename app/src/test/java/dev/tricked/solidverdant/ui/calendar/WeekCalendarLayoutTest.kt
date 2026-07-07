@@ -1,6 +1,7 @@
 package dev.tricked.solidverdant.ui.calendar
 
 import dev.tricked.solidverdant.data.calendar.DeviceCalendarEvent
+import dev.tricked.solidverdant.data.model.TimeEntry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -29,6 +30,20 @@ class WeekCalendarLayoutTest {
         endUtcMs = Instant.parse(endIso).toEpochMilli(),
         allDay = allDay,
         colorArgb = null,
+    )
+
+    private fun entry(id: String, startIso: String, endIso: String?) = TimeEntry(
+        id = id,
+        description = id,
+        userId = "user",
+        start = startIso,
+        end = endIso,
+        duration = 0,
+        taskId = null,
+        projectId = null,
+        tags = emptyList(),
+        billable = false,
+        organizationId = "org",
     )
 
     // --- Week boundary / paging math ---------------------------------------------------------
@@ -145,6 +160,35 @@ class WeekCalendarLayoutTest {
         val blocks = layoutTimedEvents(events, LocalDate.of(2026, 7, 6), utc)
         assertEquals(1, blocks.size)
         assertTrue(blocks[0].heightFraction >= MIN_BLOCK_HEIGHT_FRACTION)
+    }
+
+    @Test
+    fun layoutTrackedEntries_placesConcurrentEntriesSideBySide() {
+        val day = LocalDate.of(2026, 7, 6)
+        val entries = listOf(
+            entry("first", "2026-07-06T09:00:00Z", "2026-07-06T11:00:00Z"),
+            entry("second", "2026-07-06T10:00:00Z", "2026-07-06T12:00:00Z"),
+        )
+
+        val blocks = layoutTrackedEntries(entries, day, Instant.parse("2026-07-06T13:00:00Z"), utc)
+
+        assertEquals(0, blocks[0].column)
+        assertEquals(1, blocks[1].column)
+        assertEquals(2, blocks[0].columnCount)
+        assertEquals(2, blocks[1].columnCount)
+    }
+
+    @Test
+    fun layoutTrackedEntries_nonOverlappingEntriesUseFullWidth() {
+        val day = LocalDate.of(2026, 7, 6)
+        val entries = listOf(
+            entry("first", "2026-07-06T09:00:00Z", "2026-07-06T10:00:00Z"),
+            entry("second", "2026-07-06T10:00:00Z", "2026-07-06T11:00:00Z"),
+        )
+
+        val blocks = layoutTrackedEntries(entries, day, Instant.parse("2026-07-06T13:00:00Z"), utc)
+
+        assertTrue(blocks.all { it.column == 0 && it.columnCount == 1 })
     }
 
     // --- All-day coverage --------------------------------------------------------------------

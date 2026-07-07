@@ -87,7 +87,38 @@ fun WeekCalendarView(
     projects: List<Project>,
     modifier: Modifier = Modifier,
 ) {
-    val days = state.visibleDays
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        // Never expose the unusable seven-column layout on a phone, including the first frame
+        // before CalendarScreen's width effect updates the ViewModel after recreation.
+        val days = if (state.viewMode == CalendarViewMode.WEEK && maxWidth < 600.dp) {
+            state.visibleDays.take(3)
+        } else {
+            state.visibleDays
+        }
+        WeekCalendarContent(
+            state = state,
+            days = days,
+            onSelectDate = onSelectDate,
+            onEntryClick = onEntryClick,
+            onPrevious = onPrevious,
+            onNext = onNext,
+            onToday = onToday,
+            projects = projects,
+        )
+    }
+}
+
+@Composable
+private fun WeekCalendarContent(
+    state: CalendarUiState,
+    days: List<LocalDate>,
+    onSelectDate: (LocalDate) -> Unit,
+    onEntryClick: (TimeEntry) -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onToday: () -> Unit,
+    projects: List<Project>,
+) {
     val zone = remember { ZoneId.systemDefault() }
     val today = remember { LocalDate.now() }
     val now = remember { Instant.now() }
@@ -106,7 +137,7 @@ fun WeekCalendarView(
     }
     val hasContent = hasTrackedEntries || state.overlayEvents.isNotEmpty()
 
-    Column(modifier = modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         WeekNavHeader(days = days, viewMode = state.viewMode, locale = locale,
             onPrevious = onPrevious, onNext = onNext, onToday = onToday)
 
@@ -390,8 +421,9 @@ private fun DayColumn(
         }
 
         // Tracked time entries drawn on top with the shared EntryBlock treatment.
-        entries.forEach { entry ->
-            val (top, height) = timelineOffsets(entry, day, now, zone)
+        layoutTrackedEntries(entries, day, now, zone).forEach { block ->
+            val entry = block.entry
+            val slotWidth = colWidth / block.columnCount.coerceAtLeast(1)
             val base = projects.firstOrNull { it.id == entry.projectId }?.color
                 ?.let { hexToColor(it) }
                 ?: MaterialTheme.colorScheme.primary
@@ -401,9 +433,16 @@ private fun DayColumn(
                 color = base,
                 title = label,
                 modifier = Modifier
-                    .offset(y = CalendarTotalHeight * top)
+                    .offset(
+                        x = slotWidth * block.column,
+                        y = CalendarTotalHeight * block.startFraction,
+                    )
+                    .width(slotWidth)
                     .padding(horizontal = 0.5.dp)
-                    .height((CalendarTotalHeight * height).coerceAtLeast(Dimens.EntryMinHeight))
+                    .height(
+                        (CalendarTotalHeight * block.heightFraction)
+                            .coerceAtLeast(Dimens.EntryMinHeight),
+                    )
                     .clickable(onClick = { onEntryClick(entry) })
                     .testTag("week-entry-${entry.id}")
                     .semantics { contentDescription = a11y },

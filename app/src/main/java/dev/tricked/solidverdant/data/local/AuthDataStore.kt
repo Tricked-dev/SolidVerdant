@@ -17,6 +17,12 @@ import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
+// Keep the delegate at file scope so every AuthDataStore instance (including instances from
+// successive Hilt test components in the same instrumentation process) shares one DataStore.
+// Declaring this inside AuthDataStore creates a new delegate for each component and DataStore
+// rejects the second active instance for the same auth_prefs file.
+private val Context.authDataStore: DataStore<Preferences> by preferencesDataStore(name = "auth_prefs")
+
 /**
  * DataStore for authentication-related data
  * Provides encrypted storage for tokens, OAuth config, and PKCE data
@@ -25,8 +31,6 @@ import javax.inject.Singleton
 class AuthDataStore @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "auth_prefs")
-
     private object PreferencesKeys {
         val ACCESS_TOKEN = stringPreferencesKey("access_token")
         val REFRESH_TOKEN = stringPreferencesKey("refresh_token")
@@ -48,7 +52,7 @@ class AuthDataStore @Inject constructor(
         PreferencesKeys.STATE
     )
 
-    private fun secretFlow(key: Preferences.Key<String>): Flow<String?> = context.dataStore.data
+    private fun secretFlow(key: Preferences.Key<String>): Flow<String?> = context.authDataStore.data
         .onStart { migratePlaintextSecrets() }
         // decryptOrNull never throws: a secret that can no longer be decrypted (Keystore key lost or
         // invalidated) is treated as absent so the flow emits "logged out" instead of crashing every
@@ -59,7 +63,7 @@ class AuthDataStore @Inject constructor(
         if (migrationComplete) return
         migrationMutex.withLock {
             if (migrationComplete) return@withLock
-            context.dataStore.edit { preferences ->
+            context.authDataStore.edit { preferences ->
                 secretKeys.forEach { key ->
                     val storedValue = preferences[key] ?: return@forEach
                     when (val sanitized = sanitizeSecret(storedValue)) {
@@ -108,12 +112,12 @@ class AuthDataStore @Inject constructor(
     val isLoggedIn: Flow<Boolean> = accessToken.map { !it.isNullOrEmpty() }
 
     // OAuth config flows
-    val endpoint: Flow<String> = context.dataStore.data
+    val endpoint: Flow<String> = context.authDataStore.data
         .map { preferences ->
             preferences[PreferencesKeys.ENDPOINT] ?: DEFAULT_ENDPOINT
         }
 
-    val clientId: Flow<String> = context.dataStore.data
+    val clientId: Flow<String> = context.authDataStore.data
         .map { preferences ->
             preferences[PreferencesKeys.CLIENT_ID] ?: DEFAULT_CLIENT_ID
         }
@@ -124,14 +128,14 @@ class AuthDataStore @Inject constructor(
     val state: Flow<String?> = secretFlow(PreferencesKeys.STATE)
 
     // Membership flow
-    val currentMembershipId: Flow<String?> = context.dataStore.data
+    val currentMembershipId: Flow<String?> = context.authDataStore.data
         .map { preferences -> preferences[PreferencesKeys.CURRENT_MEMBERSHIP_ID] }
 
     /**
      * Save access and refresh tokens
      */
     suspend fun saveTokens(accessToken: String, refreshToken: String) {
-        context.dataStore.edit { preferences ->
+        context.authDataStore.edit { preferences ->
             preferences[PreferencesKeys.ACCESS_TOKEN] = secretCipher.encrypt(accessToken)
             preferences[PreferencesKeys.REFRESH_TOKEN] = secretCipher.encrypt(refreshToken)
         }
@@ -141,7 +145,7 @@ class AuthDataStore @Inject constructor(
      * Save only the access token (used during token refresh)
      */
     suspend fun saveAccessToken(accessToken: String) {
-        context.dataStore.edit { preferences ->
+        context.authDataStore.edit { preferences ->
             preferences[PreferencesKeys.ACCESS_TOKEN] = secretCipher.encrypt(accessToken)
         }
     }
@@ -150,7 +154,7 @@ class AuthDataStore @Inject constructor(
      * Clear all authentication tokens
      */
     suspend fun clearTokens() {
-        context.dataStore.edit { preferences ->
+        context.authDataStore.edit { preferences ->
             preferences.remove(PreferencesKeys.ACCESS_TOKEN)
             preferences.remove(PreferencesKeys.REFRESH_TOKEN)
         }
@@ -160,7 +164,7 @@ class AuthDataStore @Inject constructor(
      * Save OAuth configuration (endpoint and client ID)
      */
     suspend fun saveOAuthConfig(endpoint: String, clientId: String) {
-        context.dataStore.edit { preferences ->
+        context.authDataStore.edit { preferences ->
             preferences[PreferencesKeys.ENDPOINT] = endpoint.removeSuffix("/")
             preferences[PreferencesKeys.CLIENT_ID] = clientId
         }
@@ -170,7 +174,7 @@ class AuthDataStore @Inject constructor(
      * Save PKCE data for OAuth flow
      */
     suspend fun savePKCEData(codeVerifier: String, state: String) {
-        context.dataStore.edit { preferences ->
+        context.authDataStore.edit { preferences ->
             preferences[PreferencesKeys.CODE_VERIFIER] = secretCipher.encrypt(codeVerifier)
             preferences[PreferencesKeys.STATE] = secretCipher.encrypt(state)
         }
@@ -180,7 +184,7 @@ class AuthDataStore @Inject constructor(
      * Clear PKCE data after successful OAuth flow
      */
     suspend fun clearPKCEData() {
-        context.dataStore.edit { preferences ->
+        context.authDataStore.edit { preferences ->
             preferences.remove(PreferencesKeys.CODE_VERIFIER)
             preferences.remove(PreferencesKeys.STATE)
         }
@@ -190,7 +194,7 @@ class AuthDataStore @Inject constructor(
      * Save current membership ID
      */
     suspend fun saveCurrentMembershipId(membershipId: String) {
-        context.dataStore.edit { preferences ->
+        context.authDataStore.edit { preferences ->
             preferences[PreferencesKeys.CURRENT_MEMBERSHIP_ID] = membershipId
         }
     }
@@ -200,7 +204,7 @@ class AuthDataStore @Inject constructor(
      * Preserves endpoint and client ID settings
      */
     suspend fun clearAll() {
-        context.dataStore.edit { preferences ->
+        context.authDataStore.edit { preferences ->
             // Save OAuth config before clearing
             val savedEndpoint = preferences[PreferencesKeys.ENDPOINT]
             val savedClientId = preferences[PreferencesKeys.CLIENT_ID]
@@ -218,7 +222,7 @@ class AuthDataStore @Inject constructor(
      * Reset OAuth configuration to defaults
      */
     suspend fun resetOAuthConfig() {
-        context.dataStore.edit { preferences ->
+        context.authDataStore.edit { preferences ->
             preferences.remove(PreferencesKeys.ENDPOINT)
             preferences.remove(PreferencesKeys.CLIENT_ID)
         }
