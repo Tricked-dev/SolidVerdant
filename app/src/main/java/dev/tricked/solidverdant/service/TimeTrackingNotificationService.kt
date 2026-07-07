@@ -675,8 +675,12 @@ class TimeTrackingNotificationService : Service() {
                 // No running service and background service starts are disallowed. Post directly.
                 Timber.d(e, "Posting idle notification without a service")
                 ensureChannels(context)
-                NotificationManagerCompat.from(context)
-                    .notify(NOTIFICATION_ID, buildIdleNotification(context))
+                try {
+                    NotificationManagerCompat.from(context)
+                        .notify(NOTIFICATION_ID, buildIdleNotification(context))
+                } catch (se: SecurityException) {
+                    Timber.w(se, "Idle notification suppressed: notification permission missing")
+                }
             }
         }
 
@@ -706,7 +710,11 @@ class TimeTrackingNotificationService : Service() {
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .build()
-            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
+            try {
+                NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
+            } catch (se: SecurityException) {
+                Timber.w(se, "Resume prompt suppressed: notification permission missing")
+            }
         }
 
         /** Create the notification channels. Safe to call repeatedly. */

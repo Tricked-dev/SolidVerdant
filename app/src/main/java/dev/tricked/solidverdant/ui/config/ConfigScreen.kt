@@ -6,12 +6,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -43,7 +45,11 @@ fun ConfigScreen(
     onSave: (String, String) -> Unit,
     onReset: () -> Unit,
     onTestConnection: (String, String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    // Optional review-loop entry points. Rendered only when provided so the pre-login OAuth sheet
+    // stays unchanged while an in-app settings caller can surface reminder/template configuration.
+    onOpenReminderSettings: (() -> Unit)? = null,
+    onOpenManageTemplates: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -149,6 +155,36 @@ fun ConfigScreen(
                     color = if (configState.testSuccess == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodyMedium,
                 )
+            }
+
+            if (onOpenReminderSettings != null || onOpenManageTemplates != null) {
+                HorizontalDivider()
+                onOpenReminderSettings?.let { open ->
+                    TextButton(
+                        onClick = open,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.review_menu_reminder_settings),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+                onOpenManageTemplates?.let { open ->
+                    TextButton(
+                        onClick = open,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.review_menu_manage_templates),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
             }
 
             Row(

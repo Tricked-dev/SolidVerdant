@@ -1,5 +1,10 @@
 package dev.tricked.solidverdant.ui.statistics
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,36 +13,50 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
+import androidx.compose.material3.Icon
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import dev.tricked.solidverdant.R
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.tricked.solidverdant.ui.statistics.charts.BarChart
 import dev.tricked.solidverdant.ui.statistics.charts.DonutChart
 import java.time.Instant
 import java.time.LocalDate
@@ -63,70 +82,135 @@ fun formatDuration(seconds: Long): String {
 @Composable
 fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val exportState by viewModel.exportState.collectAsStateWithLifecycle()
+    val drillDown by viewModel.drillDown.collectAsStateWithLifecycle()
 
-    if (state.isLoading) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val chooserTitle = stringResource(R.string.stats2_export_chooser_title)
+    val emptyMsg = stringResource(R.string.stats2_export_empty)
+    val errorMsg = stringResource(R.string.stats2_export_error)
+
+    LaunchedEffect(exportState) {
+        when (val es = exportState) {
+            is ExportState.Ready -> {
+                shareCsv(context, es.uri, chooserTitle)
+                viewModel.onExportHandled()
+            }
+            ExportState.Empty -> {
+                snackbarHostState.showSnackbar(emptyMsg)
+                viewModel.onExportHandled()
+            }
+            ExportState.Error -> {
+                snackbarHostState.showSnackbar(errorMsg)
+                viewModel.onExportHandled()
+            }
+            else -> Unit
         }
-        return
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        RangeChips(state.range, viewModel::setRange)
-
-        if (state.isRefreshing) {
-            LinearProgressIndicator(Modifier.fillMaxWidth())
-        }
-        if (state.refreshFailed) {
-            Card(Modifier.fillMaxWidth()) {
-                Row(
-                    Modifier.fillMaxWidth().padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(
-                        stringResource(R.string.stats_cached_refresh_failed),
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    TextButton(onClick = viewModel::refresh) { Text(stringResource(R.string.retry)) }
-                }
+    Box(Modifier.fillMaxSize()) {
+        if (state.isLoading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
             }
-        }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                RangeChips(state.range, viewModel::setRange)
 
-        if (state.isEmpty) {
-            Text(
-                stringResource(R.string.stats_empty),
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(top = 32.dp),
-            )
-            return@Column
-        }
+                StatFilterBar(
+                    filters = state.filters,
+                    catalog = state.catalog,
+                    onFiltersChange = viewModel::setFilters,
+                    onClearFilters = viewModel::clearFilters,
+                )
 
-        val s = state.summary
-        KpiGrid(s)
+                ExportButton(
+                    exporting = exportState is ExportState.Running,
+                    onExport = viewModel::export,
+                )
 
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(R.string.stats_by_project), style = MaterialTheme.typography.titleMedium)
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    DonutChart(
-                        slices = s.perProject.map { hexToColor(it.colorHex) to it.seconds.toFloat() },
-                        modifier = Modifier.size(140.dp),
-                    )
-                    Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-                        s.perProject.forEach { p ->
-                            val pct = if (s.totalSeconds > 0) p.seconds * 100 / s.totalSeconds else 0
+                if (state.isRefreshing) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+                if (state.refreshFailed) {
+                    Card(Modifier.fillMaxWidth()) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
                             Text(
-                                "${p.projectName} — ${formatDuration(p.seconds)} ($pct%)",
+                                stringResource(R.string.stats_cached_refresh_failed),
+                                modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.bodyMedium,
+                            )
+                            TextButton(onClick = viewModel::refresh) { Text(stringResource(R.string.retry)) }
+                        }
+                    }
+                }
+
+                if (state.isEmpty) {
+                    Text(
+                        stringResource(R.string.stats_empty),
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.padding(top = 32.dp),
+                    )
+                    // A previous period with data is still worth showing even when the current
+                    // (possibly over-filtered) range is empty.
+                    state.comparison?.let { if (it.previousHasData) StatComparisonCard(it) }
+                } else {
+                    val s = state.summary
+                    KpiGrid(s)
+
+                    state.comparison?.let { StatComparisonCard(it) }
+
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(stringResource(R.string.stats_by_project), style = MaterialTheme.typography.titleMedium)
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                DonutChart(
+                                    slices = s.perProject.map { hexToColor(it.colorHex) to it.seconds.toFloat() },
+                                    modifier = Modifier.size(140.dp),
+                                )
+                                Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+                                    s.perProject.forEach { p ->
+                                        val pct = if (s.totalSeconds > 0) p.seconds * 100 / s.totalSeconds else 0
+                                        ProjectLegendRow(
+                                            projectName = p.projectName,
+                                            colorHex = p.colorHex,
+                                            valueText = "${formatDuration(p.seconds)} ($pct%)",
+                                            onClick = {
+                                                viewModel.openProjectDrillDown(p.projectId, p.projectName, p.colorHex)
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(stringResource(R.string.stats_trend), style = MaterialTheme.typography.titleMedium)
+                            InteractiveBarChart(
+                                bars = s.trend,
+                                barColor = MaterialTheme.colorScheme.primary,
+                                onBarClick = { bucket ->
+                                    val end = when (state.granularity) {
+                                        TrendGranularity.DAY -> bucket.startDate
+                                        TrendGranularity.WEEK -> bucket.startDate.plusDays(6)
+                                    }
+                                    viewModel.openTrendDrillDown(bucket.label, bucket.startDate, end)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
                             )
                         }
                     }
@@ -134,16 +218,67 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
             }
         }
 
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(R.string.stats_trend), style = MaterialTheme.typography.titleMedium)
-                BarChart(
-                    bars = s.trend.map { it.label to it.seconds.toFloat() },
-                    barColor = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
+    }
+
+    drillDown?.let { dd ->
+        StatDrillDownSheet(state = dd, onDismiss = viewModel::closeDrillDown)
+    }
+}
+
+@Composable
+private fun ExportButton(exporting: Boolean, onExport: () -> Unit) {
+    FilledTonalButton(
+        onClick = onExport,
+        enabled = !exporting,
+        modifier = Modifier.heightIn(min = 48.dp),
+    ) {
+        if (exporting) {
+            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+        } else {
+            Icon(
+                Icons.Default.Share,
+                contentDescription = stringResource(R.string.stats2_export_content_description),
+                modifier = Modifier.size(18.dp),
+            )
         }
+        Spacer(Modifier.width(6.dp))
+        Text(stringResource(if (exporting) R.string.stats2_exporting else R.string.stats2_export))
+    }
+}
+
+@Composable
+private fun ProjectLegendRow(
+    projectName: String,
+    colorHex: String,
+    valueText: String,
+    onClick: () -> Unit,
+) {
+    val cd = stringResource(R.string.stats2_drilldown_project_content_description, projectName)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics(mergeDescendants = true) { contentDescription = "$cd, $valueText" }
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(
+            Modifier
+                .size(10.dp)
+                .clip(androidx.compose.foundation.shape.CircleShape)
+                .background(hexToColor(colorHex)),
+        )
+        Text(
+            "$projectName — $valueText",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
@@ -222,4 +357,21 @@ private fun KpiTile(label: String, value: String, modifier: Modifier = Modifier)
             Text(label, style = MaterialTheme.typography.labelMedium)
         }
     }
+}
+
+/**
+ * Shares the exported CSV through the Android system share sheet. Grants temporary read access to the
+ * receiving app for the FileProvider content URI; the file itself only ever holds the user's own work
+ * data, never tokens or credentials.
+ */
+private fun shareCsv(context: Context, uri: Uri, chooserTitle: String) {
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "text/csv"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    val chooser = Intent.createChooser(send, chooserTitle).apply {
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    runCatching { context.startActivity(chooser) }
 }

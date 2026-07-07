@@ -69,4 +69,40 @@ class MigrationTest {
         }
         helper.close()
     }
+
+    @Test fun migration_3_4_creates_review_loop_tables() {
+        val helper = openHelper(3) { /* v3 had neither review-loop table */ }
+        val db = helper.writableDatabase
+
+        AppDatabase.MIGRATION_3_4.migrate(db)
+
+        // entry_templates: nullable metadata columns accept NULL; non-null columns round-trip.
+        db.execSQL(
+            "INSERT INTO entry_templates " +
+                "(id, organizationId, name, projectId, taskId, description, tagIds, billable, " +
+                "isFavorite, sortOrder, createdAtMs) " +
+                "VALUES ('t1', 'org1', NULL, NULL, NULL, NULL, '', 0, 1, 0, 42)"
+        )
+        db.query(
+            "SELECT organizationId, tagIds, isFavorite, createdAtMs FROM entry_templates WHERE id = 't1'"
+        ).use { c ->
+            c.moveToFirst()
+            assertEquals("org1", c.getString(0))
+            assertEquals("", c.getString(1))
+            assertEquals(1, c.getInt(2))
+            assertEquals(42L, c.getLong(3))
+        }
+
+        // inbox_dismissals keyed by issueKey.
+        db.execSQL(
+            "INSERT INTO inbox_dismissals (issueKey, organizationId, dismissedAtMs) " +
+                "VALUES ('overlap:v1:abc', 'org1', 7)"
+        )
+        db.query("SELECT organizationId, dismissedAtMs FROM inbox_dismissals WHERE issueKey = 'overlap:v1:abc'").use { c ->
+            c.moveToFirst()
+            assertEquals("org1", c.getString(0))
+            assertEquals(7L, c.getLong(1))
+        }
+        helper.close()
+    }
 }

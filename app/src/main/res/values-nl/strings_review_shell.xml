@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_review">Nakijken</string>
+    <string name="review_title">Nakijken</string>
+    <string name="review_more_actions">Meer opties voor nakijken</string>
+    <string name="review_menu_end_of_day">Dagafsluiting</string>
+    <string name="review_menu_reminder_settings">Herinneringsinstellingen</string>
+    <string name="review_menu_manage_templates">Sjablonen beheren</string>
+    <string name="review_segment_inbox">Inbox</string>
+    <string name="review_segment_review_day">Dag nakijken</string>
+    <string name="review_end_of_day_title">Dagafsluiting</string>
+    <string name="reminder_settings_title">Herinneringsinstellingen</string>
+    <string name="manage_templates_title">Sjablonen beheren</string>
+    <string name="review_navigate_back">Terug</string>
+    <string name="review_badge_overflow">99+</string>
+    <string name="review_inbox_placeholder">Items om na te kijken verschijnen hier.</string>
+    <string name="review_day_placeholder">Je dagafsluiting verschijnt hier.</string>
+    <string name="reminder_settings_placeholder">Herinneringsinstellingen verschijnen hier.</string>
+    <string name="manage_templates_placeholder">Je sjablonen verschijnen hier.</string>
+    <plurals name="review_pending_badge_description">
+        <item quantity="one">Nakijken, %1$d item om na te kijken</item>
+        <item quantity="other">Nakijken, %1$d items om na te kijken</item>
+    </plurals>
+</resources>

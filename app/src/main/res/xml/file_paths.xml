@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Exported review artifacts (CSV/PDF) live under the app cache's `exports/` directory and are
+         shared read-only via ${applicationId}.fileprovider. -->
+    <cache-path
+        name="exports"
+        path="exports/" />
+</paths>

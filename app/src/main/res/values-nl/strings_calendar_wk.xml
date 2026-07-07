@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Weekkalender + agenda-overlay van het apparaat (functiegebonden; wordt samengevoegd). -->
+    <string name="calendar_view_month">Maand</string>
+    <string name="calendar_view_week">Week</string>
+    <string name="calendar_view_day">Dag</string>
+    <string name="calendar_today">Vandaag</string>
+    <string name="calendar_show_previous">Vorige periode tonen</string>
+    <string name="calendar_show_next">Volgende periode tonen</string>
+    <string name="calendar_all_day">Hele dag</string>
+    <string name="calendar_entry_untitled">Geen omschrijving</string>
+    <string name="calendar_entry_a11y">Tijdregistratie: %1$s</string>
+
+    <!-- Overlay-instellingen -->
+    <string name="calendar_overlay_show">Agenda-afspraken tonen</string>
+    <string name="calendar_overlay_privacy">Afspraakgegevens worden alleen van je apparaat gelezen en nooit geüpload.</string>
+    <string name="calendar_overlay_permission_rationale">Geef toegang tot de agenda om je apparaatafspraken achter je geregistreerde tijd te tonen.</string>
+    <string name="calendar_overlay_grant">Agendatoegang toestaan</string>
+    <string name="calendar_overlay_denied">Agendatoegang staat uit. Schakel dit in bij de systeeminstellingen om afspraken te tonen.</string>
+    <string name="calendar_overlay_open_settings">Instellingen openen</string>
+    <string name="calendar_overlay_no_calendars">Er zijn geen agenda\'s op dit apparaat gevonden.</string>
+    <string name="calendar_overlay_choose_count">Agenda\'s kiezen (%1$d geselecteerd)</string>
+    <string name="calendar_overlay_select_prompt">Toon afspraken uit deze agenda\'s:</string>
+    <string name="calendar_overlay_calendar_desc">Afspraken uit %1$s tonen</string>
+    <string name="calendar_overlay_none_selected">Geen agenda\'s geselecteerd. Kies er minstens één om afspraken te zien.</string>
+    <string name="calendar_overlay_loading">Agenda-afspraken laden…</string>
+    <string name="calendar_overlay_error">Kan agenda-afspraken niet laden.</string>
+    <string name="calendar_overlay_retry">Opnieuw</string>
+    <string name="calendar_overlay_empty">Geen agenda-afspraken in deze periode.</string>
+    <string name="calendar_overlay_showing">Agenda-afspraken worden getoond.</string>
+    <string name="calendar_overlay_event_untitled">Naamloze afspraak</string>
+    <string name="calendar_overlay_event_a11y">Agenda-afspraak: %1$s</string>
+</resources>

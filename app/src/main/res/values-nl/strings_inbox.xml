@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Time Inbox feature strings (gap analysis #16/#17). -->
+
+    <string name="inbox_summary_none">Alles bijgewerkt</string>
+    <plurals name="inbox_summary_count">
+        <item quantity="one">%1$d item om na te kijken</item>
+        <item quantity="other">%1$d items om na te kijken</item>
+    </plurals>
+    <string name="inbox_refresh_action">Vernieuwen</string>
+    <string name="inbox_settings_action">Inbox-instellingen</string>
+
+    <string name="inbox_stale_banner">Opgeslagen gegevens weergegeven — vernieuwen mislukt.</string>
+    <string name="inbox_retry">Opnieuw</string>
+    <string name="inbox_dismiss">Negeren</string>
+
+    <string name="inbox_caught_up_title">Alles bijgewerkt</string>
+    <string name="inbox_caught_up_body">Alle geregistreerde items zien er goed uit. Er is nu niets na te kijken.</string>
+    <string name="inbox_empty_title">Nog niets om na te kijken</string>
+    <string name="inbox_empty_body">Registreer wat tijd en de inbox markeert alles wat een tweede blik waard is.</string>
+
+    <string name="inbox_dismissed_snackbar">Item genegeerd</string>
+    <string name="inbox_undo">Ongedaan maken</string>
+    <string name="inbox_swipe_dismiss_cd">Dit item negeren</string>
+
+    <string name="inbox_error_refresh">Vernieuwen mislukt. Controleer je verbinding en probeer het opnieuw.</string>
+    <string name="inbox_error_create">Item toevoegen mislukt. Controleer je verbinding en probeer het opnieuw.</string>
+    <string name="inbox_error_resolve">Je wijziging kon niet worden opgeslagen. Probeer het opnieuw.</string>
+
+    <string name="inbox_issue_overlap_title">Overlappende items</string>
+    <string name="inbox_issue_overlap_body">Twee items beslaan dezelfde tijd. Pas er een aan als dat niet de bedoeling was, of negeer het.</string>
+    <string name="inbox_issue_overlap_body_policy">Je organisatie staat overlappende items niet toe. Pas een van deze aan.</string>
+    <string name="inbox_action_adjust">Aanpassen</string>
+
+    <string name="inbox_issue_gap_title">Niet-geregistreerde tijd</string>
+    <string name="inbox_issue_gap_body">Geen enkel item beslaat dit deel van je werkuren.</string>
+    <string name="inbox_action_add_entry">Item toevoegen</string>
+
+    <string name="inbox_issue_missing_title">Details toevoegen</string>
+    <string name="inbox_issue_missing_body">Ontbreekt: %1$s.</string>
+    <string name="inbox_action_add_details">Details toevoegen</string>
+
+    <string name="inbox_issue_long_title">Ongewoon lang item</string>
+    <string name="inbox_issue_long_body">Dit item duurt %1$s. Controleer of het op het verwachte moment is gestopt.</string>
+    <string name="inbox_action_review">Nakijken</string>
+
+    <string name="inbox_action_dismiss">Negeren</string>
+    <string name="inbox_entry_untitled">Item zonder titel</string>
+
+    <string name="inbox_field_project">project</string>
+    <string name="inbox_field_task">taak</string>
+    <string name="inbox_field_description">omschrijving</string>
+    <string name="inbox_field_tags">tags</string>
+
+    <string name="inbox_duration_hm">%1$du %2$dm</string>
+    <string name="inbox_duration_h">%1$du</string>
+    <string name="inbox_duration_m">%1$dm</string>
+
+    <string name="inbox_settings_title">Inbox-instellingen</string>
+    <string name="inbox_settings_work_days">Werkdagen</string>
+    <string name="inbox_settings_working_hours">Werkuren</string>
+    <string name="inbox_settings_work_start">Begin</string>
+    <string name="inbox_settings_work_end">Einde</string>
+    <string name="inbox_settings_min_gap">Minimale gemarkeerde tussentijd</string>
+    <string name="inbox_settings_max_duration">Drempel voor lang item</string>
+    <string name="inbox_settings_checks">Controles</string>
+    <string name="inbox_settings_check_gaps">Niet-geregistreerde tussentijd</string>
+    <string name="inbox_settings_check_overlaps">Overlappende items</string>
+    <string name="inbox_settings_check_missing_project">Ontbrekend project</string>
+    <string name="inbox_settings_check_missing_task">Ontbrekende taak</string>
+    <string name="inbox_settings_check_missing_description">Ontbrekende omschrijving</string>
+    <string name="inbox_settings_check_missing_tags">Ontbrekende tags</string>
+    <string name="inbox_settings_check_long">Lange items</string>
+    <string name="inbox_settings_done">Klaar</string>
+    <string name="inbox_settings_decrease">Verlagen</string>
+    <string name="inbox_settings_increase">Verhogen</string>
+    <string name="inbox_minutes_value">%1$d min</string>
+    <string name="inbox_hours_value">%1$d u</string>
+</resources>

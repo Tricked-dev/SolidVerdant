@@ -34,8 +34,12 @@ import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
 import dev.tricked.solidverdant.ui.tracking.TrackingScreen
 import dev.tricked.solidverdant.ui.tracking.TrackingViewModel
 import dev.tricked.solidverdant.ui.navigation.MainNavHost
+import dev.tricked.solidverdant.ui.navigation.ReviewRoutes
 import dev.tricked.solidverdant.ui.calendar.CalendarScreen
 import dev.tricked.solidverdant.ui.statistics.StatisticsScreen
+import dev.tricked.solidverdant.ui.review.ReviewScreen
+import dev.tricked.solidverdant.ui.review.ReviewBadgeViewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -230,8 +234,27 @@ fun SolidVerdantApp(
         authState == AuthState.LoggedIn -> {
             val navController = rememberNavController()
             val currentMembership = authUiState.currentMembership
+            val reviewBadgeViewModel: ReviewBadgeViewModel = hiltViewModel()
+            LaunchedEffect(currentMembership?.organizationId) {
+                reviewBadgeViewModel.setOrganization(currentMembership?.organizationId)
+            }
+            val inboxBadgeCount by reviewBadgeViewModel.openIssueCount.collectAsState()
             MainNavHost(
                 navController = navController,
+                inboxBadgeCount = inboxBadgeCount,
+                reviewContent = {
+                    ReviewScreen(
+                        onOpenReminderSettings = {
+                            navController.navigate(ReviewRoutes.ReminderSettings)
+                        },
+                        onOpenManageTemplates = {
+                            navController.navigate(ReviewRoutes.ManageTemplates)
+                        },
+                        onOpenEndOfDayReview = {
+                            navController.navigate(ReviewRoutes.EndOfDay)
+                        },
+                    )
+                },
                 trackContent = {
             TrackingScreen(
                 user = authUiState.user,

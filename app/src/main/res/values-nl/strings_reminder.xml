@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Einde-van-dag-overzicht en trackingherinneringen (gap analysis #4, #18, #78). -->
+
+    <!-- Herinneringsmelding -->
+    <string name="reminder_channel_name">Herinneringen</string>
+    <string name="reminder_channel_description">Dagelijkse trackingherinneringen en het einde-van-dag-overzicht.</string>
+    <string name="reminder_review_title">Bekijk je dag</string>
+    <string name="reminder_review_text">Controleer de invoer van vandaag op gaten, niet-gecategoriseerde tijd en synchronisatieproblemen voordat de dag eindigt.</string>
+    <string name="reminder_track_title">Geen timer actief</string>
+    <string name="reminder_track_text">Start een timer als je aan het werk bent, zodat het rapport van vandaag klopt.</string>
+    <string name="reminder_action_review_now">Nu bekijken</string>
+    <string name="reminder_action_open">Openen</string>
+
+    <!-- Herinneringsinstellingen -->
+    <string name="reminder_section_title">Herinneringen</string>
+    <string name="reminder_daily_title">Dagelijkse trackingherinnering</string>
+    <string name="reminder_daily_subtitle">Een seintje om te gaan tracken als er geen timer loopt.</string>
+    <string name="reminder_eod_title">Einde-van-dag-overzicht</string>
+    <string name="reminder_eod_subtitle">Een dagelijkse melding om de dag te controleren en te corrigeren voordat die eindigt.</string>
+    <string name="reminder_time_title">Herinneringstijd</string>
+    <string name="reminder_time_disabled_hint">Zet hierboven een herinnering aan om de tijd in te stellen.</string>
+    <string name="reminder_time_dialog_title">Herinneringstijd</string>
+    <string name="reminder_best_effort_note">De bezorgtijd is bij benadering. Android kan herinneringen uitstellen om de batterij te sparen.</string>
+    <string name="reminder_permission_warning_title">Meldingen staan uit</string>
+    <string name="reminder_permission_warning_body">Herinneringen kunnen niet worden bezorgd totdat je meldingen voor deze app toestaat.</string>
+    <string name="reminder_permission_allow">Meldingen toestaan</string>
+    <string name="reminder_permission_open_settings">Instellingen openen</string>
+
+    <!-- Gedeelde dialogen -->
+    <string name="review_dialog_confirm">Instellen</string>
+    <string name="review_dialog_cancel">Annuleren</string>
+    <string name="review_project_dialog_title">Kies een project</string>
+    <string name="review_project_dialog_empty">Er zijn nog geen projecten beschikbaar.</string>
+
+    <!-- Einde-van-dag-overzicht -->
+    <string name="review_no_org">Meld je aan en kies een organisatie om je dag te bekijken.</string>
+    <string name="review_summary_tracked_label">Getrackt</string>
+    <string name="review_summary_billable_label">Factureerbaar</string>
+    <string name="review_summary_entries_label">Invoer</string>
+    <string name="review_summary_gap_label">Grootste gat</string>
+    <string name="review_summary_uncategorized_label">Geen project</string>
+    <string name="review_summary_failed_label">Sync-problemen</string>
+    <string name="review_percent">%1$d%%</string>
+    <string name="review_value_none">—</string>
+    <string name="review_progress_step">Stap %1$d van %2$d</string>
+    <string name="review_all_caught_up_title">Alles bijgewerkt</string>
+    <string name="review_all_caught_up_body">Niets meer te corrigeren voor vandaag.</string>
+    <string name="review_nothing_tracked_title">Nog niets getrackt</string>
+    <string name="review_nothing_tracked_body">Start een timer om je dag hier te zien.</string>
+    <string name="review_again">Opnieuw bekijken</string>
+    <string name="review_item_running_title">Er loopt nog een timer</string>
+    <string name="review_item_running_body">Stop hem, pas de eindtijd aan, of laat hem doorlopen.</string>
+    <string name="review_item_failed_title">Een wijziging kon niet worden gesynchroniseerd</string>
+    <string name="review_item_failed_body">Deze wijziging wacht nog om de server te bereiken.</string>
+    <string name="review_item_uncategorized_title">Invoer heeft geen project</string>
+    <string name="review_item_uncategorized_body">Wijs een project toe zodat deze tijd correct wordt gerapporteerd.</string>
+    <string name="review_entry_no_description">Geen omschrijving</string>
+    <string name="review_started_at">Gestart om %1$s</string>
+    <string name="review_time_range">%1$s – %2$s</string>
+    <string name="review_action_stop">Nu stoppen</string>
+    <string name="review_action_adjust_end">Eindtijd aanpassen</string>
+    <string name="review_action_keep_running">Laten lopen</string>
+    <string name="review_action_retry">Sync opnieuw</string>
+    <string name="review_action_skip">Zo laten</string>
+    <string name="review_action_assign_project">Project toewijzen</string>
+    <string name="review_adjust_end_dialog_title">Eindtijd instellen</string>
+    <string name="review_duration_hours_minutes">%1$du %2$dm</string>
+    <string name="review_duration_minutes">%1$dm</string>
+
+    <!-- Tijdelijke actiemeldingen -->
+    <string name="review_msg_timer_stopped">Timer gestopt</string>
+    <string name="review_msg_end_adjusted">Eindtijd bijgewerkt</string>
+    <string name="review_msg_project_assigned">Project toegewezen</string>
+    <string name="review_msg_retry_queued">Nieuwe poging in wachtrij</string>
+    <string name="review_msg_action_failed">Kon die actie niet voltooien</string>
+    <string name="review_msg_invalid_end">Kies een eindtijd na de start en niet later dan nu</string>
+</resources>

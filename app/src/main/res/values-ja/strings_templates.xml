@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- お気に入りとテンプレート（ギャップ分析 #1, #9, #81）。機能別ファイル。strings.xml には統合しないこと。 -->
+
+    <!-- トラック画面のクイックスタート行 -->
+    <string name="templates_quick_start_title">クイックスタート</string>
+    <string name="templates_start_content_desc">テンプレートからタイマーを開始: %1$s</string>
+    <string name="templates_reason_favorite">お気に入り</string>
+    <string name="template_untitled">無題のテンプレート</string>
+    <string name="templates_no_project">プロジェクトなし</string>
+
+    <!-- 入力シートから保存 / 使用 -->
+    <string name="templates_save_as_template">テンプレートとして保存</string>
+    <string name="templates_use_template">テンプレートを使用</string>
+    <string name="templates_saved">テンプレートを保存しました</string>
+
+    <!-- テンプレート管理画面 -->
+    <string name="templates_add">新しいテンプレート</string>
+    <string name="templates_loading">テンプレートを読み込み中…</string>
+    <string name="templates_empty_title">テンプレートはまだありません</string>
+    <string name="templates_empty_body">よく使うプロジェクト・タスク・タグ・説明を保存すると、トラック画面からワンタップで再開できます。</string>
+    <string name="templates_empty_create">テンプレートを作成</string>
+    <string name="templates_error_title">テンプレートを読み込めませんでした</string>
+    <string name="templates_error_body">テンプレートの読み込み中に問題が発生しました。</string>
+    <string name="templates_favorite_add">お気に入りに追加</string>
+    <string name="templates_favorite_remove">お気に入りから削除</string>
+    <string name="templates_move_up">上へ移動</string>
+    <string name="templates_move_down">下へ移動</string>
+    <string name="templates_row_details">テンプレートの操作</string>
+    <string name="templates_delete_confirm_title">テンプレートを削除しますか？</string>
+    <string name="templates_delete_confirm_body">この端末からテンプレートを削除します。記録した時間には影響しません。</string>
+    <string name="templates_details_none">プロジェクトも説明もありません</string>
+    <plurals name="templates_tag_count">
+        <item quantity="other">%1$d 件のタグ</item>
+    </plurals>
+
+    <!-- テンプレートエディター -->
+    <string name="template_editor_new_title">新しいテンプレート</string>
+    <string name="template_editor_edit_title">テンプレートを編集</string>
+    <string name="template_name_label">名前（任意）</string>
+    <string name="template_name_placeholder">例: デイリースタンドアップ</string>
+    <string name="template_favorite_label">お気に入りに固定</string>
+    <string name="template_favorite_hint">お気に入りはトラック画面の先頭に表示され、ワンタップで開始できます。</string>
+    <string name="template_description_hint">毎回入力する値には {波かっこ} を使います。例: 「レビュー: {トピック}」。</string>
+
+    <!-- 開始時の利用可否 / プレースホルダー -->
+    <string name="templates_unavailable">要確認</string>
+    <string name="templates_unavailable_content_desc">一部の情報は利用できなくなりました</string>
+    <string name="templates_fill_details_title">詳細を入力</string>
+    <string name="templates_issues_title">一部の情報が利用できません</string>
+    <string name="templates_issue_project_archived">プロジェクトはアーカイブ済みのため適用されません。</string>
+    <string name="templates_issue_project_missing">プロジェクトは存在しないため適用されません。</string>
+    <string name="templates_issue_task_archived">タスクは完了済みのため適用されません。</string>
+    <string name="templates_issue_task_missing">タスクは存在しないため適用されません。</string>
+    <plurals name="templates_issue_tags_dropped">
+        <item quantity="other">%1$d 件のタグは存在しないため適用されません。</item>
+    </plurals>
+    <string name="templates_start_anyway">このまま開始</string>
+</resources>

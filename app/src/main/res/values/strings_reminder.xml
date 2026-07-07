@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- End-of-day review + tracking reminders (gap analysis #4, #18, #78). -->
+
+    <!-- Reminder notification -->
+    <string name="reminder_channel_name">Reminders</string>
+    <string name="reminder_channel_description">Daily tracking reminders and the end-of-day review.</string>
+    <string name="reminder_review_title">Review your day</string>
+    <string name="reminder_review_text">Check today’s entries for gaps, uncategorized time, and sync problems before the day ends.</string>
+    <string name="reminder_track_title">No timer running</string>
+    <string name="reminder_track_text">Start a timer if you are working, so today’s report stays accurate.</string>
+    <string name="reminder_action_review_now">Review now</string>
+    <string name="reminder_action_open">Open</string>
+
+    <!-- Reminder settings -->
+    <string name="reminder_section_title">Reminders</string>
+    <string name="reminder_daily_title">Daily tracking reminder</string>
+    <string name="reminder_daily_subtitle">A nudge to start tracking if no timer is running.</string>
+    <string name="reminder_eod_title">End-of-day review</string>
+    <string name="reminder_eod_subtitle">A daily prompt to review and correct the day before it ends.</string>
+    <string name="reminder_time_title">Reminder time</string>
+    <string name="reminder_time_disabled_hint">Turn on a reminder above to set its time.</string>
+    <string name="reminder_time_dialog_title">Reminder time</string>
+    <string name="reminder_best_effort_note">Delivery time is approximate. Android may delay reminders to save battery.</string>
+    <string name="reminder_permission_warning_title">Notifications are turned off</string>
+    <string name="reminder_permission_warning_body">Reminders cannot be delivered until you allow notifications for this app.</string>
+    <string name="reminder_permission_allow">Allow notifications</string>
+    <string name="reminder_permission_open_settings">Open settings</string>
+
+    <!-- Shared dialogs -->
+    <string name="review_dialog_confirm">Set</string>
+    <string name="review_dialog_cancel">Cancel</string>
+    <string name="review_project_dialog_title">Choose a project</string>
+    <string name="review_project_dialog_empty">No projects are available yet.</string>
+
+    <!-- End-of-day review -->
+    <string name="review_no_org">Sign in and select an organization to review your day.</string>
+    <string name="review_summary_tracked_label">Tracked</string>
+    <string name="review_summary_billable_label">Billable</string>
+    <string name="review_summary_entries_label">Entries</string>
+    <string name="review_summary_gap_label">Largest gap</string>
+    <string name="review_summary_uncategorized_label">No project</string>
+    <string name="review_summary_failed_label">Sync issues</string>
+    <string name="review_percent">%1$d%%</string>
+    <string name="review_value_none">—</string>
+    <string name="review_progress_step">Step %1$d of %2$d</string>
+    <string name="review_all_caught_up_title">All caught up</string>
+    <string name="review_all_caught_up_body">Nothing left to correct for today.</string>
+    <string name="review_nothing_tracked_title">Nothing tracked yet</string>
+    <string name="review_nothing_tracked_body">Start a timer to see your day here.</string>
+    <string name="review_again">Review again</string>
+    <string name="review_item_running_title">A timer is still running</string>
+    <string name="review_item_running_body">Stop it, adjust its end time, or keep it running.</string>
+    <string name="review_item_failed_title">A change could not be synced</string>
+    <string name="review_item_failed_body">This change is still waiting to reach the server.</string>
+    <string name="review_item_uncategorized_title">Entry has no project</string>
+    <string name="review_item_uncategorized_body">Assign a project so this time is reported correctly.</string>
+    <string name="review_entry_no_description">No description</string>
+    <string name="review_started_at">Started at %1$s</string>
+    <string name="review_time_range">%1$s – %2$s</string>
+    <string name="review_action_stop">Stop now</string>
+    <string name="review_action_adjust_end">Adjust end time</string>
+    <string name="review_action_keep_running">Keep running</string>
+    <string name="review_action_retry">Retry sync</string>
+    <string name="review_action_skip">Keep as is</string>
+    <string name="review_action_assign_project">Assign project</string>
+    <string name="review_adjust_end_dialog_title">Set end time</string>
+    <string name="review_duration_hours_minutes">%1$dh %2$dm</string>
+    <string name="review_duration_minutes">%1$dm</string>
+
+    <!-- Transient action messages -->
+    <string name="review_msg_timer_stopped">Timer stopped</string>
+    <string name="review_msg_end_adjusted">End time updated</string>
+    <string name="review_msg_project_assigned">Project assigned</string>
+    <string name="review_msg_retry_queued">Retry queued</string>
+    <string name="review_msg_action_failed">Could not complete that action</string>
+    <string name="review_msg_invalid_end">Pick an end time after the start and no later than now</string>
+</resources>

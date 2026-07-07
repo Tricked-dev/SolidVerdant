@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Favorites & templates (gap analysis #1, #9, #81). Feature-scoped file; do not merge into strings.xml. -->
+
+    <!-- Track quick-start row -->
+    <string name="templates_quick_start_title">Quick start</string>
+    <string name="templates_start_content_desc">Start timer from template: %1$s</string>
+    <string name="templates_reason_favorite">Favorite</string>
+    <string name="template_untitled">Untitled template</string>
+    <string name="templates_no_project">No project</string>
+
+    <!-- Save / use from the entry sheet -->
+    <string name="templates_save_as_template">Save as template</string>
+    <string name="templates_use_template">Use a template</string>
+    <string name="templates_saved">Template saved</string>
+
+    <!-- Manage templates screen -->
+    <string name="templates_add">New template</string>
+    <string name="templates_loading">Loading templates…</string>
+    <string name="templates_empty_title">No templates yet</string>
+    <string name="templates_empty_body">Save a project, task, tags and a description you use often, then start it again in one tap from the Track screen.</string>
+    <string name="templates_empty_create">Create a template</string>
+    <string name="templates_error_title">Couldn\'t load templates</string>
+    <string name="templates_error_body">Something went wrong loading your templates.</string>
+    <string name="templates_favorite_add">Add to favorites</string>
+    <string name="templates_favorite_remove">Remove from favorites</string>
+    <string name="templates_move_up">Move up</string>
+    <string name="templates_move_down">Move down</string>
+    <string name="templates_row_details">Template options</string>
+    <string name="templates_delete_confirm_title">Delete template?</string>
+    <string name="templates_delete_confirm_body">This removes the template on this device. Your tracked time is not affected.</string>
+    <string name="templates_details_none">No project or description</string>
+    <plurals name="templates_tag_count">
+        <item quantity="one">%1$d tag</item>
+        <item quantity="other">%1$d tags</item>
+    </plurals>
+
+    <!-- Template editor -->
+    <string name="template_editor_new_title">New template</string>
+    <string name="template_editor_edit_title">Edit template</string>
+    <string name="template_name_label">Name (optional)</string>
+    <string name="template_name_placeholder">e.g. Daily stand-up</string>
+    <string name="template_favorite_label">Pin as favorite</string>
+    <string name="template_favorite_hint">Favorites appear first on the Track screen for one-tap start.</string>
+    <string name="template_description_hint">Use {curly braces} for a value you fill in each time, e.g. “Review: {topic}”.</string>
+
+    <!-- Availability / placeholders when starting -->
+    <string name="templates_unavailable">Needs attention</string>
+    <string name="templates_unavailable_content_desc">Some details are no longer available</string>
+    <string name="templates_fill_details_title">Fill in details</string>
+    <string name="templates_issues_title">Some details are unavailable</string>
+    <string name="templates_issue_project_archived">The project is archived and won\'t be applied.</string>
+    <string name="templates_issue_project_missing">The project no longer exists and won\'t be applied.</string>
+    <string name="templates_issue_task_archived">The task is completed and won\'t be applied.</string>
+    <string name="templates_issue_task_missing">The task no longer exists and won\'t be applied.</string>
+    <plurals name="templates_issue_tags_dropped">
+        <item quantity="one">%1$d tag no longer exists and won\'t be applied.</item>
+        <item quantity="other">%1$d tags no longer exist and won\'t be applied.</item>
+    </plurals>
+    <string name="templates_start_anyway">Start anyway</string>
+</resources>

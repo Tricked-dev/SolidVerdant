@@ -12,6 +12,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Read-only device calendar access for the optional calendar overlay (gap analysis #22). -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
 
     <application
         android:name=".SolidVerdantApp"
@@ -133,6 +135,19 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_info" />
         </receiver>
+
+        <!-- FileProvider for sharing exported files (e.g. CSV/PDF review exports) from cache via a
+             content:// URI with temporary read grants. Authority resolves to
+             ${applicationId}.fileprovider (debug builds carry the .dev applicationId suffix). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <!-- Remove the default WorkManager initializer; SolidVerdantApp provides a
              Hilt-aware Configuration via Configuration.Provider. -->

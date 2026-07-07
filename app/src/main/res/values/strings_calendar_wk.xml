@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Week calendar + device-calendar overlay (feature-scoped; merged with other strings files). -->
+    <string name="calendar_view_month">Month</string>
+    <string name="calendar_view_week">Week</string>
+    <string name="calendar_view_day">Day</string>
+    <string name="calendar_today">Today</string>
+    <string name="calendar_show_previous">Show previous period</string>
+    <string name="calendar_show_next">Show next period</string>
+    <string name="calendar_all_day">All day</string>
+    <string name="calendar_entry_untitled">No description</string>
+    <string name="calendar_entry_a11y">Time entry: %1$s</string>
+
+    <!-- Overlay controls -->
+    <string name="calendar_overlay_show">Show calendar events</string>
+    <string name="calendar_overlay_privacy">Event details are read from your device only and are never uploaded.</string>
+    <string name="calendar_overlay_permission_rationale">Allow calendar access to show your device events behind your tracked time.</string>
+    <string name="calendar_overlay_grant">Allow calendar access</string>
+    <string name="calendar_overlay_denied">Calendar access is off. Turn it on in system settings to overlay events.</string>
+    <string name="calendar_overlay_open_settings">Open settings</string>
+    <string name="calendar_overlay_no_calendars">No calendars were found on this device.</string>
+    <string name="calendar_overlay_choose_count">Choose calendars (%1$d selected)</string>
+    <string name="calendar_overlay_select_prompt">Show events from these calendars:</string>
+    <string name="calendar_overlay_calendar_desc">Show events from %1$s</string>
+    <string name="calendar_overlay_none_selected">No calendars selected. Choose at least one to see events.</string>
+    <string name="calendar_overlay_loading">Loading calendar events…</string>
+    <string name="calendar_overlay_error">Couldn\'t load calendar events.</string>
+    <string name="calendar_overlay_retry">Retry</string>
+    <string name="calendar_overlay_empty">No calendar events in this period.</string>
+    <string name="calendar_overlay_showing">Showing calendar events.</string>
+    <string name="calendar_overlay_event_untitled">Untitled event</string>
+    <string name="calendar_overlay_event_a11y">Calendar event: %1$s</string>
+</resources>

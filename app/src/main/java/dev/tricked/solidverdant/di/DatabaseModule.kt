@@ -9,8 +9,10 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dev.tricked.solidverdant.data.local.db.AppDatabase
 import dev.tricked.solidverdant.data.local.db.CatalogDao
+import dev.tricked.solidverdant.data.local.db.InboxDismissalDao
 import dev.tricked.solidverdant.data.local.db.OutboxDao
 import dev.tricked.solidverdant.data.local.db.SyncMetaDao
+import dev.tricked.solidverdant.data.local.db.TemplateDao
 import dev.tricked.solidverdant.data.local.db.TimeEntryDao
 import javax.inject.Singleton
 
@@ -30,4 +32,6 @@ object DatabaseModule {
     @Provides fun provideCatalogDao(db: AppDatabase): CatalogDao = db.catalogDao()
     @Provides fun provideOutboxDao(db: AppDatabase): OutboxDao = db.outboxDao()
     @Provides fun provideSyncMetaDao(db: AppDatabase): SyncMetaDao = db.syncMetaDao()
+    @Provides fun provideTemplateDao(db: AppDatabase): TemplateDao = db.templateDao()
+    @Provides fun provideInboxDismissalDao(db: AppDatabase): InboxDismissalDao = db.inboxDismissalDao()
 }

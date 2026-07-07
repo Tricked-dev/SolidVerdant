@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 週カレンダー + デバイスカレンダーのオーバーレイ（機能別ファイル。マージされます）。 -->
+    <string name="calendar_view_month">月</string>
+    <string name="calendar_view_week">週</string>
+    <string name="calendar_view_day">日</string>
+    <string name="calendar_today">今日</string>
+    <string name="calendar_show_previous">前の期間を表示</string>
+    <string name="calendar_show_next">次の期間を表示</string>
+    <string name="calendar_all_day">終日</string>
+    <string name="calendar_entry_untitled">説明なし</string>
+    <string name="calendar_entry_a11y">記録: %1$s</string>
+
+    <!-- オーバーレイの設定 -->
+    <string name="calendar_overlay_show">カレンダーの予定を表示</string>
+    <string name="calendar_overlay_privacy">予定の詳細はこの端末からのみ読み取られ、アップロードされることはありません。</string>
+    <string name="calendar_overlay_permission_rationale">カレンダーへのアクセスを許可すると、記録した時間の背後に端末の予定を表示できます。</string>
+    <string name="calendar_overlay_grant">カレンダーへのアクセスを許可</string>
+    <string name="calendar_overlay_denied">カレンダーへのアクセスがオフです。予定を重ねて表示するにはシステム設定でオンにしてください。</string>
+    <string name="calendar_overlay_open_settings">設定を開く</string>
+    <string name="calendar_overlay_no_calendars">この端末にカレンダーが見つかりませんでした。</string>
+    <string name="calendar_overlay_choose_count">カレンダーを選択（%1$d 件選択中）</string>
+    <string name="calendar_overlay_select_prompt">次のカレンダーの予定を表示:</string>
+    <string name="calendar_overlay_calendar_desc">%1$s の予定を表示</string>
+    <string name="calendar_overlay_none_selected">カレンダーが選択されていません。予定を表示するには 1 つ以上選択してください。</string>
+    <string name="calendar_overlay_loading">カレンダーの予定を読み込み中…</string>
+    <string name="calendar_overlay_error">カレンダーの予定を読み込めませんでした。</string>
+    <string name="calendar_overlay_retry">再試行</string>
+    <string name="calendar_overlay_empty">この期間に予定はありません。</string>
+    <string name="calendar_overlay_showing">カレンダーの予定を表示しています。</string>
+    <string name="calendar_overlay_event_untitled">無題の予定</string>
+    <string name="calendar_overlay_event_a11y">カレンダーの予定: %1$s</string>
+</resources>

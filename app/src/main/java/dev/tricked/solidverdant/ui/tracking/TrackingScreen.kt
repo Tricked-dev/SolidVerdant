@@ -160,7 +160,15 @@ import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
+import dev.tricked.solidverdant.data.repository.EntryTemplate
 import dev.tricked.solidverdant.data.model.User
+import dev.tricked.solidverdant.ui.templates.FavoriteTemplatesRow
+import dev.tricked.solidverdant.ui.templates.ManageTemplatesViewModel
+import dev.tricked.solidverdant.ui.templates.TemplateDraft
+import dev.tricked.solidverdant.ui.templates.TemplateResolver
+import dev.tricked.solidverdant.ui.templates.templateDisplayLabel
+import androidx.compose.runtime.collectAsState
+import androidx.hilt.navigation.compose.hiltViewModel
 import dev.tricked.solidverdant.data.local.AppThemeMode
 import dev.tricked.solidverdant.ui.components.ProjectTaskDropdown as SharedProjectTaskDropdown
 import dev.tricked.solidverdant.util.NotificationPermissionHelper
@@ -248,6 +256,15 @@ fun TrackingScreen(
     val scope = rememberCoroutineScope()
     val wideHistoryListState = rememberLazyListState()
     val compactListState = rememberLazyListState()
+
+    // Favorites & templates (gap analysis #1, #9). The template ViewModel resolves the current
+    // organization itself; its catalogue includes archived/done items so availability can be shown.
+    val templateViewModel: ManageTemplatesViewModel = hiltViewModel()
+    val templateState by templateViewModel.uiState.collectAsState()
+    val onSaveTemplateFromForm: (TemplateDraft) -> Unit = { draft ->
+        templateViewModel.saveNewTemplate(draft)
+        scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.templates_saved)) }
+    }
 
     LaunchedEffect(editActiveEntryRequested, uiState.currentTimeEntry) {
         if (editActiveEntryRequested) {
@@ -800,6 +817,26 @@ fun TrackingScreen(
                         if (overlapCount > 0) {
                             item { OverlapWarning(overlapCount, currentMembership?.organization?.preventOverlappingTimeEntries == true) }
                         }
+                        if (!uiState.isTracking && !uiState.isPaused &&
+                            templateState.quickStart.isNotEmpty()
+                        ) {
+                            item(key = "favorites_quick_start") {
+                                FavoriteTemplatesRow(
+                                    templates = templateState.quickStart,
+                                    projects = templateState.projects,
+                                    tasks = templateState.tasks,
+                                    tags = templateState.tags,
+                                    onStart = { start ->
+                                        onDescriptionChange(start.description ?: "")
+                                        onProjectChange(start.projectId)
+                                        onTaskChange(start.taskId)
+                                        onTagsChange(start.tagIds)
+                                        onBillableChange(start.billable)
+                                        onStartTracking()
+                                    },
+                                )
+                            }
+                        }
                         if (!uiState.isTracking && !uiState.isPaused && lastEntry != null) {
                             item(key = "continue_last") {
                                 ContinueLastEntryButton(
@@ -902,6 +939,8 @@ fun TrackingScreen(
             },
             existingEntries = uiState.timeEntries,
             preventOverlap = currentMembership?.organization?.preventOverlappingTimeEntries == true,
+            templates = templateState.templates,
+            onSaveAsTemplate = onSaveTemplateFromForm,
         )
     }
 
@@ -929,7 +968,9 @@ fun TrackingScreen(
             onSave = { description, projectId, taskId, tagIds, billable, start, end ->
                 onCreateEntry(description, projectId, taskId, tagIds, billable, start, end)
                 showAddDialog = false
-            }
+            },
+            templates = templateState.templates,
+            onSaveAsTemplate = onSaveTemplateFromForm,
         )
     }
 
@@ -2313,12 +2354,15 @@ private fun TimeEntryFormSheet(
     onSave: (String?, String?, String?, List<String>, Boolean, String, String) -> Unit,
     existingEntries: List<TimeEntry> = emptyList(),
     preventOverlap: Boolean = false,
+    templates: List<EntryTemplate> = emptyList(),
+    onSaveAsTemplate: ((TemplateDraft) -> Unit)? = null,
 ) {
     var description by remember { mutableStateOf(entry?.description ?: "") }
     var projectId by remember { mutableStateOf(entry?.projectId) }
     var taskId by remember { mutableStateOf(entry?.taskId) }
     var selectedTags by remember { mutableStateOf(entry?.tags?.map { it.id } ?: emptyList<String>()) }
     var billable by remember { mutableStateOf(entry?.billable ?: false) }
+    var templateMenuExpanded by remember { mutableStateOf(false) }
     val originalStart = remember(entry?.id) {
         entry?.let { ZonedDateTime.parse(it.start, DateTimeFormatter.ISO_DATE_TIME) }
             ?: (suggestedStart ?: ZonedDateTime.now(ZoneId.systemDefault()).minusHours(1))
@@ -2390,6 +2434,65 @@ private fun TimeEntryFormSheet(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold
                 )
+
+                // Save-as-template / start-from-template affordance (gap analysis #1, #9).
+                if (templates.isNotEmpty() || onSaveAsTemplate != null) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (templates.isNotEmpty()) {
+                            Box {
+                                OutlinedButton(
+                                    onClick = { templateMenuExpanded = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                ) {
+                                    Text(stringResource(R.string.templates_use_template))
+                                }
+                                DropdownMenu(
+                                    expanded = templateMenuExpanded,
+                                    onDismissRequest = { templateMenuExpanded = false },
+                                ) {
+                                    templates.forEach { template ->
+                                        val label = templateDisplayLabel(template, projects)
+                                        DropdownMenuItem(
+                                            text = { Text(label) },
+                                            onClick = {
+                                                val resolution = TemplateResolver.resolve(
+                                                    template, projects, tasks, tags,
+                                                )
+                                                description = template.description ?: ""
+                                                projectId = resolution.projectId
+                                                taskId = resolution.taskId
+                                                selectedTags = resolution.tagIds
+                                                billable = resolution.billable
+                                                templateMenuExpanded = false
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        if (onSaveAsTemplate != null) {
+                            OutlinedButton(
+                                onClick = {
+                                    onSaveAsTemplate(
+                                        TemplateDraft(
+                                            name = null,
+                                            projectId = projectId,
+                                            taskId = taskId,
+                                            description = description.trim().takeIf { it.isNotEmpty() },
+                                            tagIds = selectedTags,
+                                            billable = billable,
+                                            isFavorite = false,
+                                        )
+                                    )
+                                },
+                                enabled = projectId != null || description.isNotBlank() || selectedTags.isNotEmpty(),
+                                shape = RoundedCornerShape(8.dp),
+                            ) {
+                                Text(stringResource(R.string.templates_save_as_template))
+                            }
+                        }
+                    }
+                }
 
                 Text(
                     text = stringResource(R.string.time_and_duration),

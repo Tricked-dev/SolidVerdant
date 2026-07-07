@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- フェーズ2の統計: フィルター、前期間との比較、ドリルダウン、CSVエクスポート。 -->
+
+    <!-- CSVエクスポートの列見出し。 -->
+    <string name="stats2_csv_col_entry_id">エントリID</string>
+    <string name="stats2_csv_col_start">開始</string>
+    <string name="stats2_csv_col_end">終了</string>
+    <string name="stats2_csv_col_timezone">タイムゾーン</string>
+    <string name="stats2_csv_col_duration_seconds">時間（秒）</string>
+    <string name="stats2_csv_col_duration">時間</string>
+    <string name="stats2_csv_col_organization">組織</string>
+    <string name="stats2_csv_col_project">プロジェクト</string>
+    <string name="stats2_csv_col_client">クライアント</string>
+    <string name="stats2_csv_col_task">タスク</string>
+    <string name="stats2_csv_col_tags">タグ</string>
+    <string name="stats2_csv_col_description">説明</string>
+    <string name="stats2_csv_col_billable">請求可能</string>
+    <string name="stats2_yes">はい</string>
+    <string name="stats2_no">いいえ</string>
+
+    <!-- エクスポート操作とフィードバック。 -->
+    <string name="stats2_export">CSVエクスポート</string>
+    <string name="stats2_export_content_description">現在のフィルター範囲をCSVとしてエクスポート</string>
+    <string name="stats2_exporting">エクスポートを準備中…</string>
+    <string name="stats2_export_empty">この範囲にはエクスポートするものがありません</string>
+    <string name="stats2_export_error">エクスポートを作成できませんでした。もう一度お試しください。</string>
+    <string name="stats2_export_chooser_title">タイムエントリを共有（CSV）</string>
+
+    <!-- フィルターバーとフィルターシート。 -->
+    <string name="stats2_filters">フィルター</string>
+    <string name="stats2_filters_content_description">統計フィルターを編集</string>
+    <string name="stats2_filter_sheet_title">統計をフィルター</string>
+    <string name="stats2_active_scope_none">すべての記録時間を表示中</string>
+    <string name="stats2_clear_filters">クリア</string>
+    <string name="stats2_clear_filters_content_description">すべての統計フィルターをクリア</string>
+    <string name="stats2_reset">リセット</string>
+    <string name="stats2_apply">適用</string>
+    <string name="stats2_filter_projects">プロジェクト</string>
+    <string name="stats2_filter_clients">クライアント</string>
+    <string name="stats2_filter_tasks">タスク</string>
+    <string name="stats2_filter_tags">タグ</string>
+    <string name="stats2_filter_billable">請求可能状態</string>
+    <string name="stats2_billable_all">すべて</string>
+    <string name="stats2_billable_billable">請求可能</string>
+    <string name="stats2_billable_nonbillable">請求不可</string>
+    <string name="stats2_filter_empty_projects">利用可能なプロジェクトがありません</string>
+    <string name="stats2_filter_empty_clients">利用可能なクライアントがありません</string>
+    <string name="stats2_filter_empty_tasks">利用可能なタスクがありません</string>
+    <string name="stats2_filter_empty_tags">利用可能なタグがありません</string>
+    <string name="stats2_no_project">プロジェクトなし</string>
+    <plurals name="stats2_active_filters">
+        <item quantity="other">%1$d 件のフィルターが有効</item>
+    </plurals>
+
+    <!-- 前期間との比較。 -->
+    <string name="stats2_comparison_title">前期間との比較</string>
+    <string name="stats2_comparison_range">%1$s – %2$s</string>
+    <string name="stats2_comparison_no_data">前期間に記録時間はありません</string>
+    <string name="stats2_metric_total">合計</string>
+    <string name="stats2_metric_billable">請求可能</string>
+    <string name="stats2_metric_avg_per_day">1日平均</string>
+    <string name="stats2_top_changes">変化の大きいプロジェクト</string>
+    <string name="stats2_delta_percent">%1$s%%</string>
+    <string name="stats2_delta_new">新規</string>
+    <string name="stats2_delta_flat">変化なし</string>
+    <string name="stats2_delta_increase_content_description">%1$s 増加</string>
+    <string name="stats2_delta_decrease_content_description">%1$s 減少</string>
+    <string name="stats2_delta_flat_content_description">前期間から変化なし</string>
+
+    <!-- ドリルダウンシート。 -->
+    <string name="stats2_drilldown_close">閉じる</string>
+    <string name="stats2_drilldown_empty">この選択にエントリはありません</string>
+    <string name="stats2_drilldown_total">合計 %1$s</string>
+    <string name="stats2_drilldown_no_description">（説明なし）</string>
+    <string name="stats2_drilldown_project_content_description">%1$s のエントリを表示</string>
+    <string name="stats2_drilldown_bucket_content_description">%1$s のエントリを表示</string>
+    <plurals name="stats2_drilldown_entries">
+        <item quantity="other">%1$d 件のエントリ</item>
+    </plurals>
+</resources>

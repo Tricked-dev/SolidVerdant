@@ -15,6 +15,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.tricked.solidverdant.data.model.TimeEntry
@@ -82,6 +83,16 @@ class SettingsDataStore @Inject constructor(
         private val WIDGET_PROJECT_NAME = stringPreferencesKey("widget_project_name")
         private val WIDGET_TASK_NAME = stringPreferencesKey("widget_task_name")
         private val WIDGET_DESCRIPTION = stringPreferencesKey("widget_description")
+
+        // --- Phase 2 review-loop preferences (local only; survive logout like other prefs) ---
+        private val REMINDER_ENABLED = booleanPreferencesKey("reminder_enabled")
+        private val REMINDER_MINUTE_OF_DAY = intPreferencesKey("reminder_minute_of_day")
+        private val END_OF_DAY_REVIEW_ENABLED = booleanPreferencesKey("end_of_day_review_enabled")
+        private val CALENDAR_OVERLAY_ENABLED = booleanPreferencesKey("calendar_overlay_enabled")
+        private val SELECTED_CALENDAR_IDS = stringSetPreferencesKey("selected_calendar_ids")
+
+        /** Default reminder time: 17:00 local, expressed as minutes since midnight. */
+        const val DEFAULT_REMINDER_MINUTE_OF_DAY: Int = 17 * 60
 
         @Volatile
         private var INSTANCE: SettingsDataStore? = null
@@ -220,6 +231,54 @@ class SettingsDataStore @Inject constructor(
     suspend fun setLongTimerHours(hours: Int) {
         require(hours in 1..24)
         dataStore.edit { it[LONG_TIMER_HOURS] = hours }
+    }
+
+    // --- Phase 2 review-loop preferences ---
+
+    /** Whether tracking reminders are enabled. Defaults to false (opt-in). */
+    val reminderEnabled: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[REMINDER_ENABLED] ?: false
+    }.distinctUntilChanged()
+
+    /** Reminder time expressed as minutes since local midnight (0..1439). */
+    val reminderMinuteOfDay: Flow<Int> = dataStore.data.map { preferences ->
+        preferences[REMINDER_MINUTE_OF_DAY] ?: DEFAULT_REMINDER_MINUTE_OF_DAY
+    }.distinctUntilChanged()
+
+    /** Whether the optional end-of-day review notification is enabled. Defaults to false. */
+    val endOfDayReviewEnabled: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[END_OF_DAY_REVIEW_ENABLED] ?: false
+    }.distinctUntilChanged()
+
+    /** Whether the device-calendar overlay is enabled. Defaults to false (requires permission). */
+    val calendarOverlayEnabled: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[CALENDAR_OVERLAY_ENABLED] ?: false
+    }.distinctUntilChanged()
+
+    /** IDs of the device calendars the user selected for the overlay. Defaults to empty. */
+    val selectedCalendarIds: Flow<Set<String>> = dataStore.data.map { preferences ->
+        preferences[SELECTED_CALENDAR_IDS] ?: emptySet()
+    }.distinctUntilChanged()
+
+    suspend fun setReminderEnabled(enabled: Boolean) {
+        dataStore.edit { it[REMINDER_ENABLED] = enabled }
+    }
+
+    suspend fun setReminderMinuteOfDay(minuteOfDay: Int) {
+        require(minuteOfDay in 0..1439)
+        dataStore.edit { it[REMINDER_MINUTE_OF_DAY] = minuteOfDay }
+    }
+
+    suspend fun setEndOfDayReviewEnabled(enabled: Boolean) {
+        dataStore.edit { it[END_OF_DAY_REVIEW_ENABLED] = enabled }
+    }
+
+    suspend fun setCalendarOverlayEnabled(enabled: Boolean) {
+        dataStore.edit { it[CALENDAR_OVERLAY_ENABLED] = enabled }
+    }
+
+    suspend fun setSelectedCalendarIds(ids: Set<String>) {
+        dataStore.edit { it[SELECTED_CALENDAR_IDS] = ids }
     }
 
     /**

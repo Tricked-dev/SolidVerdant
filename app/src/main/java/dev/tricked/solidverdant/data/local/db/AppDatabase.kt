@@ -18,8 +18,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SyncMetaEntity::class,
         OutboxEntity::class,
         ClientEntity::class,
+        TemplateEntity::class,
+        InboxDismissalEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -28,6 +30,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun catalogDao(): CatalogDao
     abstract fun outboxDao(): OutboxDao
     abstract fun syncMetaDao(): SyncMetaDao
+    abstract fun templateDao(): TemplateDao
+    abstract fun inboxDismissalDao(): InboxDismissalDao
 
     companion object {
         /**
@@ -63,6 +67,37 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+        /**
+         * v3 -> v4 adds the Phase 2 review-loop tables. Both are additive CREATE TABLEs plus their
+         * `organizationId` indices, matching the Room-generated schema for [TemplateEntity] and
+         * [InboxDismissalEntity]. No existing table changes, so no data migration is required.
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `entry_templates` (" +
+                        "`id` TEXT NOT NULL, `organizationId` TEXT NOT NULL, `name` TEXT, " +
+                        "`projectId` TEXT, `taskId` TEXT, `description` TEXT, " +
+                        "`tagIds` TEXT NOT NULL, `billable` INTEGER NOT NULL, " +
+                        "`isFavorite` INTEGER NOT NULL, `sortOrder` INTEGER NOT NULL, " +
+                        "`createdAtMs` INTEGER NOT NULL, PRIMARY KEY(`id`))"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_entry_templates_organizationId` " +
+                        "ON `entry_templates` (`organizationId`)"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `inbox_dismissals` (" +
+                        "`issueKey` TEXT NOT NULL, `organizationId` TEXT NOT NULL, " +
+                        "`dismissedAtMs` INTEGER NOT NULL, PRIMARY KEY(`issueKey`))"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_inbox_dismissals_organizationId` " +
+                        "ON `inbox_dismissals` (`organizationId`)"
+                )
+            }
+        }
+
+        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
     }
 }

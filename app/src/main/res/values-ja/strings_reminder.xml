@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 一日の振り返りとトラッキングのリマインダー (gap analysis #4, #18, #78)。 -->
+
+    <!-- リマインダー通知 -->
+    <string name="reminder_channel_name">リマインダー</string>
+    <string name="reminder_channel_description">毎日のトラッキングリマインダーと一日の振り返り。</string>
+    <string name="reminder_review_title">今日を振り返る</string>
+    <string name="reminder_review_text">一日が終わる前に、今日のエントリーの抜け・未分類の時間・同期の問題を確認しましょう。</string>
+    <string name="reminder_track_title">タイマーが動いていません</string>
+    <string name="reminder_track_text">作業中ならタイマーを開始して、今日のレポートを正確に保ちましょう。</string>
+    <string name="reminder_action_review_now">今すぐ確認</string>
+    <string name="reminder_action_open">開く</string>
+
+    <!-- リマインダー設定 -->
+    <string name="reminder_section_title">リマインダー</string>
+    <string name="reminder_daily_title">毎日のトラッキングリマインダー</string>
+    <string name="reminder_daily_subtitle">タイマーが動いていないときにトラッキングを促します。</string>
+    <string name="reminder_eod_title">一日の振り返り</string>
+    <string name="reminder_eod_subtitle">一日が終わる前に確認・修正するための毎日の通知。</string>
+    <string name="reminder_time_title">リマインダーの時刻</string>
+    <string name="reminder_time_disabled_hint">時刻を設定するには、上のリマインダーをオンにしてください。</string>
+    <string name="reminder_time_dialog_title">リマインダーの時刻</string>
+    <string name="reminder_best_effort_note">配信時刻はおおよそです。Android はバッテリー節約のためにリマインダーを遅らせることがあります。</string>
+    <string name="reminder_permission_warning_title">通知がオフです</string>
+    <string name="reminder_permission_warning_body">このアプリの通知を許可するまで、リマインダーは配信できません。</string>
+    <string name="reminder_permission_allow">通知を許可</string>
+    <string name="reminder_permission_open_settings">設定を開く</string>
+
+    <!-- 共通ダイアログ -->
+    <string name="review_dialog_confirm">設定</string>
+    <string name="review_dialog_cancel">キャンセル</string>
+    <string name="review_project_dialog_title">プロジェクトを選択</string>
+    <string name="review_project_dialog_empty">利用できるプロジェクトはまだありません。</string>
+
+    <!-- 一日の振り返り -->
+    <string name="review_no_org">サインインして組織を選択すると、その日を振り返れます。</string>
+    <string name="review_summary_tracked_label">記録時間</string>
+    <string name="review_summary_billable_label">請求対象</string>
+    <string name="review_summary_entries_label">エントリー</string>
+    <string name="review_summary_gap_label">最大の空き</string>
+    <string name="review_summary_uncategorized_label">プロジェクトなし</string>
+    <string name="review_summary_failed_label">同期の問題</string>
+    <string name="review_percent">%1$d%%</string>
+    <string name="review_value_none">—</string>
+    <string name="review_progress_step">ステップ %1$d / %2$d</string>
+    <string name="review_all_caught_up_title">すべて完了</string>
+    <string name="review_all_caught_up_body">今日修正するものはありません。</string>
+    <string name="review_nothing_tracked_title">まだ記録がありません</string>
+    <string name="review_nothing_tracked_body">タイマーを開始すると、ここに今日の内容が表示されます。</string>
+    <string name="review_again">もう一度確認</string>
+    <string name="review_item_running_title">タイマーがまだ動いています</string>
+    <string name="review_item_running_body">停止する、終了時刻を調整する、またはそのまま続けます。</string>
+    <string name="review_item_failed_title">変更を同期できませんでした</string>
+    <string name="review_item_failed_body">この変更はまだサーバーへの送信を待っています。</string>
+    <string name="review_item_uncategorized_title">エントリーにプロジェクトがありません</string>
+    <string name="review_item_uncategorized_body">この時間が正しく報告されるようにプロジェクトを割り当ててください。</string>
+    <string name="review_entry_no_description">説明なし</string>
+    <string name="review_started_at">開始 %1$s</string>
+    <string name="review_time_range">%1$s – %2$s</string>
+    <string name="review_action_stop">今すぐ停止</string>
+    <string name="review_action_adjust_end">終了時刻を調整</string>
+    <string name="review_action_keep_running">続ける</string>
+    <string name="review_action_retry">同期を再試行</string>
+    <string name="review_action_skip">このままにする</string>
+    <string name="review_action_assign_project">プロジェクトを割り当て</string>
+    <string name="review_adjust_end_dialog_title">終了時刻を設定</string>
+    <string name="review_duration_hours_minutes">%1$d時間 %2$d分</string>
+    <string name="review_duration_minutes">%1$d分</string>
+
+    <!-- 一時的な操作メッセージ -->
+    <string name="review_msg_timer_stopped">タイマーを停止しました</string>
+    <string name="review_msg_end_adjusted">終了時刻を更新しました</string>
+    <string name="review_msg_project_assigned">プロジェクトを割り当てました</string>
+    <string name="review_msg_retry_queued">再試行をキューに追加しました</string>
+    <string name="review_msg_action_failed">操作を完了できませんでした</string>
+    <string name="review_msg_invalid_end">開始より後で、現在より前の終了時刻を選んでください</string>
+</resources>

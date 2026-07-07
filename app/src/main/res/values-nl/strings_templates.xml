@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Favorieten en sjablonen (gap-analyse #1, #9, #81). Functiegebonden bestand; niet samenvoegen met strings.xml. -->
+
+    <!-- Snelstartrij op Track -->
+    <string name="templates_quick_start_title">Snel starten</string>
+    <string name="templates_start_content_desc">Timer starten vanuit sjabloon: %1$s</string>
+    <string name="templates_reason_favorite">Favoriet</string>
+    <string name="template_untitled">Naamloos sjabloon</string>
+    <string name="templates_no_project">Geen project</string>
+
+    <!-- Opslaan / gebruiken vanuit het invoerscherm -->
+    <string name="templates_save_as_template">Als sjabloon opslaan</string>
+    <string name="templates_use_template">Een sjabloon gebruiken</string>
+    <string name="templates_saved">Sjabloon opgeslagen</string>
+
+    <!-- Scherm Sjablonen beheren -->
+    <string name="templates_add">Nieuw sjabloon</string>
+    <string name="templates_loading">Sjablonen laden…</string>
+    <string name="templates_empty_title">Nog geen sjablonen</string>
+    <string name="templates_empty_body">Sla een project, taak, tags en een omschrijving op die je vaak gebruikt en start die daarna met één tik vanaf het Track-scherm.</string>
+    <string name="templates_empty_create">Sjabloon maken</string>
+    <string name="templates_error_title">Sjablonen konden niet worden geladen</string>
+    <string name="templates_error_body">Er ging iets mis bij het laden van je sjablonen.</string>
+    <string name="templates_favorite_add">Toevoegen aan favorieten</string>
+    <string name="templates_favorite_remove">Verwijderen uit favorieten</string>
+    <string name="templates_move_up">Omhoog verplaatsen</string>
+    <string name="templates_move_down">Omlaag verplaatsen</string>
+    <string name="templates_row_details">Sjabloonopties</string>
+    <string name="templates_delete_confirm_title">Sjabloon verwijderen?</string>
+    <string name="templates_delete_confirm_body">Hiermee verwijder je het sjabloon op dit apparaat. Je geregistreerde tijd blijft ongewijzigd.</string>
+    <string name="templates_details_none">Geen project of omschrijving</string>
+    <plurals name="templates_tag_count">
+        <item quantity="one">%1$d tag</item>
+        <item quantity="other">%1$d tags</item>
+    </plurals>
+
+    <!-- Sjablooneditor -->
+    <string name="template_editor_new_title">Nieuw sjabloon</string>
+    <string name="template_editor_edit_title">Sjabloon bewerken</string>
+    <string name="template_name_label">Naam (optioneel)</string>
+    <string name="template_name_placeholder">bijv. Dagelijkse stand-up</string>
+    <string name="template_favorite_label">Vastzetten als favoriet</string>
+    <string name="template_favorite_hint">Favorieten verschijnen bovenaan op het Track-scherm om met één tik te starten.</string>
+    <string name="template_description_hint">Gebruik {accolades} voor een waarde die je elke keer invult, bijv. “Review: {onderwerp}”.</string>
+
+    <!-- Beschikbaarheid / plaatshouders bij het starten -->
+    <string name="templates_unavailable">Aandacht nodig</string>
+    <string name="templates_unavailable_content_desc">Sommige gegevens zijn niet meer beschikbaar</string>
+    <string name="templates_fill_details_title">Gegevens invullen</string>
+    <string name="templates_issues_title">Sommige gegevens zijn niet beschikbaar</string>
+    <string name="templates_issue_project_archived">Het project is gearchiveerd en wordt niet toegepast.</string>
+    <string name="templates_issue_project_missing">Het project bestaat niet meer en wordt niet toegepast.</string>
+    <string name="templates_issue_task_archived">De taak is voltooid en wordt niet toegepast.</string>
+    <string name="templates_issue_task_missing">De taak bestaat niet meer en wordt niet toegepast.</string>
+    <plurals name="templates_issue_tags_dropped">
+        <item quantity="one">%1$d tag bestaat niet meer en wordt niet toegepast.</item>
+        <item quantity="other">%1$d tags bestaan niet meer en worden niet toegepast.</item>
+    </plurals>
+    <string name="templates_start_anyway">Toch starten</string>
+</resources>

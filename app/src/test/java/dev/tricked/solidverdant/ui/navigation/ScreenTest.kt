@@ -7,7 +7,7 @@ class ScreenTest {
     @Test
     fun bottomNavScreens_haveUniqueStableRoutes() {
         val routes = bottomNavScreens.map { it.route }
-        assertEquals(listOf("track", "calendar", "stats"), routes)
+        assertEquals(listOf("track", "calendar", "stats", "review"), routes)
         assertEquals(routes.size, routes.toSet().size)
     }
 }
