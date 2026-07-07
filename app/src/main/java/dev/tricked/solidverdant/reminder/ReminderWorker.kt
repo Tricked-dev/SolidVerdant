@@ -153,7 +153,7 @@ class ReminderWorker @AssistedInject constructor(
 
     /**
      * Launches the app asking it to open the end-of-day review flow. The extra is consumed by
-     * [MainActivity] to navigate to [ReviewRoutes.EndOfDay]; tapping the notification always at
+     * [MainActivity] to navigate to [ReviewRoutes.END_OF_DAY]; tapping the notification always at
      * least brings the user into the app.
      */
     private fun openReviewPendingIntent(): PendingIntent {
@@ -161,7 +161,7 @@ class ReminderWorker @AssistedInject constructor(
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                 Intent.FLAG_ACTIVITY_CLEAR_TOP or
                 Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra(EXTRA_OPEN_REVIEW_ROUTE, ReviewRoutes.EndOfDay)
+            putExtra(EXTRA_OPEN_REVIEW_ROUTE, ReviewRoutes.END_OF_DAY)
         }
         return PendingIntent.getActivity(
             appContext,

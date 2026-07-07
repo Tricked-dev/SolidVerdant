@@ -27,16 +27,19 @@ spotless {
                 // Compose + Hilt code regularly exceeds strict line limits; keep the hard
                 // wrap generous and let reviewers judge readability.
                 "max_line_length" to "140",
-                // Naming/file-layout opinions that would force churn on existing code
-                // (widget INSTANCE holders, route constants, parser file names).
-                "ktlint_standard_property-naming" to "disabled",
-                "ktlint_standard_backing-property-naming" to "disabled",
-                "ktlint_standard_filename" to "disabled",
             ),
         )
         licenseHeaderFile(rootProject.file("spotless/copyright.kt"))
         trimTrailingWhitespace()
         endWithNewline()
+        // OBTAINIUM_ADD_APP_URL is a 400+ char URL-encoded deep link that cannot be wrapped;
+        // @Suppress annotations are not honored by the spotless ktlint step, so scope the
+        // exemption here instead.
+        suppressLintsFor {
+            step = "ktlint"
+            shortCode = "standard:max-line-length"
+            path = "app/src/main/java/dev/tricked/solidverdant/ui/tracking/TrackingScreen.kt"
+        }
     }
     kotlinGradle {
         target("*.gradle.kts", "app/*.gradle.kts")

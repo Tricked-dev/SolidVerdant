@@ -251,13 +251,13 @@ fun SolidVerdantApp(
                 reviewContent = {
                     ReviewScreen(
                         onOpenReminderSettings = {
-                            navController.navigate(ReviewRoutes.ReminderSettings)
+                            navController.navigate(ReviewRoutes.REMINDER_SETTINGS)
                         },
                         onOpenManageTemplates = {
-                            navController.navigate(ReviewRoutes.ManageTemplates)
+                            navController.navigate(ReviewRoutes.MANAGE_TEMPLATES)
                         },
                         onOpenEndOfDayReview = {
-                            navController.navigate(ReviewRoutes.EndOfDay)
+                            navController.navigate(ReviewRoutes.END_OF_DAY)
                         },
                     )
                 },

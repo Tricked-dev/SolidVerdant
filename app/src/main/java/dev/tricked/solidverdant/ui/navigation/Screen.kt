@@ -33,11 +33,11 @@ val bottomNavScreens: List<Screen> =
  */
 object ReviewRoutes {
     /** Compact end-of-day review flow (opened from the end-of-day notification). */
-    const val EndOfDay: String = "review/end_of_day"
+    const val END_OF_DAY: String = "review/end_of_day"
 
     /** Tracking-reminder + end-of-day reminder configuration. */
-    const val ReminderSettings: String = "review/reminders"
+    const val REMINDER_SETTINGS: String = "review/reminders"
 
     /** Manage reusable entry templates / favorites. */
-    const val ManageTemplates: String = "templates/manage"
+    const val MANAGE_TEMPLATES: String = "templates/manage"
 }

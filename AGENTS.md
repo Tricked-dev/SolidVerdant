@@ -58,21 +58,61 @@ These keep feature screens consistent with the shared design system. They are en
 - Progressive disclosure. The default, healthy state shows nothing extra — no always-on chrome, counters, or banners that bloat the screen. Power features live behind an affordance (icon, toggle, or sheet) and appear only when they apply.
 - Use the shared status views. Render loading, empty, and error states with the shared `LoadingState`, `EmptyState`, and `ErrorState` from `ui/components` instead of re-inventing per-screen placeholders.
 
+## Formatting
+
+Spotless (ktlint + MPL license headers from `spotless/`, max line length 140) is the formatting
+authority. Run `./gradlew spotlessCheck` to verify and `./gradlew spotlessApply` to fix before
+committing. Composables are exempt from function-naming; everything else follows ktlint defaults.
+Renovate (`.github/workflows/renovate.yml` + `renovate.json`) keeps dependencies current; it needs
+the `RENOVATE_TOKEN` repository secret.
+
 ## Verification
 
 Use the pinned development environment:
 
 ```sh
-nix develop --command env -u LD_LIBRARY_PATH ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+nix develop --command env -u LD_LIBRARY_PATH ./gradlew --no-daemon spotlessCheck testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
 ```
+
+The flake pins JDK 21 plus SDK platforms 36/37 and build-tools 35, so the JVM test and Roborazzi
+screenshot suites run on any machine with nix (on NixOS, point
+`android.aapt2FromMavenOverride` in `~/.gradle/gradle.properties` at the nix SDK's aapt2).
 
 For the connected development device, install `app-debug.apk`; its package is `dev.tricked.solidverdant.dev`. Run instrumentation with:
 
 ```sh
-adb shell am instrument -w dev.tricked.solidverdant.dev.test/androidx.test.runner.AndroidJUnitRunner
+adb shell am instrument -w dev.tricked.solidverdant.dev.test/dev.tricked.solidverdant.HiltTestRunner
 ```
 
 When Hilt modules or database providers change, perform at least one clean build before device testing to avoid stale generated classes.
+
+## On-device E2E tests
+
+- Flows live in `app/src/androidTest/.../e2e/flows`, built on `E2eRule` (mock solidtime backend +
+  seeded login + deterministic WorkManager), screen robots in `e2e/robots`, and stable testTags
+  re-exported through `e2e/TestTags` (tag constants are owned by production code, e.g.
+  `TrackingTestTags`). Match on tags or entry data, never on localized chrome; resolve localized
+  labels through resources when text matching is unavoidable (e.g. the undo snackbar action).
+- Drive sync deterministically with `E2eRule.runPendingSync()` inside a `waitUntil`; never
+  `Thread.sleep`. `MockSolidtimeServer` honors `limit`/`offset` paging and records every request
+  (`callsMatching`) for payload assertions — assert what reached the server, not just what the UI
+  shows.
+- New user-visible flows need an e2e test covering the happy path plus the failure/recovery edge
+  that AGENTS.md's feature-completeness rules promise (undo, offline, recreation, cross-device
+  state).
+
+## Performance
+
+- `./perf/run_perf.sh <label>` (run on the build machine with the test phone attached) measures
+  cold startup of the minified `benchmark` build and frame timing of the instrumented stress world
+  against the `perftest` build; results land in `perf-results/`. Compare medians across its
+  repeated passes.
+- The GrapheneOS test phone has no ART JIT: uncompiled code runs interpreted forever, so keep the
+  baseline profile (`app/src/main/baseline-prof.txt`) covering app code, and AOT-compile sideloaded
+  builds (`cmd package compile -m speed -f <pkg>`).
+- Keep per-emission work off the main thread (the tracking pipeline runs on Dispatchers.Default),
+  batch multi-row Room writes into one transaction (`applyServerEntries`), and avoid per-row
+  `ZonedDateTime.parse`/formatter construction in list rows (use `IsoTimes`).
 
 ## Working-tree care
 

@@ -20,9 +20,10 @@
           };
         };
         android = pkgs.androidenv.composeAndroidPackages {
-          # API 37 is not yet packaged by this pinned nixpkgs revision. Developers
-          # can use a host-installed Android 17 SDK until nixpkgs catches up.
-          platformVersions = [ "36" ];
+          # 37 enables building (and running the JVM test/screenshot suites) on machines
+          # without a host SDK; kaisel keeps using its host SDK via local.properties.
+          platformVersions = [ "36" "37" ];
+          buildToolsVersions = [ "35.0.0" ];
           includeEmulator = true;
           includeSystemImages = true;
           systemImageTypes = [ "google_apis_playstore" ];

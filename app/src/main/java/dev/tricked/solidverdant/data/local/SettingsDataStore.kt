@@ -94,13 +94,13 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         const val DEFAULT_REMINDER_MINUTE_OF_DAY: Int = 17 * 60
 
         @Volatile
-        private var INSTANCE: SettingsDataStore? = null
+        private var instance: SettingsDataStore? = null
 
         /**
          * Get singleton instance (for use in widgets where Hilt injection is not available)
          */
-        fun getInstance(context: Context): SettingsDataStore = INSTANCE ?: synchronized(this) {
-            INSTANCE ?: SettingsDataStore(context.applicationContext).also { INSTANCE = it }
+        fun getInstance(context: Context): SettingsDataStore = instance ?: synchronized(this) {
+            instance ?: SettingsDataStore(context.applicationContext).also { instance = it }
         }
     }
 

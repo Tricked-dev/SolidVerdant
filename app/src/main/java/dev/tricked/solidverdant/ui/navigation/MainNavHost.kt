@@ -84,13 +84,13 @@ fun MainNavHost(
 
             // Full-screen review-loop destinations pushed on top of the tab graph. They render the
             // feature agents' stub screens/panes with their own back navigation.
-            composable(ReviewRoutes.EndOfDay) {
+            composable(ReviewRoutes.END_OF_DAY) {
                 EndOfDayReviewHost(onBack = { navController.popBackStack() })
             }
-            composable(ReviewRoutes.ReminderSettings) {
+            composable(ReviewRoutes.REMINDER_SETTINGS) {
                 ReminderSettingsScreen(onBack = { navController.popBackStack() })
             }
-            composable(ReviewRoutes.ManageTemplates) {
+            composable(ReviewRoutes.MANAGE_TEMPLATES) {
                 ManageTemplatesScreen(onBack = { navController.popBackStack() })
             }
         }

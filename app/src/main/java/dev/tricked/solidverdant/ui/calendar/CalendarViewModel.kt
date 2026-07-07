@@ -86,11 +86,11 @@ class CalendarViewModel @Inject constructor(
     val uiState: StateFlow<CalendarUiState> = _uiState.asStateFlow()
 
     // Overlay query inputs kept as flows so event queries react without recollecting time entries.
-    private val _viewMode = MutableStateFlow(CalendarViewMode.WEEK)
-    private val _weekAnchor = MutableStateFlow(LocalDate.now())
-    private val _dayCount = MutableStateFlow(7)
-    private val _hasPermission = MutableStateFlow(false)
-    private val _retry = MutableStateFlow(0)
+    private val viewModeInput = MutableStateFlow(CalendarViewMode.WEEK)
+    private val weekAnchorInput = MutableStateFlow(LocalDate.now())
+    private val dayCountInput = MutableStateFlow(7)
+    private val hasPermissionInput = MutableStateFlow(false)
+    private val retryCounter = MutableStateFlow(0)
 
     private data class OverlayInputs(
         val enabled: Boolean,
@@ -118,7 +118,7 @@ class CalendarViewModel @Inject constructor(
         }
         // Load the picker's calendar list only while the overlay is on and permission is granted.
         viewModelScope.launch {
-            combine(overlaySettings.calendarOverlayEnabled, _hasPermission) { enabled, perm ->
+            combine(overlaySettings.calendarOverlayEnabled, hasPermissionInput) { enabled, perm ->
                 enabled && perm
             }
                 .distinctUntilChanged()
@@ -169,8 +169,8 @@ class CalendarViewModel @Inject constructor(
     // --- View-mode / navigation ---------------------------------------------------------------
 
     fun setViewMode(mode: CalendarViewMode) {
-        if (_viewMode.value == mode) return
-        _viewMode.value = mode
+        if (viewModeInput.value == mode) return
+        viewModeInput.value = mode
         _uiState.update { it.copy(viewMode = mode) }
         recomputeVisibleDays()
         loadForVisibleDays()
@@ -179,8 +179,8 @@ class CalendarViewModel @Inject constructor(
     /** Called by the UI as the available width changes so WEEK mode can drop to a 3-day layout. */
     fun setVisibleDayCount(count: Int) {
         val safe = count.coerceIn(1, 7)
-        if (_dayCount.value == safe) return
-        _dayCount.value = safe
+        if (dayCountInput.value == safe) return
+        dayCountInput.value = safe
         _uiState.update { it.copy(dayCount = safe) }
         recomputeVisibleDays()
         loadForVisibleDays()
@@ -197,7 +197,7 @@ class CalendarViewModel @Inject constructor(
             CalendarViewMode.WEEK -> pageAnchor(state.weekAnchor, weekStart, state.dayCount, direction)
             CalendarViewMode.DAY -> state.weekAnchor.plusDays(direction.toLong())
         }
-        _weekAnchor.value = newAnchor
+        weekAnchorInput.value = newAnchor
         val newDays = visibleDaysFor(state.viewMode, newAnchor, state.dayCount)
         val newSelected = if (state.selectedDate in newDays) {
             state.selectedDate
@@ -217,7 +217,7 @@ class CalendarViewModel @Inject constructor(
 
     fun jumpToToday() {
         val today = LocalDate.now()
-        _weekAnchor.value = today
+        weekAnchorInput.value = today
         _uiState.update {
             it.copy(
                 weekAnchor = today,
@@ -230,7 +230,7 @@ class CalendarViewModel @Inject constructor(
     }
 
     fun selectDate(date: LocalDate) {
-        _weekAnchor.value = date
+        weekAnchorInput.value = date
         _uiState.update {
             it.copy(
                 selectedDate = date,
@@ -257,7 +257,7 @@ class CalendarViewModel @Inject constructor(
             val selected = dateWithEntries ?: preferredDate
             state.copy(visibleMonth = month, selectedDate = selected, weekAnchor = selected)
         }
-        _weekAnchor.value = _uiState.value.weekAnchor
+        weekAnchorInput.value = _uiState.value.weekAnchor
         loadForVisibleDays()
     }
 
@@ -265,8 +265,8 @@ class CalendarViewModel @Inject constructor(
 
     /** Called by the UI after checking/requesting the READ_CALENDAR runtime permission. */
     fun onCalendarPermissionChanged(granted: Boolean) {
-        if (_hasPermission.value == granted && _uiState.value.hasCalendarPermission == granted) return
-        _hasPermission.value = granted
+        if (hasPermissionInput.value == granted && _uiState.value.hasCalendarPermission == granted) return
+        hasPermissionInput.value = granted
         _uiState.update { it.copy(hasCalendarPermission = granted) }
     }
 
@@ -285,7 +285,7 @@ class CalendarViewModel @Inject constructor(
     }
 
     fun retryOverlay() {
-        _retry.update { it + 1 }
+        retryCounter.update { it + 1 }
     }
 
     private suspend fun refreshAvailableCalendars() {
@@ -296,13 +296,13 @@ class CalendarViewModel @Inject constructor(
     @OptIn(ExperimentalCoroutinesApi::class)
     private suspend fun observeOverlayEvents() {
         val rangeFlow: Flow<Pair<Long, Long>?> =
-            combine(_viewMode, _weekAnchor, _dayCount) { mode, anchor, dc -> rangeFor(mode, anchor, dc) }
+            combine(viewModeInput, weekAnchorInput, dayCountInput) { mode, anchor, dc -> rangeFor(mode, anchor, dc) }
         combine(
             overlaySettings.calendarOverlayEnabled,
             overlaySettings.selectedCalendarIds,
-            _hasPermission,
+            hasPermissionInput,
             rangeFlow,
-            _retry,
+            retryCounter,
         ) { enabled, ids, perm, range, retry -> OverlayInputs(enabled, ids, perm, range, retry) }
             .distinctUntilChanged()
             .flatMapLatest { input ->

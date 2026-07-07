@@ -4,6 +4,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+package dev.tricked.solidverdant.ui.tracking
+
 import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -1140,7 +1142,11 @@ private fun HistoryFilters(filter: HistoryFilter, uiState: TrackingUiState, onCh
                         else stringResource(R.string.active_filters_count, activeCount),
                     )
                 },
-                trailingIcon = if (expanded) {{ Icon(Icons.Default.Close, stringResource(R.string.close), Modifier.size(18.dp)) }} else null,
+                trailingIcon = if (expanded) {
+                    { Icon(Icons.Default.Close, stringResource(R.string.close), Modifier.size(18.dp)) }
+                } else {
+                    null
+                },
             )
             if (!expanded && filter.query.isNotBlank()) {
                 Text(filter.query, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
@@ -1178,7 +1184,14 @@ private fun HistoryFilters(filter: HistoryFilter, uiState: TrackingUiState, onCh
             )
             FilterChip(
                 selected = filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED,
-                onClick = { onChange(filter.copy(syncStatus = if (filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED) null else TimeEntryRepository.EntrySyncStatus.FAILED)) },
+                onClick = {
+                    val toggled = if (filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED) {
+                        null
+                    } else {
+                        TimeEntryRepository.EntrySyncStatus.FAILED
+                    }
+                    onChange(filter.copy(syncStatus = toggled))
+                },
                 label = { Text(stringResource(R.string.sync_failed)) },
             )
             val today = LocalDate.now()
@@ -1258,10 +1271,8 @@ private fun HistoryFilters(filter: HistoryFilter, uiState: TrackingUiState, onCh
                 TextButton(
                     enabled = pickerState.selectedStartDateMillis != null && pickerState.selectedEndDateMillis != null,
                     onClick = {
-                        val start = pickerState.selectedStartDateMillis
-                            ?.let { Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }
-                        val end = pickerState.selectedEndDateMillis
-                            ?.let { Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }
+                        val start = pickerState.selectedStartDateMillis?.let(::utcDateOf)
+                        val end = pickerState.selectedEndDateMillis?.let(::utcDateOf)
                         if (start != null && end != null) onChange(filter.copy(startDate = start, endDate = end))
                         showDateRangePicker = false
                     },
@@ -3328,6 +3339,9 @@ private fun formatDuration(seconds: Int): String {
     val secs = seconds % 60
     return String.format("%02d:%02d:%02d", hours, minutes, secs)
 }
+
+/** Date-picker millis are UTC-midnight instants; resolve them back to the picked date. */
+private fun utcDateOf(epochMillis: Long): LocalDate = Instant.ofEpochMilli(epochMillis).atZone(ZoneOffset.UTC).toLocalDate()
 
 /** Format a day total without seconds to keep history headers compact. */
 private fun formatCompactDuration(seconds: Int): String {
