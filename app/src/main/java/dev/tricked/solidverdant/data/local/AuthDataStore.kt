@@ -109,6 +109,10 @@ class AuthDataStore @Inject constructor(
 
     val refreshToken: Flow<String?> = secretFlow(PreferencesKeys.REFRESH_TOKEN)
 
+    // NOTE: this intentionally derives from the decrypt-validating accessToken flow. The splash
+    // screen holds the first frame until this emits, which is part of the "first frame shows the
+    // full cached UI, no layout shifts" product behavior — a faster presence-only check was tried
+    // (2026-07-07) and regressed app load behavior; don't reintroduce it.
     val isLoggedIn: Flow<Boolean> = accessToken.map { !it.isNullOrEmpty() }
 
     // OAuth config flows
@@ -139,6 +143,7 @@ class AuthDataStore @Inject constructor(
             preferences[PreferencesKeys.ACCESS_TOKEN] = secretCipher.encrypt(accessToken)
             preferences[PreferencesKeys.REFRESH_TOKEN] = secretCipher.encrypt(refreshToken)
         }
+        cacheAccessToken(accessToken)
     }
 
     /**
@@ -148,6 +153,7 @@ class AuthDataStore @Inject constructor(
         context.authDataStore.edit { preferences ->
             preferences[PreferencesKeys.ACCESS_TOKEN] = secretCipher.encrypt(accessToken)
         }
+        cacheAccessToken(accessToken)
     }
 
     /**
@@ -158,6 +164,7 @@ class AuthDataStore @Inject constructor(
             preferences.remove(PreferencesKeys.ACCESS_TOKEN)
             preferences.remove(PreferencesKeys.REFRESH_TOKEN)
         }
+        cacheAccessToken(null)
     }
 
     /**
@@ -216,6 +223,7 @@ class AuthDataStore @Inject constructor(
             savedEndpoint?.let { preferences[PreferencesKeys.ENDPOINT] = it }
             savedClientId?.let { preferences[PreferencesKeys.CLIENT_ID] = it }
         }
+        cacheAccessToken(null)
     }
 
     /**
@@ -243,10 +251,26 @@ class AuthDataStore @Inject constructor(
     }
 
     /**
-     * Get access token synchronously (for use in interceptors)
+     * Get access token synchronously (for use in interceptors).
+     *
+     * Served from an in-memory cache after the first read: the auth interceptor calls this on
+     * every API request, and without the cache each request pays a DataStore disk read plus a
+     * Keystore decrypt IPC. Writes ([saveTokens]/[saveAccessToken]/[clearTokens]/[clearAll])
+     * update or invalidate the cache.
      */
     suspend fun getAccessToken(): String? {
-        return accessToken.first()
+        cachedAccessToken?.let { return it.token }
+        return accessToken.first().also { cacheAccessToken(it) }
+    }
+
+    /** Wrapper so a cached "no token" (null) is distinguishable from "nothing cached yet". */
+    private class CachedToken(val token: String?)
+
+    @Volatile
+    private var cachedAccessToken: CachedToken? = null
+
+    private fun cacheAccessToken(token: String?) {
+        cachedAccessToken = CachedToken(token)
     }
 
     /**

@@ -1,4 +1,8 @@
--dontoptimize
+# R8 optimization is intentionally ENABLED (no -dontoptimize): inlining, class merging, and
+# dead-code elimination measurably reduce cold-start and frame times in release builds. The keep
+# rules below protect everything reached via reflection (Retrofit, serialization, Hilt, manifest
+# components), so optimization must stay safe; if a release-only crash ever implicates a missing
+# class, add a targeted -keep instead of turning optimization back off.
 
 # Some methods are only called from tests, so make sure the shrinker keeps them.
 -keep class com.example.android.architecture.blueprints.** { *; }

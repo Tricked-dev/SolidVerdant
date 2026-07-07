@@ -66,11 +66,13 @@ class TimeEntryRepository @Inject constructor(
     override fun observeTimeEntries(organizationId: String): Flow<List<TimeEntry>> =
         combine(
             timeEntryDao.observeVisibleEntries(organizationId),
-            catalogDao.observeTags(organizationId)
-        ) { entities, tagEntities ->
+            catalogDao.observeTags(organizationId),
+            timeEntryDao.observeTagRefs(organizationId)
+        ) { entities, tagEntities, tagRefs ->
             val tagsById = tagEntities.associate { it.id to it.toModel() }
+            val tagIdsByEntry = tagRefs.groupBy({ it.timeEntryId }, { it.tagId })
             entities.map { entity ->
-                val tags = timeEntryDao.tagIdsFor(entity.id).mapNotNull { tagsById[it] }
+                val tags = tagIdsByEntry[entity.id].orEmpty().mapNotNull { tagsById[it] }
                 entity.toModel(tags)
             }
         }
@@ -87,13 +89,10 @@ class TimeEntryRepository @Inject constructor(
                 return
             }
             val now = clock.nowMs()
-            response.data.forEach { entry ->
-                val local = timeEntryDao.getById(entry.id)
-                if (local == null || local.syncState != SyncState.PENDING) {
-                    timeEntryDao.upsert(entry.toEntity(updatedAt = now, syncState = SyncState.SYNCED))
-                    timeEntryDao.replaceTagRefs(entry.id, entry.tags.map { it.id })
-                }
-            }
+            timeEntryDao.applyServerEntries(
+                response.data.map { it.toEntity(updatedAt = now, syncState = SyncState.SYNCED) },
+                response.data.associate { entry -> entry.id to entry.tags.map { it.id } },
+            )
             val dates = response.data.mapNotNull { entry ->
                 runCatching {
                     ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME).toLocalDate()
@@ -150,17 +149,13 @@ class TimeEntryRepository @Inject constructor(
         }
 
         val now = clock.nowMs()
-        entries.forEach { remoteEntry ->
-            val local = timeEntryDao.getById(remoteEntry.id)
-            // Never let a server pull clobber an unsynced local edit or a pending soft-delete.
-            // (The previous `updatedAt > now` guard was dead code: updatedAt is always stamped in
-            // the past, so it never held and pending edits/deletes were silently overwritten.)
-            if (local != null && (local.syncState == SyncState.PENDING || local.pendingDelete)) {
-                return@forEach
-            }
-            timeEntryDao.upsert(remoteEntry.toEntity(updatedAt = now, syncState = SyncState.SYNCED))
-            timeEntryDao.replaceTagRefs(remoteEntry.id, remoteEntry.tags.map { it.id })
-        }
+        // Single transaction; the pending-edit/soft-delete guard lives in applyServerEntries.
+        // (The previous `updatedAt > now` guard was dead code: updatedAt is always stamped in
+        // the past, so it never held and pending edits/deletes were silently overwritten.)
+        timeEntryDao.applyServerEntries(
+            entries.map { it.toEntity(updatedAt = now, syncState = SyncState.SYNCED) },
+            entries.associate { entry -> entry.id to entry.tags.map { it.id } },
+        )
         syncMetaDao.upsert(SyncMetaEntity(organizationId, now))
         Result.success(Unit)
     } catch (e: Exception) {

@@ -89,6 +89,12 @@ data class TimeEntryTagCrossRef(
     val tagId: String
 )
 
+/** Projection row for [TimeEntryDao.observeTagRefs]; not a table. */
+data class TimeEntryTagRef(
+    val timeEntryId: String,
+    val tagId: String
+)
+
 @Entity(tableName = "sync_meta")
 data class SyncMetaEntity(
     @PrimaryKey val organizationId: String,

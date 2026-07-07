@@ -183,6 +183,7 @@ import dev.tricked.solidverdant.ui.components.ProjectTaskDropdown as SharedProje
 import dev.tricked.solidverdant.ui.components.SectionCard
 import dev.tricked.solidverdant.ui.components.SyncChip
 import dev.tricked.solidverdant.ui.theme.Dimens
+import dev.tricked.solidverdant.util.IsoTimes
 import dev.tricked.solidverdant.util.NotificationPermissionHelper
 import dev.tricked.solidverdant.service.TimeTrackingNotificationService
 import kotlinx.coroutines.launch
@@ -803,8 +804,7 @@ fun TrackingScreen(
                             clients = uiState.clients,
                             syncOperations = uiState.syncOperations,
                         ).groupBy { entry ->
-                            runCatching { ZonedDateTime.parse(entry.start).toLocalDate() }
-                                .getOrDefault(LocalDate.MIN)
+                            IsoTimes.localDate(entry.start) ?: LocalDate.MIN
                         }
                         val days = grouped.mapNotNull { (date, entries) ->
                             val completed = entries.filter { (it.duration ?: 0) > 0 }
@@ -1704,7 +1704,7 @@ internal fun TrackingControls(
                 onEntryCopied = { entry ->
                     onDescriptionChange(entry.description ?: "")
                     onProjectChange(entry.projectId)
-    elapsedSeconds: Long = uiState.elapsedSeconds,
+                    onTaskChange(entry.taskId)
                     onTagsChange(entry.tags.map { it.id })
                     onBillableChange(entry.billable)
                 }
@@ -2683,7 +2683,7 @@ private fun TimeEntryFormSheet(
                         Column(horizontalAlignment = Alignment.Start, modifier = Modifier.weight(1f)) {
                             Text(stringResource(R.string.entry_date), style = MaterialTheme.typography.labelSmall)
                             Text(
-                                startTime.format(DateTimeFormatter.ofPattern("EEE, d MMM yyyy")),
+                                startTime.format(entryDateFormatter),
                                 style = MaterialTheme.typography.titleMedium
                             )
                         }
@@ -2927,7 +2927,7 @@ private fun TimeFieldButton(
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.Start) {
             Text(label, style = MaterialTheme.typography.labelSmall)
-            Text(value.format(DateTimeFormatter.ofPattern("HH:mm")), style = MaterialTheme.typography.titleMedium)
+            Text(value.format(hourMinuteFormatter), style = MaterialTheme.typography.titleMedium)
         }
     }
 }
@@ -3292,23 +3292,21 @@ private fun formatDate(date: LocalDate, context: android.content.Context): Strin
     }
 }
 
+// Shared formatter instances: DateTimeFormatter.ofPattern() builds a new parser every call,
+// which is measurable when every visible history row formats its time range during a scroll.
+private val hourMinuteFormatter = DateTimeFormatter.ofPattern("HH:mm")
+private val entryDateFormatter = DateTimeFormatter.ofPattern("EEE, d MMM yyyy")
+
 /**
  * Format time range
  */
 private fun formatTimeRange(start: String, end: String?): String {
-    return try {
-        val startTime = ZonedDateTime.parse(start, DateTimeFormatter.ISO_DATE_TIME)
-        val startFormatted = startTime.format(DateTimeFormatter.ofPattern("HH:mm"))
-
-        if (end != null) {
-            val endTime = ZonedDateTime.parse(end, DateTimeFormatter.ISO_DATE_TIME)
-            val endFormatted = endTime.format(DateTimeFormatter.ofPattern("HH:mm"))
-            "$startFormatted - $endFormatted"
-        } else {
-            "$startFormatted - now"
-        }
-    } catch (e: Exception) {
-        "Invalid time"
+    val startFormatted = IsoTimes.hourMinute(start) ?: return "Invalid time"
+    return if (end != null) {
+        val endFormatted = IsoTimes.hourMinute(end) ?: return "Invalid time"
+        "$startFormatted - $endFormatted"
+    } else {
+        "$startFormatted - now"
     }
 }
 

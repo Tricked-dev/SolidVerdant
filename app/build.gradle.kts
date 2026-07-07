@@ -82,7 +82,41 @@ android {
 
             resValue("string", "app_package_name", "dev.tricked.solidverdant.test")
         }
+
+        // Release-representative build for performance measurement (perf/run_perf.sh): full R8 +
+        // resource shrinking like release, but debug-signed so it builds without the release
+        // keystore and installs alongside the real app as dev.tricked.solidverdant.bench.
+        create("benchmark") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".bench"
+            versionNameSuffix = "-bench"
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
+
+            resValue("string", "app_package_name", "dev.tricked.solidverdant.bench")
+        }
+
+        // Instrumentable release-type build for frame-timing measurement. Release Compose (no
+        // debug composition overhead) and non-debuggable (so ART honors AOT compilation — the
+        // GrapheneOS test phone has no JIT), but unminified so the Hilt/e2e test harness can
+        // reach app internals without keep-rule surgery. Built and used only via
+        //   ./gradlew -Pperf.testBuildType=perftest assemblePerftest assemblePerftestAndroidTest
+        create("perftest") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".perftest"
+            versionNameSuffix = "-perftest"
+            isMinifyEnabled = false
+            isShrinkResources = false
+            signingConfig = signingConfigs.getByName("debug")
+
+            resValue("string", "app_package_name", "dev.tricked.solidverdant.perftest")
+        }
     }
+
+    // Which build type `assemble<X>AndroidTest`/connected tests target. Default stays debug for
+    // normal development; perf/run_perf.sh flips it to perftest for release-like frame timing.
+    testBuildType = (project.findProperty("perf.testBuildType") as? String) ?: "debug"
 
     buildFeatures {
         compose = true
@@ -177,6 +211,9 @@ dependencies {
     // App dependencies
     implementation(libs.androidx.annotation)
     implementation(libs.androidx.core.splashscreen)
+    // Installs the baseline profile (app/src/main/baseline-prof.txt) so ART AOT-compiles the
+    // startup/scroll hot paths instead of interpreting them on first runs.
+    implementation(libs.androidx.profileinstaller)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.timber)
 

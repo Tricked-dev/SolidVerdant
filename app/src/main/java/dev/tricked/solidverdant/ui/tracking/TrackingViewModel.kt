@@ -19,6 +19,7 @@ import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.service.TimeTrackingNotificationService
 import dev.tricked.solidverdant.sync.SyncTrigger
+import dev.tricked.solidverdant.util.IsoTimes
 import dev.tricked.solidverdant.widget.TimeTrackingWidget
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -27,8 +28,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -164,6 +168,8 @@ class TrackingViewModel @Inject constructor(
     private var dataCollectorJob: Job? = null
     private var syncCollectorJob: Job? = null
     private var firstFrameCacheJob: Job? = null
+    private var hasCachedContinueEntry = false
+    private var lastCachedContinueEntry: TimeEntry? = null
     private var collectingOrganizationId: String? = null
     private var lastCollectedActiveId: String? = null
     private var historyOrganizationId: String? = null
@@ -305,13 +311,19 @@ class TrackingViewModel @Inject constructor(
                     clients = catalog.second,
                     active = active
                 )
-            }.distinctUntilChanged().collect { data ->
-                val overlapCount = withContext(Dispatchers.Default) {
-                    EntryTrustRules.overlapCount(data.entries)
-                }
-                val continueEntry = data.entries
-                    .filter { it.end != null && !it.description.isNullOrBlank() }
-                    .maxByOrNull { it.start }
+            }.distinctUntilChanged().map { data ->
+                // Per-emission analysis is O(n) over the full entry window; flowOn(Default) below
+                // keeps it (plus combine's TrackingData construction and the equality checks of
+                // distinctUntilChanged) off the main thread so a Room emission burst cannot
+                // produce a long frame mid-scroll.
+                CollectedTracking(
+                    data = data,
+                    overlapCount = EntryTrustRules.overlapCount(data.entries),
+                    continueEntry = data.entries
+                        .filter { it.end != null && !it.description.isNullOrBlank() }
+                        .maxByOrNull { it.start },
+                )
+            }.flowOn(Dispatchers.Default).conflate().collect { (data, overlapCount, continueEntry) ->
                 val activeChanged = data.active?.id != lastCollectedActiveId
                 val currentState = _uiState.value
                 val mode = historyWindowMode
@@ -351,9 +363,17 @@ class TrackingViewModel @Inject constructor(
                     editingTags = if (activeChanged) data.active?.tags?.map { it.id }.orEmpty() else currentState.editingTags,
                     editingBillable = if (activeChanged) (data.active?.billable ?: false) else currentState.editingBillable
                 )
-                settingsDataStore.cacheContinueEntry(continueEntry)
+                // Both caches JSON-encode sizable object graphs; keep that (and the
+                // SharedPreferences write) off the main thread, and skip no-op continue writes.
+                if (!hasCachedContinueEntry || continueEntry != lastCachedContinueEntry) {
+                    hasCachedContinueEntry = true
+                    lastCachedContinueEntry = continueEntry
+                    viewModelScope.launch(Dispatchers.IO) {
+                        settingsDataStore.cacheContinueEntry(continueEntry)
+                    }
+                }
                 firstFrameCacheJob?.cancel()
-                firstFrameCacheJob = viewModelScope.launch {
+                firstFrameCacheJob = viewModelScope.launch(Dispatchers.IO) {
                     delay(FIRST_FRAME_CACHE_DEBOUNCE_MS)
                     settingsDataStore.cacheTrackingState(
                         SettingsDataStore.CachedTrackingState(
@@ -391,6 +411,13 @@ class TrackingViewModel @Inject constructor(
         val tasks: List<Task>,
         val tags: List<Tag>,
         val active: TimeEntry?
+    )
+
+    /** [TrackingData] plus the derived values computed off the main thread. */
+    private data class CollectedTracking(
+        val data: TrackingData,
+        val overlapCount: Int,
+        val continueEntry: TimeEntry?,
     )
 
     /**
@@ -548,13 +575,20 @@ class TrackingViewModel @Inject constructor(
             }
             authRepository.getTimeEntries(organizationId, memberId, limit, offset)
                 .onSuccess { response ->
-                    val tagsById = _uiState.value.tags.associateBy { it.id }
-                    val incoming = response.data.map { entry ->
-                        entry.copy(tags = entry.tags.map { tagsById[it.id] ?: it })
+                    val currentEntries = _uiState.value.timeEntries
+                    val currentTags = _uiState.value.tags
+                    // Tag resolution plus the dedupe/sort of a growing window is O(n log n);
+                    // keep it off the main thread so paging in more history cannot jank a
+                    // scroll that is still settling.
+                    val (incoming, merged) = withContext(Dispatchers.Default) {
+                        val tagsById = currentTags.associateBy { it.id }
+                        val resolved = response.data.map { entry ->
+                            entry.copy(tags = entry.tags.map { tagsById[it.id] ?: it })
+                        }
+                        resolved to (currentEntries + resolved)
+                            .distinctBy { it.id }
+                            .sortedByDescending { it.start }
                     }
-                    val merged = (_uiState.value.timeEntries + incoming)
-                        .distinctBy { it.id }
-                        .sortedByDescending { it.start }
                     val total = response.meta?.total ?: _uiState.value.totalTimeEntries
                     historyOffset = if (historyLoadStage <= 1) {
                         incoming.size
@@ -593,9 +627,7 @@ class TrackingViewModel @Inject constructor(
         val memberId = historyMemberId ?: return
         if (_uiState.value.isLoadingMoreTimeEntries) return
         val loadedDates = _uiState.value.timeEntries.mapNotNull { entry ->
-            runCatching {
-                ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME).toLocalDate()
-            }.getOrNull()
+            IsoTimes.localDate(entry.start)
         }
         val newestLoadedDate = loadedDates.maxOrNull()
         val oldestLoadedDate = loadedDates.minOrNull()
@@ -647,9 +679,7 @@ class TrackingViewModel @Inject constructor(
                     return@launch
                 }
                 val probeDate = probe.data.firstOrNull()?.let { entry ->
-                    runCatching {
-                        ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME).toLocalDate()
-                    }.getOrNull()
+                    IsoTimes.localDate(entry.start)
                 } ?: break
                 completedProbes++
                 _uiState.value = _uiState.value.copy(
@@ -1230,15 +1260,7 @@ class TrackingViewModel @Inject constructor(
      */
     fun getGroupedTimeEntries(): Map<LocalDate, List<TimeEntry>> {
         return _uiState.value.timeEntries
-            .groupBy { entry ->
-                try {
-                    val zonedDateTime =
-                        ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME)
-                    zonedDateTime.toLocalDate()
-                } catch (e: Exception) {
-                    LocalDate.now()
-                }
-            }
+            .groupBy { entry -> IsoTimes.localDate(entry.start) ?: LocalDate.now() }
             .toSortedMap(compareByDescending { it })
     }
 
