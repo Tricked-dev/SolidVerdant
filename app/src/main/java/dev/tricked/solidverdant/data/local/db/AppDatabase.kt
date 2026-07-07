@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.local.db
 
 import androidx.room.Database
@@ -22,7 +28,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         InboxDismissalEntity::class,
     ],
     version = 4,
-    exportSchema = true
+    exportSchema = true,
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -45,11 +51,11 @@ abstract class AppDatabase : RoomDatabase() {
                     "CREATE TABLE IF NOT EXISTS `clients` (" +
                         "`id` TEXT NOT NULL, `name` TEXT NOT NULL, " +
                         "`isArchived` INTEGER NOT NULL, `organizationId` TEXT NOT NULL, " +
-                        "PRIMARY KEY(`id`))"
+                        "PRIMARY KEY(`id`))",
                 )
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_clients_organizationId` " +
-                        "ON `clients` (`organizationId`)"
+                        "ON `clients` (`organizationId`)",
                 )
             }
         }
@@ -80,20 +86,20 @@ abstract class AppDatabase : RoomDatabase() {
                         "`projectId` TEXT, `taskId` TEXT, `description` TEXT, " +
                         "`tagIds` TEXT NOT NULL, `billable` INTEGER NOT NULL, " +
                         "`isFavorite` INTEGER NOT NULL, `sortOrder` INTEGER NOT NULL, " +
-                        "`createdAtMs` INTEGER NOT NULL, PRIMARY KEY(`id`))"
+                        "`createdAtMs` INTEGER NOT NULL, PRIMARY KEY(`id`))",
                 )
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_entry_templates_organizationId` " +
-                        "ON `entry_templates` (`organizationId`)"
+                        "ON `entry_templates` (`organizationId`)",
                 )
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `inbox_dismissals` (" +
                         "`issueKey` TEXT NOT NULL, `organizationId` TEXT NOT NULL, " +
-                        "`dismissedAtMs` INTEGER NOT NULL, PRIMARY KEY(`issueKey`))"
+                        "`dismissedAtMs` INTEGER NOT NULL, PRIMARY KEY(`issueKey`))",
                 )
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_inbox_dismissals_organizationId` " +
-                        "ON `inbox_dismissals` (`organizationId`)"
+                        "ON `inbox_dismissals` (`organizationId`)",
                 )
             }
         }

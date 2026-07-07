@@ -24,16 +24,14 @@ object NotificationPermissionHelper {
     /**
      * Check if notification permission is granted
      */
-    fun hasNotificationPermission(context: Context): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            // Pre-Android 13, notifications are enabled by default
-            true
-        }
+    fun hasNotificationPermission(context: Context): Boolean = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.POST_NOTIFICATIONS,
+        ) == PackageManager.PERMISSION_GRANTED
+    } else {
+        // Pre-Android 13, notifications are enabled by default
+        true
     }
 
     /**
@@ -44,7 +42,7 @@ object NotificationPermissionHelper {
             ActivityCompat.requestPermissions(
                 activity,
                 arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                NOTIFICATION_PERMISSION_REQUEST_CODE
+                NOTIFICATION_PERMISSION_REQUEST_CODE,
             )
         }
     }
@@ -52,14 +50,12 @@ object NotificationPermissionHelper {
     /**
      * Check if we should show permission rationale
      */
-    fun shouldShowPermissionRationale(activity: Activity): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ActivityCompat.shouldShowRequestPermissionRationale(
-                activity,
-                Manifest.permission.POST_NOTIFICATIONS
-            )
-        } else {
-            false
-        }
+    fun shouldShowPermissionRationale(activity: Activity): Boolean = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        ActivityCompat.shouldShowRequestPermissionRationale(
+            activity,
+            Manifest.permission.POST_NOTIFICATIONS,
+        )
+    } else {
+        false
     }
 }

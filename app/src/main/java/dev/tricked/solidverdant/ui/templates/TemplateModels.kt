@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.templates
 
 import dev.tricked.solidverdant.data.model.Project
@@ -42,23 +48,19 @@ object TemplateOrdering {
      * (favorites first, then the user's [EntryTemplate.sortOrder], then creation order) so the list
      * and any persisted re-order stay consistent.
      */
-    fun forManage(templates: List<EntryTemplate>): List<EntryTemplate> =
-        templates.sortedWith(
-            compareByDescending<EntryTemplate> { it.isFavorite }
-                .thenBy { it.sortOrder }
-                .thenBy { it.createdAtMs }
-                .thenBy { it.id }
-        )
+    fun forManage(templates: List<EntryTemplate>): List<EntryTemplate> = templates.sortedWith(
+        compareByDescending<EntryTemplate> { it.isFavorite }
+            .thenBy { it.sortOrder }
+            .thenBy { it.createdAtMs }
+            .thenBy { it.id },
+    )
 
     /**
      * Order used by the Track quick-start chip row: pinned favorites first (in the user's chosen
      * order), then non-favorite templates as most-recent-first "recents". [limit] caps the row so a
      * large catalogue does not eagerly compose off-screen chips.
      */
-    fun forQuickStart(
-        templates: List<EntryTemplate>,
-        limit: Int = Int.MAX_VALUE,
-    ): List<EntryTemplate> {
+    fun forQuickStart(templates: List<EntryTemplate>, limit: Int = Int.MAX_VALUE): List<EntryTemplate> {
         val favorites = templates.asSequence()
             .filter { it.isFavorite }
             .sortedWith(compareBy<EntryTemplate> { it.sortOrder }.thenBy { it.createdAtMs }.thenBy { it.id })
@@ -123,12 +125,7 @@ object TemplateResolver {
      * done items so this can distinguish "archived" from "deleted"; the caller filters them out of
      * pickers separately.
      */
-    fun resolve(
-        template: EntryTemplate,
-        projects: List<Project>,
-        tasks: List<Task>,
-        tags: List<Tag>,
-    ): TemplateResolution {
+    fun resolve(template: EntryTemplate, projects: List<Project>, tasks: List<Task>, tags: List<Tag>): TemplateResolution {
         val project = template.projectId?.let { id -> projects.firstOrNull { it.id == id } }
         val projectStatus = when {
             template.projectId == null -> RefStatus.NONE

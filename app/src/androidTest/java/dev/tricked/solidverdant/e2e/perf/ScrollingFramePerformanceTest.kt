@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.e2e.perf
 
 import android.util.SparseIntArray
@@ -72,7 +78,7 @@ class ScrollingFramePerformanceTest {
                 "\"content_ready_ms\":$contentReadyMs," +
                 "\"history_down\":${down.toJson()}," +
                 "\"history_up\":${up.toJson()}," +
-                "\"tab_switches\":${tabs.toJson()}}"
+                "\"tab_switches\":${tabs.toJson()}}",
         )
         assertFrameBudget("history down", down)
         assertFrameBudget("history up", up)
@@ -156,11 +162,9 @@ private data class FrameResult(
     val p90Ms: Int = 0,
     val p95Ms: Int = 0,
 ) {
-    fun toJson(): String =
-        "{\"total\":$total,\"over16ms\":$over16Ms,\"jank_pct\":${if (total == 0) 0 else over16Ms * 100 / total}," +
-            "\"p50_ms\":$p50Ms,\"p90_ms\":$p90Ms,\"p95_ms\":$p95Ms,\"worst_ms\":$worstMs}"
+    fun toJson(): String = "{\"total\":$total,\"over16ms\":$over16Ms,\"jank_pct\":${if (total == 0) 0 else over16Ms * 100 / total}," +
+        "\"p50_ms\":$p50Ms,\"p90_ms\":$p90Ms,\"p95_ms\":$p95Ms,\"worst_ms\":$worstMs}"
 
-    override fun toString(): String =
-        "$over16Ms/$total over16ms (${if (total == 0) 0 else over16Ms * 100 / total}%), " +
-            "p50=${p50Ms}ms p90=${p90Ms}ms p95=${p95Ms}ms worst=${worstMs}ms"
+    override fun toString(): String = "$over16Ms/$total over16ms (${if (total == 0) 0 else over16Ms * 100 / total}%), " +
+        "p50=${p50Ms}ms p90=${p90Ms}ms p95=${p95Ms}ms worst=${worstMs}ms"
 }

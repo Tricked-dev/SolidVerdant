@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.review
 
 import android.Manifest
@@ -7,7 +13,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -88,11 +93,7 @@ internal fun ReviewTimePickerDialog(
  * large project catalogue is never eagerly composed (per the UI guidance in AGENTS.md).
  */
 @Composable
-internal fun ProjectPickerDialog(
-    projects: List<ReviewProject>,
-    onSelect: (projectId: String) -> Unit,
-    onDismiss: () -> Unit,
-) {
+internal fun ProjectPickerDialog(projects: List<ReviewProject>, onSelect: (projectId: String) -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.review_project_dialog_title)) },
@@ -147,10 +148,7 @@ private fun projectColor(hex: String): Color {
 }
 
 /** Holder returned by [rememberNotificationPermissionState]. */
-internal data class NotificationPermissionState(
-    val hasPermission: Boolean,
-    val request: () -> Unit,
-)
+internal data class NotificationPermissionState(val hasPermission: Boolean, val request: () -> Unit)
 
 /**
  * Tracks POST_NOTIFICATIONS permission and exposes a request launcher. The status is re-checked on

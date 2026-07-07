@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.remote
 
 import dev.tricked.solidverdant.data.local.AuthDataStore
@@ -29,8 +35,7 @@ private class DataStoreTokenStorage(private val store: AuthDataStore) : TokenSto
     override suspend fun refreshToken() = store.getRefreshToken()
     override suspend fun endpoint() = store.getEndpoint()
     override suspend fun clientId() = store.getClientId()
-    override suspend fun saveTokens(accessToken: String, refreshToken: String) =
-        store.saveTokens(accessToken, refreshToken)
+    override suspend fun saveTokens(accessToken: String, refreshToken: String) = store.saveTokens(accessToken, refreshToken)
     override suspend fun clearTokens() = store.clearTokens()
 }
 
@@ -49,10 +54,8 @@ internal fun interface TokenRefresher {
     fun refresh(endpoint: String, clientId: String, refreshToken: String): RefreshResult
 }
 
-private class HttpTokenRefresher(
-    private val json: Json,
-    private val client: OkHttpClient = OkHttpClient.Builder().build()
-) : TokenRefresher {
+private class HttpTokenRefresher(private val json: Json, private val client: OkHttpClient = OkHttpClient.Builder().build()) :
+    TokenRefresher {
     override fun refresh(endpoint: String, clientId: String, refreshToken: String): RefreshResult {
         val request = Request.Builder()
             .url("${endpoint.removeSuffix("/")}/oauth/token")
@@ -61,7 +64,7 @@ private class HttpTokenRefresher(
                     .add("grant_type", "refresh_token")
                     .add("client_id", clientId)
                     .add("refresh_token", refreshToken)
-                    .build()
+                    .build(),
             )
             .build()
 
@@ -92,21 +95,18 @@ private class HttpTokenRefresher(
         }
     }
 
-    private fun isDefinitiveRejection(code: Int, body: String?): Boolean =
-        code == 400 && body != null &&
-            (body.contains("invalid_grant") || body.contains("invalid_client"))
+    private fun isDefinitiveRejection(code: Int, body: String?): Boolean = code == 400 &&
+        body != null &&
+        (body.contains("invalid_grant") || body.contains("invalid_client"))
 }
 
 /** Refreshes an expired access token, allowing at most one refresh at a time. */
 @Singleton
-class TokenAuthenticator internal constructor(
-    private val storage: TokenStorage,
-    private val refresher: TokenRefresher
-) : Authenticator {
+class TokenAuthenticator internal constructor(private val storage: TokenStorage, private val refresher: TokenRefresher) : Authenticator {
     @Inject
     constructor(authDataStore: AuthDataStore, json: Json) : this(
         DataStoreTokenStorage(authDataStore),
-        HttpTokenRefresher(json)
+        HttpTokenRefresher(json),
     )
 
     private val refreshLock = Any()

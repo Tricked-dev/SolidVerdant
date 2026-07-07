@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.e2e.robots
 
 import androidx.compose.ui.test.SemanticsNodeInteraction
@@ -29,8 +35,7 @@ abstract class Robot(protected val composeRule: ComposeTestRule) {
 
     protected fun nodesWithTag(tag: String) = composeRule.onAllNodes(hasTestTag(tag))
 
-    protected fun firstNodeWithTag(tag: String): SemanticsNodeInteraction =
-        composeRule.onAllNodes(hasTestTag(tag)).onFirst()
+    protected fun firstNodeWithTag(tag: String): SemanticsNodeInteraction = composeRule.onAllNodes(hasTestTag(tag)).onFirst()
 
     protected fun waitUntilEnabledTagExists(tag: String, timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
         val matcher = hasTestTag(tag) and isEnabled()

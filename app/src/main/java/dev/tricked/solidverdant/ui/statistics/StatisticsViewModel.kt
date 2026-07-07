@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.statistics
 
 import android.net.Uri
@@ -15,8 +21,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -62,18 +68,10 @@ sealed interface ExportState {
 /** What the user tapped to open a drill-down list. */
 sealed interface DrillDownTarget {
     /** A donut slice / project legend row; [projectId] null is the "no project" bucket. */
-    data class ProjectSlice(
-        val projectId: String?,
-        val projectName: String?,
-        val colorHex: String,
-    ) : DrillDownTarget
+    data class ProjectSlice(val projectId: String?, val projectName: String?, val colorHex: String) : DrillDownTarget
 
     /** A trend bar covering the inclusive [start]..[end] window it represents. */
-    data class TrendSlice(
-        val label: String,
-        val start: LocalDate,
-        val end: LocalDate,
-    ) : DrillDownTarget
+    data class TrendSlice(val label: String, val start: LocalDate, val end: LocalDate) : DrillDownTarget
 }
 
 /** Contents of the drill-down bottom sheet for the currently tapped [target]. */
@@ -123,37 +121,32 @@ class StatisticsViewModel @Inject constructor(
         val organizationName: String,
     )
 
-    private data class RemoteEntries(
-        val entries: List<TimeEntry>? = null,
-        val isLoading: Boolean = false,
-        val failed: Boolean = false,
-    )
+    private data class RemoteEntries(val entries: List<TimeEntry>? = null, val isLoading: Boolean = false, val failed: Boolean = false)
 
-    private fun loadRemoteEntries(
-        organizationId: String,
-        memberId: String,
-        range: ClosedRange<LocalDate>,
-    ): Flow<RemoteEntries> =
-        flow {
-            emit(RemoteEntries(isLoading = true))
-            val entries = mutableListOf<TimeEntry>()
-            val start = range.start.atStartOfDay(zone).toInstant().toString()
-            val end = range.endInclusive.plusDays(1).atStartOfDay(zone).toInstant().toString()
-            val pageSize = 500
-            var offset = 0
-            while (true) {
-                val page = authRepository.getTimeEntries(
-                    organizationId, memberId, limit = pageSize, offset = offset,
-                    start = start, end = end,
-                ).getOrThrow()
-                entries += page.data
-                offset += page.data.size
-                if (!shouldFetchNextPage(pageSize, page.data.size, offset, page.meta?.total)) break
-            }
-            emit(RemoteEntries(entries = entries))
-        }.catch {
-            emit(RemoteEntries(failed = true))
-        }.flowOn(Dispatchers.IO)
+    private fun loadRemoteEntries(organizationId: String, memberId: String, range: ClosedRange<LocalDate>): Flow<RemoteEntries> = flow {
+        emit(RemoteEntries(isLoading = true))
+        val entries = mutableListOf<TimeEntry>()
+        val start = range.start.atStartOfDay(zone).toInstant().toString()
+        val end = range.endInclusive.plusDays(1).atStartOfDay(zone).toInstant().toString()
+        val pageSize = 500
+        var offset = 0
+        while (true) {
+            val page = authRepository.getTimeEntries(
+                organizationId,
+                memberId,
+                limit = pageSize,
+                offset = offset,
+                start = start,
+                end = end,
+            ).getOrThrow()
+            entries += page.data
+            offset += page.data.size
+            if (!shouldFetchNextPage(pageSize, page.data.size, offset, page.meta?.total)) break
+        }
+        emit(RemoteEntries(entries = entries))
+    }.catch {
+        emit(RemoteEntries(failed = true))
+    }.flowOn(Dispatchers.IO)
 
     private val membershipFlow = flow { emit(authRepository.getCurrentMembership()) }.flowOn(Dispatchers.IO)
 
@@ -210,7 +203,10 @@ class StatisticsViewModel @Inject constructor(
                             val exportEntries = withContext(Dispatchers.Default) {
                                 filtered.filter {
                                     StatisticsAggregator.clippedSeconds(
-                                        it, zone, resolved.start, resolved.endInclusive,
+                                        it,
+                                        zone,
+                                        resolved.start,
+                                        resolved.endInclusive,
                                     ) != null
                                 }
                             }
@@ -386,9 +382,5 @@ class StatisticsViewModel @Inject constructor(
  * pure function so the previous under-fetch (defaulting an unknown total to the page size, which
  * made `offset < total` false right after the first full page) is directly testable.
  */
-internal fun shouldFetchNextPage(
-    pageSize: Int,
-    lastPageSize: Int,
-    offsetAfterPage: Int,
-    total: Int?,
-): Boolean = lastPageSize == pageSize && (total == null || offsetAfterPage < total)
+internal fun shouldFetchNextPage(pageSize: Int, lastPageSize: Int, offsetAfterPage: Int, total: Int?): Boolean =
+    lastPageSize == pageSize && (total == null || offsetAfterPage < total)

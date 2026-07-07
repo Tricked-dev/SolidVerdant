@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.sync
 
 import kotlinx.serialization.Serializable
@@ -9,7 +15,7 @@ data class StartPayload(
     val projectId: String?,
     val taskId: String?,
     val description: String,
-    val tagIds: List<String>
+    val tagIds: List<String>,
 )
 
 @Serializable
@@ -37,5 +43,5 @@ data class UpdatePayload(
     val projectId: String?,
     val taskId: String?,
     val billable: Boolean,
-    val tagIds: List<String>
+    val tagIds: List<String>,
 )

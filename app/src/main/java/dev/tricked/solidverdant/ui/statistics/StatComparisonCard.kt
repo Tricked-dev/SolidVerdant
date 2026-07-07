@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.statistics
 
 import androidx.compose.foundation.layout.Arrangement
@@ -37,8 +43,7 @@ fun formatSignedDuration(deltaSeconds: Long): String = when {
 }
 
 /** Signed integer percent such as "+25" for a [MetricDelta], or null when there is no baseline. */
-fun signedPercentValue(delta: MetricDelta): Long? =
-    delta.percentChange()?.roundToLong()
+fun signedPercentValue(delta: MetricDelta): Long? = delta.percentChange()?.roundToLong()
 
 @Composable
 fun StatComparisonCard(comparison: PeriodComparison, modifier: Modifier = Modifier) {

@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.navigation
 
 import androidx.compose.material.icons.Icons
@@ -8,11 +14,7 @@ import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.ui.graphics.vector.ImageVector
 import dev.tricked.solidverdant.R
 
-sealed class Screen(
-    val route: String,
-    val labelRes: Int,
-    val icon: ImageVector,
-) {
+sealed class Screen(val route: String, val labelRes: Int, val icon: ImageVector) {
     data object Track : Screen("track", R.string.nav_track, Icons.Outlined.Timer)
     data object Calendar : Screen("calendar", R.string.nav_calendar, Icons.Outlined.CalendarMonth)
     data object Stats : Screen("stats", R.string.nav_stats, Icons.Outlined.BarChart)

@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.local.db
 
 import android.content.Context
@@ -50,11 +56,11 @@ class MigrationTest {
                 "CREATE TABLE outbox (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
                     "opType TEXT NOT NULL, organizationId TEXT NOT NULL, timeEntryId TEXT NOT NULL, " +
                     "payloadJson TEXT NOT NULL, createdAtMs INTEGER NOT NULL, " +
-                    "attemptCount INTEGER NOT NULL, lastError TEXT)"
+                    "attemptCount INTEGER NOT NULL, lastError TEXT)",
             )
             db.execSQL(
                 "INSERT INTO outbox (opType, organizationId, timeEntryId, payloadJson, createdAtMs, attemptCount) " +
-                    "VALUES ('START', 'org1', 'local-1', '{}', 1, 0)"
+                    "VALUES ('START', 'org1', 'local-1', '{}', 1, 0)",
             )
         }
         val db = helper.writableDatabase
@@ -81,10 +87,10 @@ class MigrationTest {
             "INSERT INTO entry_templates " +
                 "(id, organizationId, name, projectId, taskId, description, tagIds, billable, " +
                 "isFavorite, sortOrder, createdAtMs) " +
-                "VALUES ('t1', 'org1', NULL, NULL, NULL, NULL, '', 0, 1, 0, 42)"
+                "VALUES ('t1', 'org1', NULL, NULL, NULL, NULL, '', 0, 1, 0, 42)",
         )
         db.query(
-            "SELECT organizationId, tagIds, isFavorite, createdAtMs FROM entry_templates WHERE id = 't1'"
+            "SELECT organizationId, tagIds, isFavorite, createdAtMs FROM entry_templates WHERE id = 't1'",
         ).use { c ->
             c.moveToFirst()
             assertEquals("org1", c.getString(0))
@@ -96,7 +102,7 @@ class MigrationTest {
         // inbox_dismissals keyed by issueKey.
         db.execSQL(
             "INSERT INTO inbox_dismissals (issueKey, organizationId, dismissedAtMs) " +
-                "VALUES ('overlap:v1:abc', 'org1', 7)"
+                "VALUES ('overlap:v1:abc', 'org1', 7)",
         )
         db.query("SELECT organizationId, dismissedAtMs FROM inbox_dismissals WHERE issueKey = 'overlap:v1:abc'").use { c ->
             c.moveToFirst()

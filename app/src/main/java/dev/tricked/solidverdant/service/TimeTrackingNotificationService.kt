@@ -26,12 +26,12 @@ import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.ui.tile.ProjectSelectionActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import timber.log.Timber
 import java.time.Instant
 import javax.inject.Inject
@@ -79,7 +79,7 @@ class TimeTrackingNotificationService : Service() {
             ACTION_START_TRACKING -> {
                 isTracking = true
                 startTime = Instant.ofEpochMilli(
-                    intent.getLongExtra(EXTRA_START_TIME, System.currentTimeMillis())
+                    intent.getLongExtra(EXTRA_START_TIME, System.currentTimeMillis()),
                 )
                 projectName = intent.getStringExtra(EXTRA_PROJECT_NAME)
                 taskName = intent.getStringExtra(EXTRA_TASK_NAME)
@@ -156,7 +156,7 @@ class TimeTrackingNotificationService : Service() {
                 userId = user.id,
                 projectId = intent.getStringExtra(EXTRA_PROJECT_ID),
                 taskId = intent.getStringExtra(EXTRA_TASK_ID),
-                description = description.orEmpty()
+                description = description.orEmpty(),
             ).onSuccess { entry ->
                 startTime = Instant.parse(entry.start)
                 refreshNotificationIfVisible()
@@ -193,7 +193,7 @@ class TimeTrackingNotificationService : Service() {
                     mutationInProgress = false
                     Timber.e(error, "Failed to stop time entry from notification")
                     showMutationError(R.string.notification_stop_failed)
-                }
+                },
             )
         }
     }
@@ -206,7 +206,7 @@ class TimeTrackingNotificationService : Service() {
             this,
             4,
             openAppIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val notification = NotificationCompat.Builder(this, CHANNEL_ID_ERROR)
             .setContentTitle(getString(R.string.notification_tracking_action_failed))
@@ -234,7 +234,7 @@ class TimeTrackingNotificationService : Service() {
     private suspend fun resumeActiveEntry(
         requestedProjectName: String?,
         requestedTaskName: String?,
-        requestedDescription: String?
+        requestedDescription: String?,
     ): Result<Instant> = runCatching {
         val user = authRepository.getCurrentUser().getOrThrow()
         val membership = authRepository.getCurrentMembership()
@@ -250,7 +250,7 @@ class TimeTrackingNotificationService : Service() {
             userId = user.id,
             projectId = projectId,
             taskId = taskId,
-            description = requestedDescription.orEmpty()
+            description = requestedDescription.orEmpty(),
         ).getOrThrow()
         Instant.parse(entry.start)
     }
@@ -267,7 +267,7 @@ class TimeTrackingNotificationService : Service() {
             organizationId = activeEntry.organizationId,
             timeEntryId = activeEntry.id,
             userId = user.id,
-            startTime = activeEntry.start
+            startTime = activeEntry.start,
         ).map { true }
     }
 
@@ -311,7 +311,7 @@ class TimeTrackingNotificationService : Service() {
                     mutationInProgress = false
                     Timber.e(error, "Failed to stop time entry during pause")
                     showMutationError(R.string.notification_pause_failed)
-                }
+                },
             )
         }
     }
@@ -345,7 +345,7 @@ class TimeTrackingNotificationService : Service() {
             resumeActiveEntry(
                 requestedProjectName,
                 requestedTaskName,
-                requestedDescription
+                requestedDescription,
             ).fold(
                 onSuccess = { resumedAt ->
                     mutationInProgress = false
@@ -363,7 +363,7 @@ class TimeTrackingNotificationService : Service() {
                     mutationInProgress = false
                     Timber.e(error, "Failed to start time entry during resume")
                     showMutationError(R.string.notification_resume_failed)
-                }
+                },
             )
         }
     }
@@ -405,7 +405,7 @@ class TimeTrackingNotificationService : Service() {
         startForeground(
             NOTIFICATION_ID,
             notification,
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
         )
         isForeground = true
     }
@@ -418,12 +418,10 @@ class TimeTrackingNotificationService : Service() {
 
     private fun createNotificationChannel() = ensureChannels(this)
 
-    private fun buildNotification(): Notification {
-        return when {
-            isTracking -> buildTrackingNotification()
-            isPaused -> buildPausedNotification()
-            else -> buildIdleNotification(this)
-        }
+    private fun buildNotification(): Notification = when {
+        isTracking -> buildTrackingNotification()
+        isPaused -> buildPausedNotification()
+        else -> buildIdleNotification(this)
     }
 
     private fun buildTrackingNotification(): Notification {
@@ -453,14 +451,17 @@ class TimeTrackingNotificationService : Service() {
             this,
             0,
             openAppIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
         val pauseIntent = Intent(this, TimeTrackingNotificationService::class.java).apply {
             action = ACTION_PAUSE_TRACKING
         }
         val pausePendingIntent = PendingIntent.getService(
-            this, 2, pauseIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            this,
+            2,
+            pauseIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
         val stopIntent = Intent(this, TimeTrackingNotificationService::class.java).apply {
@@ -468,11 +469,22 @@ class TimeTrackingNotificationService : Service() {
         }
 
         val stopPendingIntent = PendingIntent.getService(
-            this, 1, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            this,
+            1,
+            stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID_ACTIVE)
-            .setContentTitle(if (longTimerWarningVisible) getString(R.string.long_timer_notification_title) else getString(R.string.time_tracking_notification_title))
+            .setContentTitle(
+                if (longTimerWarningVisible) {
+                    getString(
+                        R.string.long_timer_notification_title,
+                    )
+                } else {
+                    getString(R.string.time_tracking_notification_title)
+                },
+            )
             .setContentText(if (longTimerWarningVisible) getString(R.string.long_timer_notification_text) else contentText)
             .setSmallIcon(R.drawable.ic_timer)
             .setOngoing(true)
@@ -486,12 +498,14 @@ class TimeTrackingNotificationService : Service() {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
         if (longTimerWarningVisible) {
             val keepPendingIntent = PendingIntent.getService(
-                this, 5,
+                this,
+                5,
                 Intent(this, TimeTrackingNotificationService::class.java).apply { action = ACTION_KEEP_RUNNING },
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
             val adjustPendingIntent = PendingIntent.getActivity(
-                this, 6,
+                this,
+                6,
                 Intent(this, MainActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                     putExtra(MainActivity.EXTRA_EDIT_ACTIVE_ENTRY, true)
@@ -545,24 +559,30 @@ class TimeTrackingNotificationService : Service() {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val openAppPendingIntent = PendingIntent.getActivity(
-            this, 0, openAppIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            this,
+            0,
+            openAppIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
         val resumeIntent = Intent(this, TimeTrackingNotificationService::class.java).apply {
             action = ACTION_RESUME_TRACKING
         }
         val resumePendingIntent = PendingIntent.getService(
-            this, 3, resumeIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            this,
+            3,
+            resumeIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
         val stopIntent = Intent(this, TimeTrackingNotificationService::class.java).apply {
             action = ACTION_STOP_TRACKING
         }
         val stopPendingIntent = PendingIntent.getService(
-            this, 1, stopIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            this,
+            1,
+            stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID_ACTIVE)
@@ -580,12 +600,12 @@ class TimeTrackingNotificationService : Service() {
             .addAction(
                 R.drawable.ic_timer,
                 getString(R.string.resume),
-                resumePendingIntent
+                resumePendingIntent,
             )
             .addAction(
                 R.drawable.ic_timer,
                 getString(R.string.stop),
-                stopPendingIntent
+                stopPendingIntent,
             )
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
@@ -695,8 +715,10 @@ class TimeTrackingNotificationService : Service() {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
             val openPendingIntent = PendingIntent.getActivity(
-                context, 7, openIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                context,
+                7,
+                openIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
             // Reuses existing strings so no new resource is required: title "Time Tracking",
             // body "Tracking time" — accurate (a timer is still running) and tapping opens the app.
@@ -725,7 +747,7 @@ class TimeTrackingNotificationService : Service() {
             val activeChannel = NotificationChannel(
                 CHANNEL_ID_ACTIVE,
                 context.getString(R.string.notification_channel_active_name),
-                NotificationManager.IMPORTANCE_DEFAULT
+                NotificationManager.IMPORTANCE_DEFAULT,
             ).apply {
                 description = context.getString(R.string.notification_channel_active_description)
                 setShowBadge(false)
@@ -736,7 +758,7 @@ class TimeTrackingNotificationService : Service() {
             val idleChannel = NotificationChannel(
                 CHANNEL_ID_IDLE,
                 context.getString(R.string.notification_channel_idle_name),
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_LOW,
             ).apply {
                 description = context.getString(R.string.notification_channel_idle_description)
                 setShowBadge(false)
@@ -747,7 +769,7 @@ class TimeTrackingNotificationService : Service() {
             val errorChannel = NotificationChannel(
                 CHANNEL_ID_ERROR,
                 context.getString(R.string.notification_channel_error_name),
-                NotificationManager.IMPORTANCE_DEFAULT
+                NotificationManager.IMPORTANCE_DEFAULT,
             ).apply {
                 description = context.getString(R.string.notification_channel_error_description)
                 setShowBadge(true)
@@ -766,7 +788,7 @@ class TimeTrackingNotificationService : Service() {
                 context,
                 0,
                 projectSelectionIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
 
             return NotificationCompat.Builder(context, CHANNEL_ID_IDLE)
@@ -779,7 +801,7 @@ class TimeTrackingNotificationService : Service() {
                 .addAction(
                     R.drawable.ic_timer,
                     context.getString(R.string.quick_start),
-                    projectSelectionPendingIntent
+                    projectSelectionPendingIntent,
                 )
                 .setCategory(NotificationCompat.CATEGORY_STATUS)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -793,7 +815,7 @@ class TimeTrackingNotificationService : Service() {
             taskId: String?,
             description: String,
             projectName: String?,
-            taskName: String?
+            taskName: String?,
         ) {
             val intent = Intent(context, TimeTrackingNotificationService::class.java).apply {
                 action = ACTION_QUICK_START
@@ -814,7 +836,7 @@ class TimeTrackingNotificationService : Service() {
             startTime: Instant,
             projectName: String? = null,
             taskName: String? = null,
-            description: String? = null
+            description: String? = null,
         ) {
             val intent = Intent(context, TimeTrackingNotificationService::class.java).apply {
                 action = ACTION_START_TRACKING
@@ -844,16 +866,19 @@ class TimeTrackingNotificationService : Service() {
         }
 
         fun refreshLongTimerWarning(context: Context) {
-            context.startService(Intent(context, TimeTrackingNotificationService::class.java).apply {
-                action = ACTION_REFRESH_LONG_TIMER
-            })
+            context.startService(
+                Intent(context, TimeTrackingNotificationService::class.java).apply {
+                    action = ACTION_REFRESH_LONG_TIMER
+                },
+            )
         }
 
         fun snoozeLongTimerWarning(context: Context) {
-            context.startService(Intent(context, TimeTrackingNotificationService::class.java).apply {
-                action = ACTION_KEEP_RUNNING
-            })
+            context.startService(
+                Intent(context, TimeTrackingNotificationService::class.java).apply {
+                    action = ACTION_KEEP_RUNNING
+                },
+            )
         }
-
     }
 }

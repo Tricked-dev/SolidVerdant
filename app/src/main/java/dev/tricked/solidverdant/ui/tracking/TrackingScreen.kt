@@ -1,4 +1,8 @@
-﻿package dev.tricked.solidverdant.ui.tracking
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
 
 import android.Manifest
 import android.content.ClipData
@@ -1254,8 +1258,10 @@ private fun HistoryFilters(filter: HistoryFilter, uiState: TrackingUiState, onCh
                 TextButton(
                     enabled = pickerState.selectedStartDateMillis != null && pickerState.selectedEndDateMillis != null,
                     onClick = {
-                        val start = pickerState.selectedStartDateMillis?.let { Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }
-                        val end = pickerState.selectedEndDateMillis?.let { Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }
+                        val start = pickerState.selectedStartDateMillis
+                            ?.let { Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }
+                        val end = pickerState.selectedEndDateMillis
+                            ?.let { Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }
                         if (start != null && end != null) onChange(filter.copy(startDate = start, endDate = end))
                         showDateRangePicker = false
                     },
@@ -1672,7 +1678,9 @@ internal fun TrackingControls(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
                     fontSize = 48.sp,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .testTag(TrackingTestTags.ELAPSED_TIMER)
                 )
                 HorizontalDivider(
                     color = MaterialTheme.colorScheme.outline,
@@ -1886,7 +1894,7 @@ private fun ContinueLastEntryButton(
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             onContinue()
         },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.CONTINUE_BUTTON),
         shape = RoundedCornerShape(8.dp)
     ) {
         Icon(
@@ -2483,7 +2491,7 @@ private fun CompactTimeEntryRow(
                 // Edit button
                 IconButton(
                     onClick = onEdit,
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.size(48.dp).testTag(TrackingTestTags.ENTRY_EDIT_BUTTON)
                 ) {
                     Icon(
                         Icons.Default.Edit,
@@ -2496,7 +2504,7 @@ private fun CompactTimeEntryRow(
                 // Delete button
                 IconButton(
                     onClick = onDelete,
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.size(48.dp).testTag(TrackingTestTags.ENTRY_DELETE_BUTTON)
                 ) {
                     Icon(
                         Icons.Default.Delete,
@@ -2781,7 +2789,7 @@ private fun TimeEntryFormSheet(
                     value = description,
                     onValueChange = { description = it },
                     label = { Text(stringResource(R.string.description)) },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.SHEET_DESCRIPTION_FIELD),
                     shape = RoundedCornerShape(8.dp)
                 )
 
@@ -2850,7 +2858,8 @@ private fun TimeEntryFormSheet(
                             )
                         },
                         enabled = durationIsValid && validation.canSave,
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.testTag(TrackingTestTags.SHEET_SAVE_BUTTON)
                     ) {
                         Text(stringResource(R.string.save), fontWeight = FontWeight.SemiBold)
                     }

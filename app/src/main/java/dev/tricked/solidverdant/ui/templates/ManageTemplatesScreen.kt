@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.templates
 
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +26,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -29,16 +36,15 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Button
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -58,10 +64,7 @@ import dev.tricked.solidverdant.data.repository.EntryTemplate
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ManageTemplatesScreen(
-    onBack: () -> Unit = {},
-    viewModel: ManageTemplatesViewModel = hiltViewModel(),
-) {
+fun ManageTemplatesScreen(onBack: () -> Unit = {}, viewModel: ManageTemplatesViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
 
     var showCreate by remember { mutableStateOf(false) }
@@ -107,7 +110,10 @@ fun ManageTemplatesScreen(
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize().testTag("templates_list"),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                        start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp,
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 12.dp,
+                        bottom = 96.dp,
                     ),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
@@ -120,10 +126,15 @@ fun ManageTemplatesScreen(
                         TemplateRow(
                             template = template,
                             resolution = TemplateResolver.resolve(
-                                template, state.projects, state.tasks, state.tags,
+                                template,
+                                state.projects,
+                                state.tasks,
+                                state.tags,
                             ),
                             projectTaskSummary = templateProjectTaskSummary(
-                                template, state.projects, state.tasks,
+                                template,
+                                state.projects,
+                                state.tasks,
                             ),
                             label = templateDisplayLabel(template, state.projects),
                             canMoveUp = canMoveUp,
@@ -294,7 +305,7 @@ internal fun TemplateRow(
                                     R.plurals.templates_tag_count,
                                     template.tagIds.size,
                                     template.tagIds.size,
-                                )
+                                ),
                             )
                         }
                         if (template.billable) add(stringResource(R.string.billable))
@@ -312,8 +323,11 @@ internal fun TemplateRow(
                     Icon(
                         imageVector = Icons.Filled.Star,
                         contentDescription = stringResource(
-                            if (template.isFavorite) R.string.templates_favorite_remove
-                            else R.string.templates_favorite_add
+                            if (template.isFavorite) {
+                                R.string.templates_favorite_remove
+                            } else {
+                                R.string.templates_favorite_add
+                            },
                         ),
                         tint = if (template.isFavorite) {
                             MaterialTheme.colorScheme.primary
@@ -336,19 +350,28 @@ internal fun TemplateRow(
                     ) {
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.edit)) },
-                            onClick = { menuExpanded = false; onEdit() },
+                            onClick = {
+                                menuExpanded = false
+                                onEdit()
+                            },
                         )
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.templates_move_up)) },
                             enabled = canMoveUp,
                             leadingIcon = { Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null) },
-                            onClick = { menuExpanded = false; onMoveUp() },
+                            onClick = {
+                                menuExpanded = false
+                                onMoveUp()
+                            },
                         )
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.templates_move_down)) },
                             enabled = canMoveDown,
                             leadingIcon = { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null) },
-                            onClick = { menuExpanded = false; onMoveDown() },
+                            onClick = {
+                                menuExpanded = false
+                                onMoveDown()
+                            },
                         )
                         DropdownMenuItem(
                             text = {
@@ -357,7 +380,10 @@ internal fun TemplateRow(
                                     color = MaterialTheme.colorScheme.error,
                                 )
                             },
-                            onClick = { menuExpanded = false; onDelete() },
+                            onClick = {
+                                menuExpanded = false
+                                onDelete()
+                            },
                         )
                     }
                 }

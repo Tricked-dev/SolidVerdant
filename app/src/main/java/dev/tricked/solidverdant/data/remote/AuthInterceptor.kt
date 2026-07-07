@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.remote
 
 import dev.tricked.solidverdant.data.local.AuthDataStore
@@ -15,9 +21,7 @@ import javax.inject.Singleton
  * OkHttp interceptor. This is a known pattern in Android networking.
  */
 @Singleton
-class AuthInterceptor @Inject constructor(
-    private val authDataStore: AuthDataStore
-) : Interceptor {
+class AuthInterceptor @Inject constructor(private val authDataStore: AuthDataStore) : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()

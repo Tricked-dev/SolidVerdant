@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.local.db
 
 import androidx.room.Room
@@ -17,16 +23,21 @@ class OutboxDaoTest {
 
     @Before fun setup() {
         db = Room.inMemoryDatabaseBuilder(
-            ApplicationProvider.getApplicationContext(), AppDatabase::class.java
+            ApplicationProvider.getApplicationContext(),
+            AppDatabase::class.java,
         ).allowMainThreadQueries().build()
         dao = db.outboxDao()
     }
 
     @After fun teardown() = db.close()
 
-    private fun op(entryId: String, type: OutboxOpType = OutboxOpType.START) =
-        OutboxEntity(opType = type, organizationId = "org1", timeEntryId = entryId,
-            payloadJson = "{}", createdAtMs = 1L)
+    private fun op(entryId: String, type: OutboxOpType = OutboxOpType.START) = OutboxEntity(
+        opType = type,
+        organizationId = "org1",
+        timeEntryId = entryId,
+        payloadJson = "{}",
+        createdAtMs = 1L,
+    )
 
     @Test fun peek_returns_insertion_order() = runTest {
         dao.insert(op("a"))

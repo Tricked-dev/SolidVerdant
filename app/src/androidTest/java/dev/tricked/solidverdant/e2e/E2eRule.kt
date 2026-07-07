@@ -1,8 +1,15 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.e2e
 
 import android.content.Context
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.hilt.work.HiltWorkerFactory
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
@@ -27,7 +34,6 @@ import org.junit.rules.RuleChain
 import org.junit.rules.TestRule
 import org.junit.runner.Description
 import org.junit.runners.model.Statement
-import androidx.hilt.work.HiltWorkerFactory
 
 /**
  * Composed on-device E2E harness. Add to a `@HiltAndroidTest` test as:
@@ -81,65 +87,62 @@ class E2eRule(private val test: Any) : TestRule {
 
     /** Configuration that must run after Hilt is up but before the activity launches. */
     private val setupRule = object : TestRule {
-        override fun apply(base: Statement, description: Description): Statement =
-            object : Statement() {
-                override fun evaluate() {
-                    hiltRule.inject()
-                    authDataStore = entryPoint.authDataStore()
+        override fun apply(base: Statement, description: Description): Statement = object : Statement() {
+            override fun evaluate() {
+                hiltRule.inject()
+                authDataStore = entryPoint.authDataStore()
 
-                    mockServer.start()
-                    testClock.reset()
+                mockServer.start()
+                testClock.reset()
 
-                    // Boot the app logged-in and aimed at the mock backend.
-                    runBlocking {
-                        // Room is process/package persistent and may contain a previous stress run.
-                        // Every E2E test owns its complete world, so clear account data before the
-                        // test seeds local-only fixtures or launches the activity.
-                        entryPoint.database().clearAllTables()
-                        entryPoint.settingsDataStore().clearCachedData()
-                        authDataStore.clearAll()
-                        authDataStore.saveOAuthConfig(mockServer.baseUrl(), "test-client")
-                        authDataStore.saveTokens("test-access-token", "test-refresh-token")
-                        authDataStore.saveCurrentMembershipId(MockSolidtimeServer.DEFAULT_MEMBERSHIP_ID)
-                    }
+                // Boot the app logged-in and aimed at the mock backend.
+                runBlocking {
+                    // Room is process/package persistent and may contain a previous stress run.
+                    // Every E2E test owns its complete world, so clear account data before the
+                    // test seeds local-only fixtures or launches the activity.
+                    entryPoint.database().clearAllTables()
+                    entryPoint.settingsDataStore().clearCachedData()
+                    authDataStore.clearAll()
+                    authDataStore.saveOAuthConfig(mockServer.baseUrl(), "test-client")
+                    authDataStore.saveTokens("test-access-token", "test-refresh-token")
+                    authDataStore.saveCurrentMembershipId(MockSolidtimeServer.DEFAULT_MEMBERSHIP_ID)
+                }
 
-                    // Deterministic WorkManager: HiltWorkerFactory so SyncWorker's deps resolve, and
-                    // a synchronous executor so enqueued work runs inline once constraints are met.
-                    WorkManagerTestInitHelper.initializeTestWorkManager(
-                        context,
-                        Configuration.Builder()
-                            .setWorkerFactory(entryPoint.workerFactory())
-                            .setExecutor(SynchronousExecutor())
-                            .build(),
-                    )
+                // Deterministic WorkManager: HiltWorkerFactory so SyncWorker's deps resolve, and
+                // a synchronous executor so enqueued work runs inline once constraints are met.
+                WorkManagerTestInitHelper.initializeTestWorkManager(
+                    context,
+                    Configuration.Builder()
+                        .setWorkerFactory(entryPoint.workerFactory())
+                        .setExecutor(SynchronousExecutor())
+                        .build(),
+                )
 
-                    try {
-                        base.evaluate()
-                    } finally {
-                        scenario?.close()
-                        runBlocking { authDataStore.clearAll() }
-                        // WorkManager is process-global. Close its test database so the next test
-                        // can initialize it with that test's fresh Hilt graph and worker factory.
-                        // Without this, workers in later tests retain dependencies from the first
-                        // test component and can tear down the activity mid-flow.
-                        WorkManagerTestInitHelper.closeWorkDatabase()
-                        mockServer.shutdown()
-                    }
+                try {
+                    base.evaluate()
+                } finally {
+                    scenario?.close()
+                    runBlocking { authDataStore.clearAll() }
+                    // WorkManager is process-global. Close its test database so the next test
+                    // can initialize it with that test's fresh Hilt graph and worker factory.
+                    // Without this, workers in later tests retain dependencies from the first
+                    // test component and can tear down the activity mid-flow.
+                    WorkManagerTestInitHelper.closeWorkDatabase()
+                    mockServer.shutdown()
                 }
             }
+        }
     }
 
-    override fun apply(base: Statement, description: Description): Statement =
-        RuleChain.outerRule(hiltRule)
-            .around(setupRule)
-            .around(composeRule)
-            .apply(base, description)
+    override fun apply(base: Statement, description: Description): Statement = RuleChain.outerRule(hiltRule)
+        .around(setupRule)
+        .around(composeRule)
+        .apply(base, description)
 
     // ---- Test-facing helpers ------------------------------------------------------------------
 
     /** Launch the real [MainActivity]. Call AFTER presetting [mockServer] catalogue. */
-    fun launchApp(): ActivityScenario<MainActivity> =
-        ActivityScenario.launch(MainActivity::class.java).also { scenario = it }
+    fun launchApp(): ActivityScenario<MainActivity> = ActivityScenario.launch(MainActivity::class.java).also { scenario = it }
 
     /**
      * Deterministically run any sync work the app enqueued: meet the constraints on the unique

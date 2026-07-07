@@ -100,16 +100,15 @@ fun CalendarOverlayControls(
 }
 
 @Composable
-private fun PermissionSection(
-    permanentlyDenied: Boolean,
-    onRequestPermission: () -> Unit,
-    onOpenAppSettings: () -> Unit,
-) {
+private fun PermissionSection(permanentlyDenied: Boolean, onRequestPermission: () -> Unit, onOpenAppSettings: () -> Unit) {
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Text(
             text = stringResource(
-                if (permanentlyDenied) R.string.calendar_overlay_denied
-                else R.string.calendar_overlay_permission_rationale,
+                if (permanentlyDenied) {
+                    R.string.calendar_overlay_denied
+                } else {
+                    R.string.calendar_overlay_permission_rationale
+                },
             ),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -128,11 +127,7 @@ private fun PermissionSection(
 }
 
 @Composable
-private fun CalendarPickerSection(
-    state: CalendarUiState,
-    onToggleCalendar: (String) -> Unit,
-    onRetry: () -> Unit,
-) {
+private fun CalendarPickerSection(state: CalendarUiState, onToggleCalendar: (String) -> Unit, onRetry: () -> Unit) {
     var expanded by remember { mutableStateOf(state.selectedCalendarIds.isEmpty()) }
     Column(modifier = Modifier.fillMaxWidth()) {
         PrivacyNote()

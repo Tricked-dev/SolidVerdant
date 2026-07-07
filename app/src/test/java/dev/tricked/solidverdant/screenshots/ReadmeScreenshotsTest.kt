@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.screenshots
 
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.data.calendar.DeviceCalendarEvent
+import dev.tricked.solidverdant.data.local.db.OutboxOpType
 import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
@@ -22,7 +29,6 @@ import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.EntryTemplate
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
-import dev.tricked.solidverdant.data.local.db.OutboxOpType
 import dev.tricked.solidverdant.domain.inbox.InboxIssue
 import dev.tricked.solidverdant.domain.inbox.InboxIssueType
 import dev.tricked.solidverdant.domain.inbox.MissingField
@@ -31,7 +37,6 @@ import dev.tricked.solidverdant.ui.calendar.CalendarViewMode
 import dev.tricked.solidverdant.ui.calendar.DayBucket
 import dev.tricked.solidverdant.ui.calendar.MonthCalendarView
 import dev.tricked.solidverdant.ui.calendar.WeekCalendarView
-import dev.tricked.solidverdant.ui.navigation.Screen as NavScreen
 import dev.tricked.solidverdant.ui.components.EditTimeEntryDialog
 import dev.tricked.solidverdant.ui.review.InboxHeader
 import dev.tricked.solidverdant.ui.review.InboxIssueCard
@@ -40,6 +45,7 @@ import dev.tricked.solidverdant.ui.review.ReviewDayUiState
 import dev.tricked.solidverdant.ui.review.ReviewItem
 import dev.tricked.solidverdant.ui.review.ReviewItemType
 import dev.tricked.solidverdant.ui.review.ReviewProject
+import dev.tricked.solidverdant.ui.statistics.InteractiveBarChart
 import dev.tricked.solidverdant.ui.statistics.KpiGrid
 import dev.tricked.solidverdant.ui.statistics.ProjectTotal
 import dev.tricked.solidverdant.ui.statistics.StatCatalog
@@ -49,7 +55,6 @@ import dev.tricked.solidverdant.ui.statistics.StatisticsSummary
 import dev.tricked.solidverdant.ui.statistics.TrendBucket
 import dev.tricked.solidverdant.ui.statistics.charts.DonutChart
 import dev.tricked.solidverdant.ui.statistics.hexToColor
-import dev.tricked.solidverdant.ui.statistics.InteractiveBarChart
 import dev.tricked.solidverdant.ui.templates.TemplateResolver
 import dev.tricked.solidverdant.ui.templates.TemplateRow
 import dev.tricked.solidverdant.ui.templates.templateDisplayLabel
@@ -62,11 +67,12 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
-import java.time.DayOfWeek
+import dev.tricked.solidverdant.ui.navigation.Screen as NavScreen
 
 /**
  * Generates the README screenshot set on the JVM — no emulator/device.
@@ -98,7 +104,10 @@ class ReadmeScreenshotsTest {
                         theme = theme,
                         device = device,
                         filePath = ScreenshotHost.outputPath(
-                            ".github", "screenshots", "generated", "${screen.name}-${theme.id}-${device.id}.png",
+                            ".github",
+                            "screenshots",
+                            "generated",
+                            "${screen.name}-${theme.id}-${device.id}.png",
                         ),
                         content = {
                             ScreenshotHost.AppShell(
@@ -113,7 +122,10 @@ class ReadmeScreenshotsTest {
                             theme = theme,
                             device = device,
                             filePath = ScreenshotHost.outputPath(
-                                ".github", "screenshots", "readme", "${screen.name}.png",
+                                ".github",
+                                "screenshots",
+                                "readme",
+                                "${screen.name}.png",
                             ),
                             content = {
                                 ScreenshotHost.AppShell(
@@ -184,7 +196,15 @@ class ReadmeScreenshotsTest {
         entry("e2", "Landing page build", "2026-06-10T10:30:00Z", "2026-06-10T12:45:00Z", 8100, taskId = "t1", entryTags = listOf(tags[0])),
         entry("e3", "Standup", "2026-06-10T13:15:00Z", "2026-06-10T13:35:00Z", 1200, projectId = "p2", billable = false),
         entry("e4", "Bug triage", "2026-06-09T14:00:00Z", "2026-06-09T15:30:00Z", 5400, projectId = "p2", billable = false),
-        entry("e5", "Client call — Acme", "2026-06-09T16:00:00Z", "2026-06-09T16:45:00Z", 2700, projectId = "p1", entryTags = listOf(tags[1])),
+        entry(
+            "e5",
+            "Client call — Acme",
+            "2026-06-09T16:00:00Z",
+            "2026-06-09T16:45:00Z",
+            2700,
+            projectId = "p1",
+            entryTags = listOf(tags[1]),
+        ),
     )
 
     private val syncOperations = listOf(
@@ -204,9 +224,8 @@ class ReadmeScreenshotsTest {
         ),
     )
 
-    private fun groupedHistory(): Map<LocalDate, List<TimeEntry>> =
-        historyEntries.groupBy { LocalDate.parse(it.start.substring(0, 10)) }
-            .toSortedMap(compareByDescending { it })
+    private fun groupedHistory(): Map<LocalDate, List<TimeEntry>> = historyEntries.groupBy { LocalDate.parse(it.start.substring(0, 10)) }
+        .toSortedMap(compareByDescending { it })
 
     private fun buildScreens(): List<Screen> = listOf(
         // 1. Track — active timer running + history rows with sync chips.
@@ -320,20 +339,33 @@ class ReadmeScreenshotsTest {
                         ),
                         16_200,
                     ),
-                    tue to DayBucket(tue, listOf(entry("w2", "Design system", "2026-06-09T10:00:00Z", "2026-06-09T11:30:00Z", 5_400, taskId = "t2")), 5_400),
+                    tue to
+                        DayBucket(
+                            tue,
+                            listOf(entry("w2", "Design system", "2026-06-09T10:00:00Z", "2026-06-09T11:30:00Z", 5_400, taskId = "t2")),
+                            5_400,
+                        ),
                 ),
                 overlayEvents = listOf(
                     DeviceCalendarEvent(
-                        instanceId = 1, eventId = 1, calendarId = "1", title = "1:1 with Alex",
+                        instanceId = 1,
+                        eventId = 1,
+                        calendarId = "1",
+                        title = "1:1 with Alex",
                         startUtcMs = Instant.parse("2026-06-08T13:00:00Z").toEpochMilli(),
                         endUtcMs = Instant.parse("2026-06-08T14:00:00Z").toEpochMilli(),
-                        allDay = false, colorArgb = 0xFF3F51B5.toInt(),
+                        allDay = false,
+                        colorArgb = 0xFF3F51B5.toInt(),
                     ),
                     DeviceCalendarEvent(
-                        instanceId = 2, eventId = 2, calendarId = "1", title = "Sprint planning",
+                        instanceId = 2,
+                        eventId = 2,
+                        calendarId = "1",
+                        title = "Sprint planning",
                         startUtcMs = Instant.parse("2026-06-09T15:00:00Z").toEpochMilli(),
                         endUtcMs = Instant.parse("2026-06-09T16:00:00Z").toEpochMilli(),
-                        allDay = false, colorArgb = 0xFFE91E63.toInt(),
+                        allDay = false,
+                        colorArgb = 0xFFE91E63.toInt(),
                     ),
                 ),
             )
@@ -456,9 +488,22 @@ class ReadmeScreenshotsTest {
                 uncategorizedCount = 1,
                 failedSyncCount = 1,
                 items = listOf(
-                    ReviewItem("running:e1", ReviewItemType.RUNNING_TIMER, "e1", description = "Landing page build", startIso = "2026-06-10T14:00:00Z"),
+                    ReviewItem(
+                        "running:e1",
+                        ReviewItemType.RUNNING_TIMER,
+                        "e1",
+                        description = "Landing page build",
+                        startIso = "2026-06-10T14:00:00Z",
+                    ),
                     ReviewItem("sync:e4", ReviewItemType.FAILED_SYNC, "e4", detail = "429 rate limited"),
-                    ReviewItem("uncat:e3", ReviewItemType.UNCATEGORIZED, "e3", description = "Standup", startIso = "2026-06-10T13:15:00Z", endIso = "2026-06-10T13:35:00Z"),
+                    ReviewItem(
+                        "uncat:e3",
+                        ReviewItemType.UNCATEGORIZED,
+                        "e3",
+                        description = "Standup",
+                        startIso = "2026-06-10T13:15:00Z",
+                        endIso = "2026-06-10T13:35:00Z",
+                    ),
                 ),
                 handledIds = emptySet(),
                 projects = listOf(

@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.sync
 
 import android.content.Context
@@ -29,7 +35,7 @@ class SyncWorker @AssistedInject constructor(
     private val remote: RemoteDataSource,
     private val json: Json,
     private val clock: Clock,
-    private val syncStatus: SyncStatusReporter
+    private val syncStatus: SyncStatusReporter,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
@@ -56,7 +62,7 @@ class SyncWorker @AssistedInject constructor(
                             op.copy(
                                 attemptCount = attempts,
                                 lastError = "Temporary server or network error; retry scheduled",
-                            )
+                            ),
                         )
                         syncStatus.set(SyncStatus.Idle)
                         return Result.retry()
@@ -132,7 +138,7 @@ class SyncWorker @AssistedInject constructor(
                 val entry = TimeEntry(
                     id = op.timeEntryId, description = p.description, userId = p.userId,
                     start = p.start, end = p.end, projectId = p.projectId, taskId = p.taskId,
-                    billable = p.billable, organizationId = op.organizationId
+                    billable = p.billable, organizationId = op.organizationId,
                 )
                 val server = remote.updateTimeEntry(op.organizationId, entry, p.tagIds).getOrThrow()
                 persistSynced(server, p.tagIds)
@@ -161,11 +167,17 @@ class SyncWorker @AssistedInject constructor(
      */
     private suspend fun findCreatedDuplicate(orgId: String, p: CreatePayload): TimeEntry? {
         val page = remote.getTimeEntries(
-            orgId, p.memberId, limit = 250, offset = 0, onlyFullDates = false
+            orgId,
+            p.memberId,
+            limit = 250,
+            offset = 0,
+            onlyFullDates = false,
         ).getOrNull() ?: return null
         return page.data.firstOrNull { e ->
-            e.start == p.start && e.end == p.end &&
-                e.projectId == p.projectId && e.taskId == p.taskId &&
+            e.start == p.start &&
+                e.end == p.end &&
+                e.projectId == p.projectId &&
+                e.taskId == p.taskId &&
                 (e.description ?: "") == p.description
         }
     }

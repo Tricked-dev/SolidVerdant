@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.statistics
 
 import org.junit.Assert.assertEquals
@@ -10,12 +16,7 @@ import java.time.temporal.ChronoUnit
 
 class PeriodComparisonTest {
 
-    private fun summary(
-        total: Long,
-        billable: Long,
-        avg: Long,
-        perProject: List<ProjectTotal>,
-    ) = StatisticsSummary(
+    private fun summary(total: Long, billable: Long, avg: Long, perProject: List<ProjectTotal>) = StatisticsSummary(
         totalSeconds = total,
         entryCount = perProject.size,
         avgSecondsPerDay = avg,
@@ -71,11 +72,15 @@ class PeriodComparisonTest {
     fun `comparison ranks project changes by magnitude and drops unchanged`() {
         val prevRange = LocalDate.parse("2026-06-24")..LocalDate.parse("2026-06-30")
         val current = summary(
-            total = 400, billable = 200, avg = 57,
+            total = 400,
+            billable = 200,
+            avg = 57,
             perProject = listOf(pt("p1", "Alpha", 300), pt("p2", "Beta", 100)),
         )
         val previous = summary(
-            total = 250, billable = 100, avg = 35,
+            total = 250,
+            billable = 100,
+            avg = 35,
             perProject = listOf(pt("p1", "Alpha", 100), pt("p3", "Gamma", 100), pt("p2", "Beta", 50)),
         )
         val cmp = computeComparison(current, previous, prevRange)

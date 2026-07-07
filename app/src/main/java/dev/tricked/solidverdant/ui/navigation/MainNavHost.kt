@@ -1,5 +1,13 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.navigation
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,11 +34,9 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import dev.tricked.solidverdant.R
-import dev.tricked.solidverdant.ui.review.ReviewDayPane
 import dev.tricked.solidverdant.ui.review.ReminderSettingsScreen
+import dev.tricked.solidverdant.ui.review.ReviewDayPane
 import dev.tricked.solidverdant.ui.templates.ManageTemplatesScreen
 
 @Composable
@@ -93,11 +99,7 @@ fun MainNavHost(
 
 /** Shared production bottom navigation, also used by full-app screenshot rendering. */
 @Composable
-internal fun MainNavigationBar(
-    currentRoute: String?,
-    inboxBadgeCount: Int,
-    onNavigate: (Screen) -> Unit,
-) {
+internal fun MainNavigationBar(currentRoute: String?, inboxBadgeCount: Int, onNavigate: (Screen) -> Unit) {
     NavigationBar {
         bottomNavScreens.forEach { screen ->
             NavigationBarItem(

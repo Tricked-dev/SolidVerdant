@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.theme
 
 import android.app.Activity
@@ -10,7 +16,6 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -39,7 +44,7 @@ private val VerdantLightColorScheme = lightColorScheme(
     onSurface = Color(0xFF1A1C18),
     surfaceVariant = Color(0xFFE0E4D8),
     onSurfaceVariant = Color(0xFF44483F),
-    outline = Color(0xFF74796E)
+    outline = Color(0xFF74796E),
 )
 
 private val NeoColorScheme = darkColorScheme(
@@ -74,7 +79,7 @@ private val NeoColorScheme = darkColorScheme(
     surfaceContainerHighest = Color(0xFF182536),
     surfaceTint = Color(0xFF1EF3FF),
     outline = Color(0xFF3D5876),
-    outlineVariant = Color(0xFF243549)
+    outlineVariant = Color(0xFF243549),
 )
 
 @Composable
@@ -82,7 +87,7 @@ fun SolidVerdantTheme(
     themeMode: AppThemeMode = AppThemeMode.SYSTEM,
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     val colorScheme = when {
         themeMode == AppThemeMode.LIGHT -> VerdantLightColorScheme
@@ -110,6 +115,6 @@ fun SolidVerdantTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        content = content
+        content = content,
     )
 }

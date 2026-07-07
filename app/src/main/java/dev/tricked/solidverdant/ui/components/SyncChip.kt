@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
@@ -37,11 +43,7 @@ import dev.tricked.solidverdant.ui.theme.syncPending
  * @param showLabel when true, shows a short text label next to the icon.
  */
 @Composable
-fun SyncChip(
-    status: EntrySyncStatus,
-    modifier: Modifier = Modifier,
-    showLabel: Boolean = true,
-) {
+fun SyncChip(status: EntrySyncStatus, modifier: Modifier = Modifier, showLabel: Boolean = true) {
     val icon: ImageVector
     val color: Color
     val labelRes: Int

@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.templates
 
 import androidx.compose.foundation.layout.Arrangement
@@ -81,8 +87,10 @@ fun TemplateEditorSheet(
         }
     }
 
-    val canSave = name.isNotBlank() || projectId != null ||
-        description.isNotBlank() || selectedTags.isNotEmpty()
+    val canSave = name.isNotBlank() ||
+        projectId != null ||
+        description.isNotBlank() ||
+        selectedTags.isNotEmpty()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -101,8 +109,11 @@ fun TemplateEditorSheet(
         ) {
             Text(
                 text = stringResource(
-                    if (existing == null) R.string.template_editor_new_title
-                    else R.string.template_editor_edit_title
+                    if (existing == null) {
+                        R.string.template_editor_new_title
+                    } else {
+                        R.string.template_editor_edit_title
+                    },
                 ),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
@@ -223,7 +234,7 @@ fun TemplateEditorSheet(
                                     tagIds = selectedTags,
                                     billable = billable,
                                     isFavorite = favorite,
-                                )
+                                ),
                             )
                         } else {
                             onUpdate(
@@ -235,7 +246,7 @@ fun TemplateEditorSheet(
                                     tagIds = selectedTags,
                                     billable = billable,
                                     isFavorite = favorite,
-                                )
+                                ),
                             )
                         }
                     },
@@ -251,10 +262,7 @@ fun TemplateEditorSheet(
 
 /** A "Cancel / Delete" confirmation dialog reused by rows and the editor. */
 @Composable
-fun TemplateDeleteDialog(
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-) {
+fun TemplateDeleteDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.templates_delete_confirm_title)) },

@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.di
 
 import android.content.Context
@@ -29,9 +35,14 @@ object DatabaseModule {
             .build()
 
     @Provides fun provideTimeEntryDao(db: AppDatabase): TimeEntryDao = db.timeEntryDao()
+
     @Provides fun provideCatalogDao(db: AppDatabase): CatalogDao = db.catalogDao()
+
     @Provides fun provideOutboxDao(db: AppDatabase): OutboxDao = db.outboxDao()
+
     @Provides fun provideSyncMetaDao(db: AppDatabase): SyncMetaDao = db.syncMetaDao()
+
     @Provides fun provideTemplateDao(db: AppDatabase): TemplateDao = db.templateDao()
+
     @Provides fun provideInboxDismissalDao(db: AppDatabase): InboxDismissalDao = db.inboxDismissalDao()
 }

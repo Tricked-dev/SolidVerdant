@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.calendar
 
 import dev.tricked.solidverdant.data.calendar.DeviceCalendarEvent
@@ -16,12 +22,7 @@ class WeekCalendarLayoutTest {
 
     private val utc = ZoneOffset.UTC
 
-    private fun event(
-        id: Long,
-        startIso: String,
-        endIso: String,
-        allDay: Boolean = false,
-    ) = DeviceCalendarEvent(
+    private fun event(id: Long, startIso: String, endIso: String, allDay: Boolean = false) = DeviceCalendarEvent(
         instanceId = id,
         eventId = id,
         calendarId = "1",
@@ -84,14 +85,16 @@ class WeekCalendarLayoutTest {
         val within = clampToDaySeconds(
             Instant.parse("2026-07-06T09:00:00Z").toEpochMilli(),
             Instant.parse("2026-07-06T10:00:00Z").toEpochMilli(),
-            day, utc,
+            day,
+            utc,
         )
         assertEquals(9 * 3600L to 10 * 3600L, within)
 
         val nextDay = clampToDaySeconds(
             Instant.parse("2026-07-07T09:00:00Z").toEpochMilli(),
             Instant.parse("2026-07-07T10:00:00Z").toEpochMilli(),
-            day, utc,
+            day,
+            utc,
         )
         assertNull(nextDay)
     }

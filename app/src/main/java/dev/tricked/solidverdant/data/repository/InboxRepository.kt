@@ -1,13 +1,19 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.repository
 
 import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.local.db.InboxDismissalDao
 import dev.tricked.solidverdant.domain.inbox.InboxAnalyzer
+import dev.tricked.solidverdant.domain.inbox.InboxSettingsDataStore
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import dev.tricked.solidverdant.domain.inbox.InboxSettingsDataStore
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject

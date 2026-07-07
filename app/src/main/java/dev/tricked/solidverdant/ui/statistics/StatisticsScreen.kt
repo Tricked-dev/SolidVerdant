@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.statistics
 
 import android.content.Context
@@ -8,15 +14,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -25,18 +31,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.rememberDateRangePickerState
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,14 +54,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.res.stringResource
-import dev.tricked.solidverdant.R
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.ui.components.EmptyState
 import dev.tricked.solidverdant.ui.components.LoadingState
 import dev.tricked.solidverdant.ui.components.SectionCard
@@ -128,7 +135,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().testTag("stats_screen")) {
         if (state.isLoading) {
             LoadingState(modifier = Modifier.fillMaxSize())
         } else {
@@ -271,12 +278,7 @@ private fun ExportAction(exporting: Boolean, onExport: () -> Unit) {
 }
 
 @Composable
-private fun ProjectLegendRow(
-    projectName: String,
-    colorHex: String,
-    valueText: String,
-    onClick: () -> Unit,
-) {
+private fun ProjectLegendRow(projectName: String, colorHex: String, valueText: String, onClick: () -> Unit) {
     val cd = stringResource(R.string.stats2_drilldown_project_content_description, projectName)
     val swatchFallback = MaterialTheme.colorScheme.outline
     Row(
@@ -330,9 +332,15 @@ private fun RangeChips(current: StatRange, onSelect: (StatRange) -> Unit) {
             selected = current is StatRange.Custom,
             onClick = { showPicker = true },
             label = {
-                Text(if (current is StatRange.Custom) {
-                    "${current.start.format(DateTimeFormatter.ofPattern("d MMM"))} – ${current.end.format(DateTimeFormatter.ofPattern("d MMM"))}"
-                } else stringResource(R.string.stats_custom))
+                Text(
+                    if (current is StatRange.Custom) {
+                        "${current.start.format(
+                            DateTimeFormatter.ofPattern("d MMM"),
+                        )} – ${current.end.format(DateTimeFormatter.ofPattern("d MMM"))}"
+                    } else {
+                        stringResource(R.string.stats_custom)
+                    },
+                )
             },
         )
     }

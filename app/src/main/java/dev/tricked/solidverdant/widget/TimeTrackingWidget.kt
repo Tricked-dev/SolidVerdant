@@ -35,11 +35,7 @@ import java.time.Instant
  */
 class TimeTrackingWidget : AppWidgetProvider() {
 
-    override fun onUpdate(
-        context: Context,
-        appWidgetManager: AppWidgetManager,
-        appWidgetIds: IntArray
-    ) {
+    override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         Timber.d("Widget onUpdate called for ${appWidgetIds.size} widgets")
 
         // Use goAsync() to handle the coroutine properly
@@ -52,7 +48,9 @@ class TimeTrackingWidget : AppWidgetProvider() {
                 val settingsDataStore = SettingsDataStore.getInstance(context)
                 val widgetState = settingsDataStore.widgetState.first()
 
-                Timber.d("Widget state: isTracking=${widgetState.isTracking}, startTime=${widgetState.startTimeEpochMillis}, project=${widgetState.projectName}")
+                Timber.d(
+                    "Widget state: isTracking=${widgetState.isTracking}, startTime=${widgetState.startTimeEpochMillis}, project=${widgetState.projectName}",
+                )
 
                 // Update all widgets with current tracking state
                 for (appWidgetId in appWidgetIds) {
@@ -65,7 +63,7 @@ class TimeTrackingWidget : AppWidgetProvider() {
                             widgetState.startTimeEpochMillis,
                             widgetState.projectName,
                             widgetState.taskName,
-                            widgetState.description
+                            widgetState.description,
                         )
                     } else {
                         Timber.d("Showing idle view for widget $appWidgetId")
@@ -99,11 +97,7 @@ class TimeTrackingWidget : AppWidgetProvider() {
         Timber.d("Widget disabled, canceled scheduled updates")
     }
 
-    private fun showIdleView(
-        context: Context,
-        appWidgetManager: AppWidgetManager,
-        appWidgetId: Int
-    ) {
+    private fun showIdleView(context: Context, appWidgetManager: AppWidgetManager, appWidgetId: Int) {
         val views = RemoteViews(context.packageName, R.layout.widget_time_tracking)
 
         // Set idle background
@@ -116,7 +110,10 @@ class TimeTrackingWidget : AppWidgetProvider() {
         // Set click intent to open app
         val openIntent = Intent(context, MainActivity::class.java)
         val openPendingIntent = PendingIntent.getActivity(
-            context, 0, openIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            context,
+            0,
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         views.setOnClickPendingIntent(R.id.widget_container, openPendingIntent)
 
@@ -124,7 +121,10 @@ class TimeTrackingWidget : AppWidgetProvider() {
         views.setTextViewText(R.id.widget_button, context.getString(R.string.start_tracking))
         val startIntent = Intent(context, ProjectSelectionActivity::class.java)
         val startPendingIntent = PendingIntent.getActivity(
-            context, 2, startIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            context,
+            2,
+            startIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         views.setOnClickPendingIntent(R.id.widget_button, startPendingIntent)
 
@@ -138,7 +138,7 @@ class TimeTrackingWidget : AppWidgetProvider() {
         startTimeMillis: Long,
         projectName: String?,
         taskName: String?,
-        description: String?
+        description: String?,
     ) {
         val views = RemoteViews(context.packageName, R.layout.widget_time_tracking)
 
@@ -175,7 +175,10 @@ class TimeTrackingWidget : AppWidgetProvider() {
         // Set click intent to open app
         val openIntent = Intent(context, MainActivity::class.java)
         val openPendingIntent = PendingIntent.getActivity(
-            context, 0, openIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            context,
+            0,
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         views.setOnClickPendingIntent(R.id.widget_container, openPendingIntent)
 
@@ -188,7 +191,10 @@ class TimeTrackingWidget : AppWidgetProvider() {
             action = TimeTrackingBroadcastReceiver.ACTION_STOP_TRACKING_FROM_NOTIFICATION
         }
         val stopPendingIntent = PendingIntent.getBroadcast(
-            context, 1, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            context,
+            1,
+            stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         views.setOnClickPendingIntent(R.id.widget_button, stopPendingIntent)
 
@@ -218,7 +224,7 @@ class TimeTrackingWidget : AppWidgetProvider() {
         alarmManager.setAndAllowWhileIdle(
             AlarmManager.ELAPSED_REALTIME,
             triggerAt,
-            pendingIntent
+            pendingIntent,
         )
     }
 
@@ -227,7 +233,7 @@ class TimeTrackingWidget : AppWidgetProvider() {
             action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
             val appWidgetManager = AppWidgetManager.getInstance(context)
             val ids = appWidgetManager.getAppWidgetIds(
-                android.content.ComponentName(context, TimeTrackingWidget::class.java)
+                android.content.ComponentName(context, TimeTrackingWidget::class.java),
             )
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
         }
@@ -235,7 +241,7 @@ class TimeTrackingWidget : AppWidgetProvider() {
             context,
             ALARM_ID,
             intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }
 
@@ -251,7 +257,7 @@ class TimeTrackingWidget : AppWidgetProvider() {
             context,
             ALARM_ID,
             intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         alarmManager.cancel(pendingIntent)
     }
@@ -268,7 +274,7 @@ class TimeTrackingWidget : AppWidgetProvider() {
         internal fun formatElapsed(startTimeMillis: Long, nowMillis: Long): String {
             val duration = Duration.between(
                 Instant.ofEpochMilli(startTimeMillis),
-                Instant.ofEpochMilli(nowMillis)
+                Instant.ofEpochMilli(nowMillis),
             )
             val safe = if (duration.isNegative) Duration.ZERO else duration
             return String.format("%02d:%02d", safe.toHours(), safe.toMinutes() % 60)
@@ -282,7 +288,7 @@ class TimeTrackingWidget : AppWidgetProvider() {
                 action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
                 val appWidgetManager = AppWidgetManager.getInstance(context)
                 val ids = appWidgetManager.getAppWidgetIds(
-                    android.content.ComponentName(context, TimeTrackingWidget::class.java)
+                    android.content.ComponentName(context, TimeTrackingWidget::class.java),
                 )
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
             }

@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.review
 
 import androidx.lifecycle.ViewModel
@@ -15,10 +21,11 @@ import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.domain.inbox.InboxAnalyzer
 import dev.tricked.solidverdant.domain.inbox.InboxIssue
-import dev.tricked.solidverdant.domain.inbox.InboxSettingsDataStore
 import dev.tricked.solidverdant.domain.inbox.InboxSettings
+import dev.tricked.solidverdant.domain.inbox.InboxSettingsDataStore
 import dev.tricked.solidverdant.sync.SyncTrigger
 import dev.tricked.solidverdant.util.Clock
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,7 +37,6 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.time.DayOfWeek
@@ -59,12 +65,7 @@ class InboxViewModel @Inject constructor(
     private val clock: Clock,
 ) : ViewModel() {
 
-    private data class OrgContext(
-        val organizationId: String,
-        val memberId: String,
-        val userId: String,
-        val preventOverlap: Boolean,
-    )
+    private data class OrgContext(val organizationId: String, val memberId: String, val userId: String, val preventOverlap: Boolean)
 
     private data class InboxData(
         val entries: List<TimeEntry>,

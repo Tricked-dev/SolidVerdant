@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.statistics.charts
 
 import androidx.compose.foundation.Canvas
@@ -12,10 +18,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 
 /** Resolved bar geometry for a single [BarChart] draw pass. */
 data class BarChartSizing(val gap: Float, val barWidth: Float)
@@ -38,11 +44,7 @@ fun barChartSizing(width: Float, count: Int, minBarWidth: Float = 1f): BarChartS
 }
 
 @Composable
-fun BarChart(
-    bars: List<Pair<String, Float>>,
-    barColor: Color,
-    modifier: Modifier = Modifier,
-) {
+fun BarChart(bars: List<Pair<String, Float>>, barColor: Color, modifier: Modifier = Modifier) {
     val max = bars.maxOfOrNull { it.second }?.coerceAtLeast(0.0001f) ?: 0.0001f
     val summary = bars.joinToString(", ") { (label, seconds) -> "$label: ${seconds.toLong()} seconds" }
     Column(modifier = modifier.semantics { contentDescription = summary }) {

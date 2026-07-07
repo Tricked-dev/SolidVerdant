@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.tracking
 
 /**
@@ -13,4 +19,10 @@ object TrackingTestTags {
     const val STOP_BUTTON = "track_stop_button"
     const val SETTINGS_BUTTON = "track_settings_button"
     const val LOGOUT_BUTTON = "track_logout_button"
+    const val ENTRY_EDIT_BUTTON = "track_entry_edit"
+    const val ENTRY_DELETE_BUTTON = "track_entry_delete"
+    const val CONTINUE_BUTTON = "track_continue_last"
+    const val SHEET_DESCRIPTION_FIELD = "track_sheet_description"
+    const val SHEET_SAVE_BUTTON = "track_sheet_save"
+    const val ELAPSED_TIMER = "track_elapsed_timer"
 }

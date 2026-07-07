@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.local.db
 
 import androidx.room.Entity
@@ -8,7 +14,7 @@ enum class SyncState { SYNCED, PENDING }
 
 @Entity(
     tableName = "time_entries",
-    indices = [Index("organizationId"), Index("start")]
+    indices = [Index("organizationId"), Index("start")],
 )
 data class TimeEntryEntity(
     @PrimaryKey val id: String,
@@ -23,7 +29,7 @@ data class TimeEntryEntity(
     val organizationId: String,
     val updatedAt: Long,
     val syncState: SyncState,
-    val pendingDelete: Boolean
+    val pendingDelete: Boolean,
 )
 
 @Entity(tableName = "projects")
@@ -38,16 +44,11 @@ data class ProjectEntity(
     val estimatedTime: Int?,
     val spentTime: Int,
     val isPublic: Boolean,
-    val organizationId: String
+    val organizationId: String,
 )
 
 @Entity(tableName = "clients", indices = [Index("organizationId")])
-data class ClientEntity(
-    @PrimaryKey val id: String,
-    val name: String,
-    val isArchived: Boolean,
-    val organizationId: String,
-)
+data class ClientEntity(@PrimaryKey val id: String, val name: String, val isArchived: Boolean, val organizationId: String)
 
 @Entity(tableName = "tasks")
 data class TaskEntity(
@@ -59,47 +60,26 @@ data class TaskEntity(
     val spentTime: Int,
     val createdAt: String,
     val updatedAt: String,
-    val organizationId: String
+    val organizationId: String,
 )
 
 @Entity(tableName = "tags")
-data class TagEntity(
-    @PrimaryKey val id: String,
-    val name: String,
-    val organizationId: String
-)
+data class TagEntity(@PrimaryKey val id: String, val name: String, val organizationId: String)
 
 @Entity(tableName = "organizations")
-data class OrganizationEntity(
-    @PrimaryKey val id: String,
-    val name: String,
-    val currency: String
-)
+data class OrganizationEntity(@PrimaryKey val id: String, val name: String, val currency: String)
 
 @Entity(tableName = "memberships")
-data class MembershipEntity(
-    @PrimaryKey val id: String,
-    val role: String,
-    val organizationId: String
-)
+data class MembershipEntity(@PrimaryKey val id: String, val role: String, val organizationId: String)
 
 @Entity(tableName = "time_entry_tag_cross_ref", primaryKeys = ["timeEntryId", "tagId"])
-data class TimeEntryTagCrossRef(
-    val timeEntryId: String,
-    val tagId: String
-)
+data class TimeEntryTagCrossRef(val timeEntryId: String, val tagId: String)
 
 /** Projection row for [TimeEntryDao.observeTagRefs]; not a table. */
-data class TimeEntryTagRef(
-    val timeEntryId: String,
-    val tagId: String
-)
+data class TimeEntryTagRef(val timeEntryId: String, val tagId: String)
 
 @Entity(tableName = "sync_meta")
-data class SyncMetaEntity(
-    @PrimaryKey val organizationId: String,
-    val lastFullSyncAtMs: Long
-)
+data class SyncMetaEntity(@PrimaryKey val organizationId: String, val lastFullSyncAtMs: Long)
 
 /**
  * Reusable entry template / favorite (gap analysis #9, #81). Account/organization scoped, local
@@ -129,8 +109,4 @@ data class TemplateEntity(
  * invalidated when the underlying data changes.
  */
 @Entity(tableName = "inbox_dismissals", indices = [Index("organizationId")])
-data class InboxDismissalEntity(
-    @PrimaryKey val issueKey: String,
-    val organizationId: String,
-    val dismissedAtMs: Long,
-)
+data class InboxDismissalEntity(@PrimaryKey val issueKey: String, val organizationId: String, val dismissedAtMs: Long)

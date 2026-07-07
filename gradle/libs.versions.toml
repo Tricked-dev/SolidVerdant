@@ -55,7 +55,7 @@ robolectric = "4.13"
 roborazzi = "1.44.0"
 retrofitKotlinxSerializationJson = "0.8.0"
 room = "2.6.1"
-spotless = "5.12.5"
+spotless = "7.2.1"
 timber = "5.0.1"
 # @keep
 targetSdk = "37"
@@ -159,6 +159,7 @@ retrofit-converter-kotlinx-serialization = { group = "com.jakewharton.retrofit",
 android-application = { id = "com.android.application", version.ref = "androidGradlePlugin" }
 android-library = { id = "com.android.library", version.ref = "androidGradlePlugin" }
 android-test = { id = "com.android.test", version.ref = "androidGradlePlugin" }
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }

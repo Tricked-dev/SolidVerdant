@@ -1,9 +1,15 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.review
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -53,11 +59,7 @@ import java.util.Locale
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun InboxSettingsSheet(
-    state: InboxUiState,
-    viewModel: InboxViewModel,
-    onDismiss: () -> Unit,
-) {
+fun InboxSettingsSheet(state: InboxUiState, viewModel: InboxViewModel, onDismiss: () -> Unit) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val config = state.config
     var editingWindow by remember { mutableStateOf<WorkField?>(null) }
@@ -200,14 +202,7 @@ private fun SectionLabel(text: String) {
 }
 
 @Composable
-private fun Stepper(
-    label: String,
-    value: String,
-    onDecrease: () -> Unit,
-    onIncrease: () -> Unit,
-    decreaseCd: String,
-    increaseCd: String,
-) {
+private fun Stepper(label: String, value: String, onDecrease: () -> Unit, onIncrease: () -> Unit, decreaseCd: String, increaseCd: String) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -239,11 +234,7 @@ private fun CheckToggle(label: String, checked: Boolean, onChange: (Boolean) -> 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WorkTimePickerDialog(
-    initialMinute: Int,
-    onDismiss: () -> Unit,
-    onConfirm: (Int) -> Unit,
-) {
+private fun WorkTimePickerDialog(initialMinute: Int, onDismiss: () -> Unit, onConfirm: (Int) -> Unit) {
     val state = rememberTimePickerState(
         initialHour = (initialMinute / 60).coerceIn(0, 23),
         initialMinute = initialMinute % 60,

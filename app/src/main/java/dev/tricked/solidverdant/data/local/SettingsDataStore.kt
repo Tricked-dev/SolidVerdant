@@ -12,24 +12,24 @@ import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
-import dev.tricked.solidverdant.data.model.TimeEntry
-import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.model.Membership
 import dev.tricked.solidverdant.data.model.Project
-import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.Tag
+import dev.tricked.solidverdant.data.model.Task
+import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.User
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -38,16 +38,14 @@ private val Context.settingsDataStore: DataStore<Preferences> by preferencesData
 enum class AppThemeMode {
     SYSTEM,
     LIGHT,
-    NEO
+    NEO,
 }
 
 /**
  * DataStore for app settings
  */
 @Singleton
-class SettingsDataStore @Inject constructor(
-    @ApplicationContext private val context: Context
-) {
+class SettingsDataStore @Inject constructor(@ApplicationContext private val context: Context) {
     private val dataStore = context.settingsDataStore
     private val immediateCache = context.getSharedPreferences("immediate_ui_cache", Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true }
@@ -101,36 +99,32 @@ class SettingsDataStore @Inject constructor(
         /**
          * Get singleton instance (for use in widgets where Hilt injection is not available)
          */
-        fun getInstance(context: Context): SettingsDataStore {
-            return INSTANCE ?: synchronized(this) {
-                INSTANCE ?: SettingsDataStore(context.applicationContext).also { INSTANCE = it }
-            }
+        fun getInstance(context: Context): SettingsDataStore = INSTANCE ?: synchronized(this) {
+            INSTANCE ?: SettingsDataStore(context.applicationContext).also { INSTANCE = it }
         }
     }
 
     /** Read synchronously so the continue card can exist on the first rendered frame. */
-    fun getCachedContinueEntry(): TimeEntry? =
-        immediateCache.getString(CONTINUE_ENTRY_JSON, null)?.let { encoded ->
-            runCatching { json.decodeFromString<TimeEntry>(encoded) }.getOrNull()
-        }
+    fun getCachedContinueEntry(): TimeEntry? = immediateCache.getString(CONTINUE_ENTRY_JSON, null)?.let { encoded ->
+        runCatching { json.decodeFromString<TimeEntry>(encoded) }.getOrNull()
+    }
 
     fun cacheContinueEntry(entry: TimeEntry?) {
         immediateCache.edit().apply {
-            if (entry == null) remove(CONTINUE_ENTRY_JSON)
-            else putString(CONTINUE_ENTRY_JSON, json.encodeToString(entry))
+            if (entry == null) {
+                remove(CONTINUE_ENTRY_JSON)
+            } else {
+                putString(CONTINUE_ENTRY_JSON, json.encodeToString(entry))
+            }
         }.apply()
     }
 
-    data class CachedAuth(
-        val user: User,
-        val memberships: List<Membership>,
-        val currentMembershipId: String?,
-    )
+    data class CachedAuth(val user: User, val memberships: List<Membership>, val currentMembershipId: String?)
 
     fun getCachedAuth(): CachedAuth? = runCatching {
         val user = json.decodeFromString<User>(immediateCache.getString(USER_JSON, null) ?: return null)
         val memberships = json.decodeFromString<List<Membership>>(
-            immediateCache.getString(MEMBERSHIPS_JSON, null) ?: return null
+            immediateCache.getString(MEMBERSHIPS_JSON, null) ?: return null,
         )
         CachedAuth(user, memberships, immediateCache.getString(CURRENT_MEMBERSHIP_ID, null))
     }.getOrNull()
@@ -140,8 +134,11 @@ class SettingsDataStore @Inject constructor(
             .putString(USER_JSON, json.encodeToString(user))
             .putString(MEMBERSHIPS_JSON, json.encodeToString(memberships))
             .apply {
-                if (currentMembershipId == null) remove(CURRENT_MEMBERSHIP_ID)
-                else putString(CURRENT_MEMBERSHIP_ID, currentMembershipId)
+                if (currentMembershipId == null) {
+                    remove(CURRENT_MEMBERSHIP_ID)
+                } else {
+                    putString(CURRENT_MEMBERSHIP_ID, currentMembershipId)
+                }
             }
             .apply()
     }
@@ -166,10 +163,9 @@ class SettingsDataStore @Inject constructor(
         val overlapCount: Int = 0,
     )
 
-    fun getCachedTrackingState(): CachedTrackingState? =
-        immediateCache.getString(TRACKING_STATE_JSON, null)?.let { encoded ->
-            runCatching { json.decodeFromString<CachedTrackingState>(encoded) }.getOrNull()
-        }
+    fun getCachedTrackingState(): CachedTrackingState? = immediateCache.getString(TRACKING_STATE_JSON, null)?.let { encoded ->
+        runCatching { json.decodeFromString<CachedTrackingState>(encoded) }.getOrNull()
+    }
 
     fun cacheTrackingState(state: CachedTrackingState) {
         immediateCache.edit()
@@ -177,8 +173,7 @@ class SettingsDataStore @Inject constructor(
             .apply()
     }
 
-    fun getCachedReviewBadgeCount(organizationId: String): Int =
-        immediateCache.getInt(REVIEW_BADGE_COUNT_PREFIX + organizationId, 0)
+    fun getCachedReviewBadgeCount(organizationId: String): Int = immediateCache.getInt(REVIEW_BADGE_COUNT_PREFIX + organizationId, 0)
 
     fun cacheReviewBadgeCount(organizationId: String, count: Int) {
         immediateCache.edit()
@@ -300,7 +295,7 @@ class SettingsDataStore @Inject constructor(
         val startTimeEpochMillis: Long = 0,
         val projectName: String? = null,
         val taskName: String? = null,
-        val description: String? = null
+        val description: String? = null,
     )
 
     /**
@@ -312,7 +307,7 @@ class SettingsDataStore @Inject constructor(
             startTimeEpochMillis = preferences[WIDGET_START_TIME] ?: 0,
             projectName = preferences[WIDGET_PROJECT_NAME],
             taskName = preferences[WIDGET_TASK_NAME],
-            description = preferences[WIDGET_DESCRIPTION]
+            description = preferences[WIDGET_DESCRIPTION],
         )
     }
 
@@ -324,7 +319,7 @@ class SettingsDataStore @Inject constructor(
         startTimeEpochMillis: Long = 0,
         projectName: String? = null,
         taskName: String? = null,
-        description: String? = null
+        description: String? = null,
     ) {
         dataStore.edit { preferences ->
             preferences[WIDGET_IS_TRACKING] = isTracking

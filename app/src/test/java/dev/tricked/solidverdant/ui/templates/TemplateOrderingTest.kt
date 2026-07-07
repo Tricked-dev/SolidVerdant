@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.templates
 
 import dev.tricked.solidverdant.data.repository.EntryTemplate
@@ -6,12 +12,7 @@ import org.junit.Test
 
 class TemplateOrderingTest {
 
-    private fun template(
-        id: String,
-        isFavorite: Boolean = false,
-        sortOrder: Int = 0,
-        createdAtMs: Long = 0L,
-    ) = EntryTemplate(
+    private fun template(id: String, isFavorite: Boolean = false, sortOrder: Int = 0, createdAtMs: Long = 0L) = EntryTemplate(
         id = id,
         organizationId = "org",
         name = null,

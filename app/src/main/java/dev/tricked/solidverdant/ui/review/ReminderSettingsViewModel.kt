@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.review
 
 import androidx.lifecycle.ViewModel
@@ -18,10 +24,8 @@ import javax.inject.Inject
  * change so the reminder is enqueued, re-anchored, or cancelled to match (gap analysis #4, #78).
  */
 @HiltViewModel
-class ReminderSettingsViewModel @Inject constructor(
-    private val settings: SettingsDataStore,
-    private val scheduler: ReminderScheduler,
-) : ViewModel() {
+class ReminderSettingsViewModel @Inject constructor(private val settings: SettingsDataStore, private val scheduler: ReminderScheduler) :
+    ViewModel() {
 
     data class State(
         val loading: Boolean = true,

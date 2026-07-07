@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.review
 
 import dev.tricked.solidverdant.data.model.TimeEntry
@@ -47,11 +53,9 @@ data class ReviewProgress(val completed: Int, val total: Int) {
 object ReviewStepMachine {
 
     /** The next item to act on, or null when everything is handled. */
-    fun current(items: List<ReviewItem>, handledIds: Set<String>): ReviewItem? =
-        items.firstOrNull { it.id !in handledIds }
+    fun current(items: List<ReviewItem>, handledIds: Set<String>): ReviewItem? = items.firstOrNull { it.id !in handledIds }
 
-    fun isComplete(items: List<ReviewItem>, handledIds: Set<String>): Boolean =
-        items.all { it.id in handledIds }
+    fun isComplete(items: List<ReviewItem>, handledIds: Set<String>): Boolean = items.all { it.id in handledIds }
 
     /**
      * Progress that does not regress as items are resolved: an item the user handled which has

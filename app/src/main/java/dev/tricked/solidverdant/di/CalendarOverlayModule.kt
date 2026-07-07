@@ -29,7 +29,5 @@ abstract class CalendarOverlayModule {
 
     @Binds
     @Singleton
-    abstract fun bindCalendarOverlaySettings(
-        impl: SettingsCalendarOverlaySettings,
-    ): CalendarOverlaySettings
+    abstract fun bindCalendarOverlaySettings(impl: SettingsCalendarOverlaySettings): CalendarOverlaySettings
 }

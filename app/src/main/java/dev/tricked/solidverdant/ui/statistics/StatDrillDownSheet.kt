@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.statistics
 
 import androidx.compose.foundation.layout.Arrangement
@@ -35,10 +41,7 @@ private val drillDateFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StatDrillDownSheet(
-    state: DrillDownUiState,
-    onDismiss: () -> Unit,
-) {
+fun StatDrillDownSheet(state: DrillDownUiState, onDismiss: () -> Unit) {
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
         val title = when (val t = state.target) {
             is DrillDownTarget.ProjectSlice -> t.projectName ?: stringResource(R.string.stats2_no_project)

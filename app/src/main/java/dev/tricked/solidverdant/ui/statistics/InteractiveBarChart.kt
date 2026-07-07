@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.statistics
 
 import androidx.compose.foundation.background
@@ -43,12 +49,7 @@ private val BarChartHeight = 140.dp
  * width and the row scrolls horizontally when a long range produces more bars than fit.
  */
 @Composable
-fun InteractiveBarChart(
-    bars: List<TrendBucket>,
-    barColor: Color,
-    onBarClick: (TrendBucket) -> Unit,
-    modifier: Modifier = Modifier,
-) {
+fun InteractiveBarChart(bars: List<TrendBucket>, barColor: Color, onBarClick: (TrendBucket) -> Unit, modifier: Modifier = Modifier) {
     if (bars.isEmpty()) return
     val max = bars.maxOf { it.seconds }.coerceAtLeast(1L)
     BoxWithConstraints(modifier.fillMaxWidth()) {

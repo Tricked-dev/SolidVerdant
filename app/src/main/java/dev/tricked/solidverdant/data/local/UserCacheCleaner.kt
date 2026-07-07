@@ -8,8 +8,8 @@ package dev.tricked.solidverdant.data.local
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
-import dev.tricked.solidverdant.util.ShortcutManager
 import dev.tricked.solidverdant.data.local.db.AppDatabase
+import dev.tricked.solidverdant.util.ShortcutManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject

@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.local
 
 import android.content.Context
@@ -28,9 +34,7 @@ private val Context.authDataStore: DataStore<Preferences> by preferencesDataStor
  * Provides encrypted storage for tokens, OAuth config, and PKCE data
  */
 @Singleton
-class AuthDataStore @Inject constructor(
-    @ApplicationContext private val context: Context
-) {
+class AuthDataStore @Inject constructor(@ApplicationContext private val context: Context) {
     private object PreferencesKeys {
         val ACCESS_TOKEN = stringPreferencesKey("access_token")
         val REFRESH_TOKEN = stringPreferencesKey("refresh_token")
@@ -43,13 +47,14 @@ class AuthDataStore @Inject constructor(
 
     private val secretCipher = AuthSecretCipher()
     private val migrationMutex = Mutex()
+
     @Volatile private var migrationComplete = false
 
     private val secretKeys = listOf(
         PreferencesKeys.ACCESS_TOKEN,
         PreferencesKeys.REFRESH_TOKEN,
         PreferencesKeys.CODE_VERIFIER,
-        PreferencesKeys.STATE
+        PreferencesKeys.STATE,
     )
 
     private fun secretFlow(key: Preferences.Key<String>): Flow<String?> = context.authDataStore.data
@@ -239,16 +244,12 @@ class AuthDataStore @Inject constructor(
     /**
      * Get code verifier synchronously (for use in interceptors)
      */
-    suspend fun getCodeVerifier(): String? {
-        return codeVerifier.first()
-    }
+    suspend fun getCodeVerifier(): String? = codeVerifier.first()
 
     /**
      * Get state synchronously (for use in OAuth callback verification)
      */
-    suspend fun getState(): String? {
-        return state.first()
-    }
+    suspend fun getState(): String? = state.first()
 
     /**
      * Get access token synchronously (for use in interceptors).
@@ -276,21 +277,15 @@ class AuthDataStore @Inject constructor(
     /**
      * Get refresh token synchronously (for use in token refresh)
      */
-    suspend fun getRefreshToken(): String? {
-        return refreshToken.first()
-    }
+    suspend fun getRefreshToken(): String? = refreshToken.first()
 
     /**
      * Get endpoint synchronously
      */
-    suspend fun getEndpoint(): String {
-        return endpoint.first()
-    }
+    suspend fun getEndpoint(): String = endpoint.first()
 
     /**
      * Get client ID synchronously
      */
-    suspend fun getClientId(): String {
-        return clientId.first()
-    }
+    suspend fun getClientId(): String = clientId.first()
 }

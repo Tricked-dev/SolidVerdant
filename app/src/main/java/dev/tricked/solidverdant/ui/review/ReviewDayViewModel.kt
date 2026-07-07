@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.review
 
 import androidx.lifecycle.ViewModel
@@ -52,6 +58,7 @@ class ReviewDayViewModel @Inject constructor(
     private val handledIds = MutableStateFlow<Set<String>>(emptySet())
 
     private val _message = MutableStateFlow<Int?>(null)
+
     /** Transient confirmation / error message (a string resource id), consumed by the UI. */
     val message: StateFlow<Int?> = _message.asStateFlow()
 
@@ -75,7 +82,7 @@ class ReviewDayViewModel @Inject constructor(
                         loading = false,
                         hasOrganization = false,
                         dateEpochDay = LocalDate.now(zone).toEpochDay(),
-                    )
+                    ),
                 )
             } else {
                 combine(
@@ -128,7 +135,7 @@ class ReviewDayViewModel @Inject constructor(
                         entryId = it.id,
                         description = it.description,
                         startIso = it.start,
-                    )
+                    ),
                 )
             }
             failed.forEach { op ->
@@ -138,7 +145,7 @@ class ReviewDayViewModel @Inject constructor(
                         type = ReviewItemType.FAILED_SYNC,
                         entryId = op.entryId,
                         detail = op.error,
-                    )
+                    ),
                 )
             }
             uncategorized.forEach { e ->
@@ -150,7 +157,7 @@ class ReviewDayViewModel @Inject constructor(
                         description = e.description,
                         startIso = e.start,
                         endIso = e.end,
-                    )
+                    ),
                 )
             }
         }
@@ -267,8 +274,7 @@ class ReviewDayViewModel @Inject constructor(
         Instant.parse(iso)
     }.getOrNull()
 
-    private fun formatIso(instant: Instant): String =
-        ISO.format(instant.atOffset(ZoneOffset.UTC))
+    private fun formatIso(instant: Instant): String = ISO.format(instant.atOffset(ZoneOffset.UTC))
 
     companion object {
         private val ISO: DateTimeFormatter =

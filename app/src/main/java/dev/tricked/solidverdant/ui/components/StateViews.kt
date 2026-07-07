@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
@@ -30,11 +36,7 @@ import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
  * centered, bodyMedium, onSurfaceVariant, with an optional leading [icon].
  */
 @Composable
-fun EmptyState(
-    text: String,
-    modifier: Modifier = Modifier,
-    icon: ImageVector? = null,
-) {
+fun EmptyState(text: String, modifier: Modifier = Modifier, icon: ImageVector? = null) {
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -65,10 +67,7 @@ fun EmptyState(
  * LinearProgressIndicator directly.
  */
 @Composable
-fun LoadingState(
-    modifier: Modifier = Modifier,
-    label: String? = null,
-) {
+fun LoadingState(modifier: Modifier = Modifier, label: String? = null) {
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -97,11 +96,7 @@ fun LoadingState(
  * error icon and an optional Retry action (uses the shared `retry` string).
  */
 @Composable
-fun ErrorState(
-    text: String,
-    modifier: Modifier = Modifier,
-    onRetry: (() -> Unit)? = null,
-) {
+fun ErrorState(text: String, modifier: Modifier = Modifier, onRetry: (() -> Unit)? = null) {
     Column(
         modifier = modifier
             .fillMaxWidth()

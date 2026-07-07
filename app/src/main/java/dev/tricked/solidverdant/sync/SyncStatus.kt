@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.sync
 
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,5 +22,7 @@ sealed interface SyncStatus {
 class SyncStatusReporter @Inject constructor() {
     private val _status = MutableStateFlow<SyncStatus>(SyncStatus.Idle)
     val status: StateFlow<SyncStatus> = _status.asStateFlow()
-    fun set(value: SyncStatus) { _status.value = value }
+    fun set(value: SyncStatus) {
+        _status.value = value
+    }
 }

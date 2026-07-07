@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.export
 
 import android.content.Context
@@ -27,9 +33,7 @@ import javax.inject.Inject
  * own work data (descriptions, project/task/client names, tags) — that is the point of the export —
  * but never any token, credential or endpoint.
  */
-class CsvExporter @Inject constructor(
-    @ApplicationContext private val context: Context,
-) {
+class CsvExporter @Inject constructor(@ApplicationContext private val context: Context) {
 
     /** Formats [entries] into a full CSV document using localized headers and yes/no labels. */
     fun formatCsv(

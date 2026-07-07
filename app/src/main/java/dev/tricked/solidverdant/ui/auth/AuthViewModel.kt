@@ -1,54 +1,59 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.auth
 
-import dev.tricked.solidverdant.R
-import androidx.lifecycle.ViewModel
 import android.content.Context
+import androidx.compose.runtime.Stable
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import coil.imageLoader
 import coil.memory.MemoryCache
-import dagger.hilt.android.qualifiers.ApplicationContext
-import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dev.tricked.solidverdant.data.local.UserCacheCleaner
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.local.SettingsDataStore
+import dev.tricked.solidverdant.data.local.UserCacheCleaner
 import dev.tricked.solidverdant.data.model.Membership
 import dev.tricked.solidverdant.data.model.User
-import dev.tricked.solidverdant.data.repository.AuthRepository
-import dev.tricked.solidverdant.data.remote.ConnectionTester
 import dev.tricked.solidverdant.data.remote.ConnectionTestCode
+import dev.tricked.solidverdant.data.remote.ConnectionTester
+import dev.tricked.solidverdant.data.repository.AuthRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
-
-import androidx.compose.runtime.Stable
 /**
  * UI state for authentication screens
  */
 @Stable
- data class AuthUiState(
+data class AuthUiState(
     val isLoading: Boolean = false,
     val user: User? = null,
     val memberships: List<Membership> = emptyList(),
     val currentMembership: Membership? = null,
     val error: String? = null,
     val authUrl: String? = null,
-    val hasRevalidated: Boolean = false
+    val hasRevalidated: Boolean = false,
 )
 
 /**
  * UI state for OAuth configuration
  */
 @Stable
- data class OAuthConfigState(
+data class OAuthConfigState(
     val endpoint: String = "",
     val clientId: String = "",
     val isTesting: Boolean = false,
@@ -78,7 +83,7 @@ class AuthViewModel @Inject constructor(
                 currentMembership = cached.memberships.firstOrNull { it.id == cached.currentMembershipId }
                     ?: cached.memberships.firstOrNull(),
             )
-        } ?: AuthUiState()
+        } ?: AuthUiState(),
     )
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
@@ -90,10 +95,12 @@ class AuthViewModel @Inject constructor(
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
-        initialValue = AuthState.Unknown
+        initialValue = AuthState.Unknown,
     )
     val isLoggedIn: StateFlow<Boolean> = authState.map { it == AuthState.LoggedIn }.stateIn(
-        viewModelScope, SharingStarted.Eagerly, false
+        viewModelScope,
+        SharingStarted.Eagerly,
+        false,
     )
     private val _snapshotHydrated = MutableStateFlow(false)
     val snapshotHydrated: StateFlow<Boolean> = _snapshotHydrated.asStateFlow()
@@ -134,14 +141,14 @@ class AuthViewModel @Inject constructor(
                     Timber.d("OAuth flow started, auth URL: $authUrl")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        authUrl = authUrl
+                        authUrl = authUrl,
                     )
                 }
                 .onFailure { error ->
                     Timber.e(error, "Failed to start OAuth flow")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = error.message ?: "Failed to start OAuth flow"
+                        error = error.message ?: "Failed to start OAuth flow",
                     )
                 }
         }
@@ -153,7 +160,7 @@ class AuthViewModel @Inject constructor(
     fun handleOAuthCallback(code: String?, state: String?) {
         if (code.isNullOrEmpty() || state.isNullOrEmpty()) {
             _uiState.value = _uiState.value.copy(
-                error = "Invalid OAuth callback parameters"
+                error = "Invalid OAuth callback parameters",
             )
             return
         }
@@ -171,7 +178,7 @@ class AuthViewModel @Inject constructor(
                     Timber.e(error, "Failed to handle OAuth callback")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = error.message ?: "Failed to complete OAuth flow"
+                        error = error.message ?: "Failed to complete OAuth flow",
                     )
                 }
         }
@@ -200,7 +207,7 @@ class AuthViewModel @Inject constructor(
                         memberships = memberships,
                         currentMembership = currentMembership,
                         isLoading = false,
-                        hasRevalidated = true
+                        hasRevalidated = true,
                     )
                     settingsDataStore.cacheAuth(user, memberships, currentMembership?.id)
 
@@ -209,13 +216,13 @@ class AuthViewModel @Inject constructor(
                         authRepository.saveCurrentMembershipId(it.id)
                     }
                 }
-                .onFailure { error ->
-                    Timber.e(error, "Failed to load memberships")
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = error.message ?: "Failed to load memberships"
-                    )
-                }
+                    .onFailure { error ->
+                        Timber.e(error, "Failed to load memberships")
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = error.message ?: "Failed to load memberships",
+                        )
+                    }
             }
         }
     }
@@ -242,7 +249,7 @@ class AuthViewModel @Inject constructor(
                 .onSuccess {
                     _configState.value = _configState.value.copy(
                         endpoint = endpoint,
-                        clientId = clientId
+                        clientId = clientId,
                     )
                     Timber.d("OAuth config saved")
                 }
@@ -257,7 +264,9 @@ class AuthViewModel @Inject constructor(
             _configState.value = _configState.value.copy(isTesting = true, testSuccess = null, testMessage = null)
             val result = connectionTester.test(endpoint.removeSuffix("/"), clientId)
             _configState.value = _configState.value.copy(
-                isTesting = false, testSuccess = result.success, testMessage = when (result.code) {
+                isTesting = false,
+                testSuccess = result.success,
+                testMessage = when (result.code) {
                     ConnectionTestCode.READY -> context.getString(R.string.connection_ready)
                     ConnectionTestCode.MISSING_CLIENT_ID -> context.getString(R.string.connection_missing_client_id)
                     ConnectionTestCode.INVALID_URL -> context.getString(R.string.connection_invalid_url)
@@ -285,7 +294,7 @@ class AuthViewModel @Inject constructor(
                     // Update UI state with default values
                     _configState.value = _configState.value.copy(
                         endpoint = dev.tricked.solidverdant.data.local.AuthDataStore.DEFAULT_ENDPOINT,
-                        clientId = dev.tricked.solidverdant.data.local.AuthDataStore.DEFAULT_CLIENT_ID
+                        clientId = dev.tricked.solidverdant.data.local.AuthDataStore.DEFAULT_CLIENT_ID,
                     )
                     Timber.d("OAuth config reset to defaults")
                 }

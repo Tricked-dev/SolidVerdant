@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.screenshots
 
 import androidx.compose.foundation.background
@@ -5,30 +11,30 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.padding
 import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
 import com.github.takahirom.roborazzi.RoborazziComposeOptions
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -117,11 +123,7 @@ object ScreenshotHost {
     /** Hosts feature content inside the same app scaffold and bottom navigation used in production. */
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
-    fun AppShell(
-        destination: Screen,
-        inboxBadgeCount: Int = 0,
-        content: @Composable () -> Unit,
-    ) {
+    fun AppShell(destination: Screen, inboxBadgeCount: Int = 0, content: @Composable () -> Unit) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             contentWindowInsets = WindowInsets(0),
@@ -208,8 +210,7 @@ object ScreenshotHost {
     }
 
     /** Absolute path under the repo root, e.g. outputPath(".github", "screenshots", "readme", "track.png"). */
-    fun outputPath(vararg parts: String): String =
-        File(repoRoot, parts.joinToString(File.separator)).absolutePath
+    fun outputPath(vararg parts: String): String = File(repoRoot, parts.joinToString(File.separator)).absolutePath
 
     /**
      * Render [content] wrapped in the app theme at the given device size and capture it to
@@ -217,12 +218,7 @@ object ScreenshotHost {
      * many times inside a single test method.
      */
     @OptIn(ExperimentalRoborazziApi::class)
-    fun capture(
-        theme: ThemeAxis,
-        device: DeviceAxis,
-        filePath: String,
-        content: @Composable () -> Unit,
-    ) {
+    fun capture(theme: ThemeAxis, device: DeviceAxis, filePath: String, content: @Composable () -> Unit) {
         captureRoboImage(
             filePath = filePath,
             roborazziComposeOptions = RoborazziComposeOptions {

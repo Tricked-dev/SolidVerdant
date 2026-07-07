@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.local.db
 
 import androidx.room.Entity
@@ -26,5 +32,5 @@ data class OutboxEntity(
      * or attempt cap reached) and is no longer drained by the sync worker, but remains visible so
      * the user can inspect and explicitly retry it.
      */
-    val deadLettered: Boolean = false
+    val deadLettered: Boolean = false,
 )

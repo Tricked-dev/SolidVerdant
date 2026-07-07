@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.repository
 
 import dev.tricked.solidverdant.data.local.db.TemplateDao
@@ -35,12 +41,13 @@ data class EntryTemplate(
  * stays consistent and testable.
  */
 object TemplateTagCodec {
-    fun encode(tagIds: List<String>): String =
-        tagIds.map { it.trim() }.filter { it.isNotEmpty() }.joinToString(",")
+    fun encode(tagIds: List<String>): String = tagIds.map { it.trim() }.filter { it.isNotEmpty() }.joinToString(",")
 
-    fun decode(raw: String): List<String> =
-        if (raw.isBlank()) emptyList()
-        else raw.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    fun decode(raw: String): List<String> = if (raw.isBlank()) {
+        emptyList()
+    } else {
+        raw.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    }
 }
 
 fun TemplateEntity.toModel(): EntryTemplate = EntryTemplate(
@@ -77,10 +84,7 @@ fun EntryTemplate.toEntity(): TemplateEntity = TemplateEntity(
  * (favorites survive per-account, matching gap analysis retention #787).
  */
 @Singleton
-class TemplateRepository @Inject constructor(
-    private val templateDao: TemplateDao,
-    private val clock: Clock,
-) {
+class TemplateRepository @Inject constructor(private val templateDao: TemplateDao, private val clock: Clock) {
     fun observeTemplates(organizationId: String): Flow<List<EntryTemplate>> =
         templateDao.observeTemplates(organizationId).map { list -> list.map { it.toModel() } }
 
@@ -145,7 +149,7 @@ class TemplateRepository @Inject constructor(
     suspend fun persistOrder(templates: List<EntryTemplate>) {
         if (templates.isEmpty()) return
         templateDao.upsertAll(
-            templates.mapIndexed { index, template -> template.copy(sortOrder = index).toEntity() }
+            templates.mapIndexed { index, template -> template.copy(sortOrder = index).toEntity() },
         )
     }
 }

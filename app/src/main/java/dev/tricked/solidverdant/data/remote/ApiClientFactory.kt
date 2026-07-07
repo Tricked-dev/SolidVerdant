@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 @file:OptIn(ExperimentalSerializationApi::class)
 
 package dev.tricked.solidverdant.data.remote
@@ -15,10 +21,7 @@ import javax.inject.Singleton
  * Factory for creating Retrofit API instances with dynamic base URLs
  */
 @Singleton
-class ApiClientFactory @Inject constructor(
-    private val okHttpClient: OkHttpClient,
-    private val json: Json
-) {
+class ApiClientFactory @Inject constructor(private val okHttpClient: OkHttpClient, private val json: Json) {
     /**
      * Creates a Solidtime API instance with the given base URL
      * @param baseUrl The base URL for the API (e.g., "https://app.solidtime.io")

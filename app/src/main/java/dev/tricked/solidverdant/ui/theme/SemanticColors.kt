@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.theme
 
 import androidx.compose.material3.ColorScheme
@@ -48,13 +54,7 @@ val ColorScheme.syncFailed: Color
  * Convenience accessor bundling the semantic tokens, for call sites that want a
  * single value to destructure. Equivalent to reading the extension vals above.
  */
-data class SemanticColors(
-    val positive: Color,
-    val negative: Color,
-    val neutral: Color,
-    val syncPending: Color,
-    val syncFailed: Color,
-)
+data class SemanticColors(val positive: Color, val negative: Color, val neutral: Color, val syncPending: Color, val syncFailed: Color)
 
 val semanticColors: SemanticColors
     @Composable

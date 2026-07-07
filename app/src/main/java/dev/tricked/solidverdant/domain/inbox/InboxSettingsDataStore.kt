@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.domain.inbox
 
 import android.content.Context
@@ -28,9 +34,7 @@ private val Context.inboxDataStore: DataStore<Preferences> by preferencesDataSto
  * and the inbox agree on what "too long" means.
  */
 @Singleton
-class InboxSettingsDataStore @Inject constructor(
-    @ApplicationContext private val context: Context,
-) {
+class InboxSettingsDataStore @Inject constructor(@ApplicationContext private val context: Context) {
     private val dataStore = context.inboxDataStore
 
     val settings: Flow<InboxSettings> = dataStore.data.map { prefs ->
@@ -73,8 +77,7 @@ class InboxSettingsDataStore @Inject constructor(
         dataStore.edit { it[check.key] = enabled }
     }
 
-    private fun dayOrNull(value: Int): DayOfWeek? =
-        DayOfWeek.values().firstOrNull { it.value == value }
+    private fun dayOrNull(value: Int): DayOfWeek? = DayOfWeek.values().firstOrNull { it.value == value }
 
     /** Identifies each toggleable check so the UI can flip it without a setter per boolean. */
     enum class InboxCheck(internal val key: Preferences.Key<Boolean>) {

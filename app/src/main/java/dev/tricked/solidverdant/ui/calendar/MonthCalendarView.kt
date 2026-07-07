@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.calendar
 
 import androidx.compose.animation.AnimatedVisibility
@@ -150,8 +156,11 @@ fun MonthCalendarView(
                                     .padding(Dimens.Space2)
                                     .clip(MaterialTheme.shapes.small)
                                     .background(
-                                        if (selected) MaterialTheme.colorScheme.primaryContainer
-                                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f + 0.55f * intensity)
+                                        if (selected) {
+                                            MaterialTheme.colorScheme.primaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f + 0.55f * intensity)
+                                        },
                                     )
                                     .clickable {
                                         onSelectDate(day)
@@ -165,8 +174,11 @@ fun MonthCalendarView(
                                     text = day.dayOfMonth.toString(),
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (inMonth) Color.Unspecified
-                                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                                    color = if (inMonth) {
+                                        Color.Unspecified
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+                                    },
                                 )
                                 if (bucket != null) {
                                     Text(

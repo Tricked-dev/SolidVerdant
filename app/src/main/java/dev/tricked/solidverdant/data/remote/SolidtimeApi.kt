@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.remote
 
 import dev.tricked.solidverdant.data.model.MembershipsResponse
@@ -39,7 +45,7 @@ interface SolidtimeApi {
         @Field("client_id") clientId: String,
         @Field("redirect_uri") redirectUri: String,
         @Field("code_verifier") codeVerifier: String,
-        @Field("code") code: String
+        @Field("code") code: String,
     ): TokenResponse
 
     /**
@@ -50,7 +56,7 @@ interface SolidtimeApi {
     suspend fun refreshToken(
         @Field("grant_type") grantType: String = "refresh_token",
         @Field("client_id") clientId: String,
-        @Field("refresh_token") refreshToken: String
+        @Field("refresh_token") refreshToken: String,
     ): TokenResponse
 
     /**
@@ -75,10 +81,7 @@ interface SolidtimeApi {
      * Start a new time entry
      */
     @POST("api/v1/organizations/{organization}/time-entries")
-    suspend fun startTimeEntry(
-        @Path("organization") organizationId: String,
-        @Body request: StartTimeEntryRequest
-    ): TimeEntryResponse
+    suspend fun startTimeEntry(@Path("organization") organizationId: String, @Body request: StartTimeEntryRequest): TimeEntryResponse
 
     /**
      * Stop an active time entry
@@ -87,32 +90,26 @@ interface SolidtimeApi {
     suspend fun stopTimeEntry(
         @Path("organization") organizationId: String,
         @Path("id") timeEntryId: String,
-        @Body request: StopTimeEntryRequest
+        @Body request: StopTimeEntryRequest,
     ): TimeEntryResponse
 
     /**
      * Get all projects for an organization
      */
     @GET("api/v1/organizations/{organization}/projects?archived=all")
-    suspend fun getProjects(
-        @Path("organization") organizationId: String
-    ): ProjectsResponse
+    suspend fun getProjects(@Path("organization") organizationId: String): ProjectsResponse
 
     /**
      * Get all tasks for an organization
      */
     @GET("api/v1/organizations/{organization}/tasks?done=all")
-    suspend fun getTasks(
-        @Path("organization") organizationId: String
-    ): TasksResponse
+    suspend fun getTasks(@Path("organization") organizationId: String): TasksResponse
 
     /**
      * Get all tags for an organization
      */
     @GET("api/v1/organizations/{organization}/tags")
-    suspend fun getTags(
-        @Path("organization") organizationId: String
-    ): TagsResponse
+    suspend fun getTags(@Path("organization") organizationId: String): TagsResponse
 
     /**
      * Get time entries for an organization with optional filters
@@ -135,15 +132,12 @@ interface SolidtimeApi {
     suspend fun updateTimeEntry(
         @Path("organization") organizationId: String,
         @Path("id") timeEntryId: String,
-        @Body request: UpdateTimeEntryRequest
+        @Body request: UpdateTimeEntryRequest,
     ): TimeEntryResponse
 
     /**
      * Delete a time entry
      */
     @DELETE("api/v1/organizations/{organization}/time-entries/{id}")
-    suspend fun deleteTimeEntry(
-        @Path("organization") organizationId: String,
-        @Path("id") timeEntryId: String
-    ): Response<Unit>
+    suspend fun deleteTimeEntry(@Path("organization") organizationId: String, @Path("id") timeEntryId: String): Response<Unit>
 }

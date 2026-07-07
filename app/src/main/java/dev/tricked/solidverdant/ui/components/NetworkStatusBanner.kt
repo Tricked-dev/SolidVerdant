@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.components
 
 import android.content.Context
@@ -70,8 +76,7 @@ private fun Context.hasValidatedInternet(): Boolean {
     return capabilities.hasValidatedInternet()
 }
 
-private fun NetworkCapabilities.hasValidatedInternet(): Boolean =
-    hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-        hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+private fun NetworkCapabilities.hasValidatedInternet(): Boolean = hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+    hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
 
 private const val OFFLINE_CONFIRMATION_DELAY_MS = 1_500L

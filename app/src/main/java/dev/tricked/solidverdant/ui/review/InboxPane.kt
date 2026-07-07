@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.review
 
 import androidx.compose.foundation.layout.Arrangement
@@ -13,7 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
@@ -195,12 +200,7 @@ fun InboxPane() {
 }
 
 @Composable
-internal fun InboxHeader(
-    issueCount: Int,
-    isRefreshing: Boolean,
-    onRefresh: () -> Unit,
-    onOpenSettings: () -> Unit,
-) {
+internal fun InboxHeader(issueCount: Int, isRefreshing: Boolean, onRefresh: () -> Unit, onOpenSettings: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -305,11 +305,7 @@ private fun CenteredMessage(icon: ImageVector, title: String, body: String, tint
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DismissibleIssue(
-    issue: InboxIssue,
-    onDismiss: () -> Unit,
-    content: @Composable () -> Unit,
-) {
+private fun DismissibleIssue(issue: InboxIssue, onDismiss: () -> Unit, content: @Composable () -> Unit) {
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             if (value != SwipeToDismissBoxValue.Settled) {

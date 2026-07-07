@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.calendar
 
 import dev.tricked.solidverdant.data.calendar.CalendarEventSource
@@ -28,6 +34,7 @@ import java.time.LocalDate
 class CalendarViewModelTest {
 
     @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
+
     @After fun tearDown() = Dispatchers.resetMain()
 
     private class FakeReader(private val entries: List<TimeEntry>) : TimeEntryReader {
@@ -41,31 +48,33 @@ class CalendarViewModelTest {
         var lastRange: Pair<Long, Long>? = null
         var queryCount = 0
         override suspend fun queryCalendars(): List<DeviceCalendar> = calendars
-        override suspend fun queryEvents(
-            calendarIds: Set<String>,
-            rangeStartMs: Long,
-            rangeEndMs: Long,
-        ): List<DeviceCalendarEvent> {
+        override suspend fun queryEvents(calendarIds: Set<String>, rangeStartMs: Long, rangeEndMs: Long): List<DeviceCalendarEvent> {
             queryCount++
             lastRange = rangeStartMs to rangeEndMs
             return events.filter { it.calendarId in calendarIds }
         }
     }
 
-    private class FakeOverlaySettings(
-        enabled: Boolean = false,
-        selected: Set<String> = emptySet(),
-    ) : CalendarOverlaySettings {
+    private class FakeOverlaySettings(enabled: Boolean = false, selected: Set<String> = emptySet()) : CalendarOverlaySettings {
         val enabledState = MutableStateFlow(enabled)
         val selectedState = MutableStateFlow(selected)
         override val calendarOverlayEnabled: Flow<Boolean> = enabledState
         override val selectedCalendarIds: Flow<Set<String>> = selectedState
-        override suspend fun setCalendarOverlayEnabled(enabled: Boolean) { enabledState.value = enabled }
-        override suspend fun setSelectedCalendarIds(ids: Set<String>) { selectedState.value = ids }
+        override suspend fun setCalendarOverlayEnabled(enabled: Boolean) {
+            enabledState.value = enabled
+        }
+        override suspend fun setSelectedCalendarIds(ids: Set<String>) {
+            selectedState.value = ids
+        }
     }
 
     private fun entry(id: String, start: String, dur: Int) = TimeEntry(
-        id = id, userId = "u", start = start, end = null, duration = dur, organizationId = "org1",
+        id = id,
+        userId = "u",
+        start = start,
+        end = null,
+        duration = dur,
+        organizationId = "org1",
     )
 
     private fun vm(
@@ -82,8 +91,8 @@ class CalendarViewModelTest {
                     entry("a", "2026-07-06T09:00:00Z", 3600),
                     entry("b", "2026-07-06T11:00:00Z", 1800),
                     entry("c", "2026-07-07T09:00:00Z", 600),
-                )
-            )
+                ),
+            ),
         )
         model.setOrganization("org1")
         val loaded = model.uiState.first { it.bucketsByDate.isNotEmpty() }
@@ -99,7 +108,8 @@ class CalendarViewModelTest {
         val start = model.uiState.value.visibleMonth
         model.nextMonth()
         assertEquals(start.plusMonths(1), model.uiState.value.visibleMonth)
-        model.previousMonth(); model.previousMonth()
+        model.previousMonth()
+        model.previousMonth()
         assertEquals(start.minusMonths(1), model.uiState.value.visibleMonth)
     }
 
@@ -149,13 +159,7 @@ class CalendarViewModelTest {
         assertEquals(1, state.overlayEvents.size)
     }
 
-    private fun event(
-        id: Long,
-        startIso: String,
-        endIso: String,
-        allDay: Boolean = false,
-        cal: String = "1",
-    ) = DeviceCalendarEvent(
+    private fun event(id: Long, startIso: String, endIso: String, allDay: Boolean = false, cal: String = "1") = DeviceCalendarEvent(
         instanceId = id,
         eventId = id,
         calendarId = cal,

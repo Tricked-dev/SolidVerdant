@@ -55,9 +55,7 @@ data class DeviceCalendarEvent(
  * degrades gracefully; any other failure propagates so the caller can surface a retryable error.
  */
 @Singleton
-class CalendarEventProvider @Inject constructor(
-    @ApplicationContext private val context: Context,
-) : CalendarEventSource {
+class CalendarEventProvider @Inject constructor(@ApplicationContext private val context: Context) : CalendarEventSource {
 
     /** Lists calendars that expose a display name, sorted by account then name. */
     override suspend fun queryCalendars(): List<DeviceCalendar> = withContext(Dispatchers.IO) {
@@ -105,70 +103,67 @@ class CalendarEventProvider @Inject constructor(
      * Uses the Instances table so recurring events are expanded to concrete occurrences. Returns an
      * empty list when [calendarIds] is empty.
      */
-    override suspend fun queryEvents(
-        calendarIds: Set<String>,
-        rangeStartMs: Long,
-        rangeEndMs: Long,
-    ): List<DeviceCalendarEvent> = withContext(Dispatchers.IO) {
-        if (calendarIds.isEmpty() || rangeEndMs <= rangeStartMs) return@withContext emptyList()
+    override suspend fun queryEvents(calendarIds: Set<String>, rangeStartMs: Long, rangeEndMs: Long): List<DeviceCalendarEvent> =
+        withContext(Dispatchers.IO) {
+            if (calendarIds.isEmpty() || rangeEndMs <= rangeStartMs) return@withContext emptyList()
 
-        val builder = CalendarContract.Instances.CONTENT_URI.buildUpon()
-        ContentUris.appendId(builder, rangeStartMs)
-        ContentUris.appendId(builder, rangeEndMs)
-        val uri = builder.build()
+            val builder = CalendarContract.Instances.CONTENT_URI.buildUpon()
+            ContentUris.appendId(builder, rangeStartMs)
+            ContentUris.appendId(builder, rangeEndMs)
+            val uri = builder.build()
 
-        val projection = arrayOf(
-            CalendarContract.Instances._ID,
-            CalendarContract.Instances.EVENT_ID,
-            CalendarContract.Instances.CALENDAR_ID,
-            CalendarContract.Instances.TITLE,
-            CalendarContract.Instances.BEGIN,
-            CalendarContract.Instances.END,
-            CalendarContract.Instances.ALL_DAY,
-            CalendarContract.Instances.DISPLAY_COLOR,
-        )
-        // Constrain to the selected calendars in SQL so we never materialise unselected events.
-        val placeholders = calendarIds.joinToString(",") { "?" }
-        val selection = "${CalendarContract.Instances.CALENDAR_ID} IN ($placeholders)"
-        val args = calendarIds.toTypedArray()
+            val projection = arrayOf(
+                CalendarContract.Instances._ID,
+                CalendarContract.Instances.EVENT_ID,
+                CalendarContract.Instances.CALENDAR_ID,
+                CalendarContract.Instances.TITLE,
+                CalendarContract.Instances.BEGIN,
+                CalendarContract.Instances.END,
+                CalendarContract.Instances.ALL_DAY,
+                CalendarContract.Instances.DISPLAY_COLOR,
+            )
+            // Constrain to the selected calendars in SQL so we never materialise unselected events.
+            val placeholders = calendarIds.joinToString(",") { "?" }
+            val selection = "${CalendarContract.Instances.CALENDAR_ID} IN ($placeholders)"
+            val args = calendarIds.toTypedArray()
 
-        val result = mutableListOf<DeviceCalendarEvent>()
-        try {
-            context.contentResolver.query(
-                uri,
-                projection,
-                selection,
-                args,
-                "${CalendarContract.Instances.BEGIN} ASC",
-            )?.use { cursor ->
-                val idCol = cursor.getColumnIndexOrThrow(CalendarContract.Instances._ID)
-                val eventCol = cursor.getColumnIndexOrThrow(CalendarContract.Instances.EVENT_ID)
-                val calCol = cursor.getColumnIndexOrThrow(CalendarContract.Instances.CALENDAR_ID)
-                val titleCol = cursor.getColumnIndexOrThrow(CalendarContract.Instances.TITLE)
-                val beginCol = cursor.getColumnIndexOrThrow(CalendarContract.Instances.BEGIN)
-                val endCol = cursor.getColumnIndexOrThrow(CalendarContract.Instances.END)
-                val allDayCol = cursor.getColumnIndexOrThrow(CalendarContract.Instances.ALL_DAY)
-                val colorCol = cursor.getColumnIndexOrThrow(CalendarContract.Instances.DISPLAY_COLOR)
-                while (cursor.moveToNext()) {
-                    val begin = cursor.getLong(beginCol)
-                    val end = cursor.getLong(endCol)
-                    // Guard against provider rows with a non-positive span.
-                    if (end < begin) continue
-                    result += DeviceCalendarEvent(
-                        instanceId = cursor.getLong(idCol),
-                        eventId = cursor.getLong(eventCol),
-                        calendarId = cursor.getLong(calCol).toString(),
-                        title = if (cursor.isNull(titleCol)) null else cursor.getString(titleCol),
-                        startUtcMs = begin,
-                        endUtcMs = end,
-                        allDay = cursor.getInt(allDayCol) == 1,
-                        colorArgb = if (cursor.isNull(colorCol)) null else cursor.getInt(colorCol).takeIf { it != 0 },
-                    )
+            val result = mutableListOf<DeviceCalendarEvent>()
+            try {
+                context.contentResolver.query(
+                    uri,
+                    projection,
+                    selection,
+                    args,
+                    "${CalendarContract.Instances.BEGIN} ASC",
+                )?.use { cursor ->
+                    val idCol = cursor.getColumnIndexOrThrow(CalendarContract.Instances._ID)
+                    val eventCol = cursor.getColumnIndexOrThrow(CalendarContract.Instances.EVENT_ID)
+                    val calCol = cursor.getColumnIndexOrThrow(CalendarContract.Instances.CALENDAR_ID)
+                    val titleCol = cursor.getColumnIndexOrThrow(CalendarContract.Instances.TITLE)
+                    val beginCol = cursor.getColumnIndexOrThrow(CalendarContract.Instances.BEGIN)
+                    val endCol = cursor.getColumnIndexOrThrow(CalendarContract.Instances.END)
+                    val allDayCol = cursor.getColumnIndexOrThrow(CalendarContract.Instances.ALL_DAY)
+                    val colorCol = cursor.getColumnIndexOrThrow(CalendarContract.Instances.DISPLAY_COLOR)
+                    while (cursor.moveToNext()) {
+                        val begin = cursor.getLong(beginCol)
+                        val end = cursor.getLong(endCol)
+                        // Guard against provider rows with a non-positive span.
+                        if (end < begin) continue
+                        result += DeviceCalendarEvent(
+                            instanceId = cursor.getLong(idCol),
+                            eventId = cursor.getLong(eventCol),
+                            calendarId = cursor.getLong(calCol).toString(),
+                            title = if (cursor.isNull(titleCol)) null else cursor.getString(titleCol),
+                            startUtcMs = begin,
+                            endUtcMs = end,
+                            allDay = cursor.getInt(allDayCol) == 1,
+                            colorArgb = if (cursor.isNull(colorCol)) null else cursor.getInt(colorCol).takeIf { it != 0 },
+                        )
+                    }
                 }
+            } catch (_: SecurityException) {
+                return@withContext emptyList()
             }
-        } catch (_: SecurityException) {
-            return@withContext emptyList()
+            result
         }
-        result
-    }
 }

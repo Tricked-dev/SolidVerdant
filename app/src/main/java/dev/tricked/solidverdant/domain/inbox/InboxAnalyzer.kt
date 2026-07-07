@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.domain.inbox
 
 import dev.tricked.solidverdant.data.model.TimeEntry
@@ -44,7 +50,11 @@ enum class MissingField { PROJECT, TASK, DESCRIPTION, TAGS }
  */
 data class InboxCheckConfig(
     val workDays: Set<DayOfWeek> = setOf(
-        DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY,
+        DayOfWeek.MONDAY,
+        DayOfWeek.TUESDAY,
+        DayOfWeek.WEDNESDAY,
+        DayOfWeek.THURSDAY,
+        DayOfWeek.FRIDAY,
     ),
     /** Minutes since local midnight the working window opens (0..1440). */
     val workStartMinute: Int = 9 * 60,
@@ -116,13 +126,8 @@ object InboxAnalyzer {
     }
 
     /** Convenience for the badge: how many open checks there are for the given inputs. */
-    fun count(
-        entries: List<TimeEntry>,
-        config: InboxCheckConfig,
-        dismissedKeys: Set<String>,
-        nowMs: Long,
-        zone: ZoneId,
-    ): Int = analyze(entries, config, dismissedKeys, nowMs, zone).size
+    fun count(entries: List<TimeEntry>, config: InboxCheckConfig, dismissedKeys: Set<String>, nowMs: Long, zone: ZoneId): Int =
+        analyze(entries, config, dismissedKeys, nowMs, zone).size
 
     // ---- Overlaps -------------------------------------------------------------------------------
 
@@ -150,12 +155,7 @@ object InboxAnalyzer {
 
     // ---- Gaps -----------------------------------------------------------------------------------
 
-    private fun gapIssues(
-        intervals: List<Interval>,
-        config: InboxCheckConfig,
-        now: Instant,
-        zone: ZoneId,
-    ): List<InboxIssue> {
+    private fun gapIssues(intervals: List<Interval>, config: InboxCheckConfig, now: Instant, zone: ZoneId): List<InboxIssue> {
         if (intervals.isEmpty() || config.workDays.isEmpty()) return emptyList()
         if (config.workEndMinute <= config.workStartMinute) return emptyList()
         if (config.minGapMinutes <= 0) return emptyList()
@@ -223,33 +223,32 @@ object InboxAnalyzer {
 
     // ---- Missing metadata -----------------------------------------------------------------------
 
-    private fun missingIssues(entries: List<TimeEntry>, config: InboxCheckConfig): List<InboxIssue> =
-        entries.mapNotNull { entry ->
-            if (entry.end == null) return@mapNotNull null // still running; handled on Track
-            val start = parseInstant(entry.start) ?: return@mapNotNull null
-            val end = parseInstant(entry.end) ?: return@mapNotNull null
-            val missing = buildSet {
-                if (config.checkMissingProject && entry.projectId == null) add(MissingField.PROJECT)
-                // A missing task is only meaningful once a project is chosen.
-                if (config.checkMissingTask && entry.projectId != null && entry.taskId == null) {
-                    add(MissingField.TASK)
-                }
-                if (config.checkMissingDescription && entry.description.isNullOrBlank()) {
-                    add(MissingField.DESCRIPTION)
-                }
-                if (config.checkMissingTags && entry.tags.isEmpty()) add(MissingField.TAGS)
+    private fun missingIssues(entries: List<TimeEntry>, config: InboxCheckConfig): List<InboxIssue> = entries.mapNotNull { entry ->
+        if (entry.end == null) return@mapNotNull null // still running; handled on Track
+        val start = parseInstant(entry.start) ?: return@mapNotNull null
+        val end = parseInstant(entry.end) ?: return@mapNotNull null
+        val missing = buildSet {
+            if (config.checkMissingProject && entry.projectId == null) add(MissingField.PROJECT)
+            // A missing task is only meaningful once a project is chosen.
+            if (config.checkMissingTask && entry.projectId != null && entry.taskId == null) {
+                add(MissingField.TASK)
             }
-            if (missing.isEmpty()) return@mapNotNull null
-            val fieldToken = missing.map { it.name }.sorted().joinToString(",")
-            InboxIssue(
-                key = "missing:$RULE_VERSION:${entry.id}:${start.epochSecond}:$fieldToken",
-                type = InboxIssueType.MISSING_METADATA,
-                startMs = start.toEpochMilli(),
-                endMs = end.toEpochMilli(),
-                primaryEntry = entry,
-                missingFields = missing,
-            )
+            if (config.checkMissingDescription && entry.description.isNullOrBlank()) {
+                add(MissingField.DESCRIPTION)
+            }
+            if (config.checkMissingTags && entry.tags.isEmpty()) add(MissingField.TAGS)
         }
+        if (missing.isEmpty()) return@mapNotNull null
+        val fieldToken = missing.map { it.name }.sorted().joinToString(",")
+        InboxIssue(
+            key = "missing:$RULE_VERSION:${entry.id}:${start.epochSecond}:$fieldToken",
+            type = InboxIssueType.MISSING_METADATA,
+            startMs = start.toEpochMilli(),
+            endMs = end.toEpochMilli(),
+            primaryEntry = entry,
+            missingFields = missing,
+        )
+    }
 
     // ---- Long duration --------------------------------------------------------------------------
 
@@ -287,9 +286,8 @@ object InboxAnalyzer {
         return parseInstant(iso)?.epochSecond?.toString() ?: iso
     }
 
-    private fun parseInstant(value: String): Instant? =
-        runCatching { OffsetDateTime.parse(value).toInstant() }
-            .recoverCatching { Instant.parse(value) }
-            .recoverCatching { ZonedDateTime.parse(value).toInstant() }
-            .getOrNull()
+    private fun parseInstant(value: String): Instant? = runCatching { OffsetDateTime.parse(value).toInstant() }
+        .recoverCatching { Instant.parse(value) }
+        .recoverCatching { ZonedDateTime.parse(value).toInstant() }
+        .getOrNull()
 }

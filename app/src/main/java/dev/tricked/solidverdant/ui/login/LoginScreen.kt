@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.login
 
 import android.content.Context
@@ -35,8 +41,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
@@ -58,7 +64,7 @@ fun LoginScreen(
     onTestConnection: (String, String) -> Unit,
     onAuthUrlReady: (String) -> Unit,
     onClearAuthUrl: () -> Unit,
-    onClearError: () -> Unit
+    onClearError: () -> Unit,
 ) {
     val context = LocalContext.current
     var showConfigDialog by remember { mutableStateOf(false) }
@@ -79,18 +85,18 @@ fun LoginScreen(
                     IconButton(onClick = { openAppLanguageSettings(context) }) {
                         Icon(
                             imageVector = Icons.Default.Language,
-                            contentDescription = stringResource(R.string.choose_language)
+                            contentDescription = stringResource(R.string.choose_language),
                         )
                     }
                     IconButton(onClick = { showConfigDialog = true }) {
                         Icon(
                             imageVector = Icons.Default.Settings,
-                            contentDescription = stringResource(R.string.settings)
+                            contentDescription = stringResource(R.string.settings),
                         )
                     }
-                }
+                },
             )
-        }
+        },
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -98,11 +104,11 @@ fun LoginScreen(
                 .padding(paddingValues)
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.Center,
         ) {
             Text(
                 text = stringResource(R.string.app_name),
-                style = MaterialTheme.typography.displayMedium
+                style = MaterialTheme.typography.displayMedium,
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -110,7 +116,7 @@ fun LoginScreen(
             Text(
                 text = stringResource(R.string.time_tracking_client),
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             Spacer(modifier = Modifier.height(48.dp))
@@ -133,7 +139,7 @@ fun LoginScreen(
             uiState.error?.let { error ->
                 ErrorCard(
                     error = error,
-                    onDismiss = onClearError
+                    onDismiss = onClearError,
                 )
             }
 
@@ -143,7 +149,7 @@ fun LoginScreen(
             Text(
                 text = stringResource(R.string.endpoint_label, configState.endpoint),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -155,7 +161,7 @@ fun LoginScreen(
             onSave = onConfigSave,
             onReset = onConfigReset,
             onTestConnection = onTestConnection,
-            onDismiss = { showConfigDialog = false }
+            onDismiss = { showConfigDialog = false },
         )
     }
 }
@@ -164,29 +170,26 @@ fun LoginScreen(
  * Error card to display error messages
  */
 @Composable
-private fun ErrorCard(
-    error: String,
-    onDismiss: () -> Unit
-) {
+private fun ErrorCard(error: String, onDismiss: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer
-        )
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+        ),
     ) {
         Column(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(16.dp),
         ) {
             Text(
                 text = stringResource(R.string.error),
                 style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onErrorContainer
+                color = MaterialTheme.colorScheme.onErrorContainer,
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = error,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onErrorContainer
+                color = MaterialTheme.colorScheme.onErrorContainer,
             )
         }
     }

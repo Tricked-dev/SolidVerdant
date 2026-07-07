@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.statistics
 
 import dev.tricked.solidverdant.data.model.Project
@@ -12,18 +18,9 @@ import java.time.temporal.WeekFields
 
 enum class TrendGranularity { DAY, WEEK }
 
-data class ProjectTotal(
-    val projectId: String?,
-    val projectName: String,
-    val colorHex: String,
-    val seconds: Long,
-)
+data class ProjectTotal(val projectId: String?, val projectName: String, val colorHex: String, val seconds: Long)
 
-data class TrendBucket(
-    val label: String,
-    val startDate: LocalDate,
-    val seconds: Long,
-)
+data class TrendBucket(val label: String, val startDate: LocalDate, val seconds: Long)
 
 data class StatisticsSummary(
     val totalSeconds: Long,
@@ -58,11 +55,7 @@ object StatisticsAggregator {
      * restriction; the client dimension is resolved through each entry's project. Returns [entries]
      * unchanged when nothing is active so the common unfiltered path allocates nothing.
      */
-    fun applyFilters(
-        entries: List<TimeEntry>,
-        projects: List<Project>,
-        filters: StatFilters,
-    ): List<TimeEntry> {
+    fun applyFilters(entries: List<TimeEntry>, projects: List<Project>, filters: StatFilters): List<TimeEntry> {
         if (!filters.isActive) return entries
         val clientByProject: Map<String, String?> = projects.associate { it.id to it.clientId }
         return entries.filter { e ->
@@ -83,12 +76,8 @@ object StatisticsAggregator {
     }
 
     /** In-range contribution (seconds) of [e], or null when it does not overlap the window. */
-    fun clippedSeconds(
-        e: TimeEntry,
-        zone: ZoneId,
-        rangeStart: LocalDate,
-        rangeEnd: LocalDate,
-    ): Long? = clippedDailyBreakdown(e, zone, rangeStart, rangeEnd)?.sumOf { it.second }
+    fun clippedSeconds(e: TimeEntry, zone: ZoneId, rangeStart: LocalDate, rangeEnd: LocalDate): Long? =
+        clippedDailyBreakdown(e, zone, rangeStart, rangeEnd)?.sumOf { it.second }
 
     /**
      * Entries contributing to a tapped chart slice, each clipped to the selected [selStart]..[selEnd]
@@ -199,10 +188,18 @@ object StatisticsAggregator {
         rangeStart: LocalDate,
         rangeEnd: LocalDate,
     ): List<Pair<LocalDate, Long>>? {
-        val startInstant = try { Instant.parse(e.start) } catch (t: Throwable) { return null }
+        val startInstant = try {
+            Instant.parse(e.start)
+        } catch (t: Throwable) {
+            return null
+        }
         val endInstant = when {
             e.duration != null -> startInstant.plusSeconds(e.duration.toLong().coerceAtLeast(0))
-            e.end != null -> try { Instant.parse(e.end) } catch (t: Throwable) { return null }
+            e.end != null -> try {
+                Instant.parse(e.end)
+            } catch (t: Throwable) {
+                return null
+            }
             else -> return null
         }
 
@@ -246,7 +243,8 @@ object StatisticsAggregator {
         TrendGranularity.WEEK -> {
             val wf = WeekFields.ISO
             val byWeekStart = rows.groupBy(
-                { it.first.with(wf.dayOfWeek(), 1) }, { it.second }
+                { it.first.with(wf.dayOfWeek(), 1) },
+                { it.second },
             ).mapValues { it.value.sum() }
             val firstWeek = rangeStart.with(wf.dayOfWeek(), 1)
             generateSequence(firstWeek) { it.plusWeeks(1) }

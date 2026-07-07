@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.sync
 
 import androidx.test.core.app.ApplicationProvider
@@ -17,7 +23,8 @@ class SyncSchedulerTest {
     @Before fun setup() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         WorkManagerTestInitHelper.initializeTestWorkManager(
-            context, Configuration.Builder().setMinimumLoggingLevel(android.util.Log.DEBUG).build()
+            context,
+            Configuration.Builder().setMinimumLoggingLevel(android.util.Log.DEBUG).build(),
         )
     }
 

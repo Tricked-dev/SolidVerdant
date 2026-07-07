@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.remote
 
 import dev.tricked.solidverdant.data.model.TokenResponse
@@ -107,10 +113,7 @@ class TokenAuthenticatorTest {
             .build()
     }
 
-    private class FakeTokenStorage(
-        @Volatile var access: String?,
-        @Volatile var refresh: String?
-    ) : TokenStorage {
+    private class FakeTokenStorage(@Volatile var access: String?, @Volatile var refresh: String?) : TokenStorage {
         override suspend fun accessToken() = access
         override suspend fun refreshToken() = refresh
         override suspend fun endpoint() = "https://example.test"

@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant
 
 import android.app.HandoffActivityData
@@ -28,16 +34,14 @@ class HandoffMainActivity : MainActivity() {
         }
     }
 
-    override fun onHandoffActivityDataRequested(
-        handoffRequestInfo: HandoffActivityDataRequestInfo
-    ): HandoffActivityData {
+    override fun onHandoffActivityDataRequested(handoffRequestInfo: HandoffActivityDataRequestInfo): HandoffActivityData {
         val extras = PersistableBundle().apply {
             authViewModel.uiState.value.currentMembership?.organizationId?.let {
                 putString(EXTRA_HANDOFF_ORGANIZATION_ID, it)
             }
         }
         val builder = HandoffActivityData.Builder(
-            ComponentName(this, HandoffMainActivity::class.java)
+            ComponentName(this, HandoffMainActivity::class.java),
         ).setExtras(extras)
         authViewModel.configState.value.endpoint
             .takeIf { it.startsWith("https://") }

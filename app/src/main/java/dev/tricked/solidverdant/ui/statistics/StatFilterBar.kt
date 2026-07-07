@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.statistics
 
 import androidx.compose.foundation.layout.Arrangement
@@ -122,11 +128,7 @@ fun StatFilterBar(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ActiveFilterChips(
-    filters: StatFilters,
-    catalog: StatCatalog,
-    onFiltersChange: (StatFilters) -> Unit,
-) {
+private fun ActiveFilterChips(filters: StatFilters, catalog: StatCatalog, onFiltersChange: (StatFilters) -> Unit) {
     val projectName = catalog.projects.associate { it.id to it.name }
     val clientName = catalog.clients.associate { it.id to it.name }
     val taskName = catalog.tasks.associate { it.id to it.name }

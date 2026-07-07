@@ -1,16 +1,19 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.config
 
-data class ParsedOAuthConfig(
-    val endpoint: String? = null,
-    val clientId: String? = null
-)
+data class ParsedOAuthConfig(val endpoint: String? = null, val clientId: String? = null)
 
 private val endpointLabel = Regex(
-    "(?im)^\\s*[\"']?(?:server|endpoint|url)[\"']?\\s*[:=]\\s*[\"']?(\\S+)"
+    "(?im)^\\s*[\"']?(?:server|endpoint|url)[\"']?\\s*[:=]\\s*[\"']?(\\S+)",
 )
 private val url = Regex("https?://[^\\s,;]+", RegexOption.IGNORE_CASE)
 private val uuid = Regex(
-    "(?i)(?<![0-9a-f])[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![0-9a-f])"
+    "(?i)(?<![0-9a-f])[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![0-9a-f])",
 )
 
 /** Extracts whatever useful OAuth configuration is present in copied text. */
@@ -35,6 +38,6 @@ fun parseOAuthConfig(text: String): ParsedOAuthConfig {
 
     return ParsedOAuthConfig(
         endpoint = endpoint?.trimEnd('/', ',', ';', '\'', '"', ')', ']'),
-        clientId = clientId
+        clientId = clientId,
     )
 }

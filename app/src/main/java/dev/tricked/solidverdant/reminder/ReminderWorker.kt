@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.reminder
 
 import android.app.NotificationChannel
@@ -158,7 +164,9 @@ class ReminderWorker @AssistedInject constructor(
             putExtra(EXTRA_OPEN_REVIEW_ROUTE, ReviewRoutes.EndOfDay)
         }
         return PendingIntent.getActivity(
-            appContext, REQ_REVIEW, intent,
+            appContext,
+            REQ_REVIEW,
+            intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }
@@ -168,7 +176,9 @@ class ReminderWorker @AssistedInject constructor(
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         return PendingIntent.getActivity(
-            appContext, REQ_OPEN, intent,
+            appContext,
+            REQ_OPEN,
+            intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }

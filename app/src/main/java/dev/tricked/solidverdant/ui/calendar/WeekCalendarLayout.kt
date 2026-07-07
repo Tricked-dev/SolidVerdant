@@ -44,12 +44,7 @@ val CalendarTotalHeight = CalendarHourHeight * 24
  * 24h column. Unparseable starts fall back to the day start; a running entry (no end) extends to
  * [now]. The height is floored at [MIN_ENTRY_HEIGHT_FRACTION] so very short entries stay visible.
  */
-fun timelineOffsets(
-    entry: TimeEntry,
-    day: LocalDate,
-    now: Instant,
-    zone: ZoneId = ZoneId.systemDefault(),
-): Pair<Float, Float> {
+fun timelineOffsets(entry: TimeEntry, day: LocalDate, now: Instant, zone: ZoneId = ZoneId.systemDefault()): Pair<Float, Float> {
     val dayStart = day.atStartOfDay(zone).toInstant()
     val secondsInDay = SECONDS_PER_DAY.toFloat()
     val start = try {
@@ -209,11 +204,7 @@ fun packOverlaps(intervals: List<Pair<Long, Long>>): List<Pair<Int, Int>> {
  * overlaps and flagging midnight continuations. Events are clipped to the day; all-day events are
  * excluded here and surfaced by [allDayEventsForDay].
  */
-fun layoutTimedEvents(
-    events: List<DeviceCalendarEvent>,
-    day: LocalDate,
-    zone: ZoneId,
-): List<EventBlock> {
+fun layoutTimedEvents(events: List<DeviceCalendarEvent>, day: LocalDate, zone: ZoneId): List<EventBlock> {
     data class Clipped(val event: DeviceCalendarEvent, val startSec: Long, val endSec: Long)
 
     val clipped = events
@@ -299,10 +290,7 @@ fun layoutTrackedEntries(
  * coverage is computed in UTC: an event covers [day] when its UTC start date is on/before [day]
  * and its UTC end date (exclusive) is after [day].
  */
-fun allDayEventsForDay(
-    events: List<DeviceCalendarEvent>,
-    day: LocalDate,
-): List<DeviceCalendarEvent> = events.filter { event ->
+fun allDayEventsForDay(events: List<DeviceCalendarEvent>, day: LocalDate): List<DeviceCalendarEvent> = events.filter { event ->
     if (!event.allDay) return@filter false
     val startDate = Instant.ofEpochMilli(event.startUtcMs).atZone(ZoneOffset.UTC).toLocalDate()
     // END is exclusive midnight; guard equal begin/end (single-day) by treating <= start as +1 day.

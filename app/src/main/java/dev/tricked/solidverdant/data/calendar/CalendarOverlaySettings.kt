@@ -26,13 +26,9 @@ interface CalendarOverlaySettings {
 }
 
 /** DataStore-backed [CalendarOverlaySettings] delegating to the shared [SettingsDataStore]. */
-class SettingsCalendarOverlaySettings @Inject constructor(
-    private val settings: SettingsDataStore,
-) : CalendarOverlaySettings {
+class SettingsCalendarOverlaySettings @Inject constructor(private val settings: SettingsDataStore) : CalendarOverlaySettings {
     override val calendarOverlayEnabled: Flow<Boolean> = settings.calendarOverlayEnabled
     override val selectedCalendarIds: Flow<Set<String>> = settings.selectedCalendarIds
-    override suspend fun setCalendarOverlayEnabled(enabled: Boolean) =
-        settings.setCalendarOverlayEnabled(enabled)
-    override suspend fun setSelectedCalendarIds(ids: Set<String>) =
-        settings.setSelectedCalendarIds(ids)
+    override suspend fun setCalendarOverlayEnabled(enabled: Boolean) = settings.setCalendarOverlayEnabled(enabled)
+    override suspend fun setSelectedCalendarIds(ids: Set<String>) = settings.setSelectedCalendarIds(ids)
 }

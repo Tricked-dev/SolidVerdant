@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.tracking
 
 import org.junit.Assert.assertEquals
@@ -44,14 +50,16 @@ class EntryTimeValidatorTest {
 
     @Test fun `end before start is a blocking error`() {
         val result = EntryTimeValidator.evaluate(
-            at("2026-07-06T09:00:00Z"), at("2026-07-06T08:00:00Z"),
+            at("2026-07-06T09:00:00Z"),
+            at("2026-07-06T08:00:00Z"),
         )
         assertEquals(EntryTimeValidator.Error.END_NOT_AFTER_START, result.error)
     }
 
     @Test fun `normal short entry is valid without warnings`() {
         val result = EntryTimeValidator.evaluate(
-            at("2026-07-06T09:00:00Z"), at("2026-07-06T10:30:00Z"),
+            at("2026-07-06T09:00:00Z"),
+            at("2026-07-06T10:30:00Z"),
         )
         assertNull(result.error)
         assertTrue(result.warnings.isEmpty())
@@ -60,7 +68,8 @@ class EntryTimeValidatorTest {
 
     @Test fun `duration over 24h is blocked as too long`() {
         val result = EntryTimeValidator.evaluate(
-            at("2026-07-06T09:00:00Z"), at("2026-07-07T10:00:00Z"),
+            at("2026-07-06T09:00:00Z"),
+            at("2026-07-07T10:00:00Z"),
         )
         assertEquals(EntryTimeValidator.Error.TOO_LONG, result.error)
         assertFalse(result.canSave)
@@ -68,7 +77,8 @@ class EntryTimeValidatorTest {
 
     @Test fun `long but plausible duration warns yet still saves`() {
         val result = EntryTimeValidator.evaluate(
-            at("2026-07-06T08:00:00Z"), at("2026-07-06T22:00:00Z"), // 14h
+            at("2026-07-06T08:00:00Z"),
+            at("2026-07-06T22:00:00Z"), // 14h
         )
         assertNull(result.error)
         assertTrue(result.warnings.contains(EntryTimeValidator.Warning.LONG_DURATION))
@@ -77,7 +87,9 @@ class EntryTimeValidatorTest {
 
     @Test fun `overlap surfaces a warning that does not block saving`() {
         val result = EntryTimeValidator.evaluate(
-            at("2026-07-06T09:00:00Z"), at("2026-07-06T10:00:00Z"), overlaps = true,
+            at("2026-07-06T09:00:00Z"),
+            at("2026-07-06T10:00:00Z"),
+            overlaps = true,
         )
         assertTrue(result.warnings.contains(EntryTimeValidator.Warning.OVERLAP))
         assertTrue(result.canSave)
@@ -85,8 +97,10 @@ class EntryTimeValidatorTest {
 
     @Test fun `overlap under an org policy uses the stronger policy warning`() {
         val result = EntryTimeValidator.evaluate(
-            at("2026-07-06T09:00:00Z"), at("2026-07-06T10:00:00Z"),
-            overlaps = true, overlapProhibited = true,
+            at("2026-07-06T09:00:00Z"),
+            at("2026-07-06T10:00:00Z"),
+            overlaps = true,
+            overlapProhibited = true,
         )
         assertTrue(result.warnings.contains(EntryTimeValidator.Warning.OVERLAP_POLICY))
         assertFalse(result.warnings.contains(EntryTimeValidator.Warning.OVERLAP))

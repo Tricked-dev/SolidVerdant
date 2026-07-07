@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.e2e.mock
 
 import dev.tricked.solidverdant.data.model.Client
@@ -25,9 +31,9 @@ import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
+import java.time.Instant
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicInteger
-import java.time.Instant
 
 /**
  * A stateful fake of the Solidtime backend built on [MockWebServer].
@@ -119,12 +125,7 @@ class MockSolidtimeServer {
     }
 
     /** Deterministic large dataset used by scrolling and composition stress tests. */
-    fun presetStressWorld(
-        entryCount: Int = 250,
-        projectCount: Int = 120,
-        taskCount: Int = 480,
-        tagCount: Int = 160,
-    ) {
+    fun presetStressWorld(entryCount: Int = 250, projectCount: Int = 120, taskCount: Int = 480, tagCount: Int = 160) {
         presetLoggedInWorld(seededEntry = null)
         clients.clear()
         clients += (0 until 40).map { Client("client-$it", "Client ${it.toString().padStart(3, '0')}") }
@@ -174,8 +175,7 @@ class MockSolidtimeServer {
     fun callsMatching(method: String, pathContains: String): List<RecordedCall> =
         recordedCalls.filter { it.method == method && it.path.contains(pathContains) }
 
-    fun wasRequested(method: String, pathContains: String): Boolean =
-        callsMatching(method, pathContains).isNotEmpty()
+    fun wasRequested(method: String, pathContains: String): Boolean = callsMatching(method, pathContains).isNotEmpty()
 
     // ---- Dispatcher ---------------------------------------------------------------------------
 
@@ -233,19 +233,42 @@ class MockSolidtimeServer {
             val orgId = ENTRY_COLLECTION_REGEX.find(path)!!.groupValues[1]
             when (method) {
                 "POST" -> handleCreateOrStart(orgId, body)
-                "GET" -> ok(
-                    json.encodeToString(
-                        TimeEntriesResponse(
-                            data = timeEntries.toList(),
-                            meta = TimeEntriesMeta(total = timeEntries.size, currentPage = 1, lastPage = 1, perPage = 250),
-                        )
-                    )
-                )
+                "GET" -> handleListEntries(fullPath)
                 else -> notFound()
             }
         }
 
         else -> notFound()
+    }
+
+    /**
+     * Honors the app's `limit`/`offset` query params like the real backend so pagination is
+     * actually exercised: history paging (loadMoreTimeEntries) and date jumps binary-search over
+     * offsets, which a return-everything fake silently short-circuits.
+     */
+    private fun handleListEntries(fullPath: String): MockResponse {
+        val query = fullPath.substringAfter("?", missingDelimiterValue = "")
+        val params = query.split("&").mapNotNull {
+            val (k, v) = it.split("=", limit = 2).takeIf { p -> p.size == 2 } ?: return@mapNotNull null
+            k to v
+        }.toMap()
+        val limit = params["limit"]?.toIntOrNull() ?: 250
+        val offset = params["offset"]?.toIntOrNull() ?: 0
+        val sorted = timeEntries.sortedByDescending { it.start }
+        val page = sorted.drop(offset).take(limit)
+        return ok(
+            json.encodeToString(
+                TimeEntriesResponse(
+                    data = page,
+                    meta = TimeEntriesMeta(
+                        total = sorted.size,
+                        currentPage = (offset / limit.coerceAtLeast(1)) + 1,
+                        lastPage = (sorted.size + limit - 1) / limit.coerceAtLeast(1),
+                        perPage = limit,
+                    ),
+                ),
+            ),
+        )
     }
 
     private fun handleCreateOrStart(orgId: String, body: String): MockResponse {

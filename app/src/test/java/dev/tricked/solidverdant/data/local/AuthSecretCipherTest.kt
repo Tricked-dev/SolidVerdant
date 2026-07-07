@@ -1,13 +1,19 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.local
 
-import javax.crypto.KeyGenerator
-import javax.crypto.SecretKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
 
 class AuthSecretCipherTest {
     private val key = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()

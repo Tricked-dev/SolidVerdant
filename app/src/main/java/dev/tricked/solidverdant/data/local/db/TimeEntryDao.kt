@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.local.db
 
 import androidx.room.Dao
@@ -54,7 +60,7 @@ interface TimeEntryDao {
      */
     @Query(
         "SELECT r.timeEntryId AS timeEntryId, r.tagId AS tagId FROM time_entry_tag_cross_ref r " +
-            "INNER JOIN time_entries e ON e.id = r.timeEntryId WHERE e.organizationId = :orgId"
+            "INNER JOIN time_entries e ON e.id = r.timeEntryId WHERE e.organizationId = :orgId",
     )
     fun observeTagRefs(orgId: String): Flow<List<TimeEntryTagRef>>
 

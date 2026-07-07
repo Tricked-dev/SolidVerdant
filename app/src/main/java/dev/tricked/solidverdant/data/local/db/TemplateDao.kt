@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.local.db
 
 import androidx.room.Dao
@@ -17,7 +23,7 @@ interface TemplateDao {
 
     @Query(
         "SELECT * FROM entry_templates WHERE organizationId = :orgId " +
-            "ORDER BY isFavorite DESC, sortOrder ASC, createdAtMs ASC"
+            "ORDER BY isFavorite DESC, sortOrder ASC, createdAtMs ASC",
     )
     fun observeTemplates(orgId: String): Flow<List<TemplateEntity>>
 

@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
@@ -16,10 +22,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
 import dev.tricked.solidverdant.ui.theme.negative
 import dev.tricked.solidverdant.ui.theme.neutral
 import dev.tricked.solidverdant.ui.theme.positive
-import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
 
 /** Direction of a delta, driving the [DeltaBadge] colour and arrow. */
 enum class DeltaDirection { UP, DOWN, NEUTRAL }
@@ -31,11 +37,7 @@ enum class DeltaDirection { UP, DOWN, NEUTRAL }
  * stay aligned.
  */
 @Composable
-fun DeltaBadge(
-    direction: DeltaDirection,
-    text: String,
-    modifier: Modifier = Modifier,
-) {
+fun DeltaBadge(direction: DeltaDirection, text: String, modifier: Modifier = Modifier) {
     val color = when (direction) {
         DeltaDirection.UP -> MaterialTheme.colorScheme.positive
         DeltaDirection.DOWN -> MaterialTheme.colorScheme.negative
@@ -66,11 +68,7 @@ fun DeltaBadge(
  * (positive -> UP, negative -> DOWN, zero -> NEUTRAL).
  */
 @Composable
-fun DeltaBadge(
-    sign: Int,
-    text: String,
-    modifier: Modifier = Modifier,
-) {
+fun DeltaBadge(sign: Int, text: String, modifier: Modifier = Modifier) {
     val direction = when {
         sign > 0 -> DeltaDirection.UP
         sign < 0 -> DeltaDirection.DOWN

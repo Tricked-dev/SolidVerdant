@@ -18,8 +18,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -138,8 +138,14 @@ private fun WeekCalendarContent(
     val hasContent = hasTrackedEntries || state.overlayEvents.isNotEmpty()
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        WeekNavHeader(days = days, viewMode = state.viewMode, locale = locale,
-            onPrevious = onPrevious, onNext = onNext, onToday = onToday)
+        WeekNavHeader(
+            days = days,
+            viewMode = state.viewMode,
+            locale = locale,
+            onPrevious = onPrevious,
+            onNext = onNext,
+            onToday = onToday,
+        )
 
         // Subtle top-line refresh only when content is already on screen; a first, empty load uses
         // the full-content LoadingState below instead.
@@ -310,8 +316,11 @@ private fun DayHeaderCell(
         Text(
             text = weekday,
             style = MaterialTheme.typography.labelSmall,
-            color = if (isToday) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (isToday) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
             maxLines = 1,
         )
         Text(
@@ -324,10 +333,7 @@ private fun DayHeaderCell(
 }
 
 @Composable
-private fun AllDayRow(
-    days: List<LocalDate>,
-    allDayByDay: Map<LocalDate, List<DeviceCalendarEvent>>,
-) {
+private fun AllDayRow(days: List<LocalDate>, allDayByDay: Map<LocalDate, List<DeviceCalendarEvent>>) {
     val untitled = stringResource(R.string.calendar_overlay_event_untitled)
     Row(
         modifier = Modifier
@@ -493,12 +499,7 @@ internal fun HourGridlines(modifier: Modifier = Modifier) {
  * hour gutter in single-column layouts.
  */
 @Composable
-internal fun CurrentTimeMarker(
-    now: Instant,
-    day: LocalDate,
-    zone: ZoneId,
-    modifier: Modifier = Modifier,
-) {
+internal fun CurrentTimeMarker(now: Instant, day: LocalDate, zone: ZoneId, modifier: Modifier = Modifier) {
     val fraction = (now.epochSecond - day.atStartOfDay(zone).toInstant().epochSecond)
         .toFloat() / SECONDS_PER_DAY
     if (fraction in 0f..1f) {
@@ -525,8 +526,7 @@ private fun HairLine() {
 
 /** Compose color for a device event, falling back to the theme secondary when none is supplied. */
 @Composable
-private fun DeviceCalendarEvent.eventColor(): Color =
-    colorArgb?.let { Color(it) } ?: MaterialTheme.colorScheme.secondary
+private fun DeviceCalendarEvent.eventColor(): Color = colorArgb?.let { Color(it) } ?: MaterialTheme.colorScheme.secondary
 
 private fun rangeLabel(days: List<LocalDate>, viewMode: CalendarViewMode, locale: Locale): String {
     if (days.isEmpty()) return ""

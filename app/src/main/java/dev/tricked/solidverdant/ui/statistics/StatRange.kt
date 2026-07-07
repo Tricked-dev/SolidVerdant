@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.statistics
 
 import java.time.LocalDate
@@ -34,8 +40,7 @@ sealed interface StatRange {
     }
 
     data object ThisMonth : StatRange {
-        override fun resolve(today: LocalDate): ClosedRange<LocalDate> =
-            today.withDayOfMonth(1)..today
+        override fun resolve(today: LocalDate): ClosedRange<LocalDate> = today.withDayOfMonth(1)..today
     }
 
     data object PreviousMonth : StatRange {
@@ -46,7 +51,9 @@ sealed interface StatRange {
     }
 
     data class Custom(val start: LocalDate, val end: LocalDate) : StatRange {
-        init { require(!end.isBefore(start)) { "Custom range end must not precede start" } }
+        init {
+            require(!end.isBefore(start)) { "Custom range end must not precede start" }
+        }
         override fun resolve(today: LocalDate): ClosedRange<LocalDate> = start..end
     }
 }

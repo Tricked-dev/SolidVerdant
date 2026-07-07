@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.local
 
 import android.security.keystore.KeyGenParameterSpec
@@ -23,12 +29,12 @@ internal class AndroidKeystoreKeyProvider : SecretKeyProvider {
             init(
                 KeyGenParameterSpec.Builder(
                     KEY_ALIAS,
-                    KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+                    KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
                 )
                     .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                     .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                     .setKeySize(256)
-                    .build()
+                    .build(),
             )
             generateKey()
         }
@@ -41,9 +47,7 @@ internal class AndroidKeystoreKeyProvider : SecretKeyProvider {
 }
 
 /** AES-GCM envelope. A fresh IV and authentication tag are generated for every write. */
-internal class AuthSecretCipher(
-    private val keyProvider: SecretKeyProvider = AndroidKeystoreKeyProvider()
-) {
+internal class AuthSecretCipher(private val keyProvider: SecretKeyProvider = AndroidKeystoreKeyProvider()) {
     fun isEncrypted(value: String): Boolean = value.startsWith(PREFIX)
 
     /** Converts legacy plaintext while leaving an already migrated envelope untouched. */
@@ -79,7 +83,7 @@ internal class AuthSecretCipher(
         cipher.init(
             Cipher.DECRYPT_MODE,
             keyProvider.getOrCreate(),
-            GCMParameterSpec(TAG_LENGTH_BITS, payload.copyOfRange(0, IV_LENGTH_BYTES))
+            GCMParameterSpec(TAG_LENGTH_BITS, payload.copyOfRange(0, IV_LENGTH_BYTES)),
         )
         return cipher.doFinal(payload.copyOfRange(IV_LENGTH_BYTES, payload.size))
             .toString(Charsets.UTF_8)

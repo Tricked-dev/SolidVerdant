@@ -1,12 +1,18 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.remote
 
+import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.model.Membership
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntriesResponse
 import dev.tricked.solidverdant.data.model.TimeEntry
-import dev.tricked.solidverdant.data.model.Client
 
 class FakeRemoteDataSource(
     var entries: List<TimeEntry> = emptyList(),
@@ -35,23 +41,52 @@ class FakeRemoteDataSource(
     override suspend fun getActiveTimeEntry() = Result.success(active)
     override suspend fun getMyMemberships() = Result.success(memberships)
 
-    override suspend fun startTimeEntry(organizationId: String, memberId: String, userId: String, projectId: String?, taskId: String?, description: String): Result<TimeEntry> {
+    override suspend fun startTimeEntry(
+        organizationId: String,
+        memberId: String,
+        userId: String,
+        projectId: String?,
+        taskId: String?,
+        description: String,
+    ): Result<TimeEntry> {
         writeError?.let { return Result.failure(it) }
         if (failNextWrite) return Result.failure(java.io.IOException("offline"))
         started += Triple(description, projectId, taskId)
-        return Result.success(startResult(TimeEntry(
-            id = "server-1", description = description, userId = userId,
-            start = "2026-01-01T09:00:00Z", end = null, projectId = projectId,
-            taskId = taskId, organizationId = organizationId
-        )))
+        return Result.success(
+            startResult(
+                TimeEntry(
+                    id = "server-1",
+                    description = description,
+                    userId = userId,
+                    start = "2026-01-01T09:00:00Z",
+                    end = null,
+                    projectId = projectId,
+                    taskId = taskId,
+                    organizationId = organizationId,
+                ),
+            ),
+        )
     }
     override suspend fun createTimeEntry(organizationId: String, memberId: String, userId: String, entry: TimeEntry, tags: List<String>) =
         writeError?.let { Result.failure(it) }
             ?: if (failNextWrite) Result.failure(java.io.IOException("offline")) else Result.success(startResult(entry))
     override suspend fun stopTimeEntry(organizationId: String, timeEntryId: String, userId: String, startTime: String) =
         writeError?.let { Result.failure(it) }
-            ?: if (failNextWrite) Result.failure(java.io.IOException("offline"))
-            else Result.success(stopResult(TimeEntry(id = timeEntryId, userId = userId, start = startTime, end = "2026-01-01T10:00:00Z", organizationId = organizationId)))
+            ?: if (failNextWrite) {
+                Result.failure(java.io.IOException("offline"))
+            } else {
+                Result.success(
+                    stopResult(
+                        TimeEntry(
+                            id = timeEntryId,
+                            userId = userId,
+                            start = startTime,
+                            end = "2026-01-01T10:00:00Z",
+                            organizationId = organizationId,
+                        ),
+                    ),
+                )
+            }
     override suspend fun updateTimeEntry(organizationId: String, timeEntry: TimeEntry, tags: List<String>) =
         writeError?.let { Result.failure(it) }
             ?: if (failNextWrite) Result.failure(java.io.IOException("offline")) else Result.success(updateResult(timeEntry))

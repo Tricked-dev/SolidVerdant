@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.calendar
 
 import androidx.lifecycle.ViewModel
@@ -11,6 +17,7 @@ import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.TimeEntryReader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,7 +29,6 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import java.time.DayOfWeek
 import java.time.Instant
@@ -36,11 +42,7 @@ import javax.inject.Inject
 /** Which calendar layout the user is currently viewing. */
 enum class CalendarViewMode { MONTH, WEEK, DAY }
 
-data class DayBucket(
-    val date: LocalDate,
-    val entries: List<TimeEntry>,
-    val totalSeconds: Long,
-)
+data class DayBucket(val date: LocalDate, val entries: List<TimeEntry>, val totalSeconds: Long)
 
 data class CalendarUiState(
     val viewMode: CalendarViewMode = CalendarViewMode.WEEK,
@@ -98,11 +100,7 @@ class CalendarViewModel @Inject constructor(
         val retry: Int,
     )
 
-    private data class OverlayResult(
-        val events: List<DeviceCalendarEvent>,
-        val loading: Boolean,
-        val error: Boolean,
-    )
+    private data class OverlayResult(val events: List<DeviceCalendarEvent>, val loading: Boolean, val error: Boolean)
 
     init {
         recomputeVisibleDays()
@@ -125,8 +123,11 @@ class CalendarViewModel @Inject constructor(
             }
                 .distinctUntilChanged()
                 .collect { ready ->
-                    if (ready) refreshAvailableCalendars()
-                    else _uiState.update { it.copy(availableCalendars = emptyList()) }
+                    if (ready) {
+                        refreshAvailableCalendars()
+                    } else {
+                        _uiState.update { it.copy(availableCalendars = emptyList()) }
+                    }
                 }
         }
         // Query events reactively whenever the page, selection, or permission changes.
@@ -198,8 +199,11 @@ class CalendarViewModel @Inject constructor(
         }
         _weekAnchor.value = newAnchor
         val newDays = visibleDaysFor(state.viewMode, newAnchor, state.dayCount)
-        val newSelected = if (state.selectedDate in newDays) state.selectedDate
-        else newDays.firstOrNull() ?: newAnchor
+        val newSelected = if (state.selectedDate in newDays) {
+            state.selectedDate
+        } else {
+            newDays.firstOrNull() ?: newAnchor
+        }
         _uiState.update {
             it.copy(
                 weekAnchor = newAnchor,
@@ -337,12 +341,11 @@ class CalendarViewModel @Inject constructor(
         _uiState.update { it.copy(visibleDays = visibleDaysFor(s.viewMode, s.weekAnchor, s.dayCount)) }
     }
 
-    private fun visibleDaysFor(mode: CalendarViewMode, anchor: LocalDate, dayCount: Int): List<LocalDate> =
-        when (mode) {
-            CalendarViewMode.MONTH -> emptyList()
-            CalendarViewMode.WEEK -> visibleCalendarDays(anchor, weekStart, dayCount)
-            CalendarViewMode.DAY -> listOf(anchor)
-        }
+    private fun visibleDaysFor(mode: CalendarViewMode, anchor: LocalDate, dayCount: Int): List<LocalDate> = when (mode) {
+        CalendarViewMode.MONTH -> emptyList()
+        CalendarViewMode.WEEK -> visibleCalendarDays(anchor, weekStart, dayCount)
+        CalendarViewMode.DAY -> listOf(anchor)
+    }
 
     /** Epoch-milli half-open range covering the visible page, or null for MONTH mode. */
     private fun rangeFor(mode: CalendarViewMode, anchor: LocalDate, dayCount: Int): Pair<Long, Long>? {
@@ -362,9 +365,12 @@ class CalendarViewModel @Inject constructor(
             CalendarViewMode.MONTH -> listOf(state.visibleMonth)
             else -> {
                 val days = state.visibleDays
-                if (days.isEmpty()) listOf(state.visibleMonth)
-                // A week can straddle two months; load both so no column is missing entries.
-                else listOf(days.first(), days.last()).map { YearMonth.from(it) }.distinct()
+                if (days.isEmpty()) {
+                    listOf(state.visibleMonth)
+                } // A week can straddle two months; load both so no column is missing entries.
+                else {
+                    listOf(days.first(), days.last()).map { YearMonth.from(it) }.distinct()
+                }
             }
         }
         _uiState.update { it.copy(isLoading = true) }
@@ -374,6 +380,5 @@ class CalendarViewModel @Inject constructor(
         }
     }
 
-    fun entriesForSelectedDay(): List<TimeEntry> =
-        _uiState.value.bucketsByDate[_uiState.value.selectedDate]?.entries ?: emptyList()
+    fun entriesForSelectedDay(): List<TimeEntry> = _uiState.value.bucketsByDate[_uiState.value.selectedDate]?.entries ?: emptyList()
 }

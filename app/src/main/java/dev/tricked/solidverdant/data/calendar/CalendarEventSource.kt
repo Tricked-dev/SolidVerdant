@@ -20,9 +20,5 @@ interface CalendarEventSource {
      * Returns event occurrences from [calendarIds] intersecting `[rangeStartMs, rangeEndMs)`.
      * Empty when [calendarIds] is empty or permission is denied.
      */
-    suspend fun queryEvents(
-        calendarIds: Set<String>,
-        rangeStartMs: Long,
-        rangeEndMs: Long,
-    ): List<DeviceCalendarEvent>
+    suspend fun queryEvents(calendarIds: Set<String>, rangeStartMs: Long, rangeEndMs: Long): List<DeviceCalendarEvent>
 }

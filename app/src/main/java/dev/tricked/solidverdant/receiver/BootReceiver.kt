@@ -74,7 +74,7 @@ class BootReceiver : BroadcastReceiver() {
                                 startTime = Instant.parse(timeEntry.start),
                                 projectName = null, // Will be updated when app loads
                                 taskName = null,
-                                description = timeEntry.description
+                                description = timeEntry.description,
                             )
                         } catch (e: Exception) {
                             Timber.e(e, "Could not start tracking service after boot; showing resume prompt")
