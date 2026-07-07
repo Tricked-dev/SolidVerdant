@@ -128,7 +128,7 @@ fun MonthCalendarView(
             Row(modifier = Modifier.fillMaxWidth()) {
                 week.forEach { day ->
                     val bucket = state.bucketsByDate[day]
-                    val inMonth = day.month == state.visibleMonth.month
+                    val inMonth = java.time.YearMonth.from(day) == state.visibleMonth
                     val selected = day == state.selectedDate
                     val intensity = ((bucket?.totalSeconds ?: 0L).toFloat() / maxSeconds).coerceIn(0f, 1f)
                     Column(

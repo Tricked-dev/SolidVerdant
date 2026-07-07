@@ -69,6 +69,75 @@ class SyncWorkerTest {
         assertEquals(1, db.outboxDao().peekAll().size)
     }
 
+    @Test fun rejected_op_is_dead_lettered_and_not_reattempted() = runTest {
+        remote.writeError = IllegalStateException("rejected") // non-IOException -> FAIL
+        db.outboxDao().insert(OutboxEntity(
+            opType = OutboxOpType.DELETE, organizationId = "org1", timeEntryId = "server-1",
+            createdAtMs = 1L, payloadJson = "{}"))
+
+        val result = buildWorker().doWork()
+        assertEquals(ListenableWorker.Result.success(), result)
+        // The op remains (visible for user retry) but is dead-lettered and no longer drained.
+        val stored = db.outboxDao().peekAll().single()
+        assertTrue(stored.deadLettered)
+        assertTrue(db.outboxDao().peekPending().isEmpty())
+
+        // A subsequent run must not touch the server again.
+        remote.writeError = null
+        buildWorker().doWork()
+        assertTrue(remote.deleted.isEmpty())
+    }
+
+    @Test fun transient_failures_are_dead_lettered_after_attempt_cap() = runTest {
+        remote.failNextWrite = true // IOException -> RETRY
+        db.outboxDao().insert(OutboxEntity(
+            opType = OutboxOpType.STOP, organizationId = "org1", timeEntryId = "server-1",
+            createdAtMs = 1L, attemptCount = SyncWorker.MAX_ATTEMPTS - 1,
+            payloadJson = json.encodeToString(StopPayload("u1", "2026-07-07T08:00:00Z"))))
+
+        val result = buildWorker().doWork()
+        // Cap reached: dead-lettered instead of endless retry, worker completes successfully.
+        assertEquals(ListenableWorker.Result.success(), result)
+        val stored = db.outboxDao().peekAll().single()
+        assertTrue(stored.deadLettered)
+        assertTrue(db.outboxDao().peekPending().isEmpty())
+    }
+
+    @Test fun failed_create_cascades_dead_letter_to_dependent_ops() = runTest {
+        remote.writeError = IllegalStateException("rejected")
+        // START creates the entry; STOP depends on the not-yet-rekeyed local id.
+        db.outboxDao().insert(OutboxEntity(
+            opType = OutboxOpType.START, organizationId = "org1", timeEntryId = "local-1",
+            createdAtMs = 1L, payloadJson = json.encodeToString(
+                StartPayload("m1", "u1", null, null, "work", emptyList()))))
+        db.outboxDao().insert(OutboxEntity(
+            opType = OutboxOpType.STOP, organizationId = "org1", timeEntryId = "local-1",
+            createdAtMs = 2L, payloadJson = json.encodeToString(StopPayload("u1", "s"))))
+
+        buildWorker().doWork()
+        // Both the failed create and its dependent are dead-lettered; none re-attempted.
+        assertTrue(db.outboxDao().peekPending().isEmpty())
+        assertTrue(db.outboxDao().peekAll().all { it.deadLettered })
+        assertEquals(2, db.outboxDao().peekAll().size)
+    }
+
+    @Test fun start_retry_adopts_existing_active_entry_without_duplicate() = runTest {
+        // A prior attempt already created the entry on the server (attemptCount > 0).
+        remote.active = TimeEntry(id = "server-9", userId = "u1", organizationId = "org1",
+            start = "2026-07-07T08:00:00Z", end = null)
+        db.outboxDao().insert(OutboxEntity(
+            opType = OutboxOpType.START, organizationId = "org1", timeEntryId = "local-1",
+            createdAtMs = 1L, attemptCount = 1,
+            payloadJson = json.encodeToString(StartPayload("m1", "u1", null, null, "work", emptyList()))))
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+        // No duplicate start POST; op cleared and reconciled to the server entry.
+        assertTrue(remote.started.isEmpty())
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+        assertNull(db.timeEntryDao().getById("local-1"))
+        assertEquals(SyncState.SYNCED, db.timeEntryDao().getById("server-9")?.syncState)
+    }
+
     @Test fun stop_success_persists_authoritative_server_entry_as_synced() = runTest {
         val local = TimeEntry(
             id = "server-1", userId = "u1", organizationId = "org1",

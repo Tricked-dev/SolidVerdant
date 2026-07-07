@@ -21,7 +21,9 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, "solidverdant.db")
-            .fallbackToDestructiveMigration()
+            // No destructive fallback: unsynced outbox operations and pending local edits must
+            // survive schema upgrades. Every version bump must ship an explicit migration.
+            .addMigrations(*AppDatabase.MIGRATIONS)
             .build()
 
     @Provides fun provideTimeEntryDao(db: AppDatabase): TimeEntryDao = db.timeEntryDao()

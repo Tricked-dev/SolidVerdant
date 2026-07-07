@@ -62,14 +62,24 @@ class BootReceiver : BroadcastReceiver() {
                     if (timeEntry != null &&
                         timeEntry.organizationId == currentMembership?.organizationId
                     ) {
-                        Timber.d("Active tracking found, restoring tracking notification")
-                        TimeTrackingNotificationService.startTracking(
-                            context = context,
-                            startTime = Instant.parse(timeEntry.start),
-                            projectName = null, // Will be updated when app loads
-                            taskName = null,
-                            description = timeEntry.description
-                        )
+                        // Only restore the foreground tracking service when a timer is actually
+                        // running for the current membership (guarded above). Starting an FGS
+                        // from BOOT_COMPLETED is normally allowed, but guard the call so a
+                        // ForegroundServiceStartNotAllowedException on stricter OEMs degrades to
+                        // a plain "tap to resume" notification instead of dropping the timer.
+                        try {
+                            Timber.d("Active tracking found, restoring tracking notification")
+                            TimeTrackingNotificationService.startTracking(
+                                context = context,
+                                startTime = Instant.parse(timeEntry.start),
+                                projectName = null, // Will be updated when app loads
+                                taskName = null,
+                                description = timeEntry.description
+                            )
+                        } catch (e: Exception) {
+                            Timber.e(e, "Could not start tracking service after boot; showing resume prompt")
+                            TimeTrackingNotificationService.showResumePrompt(context)
+                        }
                     } else if (settingsDataStore.alwaysShowNotification.first()) {
                         Timber.d("No active tracking for current membership, showing idle notification")
                         TimeTrackingNotificationService.showIdle(context)

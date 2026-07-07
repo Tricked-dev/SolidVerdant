@@ -49,13 +49,14 @@ object StatisticsAggregator {
     ): StatisticsSummary {
         val projectById = projects.associateBy { it.id }
 
-        data class Counted(val date: LocalDate, val seconds: Long, val entry: TimeEntry)
+        // Per-entry clipped total plus its per-day breakdown within the range. An entry that begins
+        // before rangeStart or ends after rangeEnd only contributes the overlapping seconds, and a
+        // multi-day entry has those seconds split across each day it actually spans.
+        data class Counted(val seconds: Long, val entry: TimeEntry, val daily: List<Pair<LocalDate, Long>>)
 
         val counted = entries.mapNotNull { e ->
-            val secs = effectiveSeconds(e) ?: return@mapNotNull null
-            val date = startDate(e, zone) ?: return@mapNotNull null
-            if (date < rangeStart || date > rangeEnd) return@mapNotNull null
-            Counted(date, secs, e)
+            val daily = clippedDailyBreakdown(e, zone, rangeStart, rangeEnd) ?: return@mapNotNull null
+            Counted(daily.sumOf { it.second }, e, daily)
         }
 
         val totalSeconds = counted.sumOf { it.seconds }
@@ -78,7 +79,7 @@ object StatisticsAggregator {
         val days = ChronoUnit.DAYS.between(rangeStart, rangeEnd) + 1
         val avgPerDay = if (days > 0) totalSeconds / days else totalSeconds
 
-        val trend = buildTrend(counted.map { it.date to it.seconds }, rangeStart, rangeEnd, granularity)
+        val trend = buildTrend(counted.flatMap { it.daily }, rangeStart, rangeEnd, granularity)
 
         return StatisticsSummary(
             totalSeconds = totalSeconds,
@@ -91,22 +92,53 @@ object StatisticsAggregator {
         )
     }
 
-    private fun effectiveSeconds(e: TimeEntry): Long? {
-        e.duration?.let { return it.toLong() }
-        val end = e.end ?: return null
-        return try {
-            val s = Instant.parse(e.start)
-            val en = Instant.parse(end)
-            (en.epochSecond - s.epochSecond).coerceAtLeast(0)
-        } catch (t: Throwable) {
-            null
+    /**
+     * Clips an entry's [start, end) interval to the inclusive [rangeStart, rangeEnd] window (in
+     * [zone]) and splits the overlapping seconds across every local day it spans.
+     *
+     * Returns null when the entry cannot be resolved to a finite interval (unparseable start, or an
+     * active entry with neither duration nor end) or has no overlap with the range. The end is taken
+     * from [TimeEntry.duration] when present (start + duration), otherwise from [TimeEntry.end].
+     * A zero-length entry whose instant falls inside the range yields a single 0-second day so it
+     * still counts and attributes to the correct project/day. The returned per-day seconds sum to
+     * the entry's total in-range contribution.
+     */
+    private fun clippedDailyBreakdown(
+        e: TimeEntry,
+        zone: ZoneId,
+        rangeStart: LocalDate,
+        rangeEnd: LocalDate,
+    ): List<Pair<LocalDate, Long>>? {
+        val startInstant = try { Instant.parse(e.start) } catch (t: Throwable) { return null }
+        val endInstant = when {
+            e.duration != null -> startInstant.plusSeconds(e.duration.toLong().coerceAtLeast(0))
+            e.end != null -> try { Instant.parse(e.end) } catch (t: Throwable) { return null }
+            else -> return null
         }
-    }
 
-    private fun startDate(e: TimeEntry, zone: ZoneId): LocalDate? = try {
-        Instant.parse(e.start).atZone(zone).toLocalDate()
-    } catch (t: Throwable) {
-        null
+        val rangeStartInstant = rangeStart.atStartOfDay(zone).toInstant()
+        val rangeEndExclusive = rangeEnd.plusDays(1).atStartOfDay(zone).toInstant()
+
+        // Zero- or negative-length entry: attribute 0 seconds on its start day if that day is in range.
+        if (!endInstant.isAfter(startInstant)) {
+            if (startInstant < rangeStartInstant || !startInstant.isBefore(rangeEndExclusive)) return null
+            return listOf(startInstant.atZone(zone).toLocalDate() to 0L)
+        }
+
+        val clipStart = maxOf(startInstant, rangeStartInstant)
+        val clipEnd = minOf(endInstant, rangeEndExclusive)
+        if (!clipEnd.isAfter(clipStart)) return null
+
+        val out = mutableListOf<Pair<LocalDate, Long>>()
+        var cursor = clipStart
+        while (cursor < clipEnd) {
+            val date = cursor.atZone(zone).toLocalDate()
+            val nextDayStart = date.plusDays(1).atStartOfDay(zone).toInstant()
+            val segmentEnd = minOf(nextDayStart, clipEnd)
+            out += date to (segmentEnd.epochSecond - cursor.epochSecond)
+            cursor = segmentEnd
+        }
+        return out
     }
 
     private fun buildTrend(
@@ -131,7 +163,10 @@ object StatisticsAggregator {
                 .takeWhile { it <= rangeEnd }
                 .map { ws ->
                     val week = ws.get(wf.weekOfWeekBasedYear())
-                    TrendBucket("W$week", ws, byWeekStart[ws] ?: 0L)
+                    // Include the (week-based) year so labels don't collide across year
+                    // boundaries, e.g. W52 of 2025 vs W52 of 2026 in a multi-year range.
+                    val yy = ws.get(wf.weekBasedYear()) % 100
+                    TrendBucket("W$week '%02d".format(yy), ws, byWeekStart[ws] ?: 0L)
                 }
                 .toList()
         }

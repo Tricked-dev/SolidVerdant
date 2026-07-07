@@ -2,6 +2,7 @@ package dev.tricked.solidverdant.ui.calendar
 
 import dev.tricked.solidverdant.data.model.TimeEntry
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 import java.time.DayOfWeek
 import java.time.Instant
@@ -38,6 +39,25 @@ class CalendarDateUtilsTest {
             end = null, duration = null, organizationId = "o",
         )
         assertEquals(3600L, entryDurationSeconds(e, Instant.parse("2026-07-06T10:00:00Z")))
+    }
+
+    @Test
+    fun entryLocalDate_parsesValidStart() {
+        val e = TimeEntry(
+            id = "1", userId = "u", start = "2026-07-06T09:00:00Z",
+            end = null, duration = null, organizationId = "o",
+        )
+        assertEquals(LocalDate.of(2026, 7, 6), entryLocalDate(e))
+    }
+
+    @Test
+    fun entryLocalDate_returnsNullOnUnparseableStart() {
+        // Malformed start must NOT fall back to today (which would pollute today's totals).
+        val e = TimeEntry(
+            id = "1", userId = "u", start = "not-a-timestamp",
+            end = null, duration = null, organizationId = "o",
+        )
+        assertNull(entryLocalDate(e))
     }
 
     @Test

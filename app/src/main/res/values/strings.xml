@@ -208,4 +208,11 @@
     <string name="widget_not_tracking">Not tracking</string>
     <string name="widget_login_required">Login required</string>
 
+    <!-- Time entry validation (edit/create) -->
+    <string name="entry_error_end_before_start">End time must be after the start time.</string>
+    <string name="entry_error_duration_too_long">This entry is longer than 24 hours. Check the start and end times.</string>
+    <string name="entry_warning_long_duration">This entry is %1$d hours long. Save it only if that\'s correct.</string>
+    <string name="entry_warning_overlap">This entry overlaps another entry. Overlaps are allowed but may be flagged.</string>
+    <string name="entry_warning_overlap_policy">This entry overlaps another entry, which your organization\'s policy discourages.</string>
+
 </resources>

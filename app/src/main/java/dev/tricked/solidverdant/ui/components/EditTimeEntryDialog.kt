@@ -53,6 +53,9 @@ import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.ui.tracking.EntryTimeValidator
+import dev.tricked.solidverdant.ui.tracking.EntryTrustRules
+import dev.tricked.solidverdant.ui.tracking.EntryValidationBanner
 import dev.tricked.solidverdant.ui.tracking.ProjectTaskDropdown as TrackingProjectTaskDropdown
 import dev.tricked.solidverdant.ui.tracking.TagsSelector
 import java.time.ZonedDateTime
@@ -66,7 +69,9 @@ fun EditTimeEntryDialog(
     tasks: List<Task>,
     tags: List<Tag>,
     onDismiss: () -> Unit,
-    onSave: (String?, String?, String?, List<String>, Boolean, String, String) -> Unit
+    onSave: (String?, String?, String?, List<String>, Boolean, String, String) -> Unit,
+    existingEntries: List<TimeEntry> = emptyList(),
+    preventOverlap: Boolean = false,
 ) {
     var description by remember { mutableStateOf(entry.description ?: "") }
     var projectId by remember { mutableStateOf(entry.projectId) }
@@ -86,6 +91,24 @@ fun EditTimeEntryDialog(
     var editingTime by remember { mutableStateOf<TimeField?>(null) }
     val durationIsValid = durationMinutes.toLongOrNull()?.let { it > 0 } == true
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    val overlaps = remember(startTime, endTime, existingEntries) {
+        if (existingEntries.isEmpty()) {
+            false
+        } else {
+            val candidate = entry.copy(
+                start = startTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                end = endTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+            )
+            existingEntries.any { it.id != candidate.id && EntryTrustRules.overlaps(candidate, it) }
+        }
+    }
+    val validation = remember(startTime, endTime, overlaps, preventOverlap) {
+        EntryTimeValidator.evaluate(startTime, endTime, overlaps, preventOverlap)
+    }
+    val durationHours = remember(startTime, endTime) {
+        java.time.Duration.between(startTime, endTime).toHours().coerceAtLeast(0)
+    }
 
     fun setDuration(minutes: Long) {
         val safeMinutes = minutes.coerceAtLeast(1)
@@ -250,6 +273,8 @@ fun EditTimeEntryDialog(
                     )
                 }
 
+                EntryValidationBanner(result = validation, durationHours = durationHours)
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
@@ -277,7 +302,7 @@ fun EditTimeEntryDialog(
                                 endTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
                             )
                         },
-                        enabled = durationIsValid,
+                        enabled = durationIsValid && validation.canSave,
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(stringResource(R.string.save), fontWeight = FontWeight.SemiBold)
@@ -298,10 +323,12 @@ fun EditTimeEntryDialog(
                     startTime = startTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
                     endTime = startTime.plusMinutes(minutes)
                 } else {
-                    var selectedEnd = endTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
-                    if (!selectedEnd.isAfter(startTime)) selectedEnd = selectedEnd.plusDays(1)
-                    endTime = selectedEnd
-                    durationMinutes = java.time.Duration.between(startTime, endTime).toMinutes().coerceAtLeast(1).toString()
+                    val sameDayEnd = endTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
+                    // Do not silently roll an earlier clock-time into a ~24h entry: only a plausible
+                    // overnight span becomes cross-midnight, otherwise keep it same-day so the
+                    // validation banner surfaces the end-before-start error for the user to fix.
+                    endTime = EntryTimeValidator.resolveEnd(startTime, sameDayEnd) ?: sameDayEnd
+                    durationMinutes = java.time.Duration.between(startTime, endTime).toMinutes().toString()
                 }
                 editingTime = null
             }

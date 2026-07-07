@@ -13,9 +13,11 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import dagger.hilt.android.AndroidEntryPoint
 import dev.tricked.solidverdant.MainActivity
 import dev.tricked.solidverdant.R
@@ -279,7 +281,20 @@ class TimeTrackingNotificationService : Service() {
         taskName = null
         description = null
 
-        publishNotification()
+        // The idle quick-start prompt must not hold a foreground service. Drop the FGS (if we
+        // held one for an active timer) and post the prompt as a normal notification instead.
+        if (isForeground) {
+            stopForeground(STOP_FOREGROUND_DETACH)
+            isForeground = false
+        }
+        // Cancel first so the prompt is re-posted on the low-importance idle channel rather
+        // than inheriting the active channel from a previous tracking notification.
+        notificationManager.cancel(NOTIFICATION_ID)
+        notificationManager.notify(NOTIFICATION_ID, buildIdleNotification(this))
+
+        // No timer is running, so nothing needs a live service. The notification persists
+        // because it was posted via NotificationManager, not tied to the foreground lifecycle.
+        stopSelf()
     }
 
     private fun handlePauseTracking() {
@@ -355,15 +370,44 @@ class TimeTrackingNotificationService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    /** The single path for creating or replacing the foreground notification. */
+    /**
+     * The single path for creating or replacing the status notification.
+     *
+     * A foreground service is held only while a timer is actually running. Paused/idle states
+     * show a normal notification and drop the foreground service so we never keep an FGS alive
+     * just to display a prompt (Google Play foreground-service policy).
+     */
     private fun publishNotification() {
         val notification = buildNotification()
-        if (isForeground) {
-            notificationManager.notify(NOTIFICATION_ID, notification)
+        if (isTracking) {
+            startForegroundCompat(notification)
         } else {
-            startForeground(NOTIFICATION_ID, notification)
-            isForeground = true
+            if (isForeground) {
+                // Keep the notification posted but detach it from the (now stopping) FGS.
+                stopForeground(STOP_FOREGROUND_DETACH)
+                isForeground = false
+            } else {
+                // The service may have been launched fresh via startForegroundService (e.g.
+                // pausing after process death). That call obligates a startForeground() within
+                // ~5s, so satisfy the contract and then immediately detach: paused/idle states
+                // must not keep a foreground service alive.
+                startForegroundCompat(notification)
+                stopForeground(STOP_FOREGROUND_DETACH)
+                isForeground = false
+            }
+            notificationManager.notify(NOTIFICATION_ID, notification)
         }
+    }
+
+    /** Promote to a foreground service with the dataSync type (matches the manifest). */
+    private fun startForegroundCompat(notification: Notification) {
+        // minSdk is 29, so the typed startForeground overload is always available.
+        startForeground(
+            NOTIFICATION_ID,
+            notification,
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        )
+        isForeground = true
     }
 
     private fun refreshNotificationIfVisible() {
@@ -372,54 +416,13 @@ class TimeTrackingNotificationService : Service() {
         }
     }
 
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // Active tracking channel - higher importance for ongoing timer
-            val activeChannel = NotificationChannel(
-                CHANNEL_ID_ACTIVE,
-                getString(R.string.notification_channel_active_name),
-                NotificationManager.IMPORTANCE_DEFAULT
-            ).apply {
-                description = getString(R.string.notification_channel_active_description)
-                setShowBadge(false)
-                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-                setSound(null, null) // Silent
-            }
-
-            // Idle/Quick start channel - low importance
-            val idleChannel = NotificationChannel(
-                CHANNEL_ID_IDLE,
-                getString(R.string.notification_channel_idle_name),
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = getString(R.string.notification_channel_idle_description)
-                setShowBadge(false)
-                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-                setSound(null, null) // Silent
-            }
-
-            // Error/Sync issues channel - default importance
-            val errorChannel = NotificationChannel(
-                CHANNEL_ID_ERROR,
-                getString(R.string.notification_channel_error_name),
-                NotificationManager.IMPORTANCE_DEFAULT
-            ).apply {
-                description = getString(R.string.notification_channel_error_description)
-                setShowBadge(true)
-                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-            }
-
-            notificationManager.createNotificationChannels(
-                listOf(activeChannel, idleChannel, errorChannel)
-            )
-        }
-    }
+    private fun createNotificationChannel() = ensureChannels(this)
 
     private fun buildNotification(): Notification {
         return when {
             isTracking -> buildTrackingNotification()
             isPaused -> buildPausedNotification()
-            else -> buildIdleNotification()
+            else -> buildIdleNotification(this)
         }
     }
 
@@ -597,40 +600,26 @@ class TimeTrackingNotificationService : Service() {
         return String.format("%02d:%02d:%02d", hours, minutes, seconds)
     }
 
-    private fun buildIdleNotification(): Notification {
-        // Intent to open project selection overlay (same as tile)
-        val projectSelectionIntent = Intent(this, ProjectSelectionActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val projectSelectionPendingIntent = PendingIntent.getActivity(
-            this,
-            0,
-            projectSelectionIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        return NotificationCompat.Builder(this, CHANNEL_ID_IDLE)
-            .setContentTitle(getString(R.string.app_name))
-            .setContentText(getString(R.string.notification_quick_start_ready))
-            .setSmallIcon(R.drawable.ic_timer)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setContentIntent(projectSelectionPendingIntent)
-            .addAction(
-                R.drawable.ic_timer,
-                getString(R.string.quick_start),
-                projectSelectionPendingIntent
-            )
-            .setCategory(NotificationCompat.CATEGORY_STATUS)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .build()
-    }
-
     private fun stopService() {
         isForeground = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    /**
+     * Android 15+ (API 35) enforces a cumulative daily runtime limit on dataSync foreground
+     * services (~6h/24h). A full-workday timer can hit it; when it does the system calls this and
+     * requires the FGS to stop promptly. Degrade gracefully: detach so the elapsed-timer
+     * notification stays posted (the entry is server-authoritative and keeps running) while we
+     * drop the foreground status, rather than being force-stopped/crashed.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Timber.w("dataSync foreground service timed out; detaching to a plain notification")
+        if (isForeground) {
+            notificationManager.notify(NOTIFICATION_ID, buildNotification())
+            stopForeground(STOP_FOREGROUND_DETACH)
+            isForeground = false
+        }
     }
 
     override fun onDestroy() {
@@ -669,13 +658,125 @@ class TimeTrackingNotificationService : Service() {
         const val EXTRA_TASK_ID = "task_id"
 
         /**
-         * Show idle notification (quick start)
+         * Show the idle "quick start" prompt.
+         *
+         * This is a normal (non-foreground) notification: it never starts or keeps a foreground
+         * service alive. If a tracking service is currently running we deliver ACTION_SHOW_IDLE
+         * so it demotes itself; otherwise we post the prompt directly. We deliberately use
+         * startService (not startForegroundService) so the idle prompt can never become an FGS.
          */
         fun showIdle(context: Context) {
             val intent = Intent(context, TimeTrackingNotificationService::class.java).apply {
                 action = ACTION_SHOW_IDLE
             }
-            context.startForegroundService(intent)
+            try {
+                context.startService(intent)
+            } catch (e: IllegalStateException) {
+                // No running service and background service starts are disallowed. Post directly.
+                Timber.d(e, "Posting idle notification without a service")
+                ensureChannels(context)
+                NotificationManagerCompat.from(context)
+                    .notify(NOTIFICATION_ID, buildIdleNotification(context))
+            }
+        }
+
+        /**
+         * Fallback used when a running timer cannot be restored into a foreground service (e.g.
+         * a ForegroundServiceStartNotAllowedException after boot on some OEMs). Posts a plain
+         * notification prompting the user to reopen the app to restore the timer display.
+         */
+        fun showResumePrompt(context: Context) {
+            ensureChannels(context)
+            val openIntent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val openPendingIntent = PendingIntent.getActivity(
+                context, 7, openIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            // Reuses existing strings so no new resource is required: title "Time Tracking",
+            // body "Tracking time" — accurate (a timer is still running) and tapping opens the app.
+            val notification = NotificationCompat.Builder(context, CHANNEL_ID_IDLE)
+                .setContentTitle(context.getString(R.string.time_tracking_notification_title))
+                .setContentText(context.getString(R.string.notification_tracking_default))
+                .setSmallIcon(R.drawable.ic_timer)
+                .setAutoCancel(true)
+                .setContentIntent(openPendingIntent)
+                .setCategory(NotificationCompat.CATEGORY_STATUS)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .build()
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
+        }
+
+        /** Create the notification channels. Safe to call repeatedly. */
+        fun ensureChannels(context: Context) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+            val manager = context.getSystemService(NotificationManager::class.java) ?: return
+
+            val activeChannel = NotificationChannel(
+                CHANNEL_ID_ACTIVE,
+                context.getString(R.string.notification_channel_active_name),
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = context.getString(R.string.notification_channel_active_description)
+                setShowBadge(false)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                setSound(null, null) // Silent
+            }
+
+            val idleChannel = NotificationChannel(
+                CHANNEL_ID_IDLE,
+                context.getString(R.string.notification_channel_idle_name),
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = context.getString(R.string.notification_channel_idle_description)
+                setShowBadge(false)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                setSound(null, null) // Silent
+            }
+
+            val errorChannel = NotificationChannel(
+                CHANNEL_ID_ERROR,
+                context.getString(R.string.notification_channel_error_name),
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = context.getString(R.string.notification_channel_error_description)
+                setShowBadge(true)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            }
+
+            manager.createNotificationChannels(listOf(activeChannel, idleChannel, errorChannel))
+        }
+
+        /** Build the idle quick-start prompt notification (usable without a service instance). */
+        private fun buildIdleNotification(context: Context): Notification {
+            val projectSelectionIntent = Intent(context, ProjectSelectionActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val projectSelectionPendingIntent = PendingIntent.getActivity(
+                context,
+                0,
+                projectSelectionIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            return NotificationCompat.Builder(context, CHANNEL_ID_IDLE)
+                .setContentTitle(context.getString(R.string.app_name))
+                .setContentText(context.getString(R.string.notification_quick_start_ready))
+                .setSmallIcon(R.drawable.ic_timer)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setContentIntent(projectSelectionPendingIntent)
+                .addAction(
+                    R.drawable.ic_timer,
+                    context.getString(R.string.quick_start),
+                    projectSelectionPendingIntent
+                )
+                .setCategory(NotificationCompat.CATEGORY_STATUS)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .build()
         }
 
         fun quickStart(

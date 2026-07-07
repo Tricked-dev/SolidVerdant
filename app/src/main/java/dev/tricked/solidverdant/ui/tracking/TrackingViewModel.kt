@@ -35,6 +35,33 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
+/** Which slice of history the user is currently looking at. */
+internal enum class HistoryWindowMode { RECENT, PAGINATED }
+
+/**
+ * Single source of truth for how a Room emission from the recent-window collector combines with
+ * the list currently on screen.
+ *
+ * In [HistoryWindowMode.RECENT] the collector owns the list and replaces it wholesale, so live
+ * edits and the active-entry poll stay fresh. Once the user pages or jumps to an off-window slice
+ * ([HistoryWindowMode.PAGINATED]) the network-fetched window is authoritative: its order and
+ * membership are preserved (so scroll position survives a poll emission) while any fresher copy of
+ * a still-visible entry carried by the recent collector is overlaid in place.
+ */
+internal object HistoryWindow {
+    fun merge(
+        mode: HistoryWindowMode,
+        displayed: List<TimeEntry>,
+        collected: List<TimeEntry>
+    ): List<TimeEntry> = when (mode) {
+        HistoryWindowMode.RECENT -> collected
+        HistoryWindowMode.PAGINATED -> {
+            val collectedById = collected.associateBy { it.id }
+            displayed.map { collectedById[it.id] ?: it }
+        }
+    }
+}
+
 /**
  * UI state for tracking screen
  */
@@ -135,6 +162,7 @@ class TrackingViewModel @Inject constructor(
     private var historyLoadStage = 0
     private var historyOffset = 0
     private var historyWindowStartOffset = 0
+    private var historyWindowMode = HistoryWindowMode.RECENT
     private var isInitialized = false
 
     init {
@@ -242,12 +270,13 @@ class TrackingViewModel @Inject constructor(
         }
         dataCollectorJob?.cancel()
         syncCollectorJob?.cancel()
-        syncCollectorJob?.cancel()
         firstFrameCacheJob?.cancel()
         collectingOrganizationId = organizationId
         lastCollectedActiveId = null
         historyLoadStage = 1
         historyWindowStartOffset = 0
+        historyOffset = 0
+        historyWindowMode = HistoryWindowMode.RECENT
         dataCollectorJob = viewModelScope.launch {
             combine(
                 timeEntryRepository.observeTimeEntries(organizationId),
@@ -272,9 +301,18 @@ class TrackingViewModel @Inject constructor(
                     .filter { it.end != null && !it.description.isNullOrBlank() }
                     .maxByOrNull { it.start }
                 val activeChanged = data.active?.id != lastCollectedActiveId
-                historyOffset = data.entries.size
-                _uiState.value = _uiState.value.copy(
-                    timeEntries = data.entries,
+                val currentState = _uiState.value
+                val mode = historyWindowMode
+                // Single source of truth: the collector only owns the displayed list (and the
+                // paging offset) while the recent slice is on screen. Once the user has paged or
+                // jumped, loadMore/jump own the window and offset; here we merely refresh visible
+                // entries in place so a poll emission cannot wipe the window or reset scroll.
+                val displayedEntries = HistoryWindow.merge(mode, currentState.timeEntries, data.entries)
+                if (mode == HistoryWindowMode.RECENT) {
+                    historyOffset = data.entries.size
+                }
+                _uiState.value = currentState.copy(
+                    timeEntries = displayedEntries,
                     projects = data.projects,
                     tasks = data.tasks,
                     tags = data.tags,
@@ -283,17 +321,22 @@ class TrackingViewModel @Inject constructor(
                     isTracking = data.active != null,
                     hasLoadedTimeEntries = true,
                     // Heuristic: if we filled the refresh window there may be older history
-                    // to page in from the network (see loadMoreTimeEntries).
-                    hasMoreTimeEntries = data.entries.size >= HISTORY_REFRESH_LIMIT,
+                    // to page in from the network (see loadMoreTimeEntries). Preserve the flag
+                    // maintained by loadMore/jump once the user is viewing a paginated window.
+                    hasMoreTimeEntries = if (mode == HistoryWindowMode.RECENT) {
+                        data.entries.size >= HISTORY_REFRESH_LIMIT
+                    } else {
+                        currentState.hasMoreTimeEntries
+                    },
                     cachedContinueEntry = continueEntry,
                     isLoading = false,
                     // Only reset in-progress edits when the active entry itself changes,
                     // so a user's typing is not clobbered by a background emission.
-                    editingDescription = if (activeChanged) data.active?.description.orEmpty() else _uiState.value.editingDescription,
-                    editingProjectId = if (activeChanged) data.active?.projectId else _uiState.value.editingProjectId,
-                    editingTaskId = if (activeChanged) data.active?.taskId else _uiState.value.editingTaskId,
-                    editingTags = if (activeChanged) data.active?.tags?.map { it.id }.orEmpty() else _uiState.value.editingTags,
-                    editingBillable = if (activeChanged) (data.active?.billable ?: false) else _uiState.value.editingBillable
+                    editingDescription = if (activeChanged) data.active?.description.orEmpty() else currentState.editingDescription,
+                    editingProjectId = if (activeChanged) data.active?.projectId else currentState.editingProjectId,
+                    editingTaskId = if (activeChanged) data.active?.taskId else currentState.editingTaskId,
+                    editingTags = if (activeChanged) data.active?.tags?.map { it.id }.orEmpty() else currentState.editingTags,
+                    editingBillable = if (activeChanged) (data.active?.billable ?: false) else currentState.editingBillable
                 )
                 settingsDataStore.cacheContinueEntry(continueEntry)
                 firstFrameCacheJob?.cancel()
@@ -473,31 +516,6 @@ class TrackingViewModel @Inject constructor(
                 }
     }
 
-    /**
-     * Load time entries
-     */
-    private suspend fun loadTimeEntries(organizationId: String, memberId: String) {
-            authRepository.getTimeEntries(organizationId, memberId)
-                .onSuccess { response ->
-                    val entries = response.data
-                    val continueEntry = entries
-                        .filter { it.end != null && !it.description.isNullOrBlank() }
-                        .maxByOrNull { it.start }
-                    _uiState.value = _uiState.value.copy(
-                        timeEntries = entries,
-                        hasLoadedTimeEntries = true,
-                        hasMoreTimeEntries = entries.size < (response.meta?.total ?: entries.size),
-                        totalTimeEntries = response.meta?.total,
-                        cachedContinueEntry = continueEntry
-                    )
-                    settingsDataStore.cacheContinueEntry(continueEntry)
-                }
-                .onFailure { error ->
-                    Timber.e(error, "Failed to load time entries")
-                    _uiState.value = _uiState.value.copy(hasLoadedTimeEntries = true)
-                }
-    }
-
     /** Load history progressively while retaining fetched entries for this app session. */
     fun loadMoreTimeEntries() {
         val organizationId = historyOrganizationId ?: return
@@ -528,6 +546,9 @@ class TrackingViewModel @Inject constructor(
                         historyOffset + incoming.size
                     }
                     historyLoadStage++
+                    // The user has explicitly asked for more than the recent slice; the collector
+                    // must now preserve this grown window instead of replacing it on every poll.
+                    historyWindowMode = HistoryWindowMode.PAGINATED
                     _uiState.value = _uiState.value.copy(
                         timeEntries = merged,
                         isLoadingMoreTimeEntries = false,
@@ -651,6 +672,8 @@ class TrackingViewModel @Inject constructor(
             historyWindowStartOffset = windowStart
             historyOffset = windowStart + window.size
             historyLoadStage = 2
+            // The jumped-to window is authoritative; keep the collector from replacing it.
+            historyWindowMode = HistoryWindowMode.PAGINATED
             _uiState.value = _uiState.value.copy(
                 timeEntries = window,
                 totalTimeEntries = response.meta?.total ?: total,
@@ -682,6 +705,7 @@ class TrackingViewModel @Inject constructor(
                     entry.copy(tags = entry.tags.map { tagsById[it.id] ?: it })
                 }
                 historyWindowStartOffset = newStart
+                historyWindowMode = HistoryWindowMode.PAGINATED
                 _uiState.value = _uiState.value.copy(
                     timeEntries = (incoming + _uiState.value.timeEntries)
                         .distinctBy { it.id }.sortedByDescending { it.start },
@@ -718,46 +742,6 @@ class TrackingViewModel @Inject constructor(
     }
 
     /**
-     * Load projects
-     */
-    private suspend fun loadProjects(organizationId: String) {
-            authRepository.getProjects(organizationId)
-                .onSuccess { projects ->
-                    _uiState.value =
-                        _uiState.value.copy(projects = projects.filter { !it.isArchived })
-                }
-                .onFailure { error ->
-                    Timber.e(error, "Failed to load projects")
-                }
-    }
-
-    /**
-     * Load tasks
-     */
-    private suspend fun loadTasks(organizationId: String) {
-            authRepository.getTasks(organizationId)
-                .onSuccess { tasks ->
-                    _uiState.value = _uiState.value.copy(tasks = tasks.filter { !it.isDone })
-                }
-                .onFailure { error ->
-                    Timber.e(error, "Failed to load tasks")
-                }
-    }
-
-    /**
-     * Load tags
-     */
-    private suspend fun loadTags(organizationId: String) {
-            authRepository.getTags(organizationId)
-                .onSuccess { tags ->
-                    _uiState.value = _uiState.value.copy(tags = tags)
-                }
-                .onFailure { error ->
-                    Timber.e(error, "Failed to load tags")
-                }
-    }
-
-    /**
      * Start the elapsed time timer
      */
     private fun startTimer(startTimeString: String) {
@@ -772,7 +756,9 @@ class TrackingViewModel @Inject constructor(
 
                 while (true) {
                     val now = Instant.now()
-                    val elapsed = now.epochSecond - startInstant.epochSecond
+                    // Clamp: a device clock behind the entry's start would otherwise yield a
+                    // negative elapsed value and render as garbage (e.g. "-1:-5:-3").
+                    val elapsed = (now.epochSecond - startInstant.epochSecond).coerceAtLeast(0)
                     _uiState.value = _uiState.value.copy(elapsedSeconds = elapsed)
                     delay(1000) // Update every second
                 }

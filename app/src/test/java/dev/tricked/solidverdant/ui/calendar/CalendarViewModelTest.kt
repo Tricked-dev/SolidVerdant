@@ -5,6 +5,7 @@ import dev.tricked.solidverdant.data.repository.TimeEntryReader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -42,8 +43,9 @@ class CalendarViewModelTest {
             )
         )
         vm.setOrganization("org1")
-        // UnconfinedTestDispatcher runs the flowOf collection eagerly.
-        val loaded = vm.uiState.value
+        // Aggregation now hops to Dispatchers.Default, so await the populated state instead of
+        // reading the initial (empty) value synchronously.
+        val loaded = vm.uiState.first { it.bucketsByDate.isNotEmpty() }
         val day6 = loaded.bucketsByDate[LocalDate.of(2026, 7, 6)]!!
         assertEquals(2, day6.entries.size)
         assertEquals(5400L, day6.totalSeconds)

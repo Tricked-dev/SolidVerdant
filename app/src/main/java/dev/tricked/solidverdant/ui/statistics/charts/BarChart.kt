@@ -17,6 +17,26 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 
+/** Resolved bar geometry for a single [BarChart] draw pass. */
+data class BarChartSizing(val gap: Float, val barWidth: Float)
+
+/**
+ * Computes gap and bar width for [count] bars across [width] pixels.
+ *
+ * The naive `barWidth = (width - gap * (count + 1)) / count` goes negative once the inter-bar
+ * gaps exceed the available width (many bars, e.g. WEEK granularity over a multi-year custom
+ * range), which renders empty or inverted bars. We cap the total gap budget to half the width so
+ * bars always keep at least half the canvas, and floor the bar width at a visible minimum. This is
+ * a pure function so it can be unit tested without a Compose canvas.
+ */
+fun barChartSizing(width: Float, count: Int, minBarWidth: Float = 1f): BarChartSizing {
+    if (count <= 0 || width <= 0f) return BarChartSizing(0f, 0f)
+    // Gaps get at most half the width; the desired 2% shrinks as bars multiply.
+    val gap = (width * 0.02f).coerceAtMost(width * 0.5f / (count + 1))
+    val barWidth = ((width - gap * (count + 1)) / count).coerceAtLeast(minBarWidth)
+    return BarChartSizing(gap = gap, barWidth = barWidth)
+}
+
 @Composable
 fun BarChart(
     bars: List<Pair<String, Float>>,
@@ -32,15 +52,14 @@ fun BarChart(
                 .height(140.dp),
         ) {
             if (bars.isEmpty()) return@Canvas
-            val gap = size.width * 0.02f
-            val barWidth = (size.width - gap * (bars.size + 1)) / bars.size
+            val sizing = barChartSizing(size.width, bars.size)
             bars.forEachIndexed { i, (_, value) ->
                 val h = (value / max) * size.height
-                val left = gap + i * (barWidth + gap)
+                val left = sizing.gap + i * (sizing.barWidth + sizing.gap)
                 drawRect(
                     color = barColor,
                     topLeft = androidx.compose.ui.geometry.Offset(left, size.height - h),
-                    size = androidx.compose.ui.geometry.Size(barWidth, h),
+                    size = androidx.compose.ui.geometry.Size(sizing.barWidth, h),
                 )
             }
         }

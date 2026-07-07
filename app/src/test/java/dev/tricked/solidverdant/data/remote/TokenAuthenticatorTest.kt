@@ -24,7 +24,7 @@ class TokenAuthenticatorTest {
                 refreshCalls.incrementAndGet()
                 enteredRefresh.countDown()
                 check(releaseRefresh.await(5, TimeUnit.SECONDS))
-                TokenResponse("new-access", "new-refresh")
+                RefreshResult.Success(TokenResponse("new-access", "new-refresh"))
             }
             val pool = Executors.newFixedThreadPool(2)
             try {
@@ -45,13 +45,38 @@ class TokenAuthenticatorTest {
     }
 
     @Test
-    fun `refresh failure leaves credentials intact`() {
+    fun `transient refresh failure leaves credentials intact`() {
         val storage = FakeTokenStorage("access", "refresh")
-        val authenticator = TokenAuthenticator(storage) { _, _, _ -> null }
+        val authenticator = TokenAuthenticator(storage) { _, _, _ -> RefreshResult.Transient }
 
         assertNull(authenticator.authenticate(null, unauthorized("access")))
         assertEquals("access", storage.access)
         assertEquals("refresh", storage.refresh)
+    }
+
+    @Test
+    fun `definitive refresh rejection clears the dead credentials`() {
+        val storage = FakeTokenStorage("access", "refresh")
+        val authenticator = TokenAuthenticator(storage) { _, _, _ -> RefreshResult.Invalid }
+
+        assertNull(authenticator.authenticate(null, unauthorized("access")))
+        assertNull(storage.access)
+        assertNull(storage.refresh)
+    }
+
+    @Test
+    fun `missing refresh token clears the dead access token`() {
+        val storage = FakeTokenStorage("access", null)
+        val refreshCalls = AtomicInteger()
+        val authenticator = TokenAuthenticator(storage) { _, _, _ ->
+            refreshCalls.incrementAndGet()
+            RefreshResult.Invalid
+        }
+
+        assertNull(authenticator.authenticate(null, unauthorized("access")))
+        assertNull(storage.access)
+        assertNull(storage.refresh)
+        assertEquals("refresh must not be attempted without a refresh token", 0, refreshCalls.get())
     }
 
     @Test
@@ -60,7 +85,7 @@ class TokenAuthenticatorTest {
         val refreshCalls = AtomicInteger()
         val authenticator = TokenAuthenticator(storage) { _, _, _ ->
             refreshCalls.incrementAndGet()
-            null
+            RefreshResult.Invalid
         }
 
         val retried = authenticator.authenticate(null, unauthorized("old-access"))
@@ -93,6 +118,10 @@ class TokenAuthenticatorTest {
         override suspend fun saveTokens(accessToken: String, refreshToken: String) {
             access = accessToken
             refresh = refreshToken
+        }
+        override suspend fun clearTokens() {
+            access = null
+            refresh = null
         }
     }
 }

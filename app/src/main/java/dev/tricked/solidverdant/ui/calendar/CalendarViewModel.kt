@@ -9,7 +9,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
@@ -44,16 +46,23 @@ class CalendarViewModel @Inject constructor(
         this.memberId = memberId
         viewModelScope.launch {
             reader.observeTimeEntries(organizationId).collect { entries ->
-                val now = Instant.now()
-                val buckets = entries
-                    .groupBy { entryLocalDate(it) }
-                    .mapValues { (date, dayEntries) ->
-                        DayBucket(
-                            date = date,
-                            entries = dayEntries.sortedByDescending { it.start },
-                            totalSeconds = dayEntries.sumOf { entryDurationSeconds(it, now) },
-                        )
-                    }
+                // Aggregate off the main thread: a large month can hold thousands of entries and
+                // groupBy/sumOf here would otherwise jank or ANR the UI thread.
+                val buckets = withContext(Dispatchers.Default) {
+                    val now = Instant.now()
+                    entries
+                        // Skip entries whose start cannot be parsed instead of bucketing them
+                        // onto today, which would corrupt the current day's total.
+                        .mapNotNull { entry -> entryLocalDate(entry)?.let { it to entry } }
+                        .groupBy({ it.first }, { it.second })
+                        .mapValues { (date, dayEntries) ->
+                            DayBucket(
+                                date = date,
+                                entries = dayEntries.sortedByDescending { it.start },
+                                totalSeconds = dayEntries.sumOf { entryDurationSeconds(it, now) },
+                            )
+                        }
+                }
                 _uiState.update { it.copy(bucketsByDate = buckets, isLoading = false) }
             }
         }

@@ -24,12 +24,18 @@ fun monthGridWeeks(month: YearMonth, weekStart: DayOfWeek = DayOfWeek.MONDAY): L
         .chunked(7)
 }
 
-fun entryLocalDate(entry: TimeEntry): LocalDate = try {
+/**
+ * Resolves the local date an entry started on, or null when [TimeEntry.start] cannot be parsed.
+ *
+ * Returning null (rather than falling back to today) keeps malformed entries from polluting the
+ * current day's totals; callers must skip null buckets. Mirrors the aggregator's safe startDate.
+ */
+fun entryLocalDate(entry: TimeEntry): LocalDate? = try {
     ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME)
         .withZoneSameInstant(ZoneId.systemDefault())
         .toLocalDate()
 } catch (_: Exception) {
-    LocalDate.now()
+    null
 }
 
 fun entryDurationSeconds(entry: TimeEntry, now: Instant): Long {

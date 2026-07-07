@@ -37,6 +37,47 @@ class TimeEntryRepositoryWriteTest {
     }
     @After fun teardown() = db.close()
 
+    @Test fun refreshAll_does_not_clobber_pending_local_edit() = runTest {
+        val serverVersion = TimeEntry(
+            id = "server-1", userId = "u", organizationId = "org1",
+            start = "2026-07-07T08:00:00Z", end = "2026-07-07T09:00:00Z", description = "server text",
+        )
+        val fake = FakeRemoteDataSource(entries = listOf(serverVersion))
+        val repo2 = TimeEntryRepository(
+            db.timeEntryDao(), db.catalogDao(), db.outboxDao(), db.syncMetaDao(),
+            fake, clock, Json { encodeDefaults = true }
+        )
+        // Local PENDING edit (an unsynced correction) for the same id.
+        val localEdit = serverVersion.copy(description = "my local edit")
+        db.timeEntryDao().upsert(localEdit.toEntity(updatedAt = 1L, syncState = SyncState.PENDING))
+
+        repo2.refreshAll("org1", "member")
+
+        val stored = db.timeEntryDao().getById("server-1")
+        assertEquals(SyncState.PENDING, stored?.syncState)
+        assertEquals("my local edit", stored?.description)
+    }
+
+    @Test fun refreshAll_does_not_resurrect_pending_delete() = runTest {
+        val serverVersion = TimeEntry(
+            id = "server-1", userId = "u", organizationId = "org1",
+            start = "2026-07-07T08:00:00Z", end = "2026-07-07T09:00:00Z", description = "server text",
+        )
+        val fake = FakeRemoteDataSource(entries = listOf(serverVersion))
+        val repo2 = TimeEntryRepository(
+            db.timeEntryDao(), db.catalogDao(), db.outboxDao(), db.syncMetaDao(),
+            fake, clock, Json { encodeDefaults = true }
+        )
+        // Soft-deleted row awaiting server delete must not be resurrected by a pull.
+        db.timeEntryDao().upsert(
+            serverVersion.toEntity(updatedAt = 1L, syncState = SyncState.PENDING, pendingDelete = true)
+        )
+
+        repo2.refreshAll("org1", "member")
+
+        assertEquals(true, db.timeEntryDao().getById("server-1")?.pendingDelete)
+    }
+
     @Test fun start_writes_optimistic_local_entry_and_enqueues_outbox() = runTest {
         val entry = repo.startEntry("org1", "member1", "u1", projectId = "p1", taskId = null, description = "work", tagIds = emptyList())
         assertTrue(entry.id.startsWith("local-"))

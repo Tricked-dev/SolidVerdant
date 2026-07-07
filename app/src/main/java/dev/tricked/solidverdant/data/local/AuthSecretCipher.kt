@@ -56,6 +56,21 @@ internal class AuthSecretCipher(
         return PREFIX + Base64.getEncoder().encodeToString(payload)
     }
 
+    /**
+     * Decrypts a stored secret, returning null when it cannot be recovered.
+     *
+     * The Keystore key backing this cipher can be permanently lost or invalidated (app-data restore
+     * to a new device, key eviction, OS key reset), which makes [decrypt] throw
+     * AEADBadTagException/KeyStoreException. Callers that must not crash on an undecryptable secret
+     * use this to treat the secret as absent instead of propagating the failure.
+     */
+    fun decryptOrNull(value: String): String? = try {
+        decrypt(value)
+    } catch (e: Exception) {
+        // Never log the (possibly still sensitive) stored value; the exception type is enough.
+        null
+    }
+
     fun decrypt(value: String): String {
         require(isEncrypted(value)) { "Authentication secret is not encrypted" }
         val payload = Base64.getDecoder().decode(value.removePrefix(PREFIX))

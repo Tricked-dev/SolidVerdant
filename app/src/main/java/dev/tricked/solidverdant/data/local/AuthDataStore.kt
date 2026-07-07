@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -49,7 +50,10 @@ class AuthDataStore @Inject constructor(
 
     private fun secretFlow(key: Preferences.Key<String>): Flow<String?> = context.dataStore.data
         .onStart { migratePlaintextSecrets() }
-        .map { preferences -> preferences[key]?.let(secretCipher::decrypt) }
+        // decryptOrNull never throws: a secret that can no longer be decrypted (Keystore key lost or
+        // invalidated) is treated as absent so the flow emits "logged out" instead of crashing every
+        // collector (isLoggedIn/accessToken and the interceptor's runBlocking read path).
+        .map { preferences -> preferences[key]?.let(secretCipher::decryptOrNull) }
 
     private suspend fun migratePlaintextSecrets() {
         if (migrationComplete) return
@@ -57,12 +61,37 @@ class AuthDataStore @Inject constructor(
             if (migrationComplete) return@withLock
             context.dataStore.edit { preferences ->
                 secretKeys.forEach { key ->
-                    preferences[key]?.let { storedValue ->
-                        preferences[key] = secretCipher.encryptIfNeeded(storedValue)
+                    val storedValue = preferences[key] ?: return@forEach
+                    when (val sanitized = sanitizeSecret(storedValue)) {
+                        // Undecryptable secret (e.g. after data restore to a new device): discard it so
+                        // the app starts cleanly at the login screen instead of crash-looping.
+                        null -> preferences.remove(key)
+                        else -> preferences[key] = sanitized
                     }
                 }
             }
             migrationComplete = true
+        }
+    }
+
+    /**
+     * Returns the encrypted envelope to persist, or null when the stored secret cannot be recovered
+     * and must be discarded. Legacy plaintext is encrypted in place; an already-encrypted value is
+     * verified to still be decryptable with the current Keystore key.
+     */
+    private fun sanitizeSecret(storedValue: String): String? = if (secretCipher.isEncrypted(storedValue)) {
+        if (secretCipher.decryptOrNull(storedValue) != null) {
+            storedValue
+        } else {
+            Timber.w("Discarding an undecryptable authentication secret; treating session as logged out")
+            null
+        }
+    } else {
+        try {
+            secretCipher.encrypt(storedValue)
+        } catch (e: Exception) {
+            Timber.w("Discarding an authentication secret that could not be encrypted")
+            null
         }
     }
 

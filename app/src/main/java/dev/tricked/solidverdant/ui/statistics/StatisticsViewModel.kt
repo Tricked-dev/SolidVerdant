@@ -70,16 +70,17 @@ class StatisticsViewModel @Inject constructor(
             val entries = mutableListOf<TimeEntry>()
             val start = range.start.atStartOfDay(zone).toInstant().toString()
             val end = range.endInclusive.plusDays(1).atStartOfDay(zone).toInstant().toString()
+            val pageSize = 500
             var offset = 0
-            do {
+            while (true) {
                 val page = authRepository.getTimeEntries(
-                    organizationId, memberId, limit = 500, offset = offset,
+                    organizationId, memberId, limit = pageSize, offset = offset,
                     start = start, end = end,
                 ).getOrThrow()
                 entries += page.data
                 offset += page.data.size
-                val total = page.meta?.total ?: page.data.size
-            } while (page.data.size == 500 && offset < total)
+                if (!shouldFetchNextPage(pageSize, page.data.size, offset, page.meta?.total)) break
+            }
             emit(RemoteEntries(entries = entries))
         }.catch {
             emit(RemoteEntries(failed = true))
@@ -136,3 +137,19 @@ class StatisticsViewModel @Inject constructor(
         refreshTrigger.value += 1
     }
 }
+
+/**
+ * Whether another page must be fetched after receiving one of [lastPageSize] entries.
+ *
+ * A full page (== [pageSize]) means the server may have more rows: when the total is unknown
+ * (meta null) that alone triggers the next request; when the total is known we continue only while
+ * [offsetAfterPage] has not reached it. A short or empty page always stops the loop. Extracted as a
+ * pure function so the previous under-fetch (defaulting an unknown total to the page size, which
+ * made `offset < total` false right after the first full page) is directly testable.
+ */
+internal fun shouldFetchNextPage(
+    pageSize: Int,
+    lastPageSize: Int,
+    offsetAfterPage: Int,
+    total: Int?,
+): Boolean = lastPageSize == pageSize && (total == null || offsetAfterPage < total)

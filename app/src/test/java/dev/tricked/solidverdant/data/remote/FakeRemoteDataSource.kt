@@ -17,6 +17,8 @@ class FakeRemoteDataSource(
     var active: TimeEntry? = null,
     var memberships: List<Membership> = emptyList(),
     var failNextWrite: Boolean = false,
+    /** When set, every write fails with this throwable (use a non-IOException to exercise FAIL). */
+    var writeError: Throwable? = null,
     var startResult: (TimeEntry) -> TimeEntry = { it },
     var stopResult: (TimeEntry) -> TimeEntry = { it },
     var updateResult: (TimeEntry) -> TimeEntry = { it },
@@ -34,6 +36,7 @@ class FakeRemoteDataSource(
     override suspend fun getMyMemberships() = Result.success(memberships)
 
     override suspend fun startTimeEntry(organizationId: String, memberId: String, userId: String, projectId: String?, taskId: String?, description: String): Result<TimeEntry> {
+        writeError?.let { return Result.failure(it) }
         if (failNextWrite) return Result.failure(java.io.IOException("offline"))
         started += Triple(description, projectId, taskId)
         return Result.success(startResult(TimeEntry(
@@ -43,13 +46,17 @@ class FakeRemoteDataSource(
         )))
     }
     override suspend fun createTimeEntry(organizationId: String, memberId: String, userId: String, entry: TimeEntry, tags: List<String>) =
-        if (failNextWrite) Result.failure(java.io.IOException("offline")) else Result.success(startResult(entry))
+        writeError?.let { Result.failure(it) }
+            ?: if (failNextWrite) Result.failure(java.io.IOException("offline")) else Result.success(startResult(entry))
     override suspend fun stopTimeEntry(organizationId: String, timeEntryId: String, userId: String, startTime: String) =
-        if (failNextWrite) Result.failure(java.io.IOException("offline"))
-        else Result.success(stopResult(TimeEntry(id = timeEntryId, userId = userId, start = startTime, end = "2026-01-01T10:00:00Z", organizationId = organizationId)))
+        writeError?.let { Result.failure(it) }
+            ?: if (failNextWrite) Result.failure(java.io.IOException("offline"))
+            else Result.success(stopResult(TimeEntry(id = timeEntryId, userId = userId, start = startTime, end = "2026-01-01T10:00:00Z", organizationId = organizationId)))
     override suspend fun updateTimeEntry(organizationId: String, timeEntry: TimeEntry, tags: List<String>) =
-        if (failNextWrite) Result.failure(java.io.IOException("offline")) else Result.success(updateResult(timeEntry))
+        writeError?.let { Result.failure(it) }
+            ?: if (failNextWrite) Result.failure(java.io.IOException("offline")) else Result.success(updateResult(timeEntry))
     override suspend fun deleteTimeEntry(organizationId: String, timeEntryId: String): Result<Unit> {
+        writeError?.let { return Result.failure(it) }
         if (failNextWrite) return Result.failure(java.io.IOException("offline"))
         deleted += timeEntryId
         return Result.success(Unit)

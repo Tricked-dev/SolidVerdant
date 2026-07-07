@@ -119,8 +119,7 @@ class TimeEntryRepository @Inject constructor(
                     entryId = op.timeEntryId,
                     type = op.opType,
                     status = when {
-                        op.lastError?.startsWith("Server rejected") == true -> EntrySyncStatus.FAILED
-                        op.lastError != null && op.attemptCount >= 3 -> EntrySyncStatus.FAILED
+                        op.deadLettered -> EntrySyncStatus.FAILED
                         op.attemptCount > 0 -> EntrySyncStatus.RETRYING
                         else -> EntrySyncStatus.PENDING
                     },
@@ -153,8 +152,10 @@ class TimeEntryRepository @Inject constructor(
         val now = clock.nowMs()
         entries.forEach { remoteEntry ->
             val local = timeEntryDao.getById(remoteEntry.id)
-            // Last-write-wins: keep a strictly-newer PENDING local edit.
-            if (local != null && local.syncState == SyncState.PENDING && local.updatedAt > now) {
+            // Never let a server pull clobber an unsynced local edit or a pending soft-delete.
+            // (The previous `updatedAt > now` guard was dead code: updatedAt is always stamped in
+            // the past, so it never held and pending edits/deletes were silently overwritten.)
+            if (local != null && (local.syncState == SyncState.PENDING || local.pendingDelete)) {
                 return@forEach
             }
             timeEntryDao.upsert(remoteEntry.toEntity(updatedAt = now, syncState = SyncState.SYNCED))
@@ -186,7 +187,7 @@ class TimeEntryRepository @Inject constructor(
         outboxDao.insert(
             OutboxEntity(
                 opType = OutboxOpType.START, organizationId = organizationId,
-                timeEntryId = localId, createdAtMs = now,
+                timeEntryId = localId, createdAtMs = now, clientId = newClientId(),
                 payloadJson = json.encodeToString(
                     StartPayload(memberId, userId, projectId, taskId, description, tagIds)
                 )
@@ -202,7 +203,7 @@ class TimeEntryRepository @Inject constructor(
         outboxDao.insert(
             OutboxEntity(
                 opType = OutboxOpType.STOP, organizationId = entry.organizationId,
-                timeEntryId = entry.id, createdAtMs = now,
+                timeEntryId = entry.id, createdAtMs = now, clientId = newClientId(),
                 payloadJson = json.encodeToString(StopPayload(userId, entry.start))
             )
         )
@@ -215,7 +216,7 @@ class TimeEntryRepository @Inject constructor(
         outboxDao.insert(
             OutboxEntity(
                 opType = OutboxOpType.UPDATE, organizationId = entry.organizationId,
-                timeEntryId = entry.id, createdAtMs = now,
+                timeEntryId = entry.id, createdAtMs = now, clientId = newClientId(),
                 payloadJson = json.encodeToString(
                     UpdatePayload(entry.userId, entry.start, entry.end, entry.description,
                         entry.projectId, entry.taskId, entry.billable, tagIds)
@@ -235,7 +236,7 @@ class TimeEntryRepository @Inject constructor(
         outboxDao.insert(
             OutboxEntity(
                 opType = OutboxOpType.DELETE, organizationId = entry.organizationId,
-                timeEntryId = entry.id, createdAtMs = now, payloadJson = "{}"
+                timeEntryId = entry.id, createdAtMs = now, clientId = newClientId(), payloadJson = "{}"
             )
         )
     }
@@ -253,6 +254,7 @@ class TimeEntryRepository @Inject constructor(
                 organizationId = entry.organizationId,
                 timeEntryId = restored.id,
                 createdAtMs = now,
+                clientId = newClientId(),
                 payloadJson = json.encodeToString(CreatePayload(
                     membership, entry.userId, entry.start, end, entry.description.orEmpty(),
                     entry.projectId, entry.taskId, entry.billable, entry.tags.map { it.id },
@@ -272,6 +274,9 @@ class TimeEntryRepository @Inject constructor(
     }
 
     suspend fun prepareRetry(entryId: String): Boolean = outboxDao.resetForRetry(entryId) > 0
+
+    /** Stable idempotency key for a new outbox operation; persisted on the row (see OutboxEntity). */
+    private fun newClientId(): String = java.util.UUID.randomUUID().toString()
 
     private fun nowIso(): String = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC)
         .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'"))

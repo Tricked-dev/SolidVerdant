@@ -94,6 +94,11 @@ kotlin {
     }
 }
 
+// Export Room schemas so migrations can be validated and tested (exportSchema = true).
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 /*
  Dependency versions are defined in the top level build.gradle file. This helps keeping track of
  all versions in a single place. This improves readability and helps managing project complexity.

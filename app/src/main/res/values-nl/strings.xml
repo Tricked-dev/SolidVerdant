@@ -199,4 +199,11 @@
     <string name="widget_not_tracking">Niet aan het registreren</string>
     <string name="widget_login_required">Inloggen vereist</string>
 
+    <!-- Tijdregistratie-validatie (bewerken/aanmaken) -->
+    <string name="entry_error_end_before_start">De eindtijd moet na de starttijd liggen.</string>
+    <string name="entry_error_duration_too_long">Deze registratie is langer dan 24 uur. Controleer de start- en eindtijd.</string>
+    <string name="entry_warning_long_duration">Deze registratie duurt %1$d uur. Sla alleen op als dat klopt.</string>
+    <string name="entry_warning_overlap">Deze registratie overlapt met een andere. Overlap is toegestaan maar kan worden gemarkeerd.</string>
+    <string name="entry_warning_overlap_policy">Deze registratie overlapt met een andere, wat het beleid van je organisatie afraadt.</string>
+
 </resources>

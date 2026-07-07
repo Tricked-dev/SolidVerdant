@@ -51,6 +51,21 @@ class SettingsDataStore @Inject constructor(
     private val immediateCache = context.getSharedPreferences("immediate_ui_cache", Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true }
 
+    init {
+        // Warm the SharedPreferences file on a background thread so the synchronous
+        // getCachedAppTheme() read during MainActivity.onCreate (first frame) is served from the
+        // in-memory map instead of blocking the main thread on the initial disk load.
+        Thread {
+            @Suppress("UNUSED_VARIABLE")
+            val warm = immediateCache.all
+        }.apply {
+            name = "settings-cache-warmup"
+            priority = Thread.MIN_PRIORITY
+            isDaemon = true
+            start()
+        }
+    }
+
     companion object {
         private const val CONTINUE_ENTRY_JSON = "continue_entry_json"
         private const val USER_JSON = "user_json"

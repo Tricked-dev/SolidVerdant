@@ -899,7 +899,9 @@ fun TrackingScreen(
             onSave = { description, projectId, taskId, tagIds, billable, start, end ->
                 onUpdatePastEntry(entry, description, projectId, taskId, tagIds, billable, start, end)
                 showEditDialog = null
-            }
+            },
+            existingEntries = uiState.timeEntries,
+            preventOverlap = currentMembership?.organization?.preventOverlappingTimeEntries == true,
         )
     }
 
@@ -921,6 +923,8 @@ fun TrackingScreen(
             projects = uiState.projects,
             tasks = uiState.tasks,
             tags = uiState.tags,
+            existingEntries = uiState.timeEntries,
+            preventOverlap = currentMembership?.organization?.preventOverlappingTimeEntries == true,
             onDismiss = { showAddDialog = false },
             onSave = { description, projectId, taskId, tagIds, billable, start, end ->
                 onCreateEntry(description, projectId, taskId, tagIds, billable, start, end)
@@ -2306,7 +2310,9 @@ private fun TimeEntryFormSheet(
     tasks: List<Task>,
     tags: List<Tag>,
     onDismiss: () -> Unit,
-    onSave: (String?, String?, String?, List<String>, Boolean, String, String) -> Unit
+    onSave: (String?, String?, String?, List<String>, Boolean, String, String) -> Unit,
+    existingEntries: List<TimeEntry> = emptyList(),
+    preventOverlap: Boolean = false,
 ) {
     var description by remember { mutableStateOf(entry?.description ?: "") }
     var projectId by remember { mutableStateOf(entry?.projectId) }
@@ -2335,6 +2341,28 @@ private fun TimeEntryFormSheet(
     var showDatePicker by remember { mutableStateOf(false) }
     val durationIsValid = durationMinutes.toLongOrNull()?.let { it > 0 } == true
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    val overlaps = remember(startTime, endTime, existingEntries, entry) {
+        val org = entry?.organizationId ?: existingEntries.firstOrNull()?.organizationId
+        if (org == null || existingEntries.isEmpty()) {
+            false
+        } else {
+            val candidate = TimeEntry(
+                id = entry?.id ?: "",
+                userId = entry?.userId ?: "",
+                start = startTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                end = endTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                organizationId = org,
+            )
+            existingEntries.any { it.id != candidate.id && EntryTrustRules.overlaps(candidate, it) }
+        }
+    }
+    val validation = remember(startTime, endTime, overlaps, preventOverlap) {
+        EntryTimeValidator.evaluate(startTime, endTime, overlaps, preventOverlap)
+    }
+    val durationHours = remember(startTime, endTime) {
+        java.time.Duration.between(startTime, endTime).toHours().coerceAtLeast(0)
+    }
 
     fun setDuration(minutes: Long) {
         val safeMinutes = minutes.coerceAtLeast(1)
@@ -2518,6 +2546,8 @@ private fun TimeEntryFormSheet(
                     )
                 }
 
+                EntryValidationBanner(result = validation, durationHours = durationHours)
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
@@ -2545,7 +2575,7 @@ private fun TimeEntryFormSheet(
                                 endTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
                             )
                         },
-                        enabled = durationIsValid,
+                        enabled = durationIsValid && validation.canSave,
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(stringResource(R.string.save), fontWeight = FontWeight.SemiBold)
@@ -2566,10 +2596,12 @@ private fun TimeEntryFormSheet(
                     startTime = startTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
                     endTime = startTime.plusMinutes(minutes)
                 } else {
-                    var selectedEnd = endTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
-                    if (!selectedEnd.isAfter(startTime)) selectedEnd = selectedEnd.plusDays(1)
-                    endTime = selectedEnd
-                    durationMinutes = java.time.Duration.between(startTime, endTime).toMinutes().coerceAtLeast(1).toString()
+                    val sameDayEnd = endTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
+                    // Do not silently roll an earlier clock-time into a ~24h entry: only a plausible
+                    // overnight span becomes cross-midnight, otherwise keep it same-day so the
+                    // validation banner surfaces the end-before-start error for the user to fix.
+                    endTime = EntryTimeValidator.resolveEnd(startTime, sameDayEnd) ?: sameDayEnd
+                    durationMinutes = java.time.Duration.between(startTime, endTime).toMinutes().toString()
                 }
                 editingTime = null
             }
@@ -2867,11 +2899,111 @@ private fun copyToClipboard(context: Context, text: String) {
 /**
  * Format elapsed time as HH:MM:SS
  */
-private fun formatElapsedTime(seconds: Long): String {
-    val hours = seconds / 3600
-    val minutes = (seconds % 3600) / 60
-    val secs = seconds % 60
+internal fun formatElapsedTime(seconds: Long): String {
+    // Defensive floor: a device clock behind the entry's start must never render as "-1:-5:-3".
+    val safeSeconds = seconds.coerceAtLeast(0)
+    val hours = safeSeconds / 3600
+    val minutes = (safeSeconds % 3600) / 60
+    val secs = safeSeconds % 60
     return String.format("%02d:%02d:%02d", hours, minutes, secs)
+}
+
+/**
+ * Deterministic client-side validation for a manually edited or created time entry. Server policy
+ * stays authoritative (see [EntryTrustRules]); these are local guards so the user never silently
+ * creates a ~24h entry from a typo, and is warned before saving an unusually long or overlapping
+ * entry. Warnings do not block: an explicit Save is the user's confirmation.
+ */
+internal object EntryTimeValidator {
+    /** An end clock-time earlier than start rolls to the next day only within this span; beyond it
+     *  the inversion is treated as a mistake rather than an intended overnight shift. */
+    val MAX_CROSS_MIDNIGHT: java.time.Duration = java.time.Duration.ofHours(18)
+    /** Durations at or above this are plausible but worth confirming before saving. */
+    val LONG_DURATION_WARNING: java.time.Duration = java.time.Duration.ofHours(12)
+    /** Hard ceiling; a single entry longer than this is almost certainly an error. */
+    val MAX_DURATION: java.time.Duration = java.time.Duration.ofHours(24)
+
+    enum class Error { END_NOT_AFTER_START, TOO_LONG }
+    enum class Warning { LONG_DURATION, OVERLAP, OVERLAP_POLICY }
+
+    data class Result(val error: Error?, val warnings: List<Warning>) {
+        val canSave: Boolean get() = error == null
+    }
+
+    /**
+     * Resolve an end clock-time [sameDayEnd] that shares [start]'s date. Returns the same-day value
+     * when it is after start, the next-day value for a plausible overnight entry, or null when the
+     * only rollover interpretation would be implausibly long — signalling the caller to surface an
+     * end-before-start error instead of silently rolling over into a ~24h entry.
+     */
+    fun resolveEnd(start: ZonedDateTime, sameDayEnd: ZonedDateTime): ZonedDateTime? {
+        if (sameDayEnd.isAfter(start)) return sameDayEnd
+        val rolled = sameDayEnd.plusDays(1)
+        return rolled.takeIf { java.time.Duration.between(start, it) <= MAX_CROSS_MIDNIGHT }
+    }
+
+    fun evaluate(
+        start: ZonedDateTime,
+        end: ZonedDateTime,
+        overlaps: Boolean = false,
+        overlapProhibited: Boolean = false,
+    ): Result {
+        val duration = java.time.Duration.between(start, end)
+        val error = when {
+            !end.isAfter(start) -> Error.END_NOT_AFTER_START
+            duration > MAX_DURATION -> Error.TOO_LONG
+            else -> null
+        }
+        val warnings = buildList {
+            if (error == null && duration >= LONG_DURATION_WARNING) add(Warning.LONG_DURATION)
+            if (overlaps) add(if (overlapProhibited) Warning.OVERLAP_POLICY else Warning.OVERLAP)
+        }
+        return Result(error, warnings)
+    }
+}
+
+/** Inline error/warning banner for the create/edit time-entry sheets. */
+@Composable
+internal fun EntryValidationBanner(result: EntryTimeValidator.Result, durationHours: Long) {
+    if (result.canSave && result.warnings.isEmpty()) return
+    val isError = !result.canSave
+    Surface(
+        color = if (isError) MaterialTheme.colorScheme.errorContainer
+        else MaterialTheme.colorScheme.secondaryContainer,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        val contentColor = if (isError) MaterialTheme.colorScheme.onErrorContainer
+        else MaterialTheme.colorScheme.onSecondaryContainer
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            result.error?.let { error ->
+                Text(
+                    text = stringResource(
+                        when (error) {
+                            EntryTimeValidator.Error.END_NOT_AFTER_START -> R.string.entry_error_end_before_start
+                            EntryTimeValidator.Error.TOO_LONG -> R.string.entry_error_duration_too_long
+                        }
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = contentColor,
+                )
+            }
+            result.warnings.forEach { warning ->
+                Text(
+                    text = when (warning) {
+                        EntryTimeValidator.Warning.LONG_DURATION ->
+                            stringResource(R.string.entry_warning_long_duration, durationHours)
+                        EntryTimeValidator.Warning.OVERLAP ->
+                            stringResource(R.string.entry_warning_overlap)
+                        EntryTimeValidator.Warning.OVERLAP_POLICY ->
+                            stringResource(R.string.entry_warning_overlap_policy)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = contentColor,
+                )
+            }
+        }
+    }
 }
 
 /**
