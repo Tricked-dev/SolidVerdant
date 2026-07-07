@@ -39,4 +39,13 @@ class TimeEntryTest {
         assertTrue(encoded.contains(""""end":"2026-07-06T09:30:00Z""""))
         assertTrue(encoded.contains(""""member_id":"member""""))
     }
+
+    @Test fun userProfileIncludesSolidtimePresentationAndLocaleFields() {
+        val user = json.decodeFromString<User>(
+            """{"id":"u","name":"Ada Lovelace","email":"ada@example.test","profile_photo_url":"https://example.test/ada.png","timezone":"Europe/Amsterdam","week_start":"monday"}"""
+        )
+        assertEquals("https://example.test/ada.png", user.profilePhotoUrl)
+        assertEquals("Europe/Amsterdam", user.timezone)
+        assertEquals("monday", user.weekStart)
+    }
 }

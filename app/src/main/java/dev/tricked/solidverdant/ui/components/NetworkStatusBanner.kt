@@ -33,12 +33,13 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.collectLatest
 
 @Composable
 fun NetworkAwareContent(content: @Composable () -> Unit) {
     val context = LocalContext.current
     val isOnline by produceState(initialValue = context.hasValidatedInternet(), context) {
-        context.connectivityFlow().collect { reportedOnline ->
+        context.connectivityFlow().collectLatest { reportedOnline ->
             if (reportedOnline) {
                 value = true
             } else {
@@ -105,13 +106,16 @@ private fun Context.connectivityFlow() = callbackFlow {
     val connectivityManager =
         getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     val callback = object : ConnectivityManager.NetworkCallback() {
-        override fun onAvailable(network: Network) = reportStatus()
-        override fun onLost(network: Network) = reportStatus()
-        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) =
-            reportStatus()
+        override fun onAvailable(network: Network) {
+            // CapabilitiesChanged supplies the authoritative state immediately afterwards.
+        }
 
-        private fun reportStatus() {
-            trySend(hasValidatedInternet())
+        override fun onLost(network: Network) {
+            trySend(false)
+        }
+
+        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
+            trySend(capabilities.hasValidatedInternet())
         }
     }
 
@@ -125,9 +129,12 @@ private fun Context.hasValidatedInternet(): Boolean {
         getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     val network = connectivityManager.activeNetwork ?: return false
     val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
-    return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-        capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    return capabilities.hasValidatedInternet()
 }
+
+private fun NetworkCapabilities.hasValidatedInternet(): Boolean =
+    hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+        hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
 
 private const val RESTORED_MESSAGE_DURATION_MS = 3_000L
 private const val OFFLINE_CONFIRMATION_DELAY_MS = 1_500L

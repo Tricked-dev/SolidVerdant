@@ -14,9 +14,10 @@ import androidx.room.TypeConverters
         MembershipEntity::class,
         TimeEntryTagCrossRef::class,
         SyncMetaEntity::class,
-        OutboxEntity::class
+        OutboxEntity::class,
+        ClientEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

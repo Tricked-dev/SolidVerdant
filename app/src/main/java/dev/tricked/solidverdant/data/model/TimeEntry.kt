@@ -63,7 +63,12 @@ object TimeEntryTagsSerializer : JsonTransformingSerializer<List<Tag>>(ListSeria
 data class User(
     val id: String,
     val name: String,
-    val email: String
+    val email: String,
+    @SerialName("profile_photo_url")
+    val profilePhotoUrl: String = "",
+    val timezone: String = "UTC",
+    @SerialName("week_start")
+    val weekStart: String = "monday"
 )
 
 /**
@@ -87,7 +92,9 @@ data class Membership(
 data class Organization(
     val id: String,
     val name: String,
-    val currency: String
+    val currency: String,
+    @SerialName("prevent_overlapping_time_entries")
+    val preventOverlappingTimeEntries: Boolean = false
 )
 
 /**
@@ -167,6 +174,13 @@ data class Project(
     val isPublic: Boolean = false
 )
 
+@Serializable
+data class Client(
+    val id: String,
+    val name: String,
+    @SerialName("is_archived") val isArchived: Boolean = false,
+)
+
 /**
  * Task information
  */
@@ -195,6 +209,8 @@ data class Task(
 data class ProjectsResponse(
     val data: List<Project>
 )
+
+@Serializable data class ClientsResponse(val data: List<Client>)
 
 /**
  * Response wrapper for tasks API calls

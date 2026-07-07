@@ -42,6 +42,7 @@ fun ConfigScreen(
     configState: OAuthConfigState,
     onSave: (String, String) -> Unit,
     onReset: () -> Unit,
+    onTestConnection: (String, String) -> Unit,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -121,6 +122,11 @@ fun ConfigScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 FilledTonalButton(
+                    onClick = { onTestConnection(endpoint, clientId) },
+                    enabled = endpoint.isNotBlank() && clientId.isNotBlank() && !configState.isTesting,
+                    modifier = Modifier.weight(1f),
+                ) { Text(stringResource(if (configState.isTesting) R.string.testing_connection else R.string.test_connection)) }
+                FilledTonalButton(
                     onClick = ::pasteConfig,
                     modifier = Modifier.weight(1f)
                 ) {
@@ -135,6 +141,14 @@ fun ConfigScreen(
                 ) {
                     Text(stringResource(R.string.reset_to_defaults))
                 }
+            }
+
+            configState.testMessage?.let { message ->
+                Text(
+                    text = message,
+                    color = if (configState.testSuccess == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             }
 
             Row(

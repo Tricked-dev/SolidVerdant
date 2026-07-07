@@ -31,6 +31,9 @@ interface TimeEntryDao {
     @Query("DELETE FROM time_entries WHERE id = :id")
     suspend fun deleteById(id: String)
 
+    @Query("UPDATE time_entries SET pendingDelete = 0, syncState = :syncState WHERE id = :id")
+    suspend fun restoreDeleted(id: String, syncState: SyncState)
+
     @Query("UPDATE time_entries SET id = :newId WHERE id = :oldId")
     suspend fun updateId(oldId: String, newId: String)
 

@@ -6,6 +6,7 @@ import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.Client
 
 fun TimeEntry.toEntity(
     updatedAt: Long,
@@ -35,6 +36,9 @@ fun ProjectEntity.toModel() = Project(
     billableRate = billableRate, isBillable = isBillable, estimatedTime = estimatedTime,
     spentTime = spentTime, isPublic = isPublic
 )
+
+fun Client.toEntity(orgId: String) = ClientEntity(id, name, isArchived, orgId)
+fun ClientEntity.toModel() = Client(id, name, isArchived)
 
 fun Task.toEntity(orgId: String) = TaskEntity(
     id = id, name = name, isDone = isDone, projectId = projectId,

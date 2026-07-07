@@ -30,6 +30,14 @@ class StatRangeTest {
         assertEquals(LocalDate.parse("2026-01-31"), r.endInclusive)
     }
 
+    @Test fun `shortcut ranges resolve inclusively`() {
+        assertEquals(LocalDate.parse("2026-07-02"), StatRange.Last7Days.resolve(today).start)
+        assertEquals(LocalDate.parse("2026-06-29"), StatRange.LastWeek.resolve(today).start)
+        assertEquals(LocalDate.parse("2026-07-05"), StatRange.LastWeek.resolve(today).endInclusive)
+        assertEquals(LocalDate.parse("2026-06-01"), StatRange.PreviousMonth.resolve(today).start)
+        assertEquals(LocalDate.parse("2026-06-30"), StatRange.PreviousMonth.resolve(today).endInclusive)
+    }
+
     @Test
     fun `granularity is day for short ranges and week for long`() {
         assertEquals(

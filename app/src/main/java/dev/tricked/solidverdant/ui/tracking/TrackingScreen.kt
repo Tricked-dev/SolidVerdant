@@ -17,6 +17,11 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -43,6 +48,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -62,6 +68,8 @@ import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -74,6 +82,7 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
@@ -95,6 +104,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.VerticalDivider
@@ -129,6 +141,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.core.net.toUri
@@ -142,6 +155,7 @@ import dev.tricked.solidverdant.data.model.Membership
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.local.AppThemeMode
 import dev.tricked.solidverdant.ui.components.ProjectTaskDropdown as SharedProjectTaskDropdown
@@ -180,9 +194,11 @@ fun TrackingScreen(
     alwaysShowNotifications: Boolean,
     appTheme: AppThemeMode,
     optimisticRefresh: Boolean,
+    longTimerHours: Int,
     onAlwaysShowNotificationsChange: (Boolean) -> Unit,
     onAppThemeChange: (AppThemeMode) -> Unit,
     onOptimisticRefreshChange: (Boolean) -> Unit,
+    onLongTimerHoursChange: (Int) -> Unit,
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
     onMembershipChange: (Membership) -> Unit,
@@ -199,6 +215,8 @@ fun TrackingScreen(
     onUpdatePastEntry: (TimeEntry, String?, String?, String?, List<String>, Boolean, String, String) -> Unit,
     onCreateEntry: (String?, String?, String?, List<String>, Boolean, String, String) -> Unit,
     onDeleteEntry: (String) -> Unit,
+    onUndoDelete: (TimeEntry) -> Unit,
+    onRetrySync: () -> Unit,
     onLoadMoreEntries: () -> Unit,
     onLoadNewerEntries: () -> Unit,
     onJumpToDate: (LocalDate) -> Unit,
@@ -210,11 +228,26 @@ fun TrackingScreen(
     var organizationMenuExpanded by remember { mutableStateOf(false) }
     var hasUserScrolledHistory by remember { mutableStateOf(false) }
     var calendarInitialDate by remember { mutableStateOf<LocalDate?>(null) }
+    var historyFilter by remember { mutableStateOf(HistoryFilter()) }
+    var deletedEntry by remember { mutableStateOf<TimeEntry?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    var longTimerSnoozedUntil by remember { mutableStateOf(0L) }
     val context = LocalContext.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val wideHistoryListState = rememberLazyListState()
     val compactListState = rememberLazyListState()
+
+    LaunchedEffect(deletedEntry) {
+        val entry = deletedEntry ?: return@LaunchedEffect
+        val result = snackbarHostState.showSnackbar(
+            message = context.getString(R.string.entry_deleted),
+            actionLabel = context.getString(R.string.undo),
+            withDismissAction = true,
+        )
+        if (result == SnackbarResult.ActionPerformed) onUndoDelete(entry)
+        deletedEntry = null
+    }
     val historyScrollConnection = remember(onLoadMoreEntries) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
@@ -297,6 +330,43 @@ fun TrackingScreen(
                             .fillMaxWidth()
                             .verticalScroll(rememberScrollState())
                     ) {
+                        user?.let { account ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (account.profilePhotoUrl.isNotBlank()) {
+                                    AsyncImage(
+                                        model = account.profilePhotoUrl,
+                                        contentDescription = stringResource(R.string.profile_picture),
+                                        modifier = Modifier.size(48.dp).clip(CircleShape)
+                                    )
+                                } else {
+                                    Surface(
+                                        modifier = Modifier.size(48.dp),
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.primaryContainer
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(
+                                                account.name.split(Regex("\\s+")).mapNotNull { it.firstOrNull() }
+                                                    .take(2).joinToString("").uppercase(),
+                                                style = MaterialTheme.typography.titleMedium
+                                            )
+                                        }
+                                    }
+                                }
+                                Column(Modifier.padding(start = 12.dp)) {
+                                    Text(account.name, style = MaterialTheme.typography.titleMedium)
+                                    Text(account.email, style = MaterialTheme.typography.bodySmall)
+                                    Text(
+                                        "${account.timezone} · ${account.weekStart.replaceFirstChar { it.uppercase() }}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
                         Text(
                             text = stringResource(R.string.settings_menu),
                             style = MaterialTheme.typography.headlineSmall,
@@ -332,6 +402,26 @@ fun TrackingScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
+                        HorizontalDivider()
+                        Text(
+                            stringResource(R.string.long_timer_warning),
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(top = 16.dp),
+                        )
+                        Text(
+                            stringResource(R.string.long_timer_warning_description, longTimerHours),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf(2, 4, 6, 8, 12).forEach { hours ->
+                                FilterChip(
+                                    selected = longTimerHours == hours,
+                                    onClick = { onLongTimerHoursChange(hours) },
+                                    label = { Text(stringResource(R.string.hours_short, hours)) },
+                                )
+                            }
+                        }
                         HorizontalDivider()
 
                         Spacer(modifier = Modifier.height(16.dp))
@@ -464,20 +554,16 @@ fun TrackingScreen(
                         AboutSection(context = context)
                     }
 
-                    // Logout button at the bottom
-                    Button(
+                    // Keep logout visible without turning the drawer footer into a large block.
+                    TextButton(
                         onClick = {
                             scope.launch { drawerState.close() }
                             onLogout()
                         },
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer
-                        ),
-                        shape = RoundedCornerShape(8.dp)
+                            .align(Alignment.End)
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ExitToApp,
@@ -495,6 +581,7 @@ fun TrackingScreen(
         }
     ) {
         Scaffold(
+            snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
                     title = {
@@ -576,7 +663,7 @@ fun TrackingScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Notifications,
-                                    contentDescription = "Enable notifications"
+                                    contentDescription = stringResource(R.string.enable_notifications)
                                 )
                             }
                         }
@@ -610,7 +697,24 @@ fun TrackingScreen(
                 val lastEntry = serverLastEntry ?: uiState.cachedContinueEntry?.takeIf {
                     it.organizationId == currentMembership?.organizationId
                 }
-                val groupedEntries = getGroupedEntries()
+                val groupedEntries = remember(
+                    uiState.timeEntries, uiState.projects, uiState.tasks, uiState.clients,
+                    uiState.syncOperations, historyFilter,
+                ) {
+                    EntryTrustRules.filter(
+                        entries = uiState.timeEntries,
+                        filter = historyFilter,
+                        projects = uiState.projects,
+                        tasks = uiState.tasks,
+                        clients = uiState.clients,
+                        syncOperations = uiState.syncOperations,
+                    ).groupBy { entry ->
+                        runCatching { ZonedDateTime.parse(entry.start).toLocalDate() }.getOrDefault(LocalDate.MIN)
+                    }
+                }
+                val overlapCount = remember(uiState.timeEntries) {
+                    EntryTrustRules.overlapCount(uiState.timeEntries)
+                }
 
                 LaunchedEffect(uiState.historyJumpDate, groupedEntries) {
                     val target = uiState.historyJumpDate ?: return@LaunchedEffect
@@ -644,6 +748,20 @@ fun TrackingScreen(
                                 onResume = onResumeTracking,
                                 onUpdate = onUpdateCurrentEntry
                             )
+                        }
+                        if (uiState.isTracking && uiState.elapsedSeconds >= longTimerHours * 3600L &&
+                            uiState.elapsedSeconds >= longTimerSnoozedUntil) {
+                            item {
+                                LongTimerWarning(
+                                    hours = longTimerHours,
+                                    onStop = onStopTracking,
+                                    onKeepRunning = { longTimerSnoozedUntil = uiState.elapsedSeconds + 3600L },
+                                    onAdjust = { uiState.currentTimeEntry?.let { showEditDialog = it } },
+                                )
+                            }
+                        }
+                        if (overlapCount > 0) {
+                            item { OverlapWarning(overlapCount, currentMembership?.organization?.preventOverlappingTimeEntries == true) }
                         }
                         if (!uiState.isTracking && !uiState.isPaused && lastEntry != null) {
                             item(key = "continue_last") {
@@ -688,11 +806,15 @@ fun TrackingScreen(
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 item { Spacer(Modifier.height(8.dp)) }
+                                item { HistoryFilters(historyFilter, uiState) { historyFilter = it } }
+                                if (uiState.syncOperations.isNotEmpty()) {
+                                    item { SyncCenter(uiState.syncOperations, onRetrySync) }
+                                }
                                 trackingHistoryItems(
                                     uiState = uiState,
                                     groupedEntries = groupedEntries,
                                     onEdit = { showEditDialog = it },
-                                    onDelete = { onDeleteEntry(it.id) },
+                                    onDelete = { deletedEntry = it; onDeleteEntry(it.id) },
                                     onDateClick = { calendarInitialDate = it }
                                 )
                                 item { Spacer(Modifier.height(16.dp)) }
@@ -709,11 +831,15 @@ fun TrackingScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             primaryContent()
+                            item { HistoryFilters(historyFilter, uiState) { historyFilter = it } }
+                            if (uiState.syncOperations.isNotEmpty()) {
+                                item { SyncCenter(uiState.syncOperations, onRetrySync) }
+                            }
                             trackingHistoryItems(
                                 uiState = uiState,
                                 groupedEntries = groupedEntries,
                                 onEdit = { showEditDialog = it },
-                                onDelete = { onDeleteEntry(it.id) },
+                                onDelete = { deletedEntry = it; onDeleteEntry(it.id) },
                                 onDateClick = { calendarInitialDate = it }
                             )
                             item { Spacer(Modifier.height(16.dp)) }
@@ -821,6 +947,194 @@ fun TrackingScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun HistoryFilters(filter: HistoryFilter, uiState: TrackingUiState, onChange: (HistoryFilter) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val activeCount = listOfNotNull(
+        filter.query.takeIf { it.isNotBlank() }, filter.billable, filter.runningOnly.takeIf { it },
+        filter.syncStatus, filter.startDate, filter.projectId, filter.taskId, filter.tagId,
+        filter.needsCategorization.takeIf { it },
+    ).size
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = expanded || activeCount > 0,
+                onClick = { expanded = !expanded },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, Modifier.size(18.dp)) },
+                label = {
+                    Text(
+                        if (activeCount == 0) stringResource(R.string.search_and_filter)
+                        else stringResource(R.string.active_filters_count, activeCount),
+                    )
+                },
+                trailingIcon = if (expanded) {{ Icon(Icons.Default.Close, stringResource(R.string.close), Modifier.size(18.dp)) }} else null,
+            )
+            if (!expanded && filter.query.isNotBlank()) {
+                Text(filter.query, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            }
+        }
+        AnimatedVisibility(
+            visible = expanded,
+            enter = fadeIn(tween(180)) + expandVertically(tween(220)),
+            exit = fadeOut(tween(120)) + shrinkVertically(tween(180)),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = filter.query,
+                    onValueChange = { onChange(filter.copy(query = it)) },
+                    label = { Text(stringResource(R.string.search_history)) },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = filter.billable == true,
+                onClick = { onChange(filter.copy(billable = if (filter.billable == true) null else true)) },
+                label = { Text(stringResource(R.string.billable)) },
+            )
+            FilterChip(
+                selected = filter.runningOnly,
+                onClick = { onChange(filter.copy(runningOnly = !filter.runningOnly)) },
+                label = { Text(stringResource(R.string.running_entries)) },
+            )
+            FilterChip(
+                selected = filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED,
+                onClick = { onChange(filter.copy(syncStatus = if (filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED) null else TimeEntryRepository.EntrySyncStatus.FAILED)) },
+                label = { Text(stringResource(R.string.sync_failed)) },
+            )
+            val today = LocalDate.now()
+            FilterChip(
+                selected = filter.startDate == today && filter.endDate == today,
+                onClick = { onChange(filter.copy(startDate = today, endDate = today)) },
+                label = { Text(stringResource(R.string.today)) },
+            )
+            FilterChip(
+                selected = filter.startDate == today.minusDays(6) && filter.endDate == today,
+                onClick = { onChange(filter.copy(startDate = today.minusDays(6), endDate = today)) },
+                label = { Text(stringResource(R.string.stats_last_7_days)) },
+            )
+            FilterChip(
+                selected = filter.needsCategorization,
+                onClick = { onChange(filter.copy(needsCategorization = !filter.needsCategorization)) },
+                label = { Text(stringResource(R.string.needs_categorization)) },
+            )
+            if (filter != HistoryFilter()) {
+                TextButton(onClick = { onChange(HistoryFilter()) }) { Text(stringResource(R.string.clear_filters)) }
+            }
+                }
+                FilterDropdown(
+            label = stringResource(R.string.project),
+            selectedId = filter.projectId,
+            options = uiState.projects.map { it.id to it.name },
+            onSelect = { onChange(filter.copy(projectId = it, taskId = null)) },
+        )
+                if (filter.projectId != null) {
+            FilterDropdown(
+                label = stringResource(R.string.task),
+                selectedId = filter.taskId,
+                options = uiState.tasks.filter { it.projectId == filter.projectId }.map { it.id to it.name },
+                onSelect = { onChange(filter.copy(taskId = it)) },
+            )
+                }
+                FilterDropdown(
+            label = stringResource(R.string.tags),
+            selectedId = filter.tagId,
+            options = uiState.tags.map { it.id to it.name },
+            onSelect = { onChange(filter.copy(tagId = it)) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterDropdown(
+    label: String,
+    selectedId: String?,
+    options: List<Pair<String, String>>,
+    onSelect: (String?) -> Unit,
+) {
+    if (options.isEmpty()) return
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        FilterChip(
+            selected = selectedId != null,
+            onClick = { expanded = true },
+            label = { Text(options.firstOrNull { it.first == selectedId }?.second ?: label, maxLines = 1) },
+        )
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.all_items, label)) },
+                onClick = { onSelect(null); expanded = false },
+            )
+            options.forEach { (id, name) ->
+                DropdownMenuItem(text = { Text(name) }, onClick = { onSelect(id); expanded = false })
+            }
+        }
+    }
+}
+
+@Composable
+private fun SyncCenter(operations: List<TimeEntryRepository.SyncOperation>, onRetry: () -> Unit) {
+    val failed = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.FAILED }
+    val retrying = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.RETRYING }
+    Card(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.sync_center), style = MaterialTheme.typography.titleSmall)
+                Text(
+                    when {
+                        failed > 0 -> stringResource(R.string.sync_failed_count, failed)
+                        retrying > 0 -> stringResource(R.string.sync_retrying_count, retrying)
+                        else -> stringResource(R.string.sync_pending_count, operations.size)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                operations.firstOrNull { it.error != null }?.error?.let {
+                    Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                }
+            }
+            if (failed > 0 || retrying > 0) TextButton(onClick = onRetry) { Text(stringResource(R.string.retry)) }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun LongTimerWarning(hours: Int, onStop: () -> Unit, onKeepRunning: () -> Unit, onAdjust: () -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+        Column(Modifier.fillMaxWidth().padding(12.dp)) {
+            Text(stringResource(R.string.timer_running_long, hours), style = MaterialTheme.typography.titleSmall)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onStop) { Text(stringResource(R.string.stop_now)) }
+                TextButton(onClick = onKeepRunning) { Text(stringResource(R.string.keep_running)) }
+                TextButton(onClick = onAdjust) { Text(stringResource(R.string.adjust_end_time)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OverlapWarning(count: Int, prohibitedByOrganization: Boolean) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+        Text(
+            stringResource(
+                if (prohibitedByOrganization) R.string.overlap_policy_warning_count else R.string.overlap_warning_count,
+                count,
+            ),
+            Modifier.fillMaxWidth().padding(12.dp),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+}
+
 private const val HISTORY_PREFETCH_ITEMS = 75
 
 private fun historyHeaderIndex(
@@ -877,6 +1191,7 @@ private fun LazyListScope.trackingHistoryItems(
                         entries = entriesForProject,
                         projects = uiState.projects,
                         tasks = uiState.tasks,
+                        syncOperations = uiState.syncOperations,
                         onEdit = onEdit,
                         onDelete = onDelete
                     )
@@ -1544,10 +1859,9 @@ internal fun TagsSelector(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 8.dp)
         )
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             availableTags.forEach { tag ->
                 FilterChip(
@@ -1633,6 +1947,7 @@ private fun CollapsibleTimeEntryGroup(
     entries: List<TimeEntry>,
     projects: List<Project>,
     tasks: List<Task>,
+    syncOperations: List<TimeEntryRepository.SyncOperation>,
     onEdit: (TimeEntry) -> Unit,
     onDelete: (TimeEntry) -> Unit
 ) {
@@ -1645,6 +1960,8 @@ private fun CollapsibleTimeEntryGroup(
                 entry = entries.first(),
                 projects = projects,
                 tasks = tasks,
+                syncStatus = syncOperations.lastOrNull { it.entryId == entries.first().id }?.status
+                    ?: TimeEntryRepository.EntrySyncStatus.SYNCED,
                 onEdit = { onEdit(entries.first()) },
                 onDelete = { onDelete(entries.first()) },
                 count = null
@@ -1657,6 +1974,8 @@ private fun CollapsibleTimeEntryGroup(
                     entry = entries.first(),
                     projects = projects,
                     tasks = tasks,
+                    syncStatus = entries.mapNotNull { entry -> syncOperations.lastOrNull { it.entryId == entry.id }?.status }
+                        .maxByOrNull { it.ordinal } ?: TimeEntryRepository.EntrySyncStatus.SYNCED,
                     onEdit = { isExpanded = true },
                     onDelete = { /* Don't allow deleting grouped entries */ },
                     count = entries.size,
@@ -1669,6 +1988,8 @@ private fun CollapsibleTimeEntryGroup(
                         entry = entry,
                         projects = projects,
                         tasks = tasks,
+                        syncStatus = syncOperations.lastOrNull { it.entryId == entry.id }?.status
+                            ?: TimeEntryRepository.EntrySyncStatus.SYNCED,
                         onEdit = { onEdit(entry) },
                         onDelete = { onDelete(entry) },
                         count = null,
@@ -1687,7 +2008,7 @@ private fun CollapsibleTimeEntryGroup(
                     horizontalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = "Collapse ${entries.size} entries",
+                        text = stringResource(R.string.collapse_entries, entries.size),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.clickable { isExpanded = false }
@@ -1707,6 +2028,7 @@ private fun CompactTimeEntryRow(
     entry: TimeEntry,
     projects: List<Project>,
     tasks: List<Task>,
+    syncStatus: TimeEntryRepository.EntrySyncStatus?,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     count: Int? = null,
@@ -1810,6 +2132,20 @@ private fun CompactTimeEntryRow(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if (syncStatus != null) {
+                val label = when (syncStatus) {
+                    TimeEntryRepository.EntrySyncStatus.SYNCED -> stringResource(R.string.sync_synced)
+                    TimeEntryRepository.EntrySyncStatus.PENDING -> stringResource(R.string.sync_pending)
+                    TimeEntryRepository.EntrySyncStatus.RETRYING -> stringResource(R.string.sync_retrying)
+                    TimeEntryRepository.EntrySyncStatus.FAILED -> stringResource(R.string.sync_failed)
+                }
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED)
+                        MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                )
+            }
             // Duration (use totalDuration if grouped, otherwise entry duration)
             Text(
                 text = formatDuration(totalDuration ?: entry.duration ?: 0),
@@ -1824,7 +2160,7 @@ private fun CompactTimeEntryRow(
                 // Edit button
                 IconButton(
                     onClick = onEdit,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
                         Icons.Default.Edit,
@@ -1837,7 +2173,7 @@ private fun CompactTimeEntryRow(
                 // Delete button
                 IconButton(
                     onClick = onDelete,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
                         Icons.Default.Delete,
@@ -2012,7 +2348,7 @@ private fun TimeEntryFormSheet(
                                     }
                                 },
                                 label = { Text(stringResource(R.string.minutes)) },
-                                suffix = { Text("min") },
+                                suffix = { Text(stringResource(R.string.minutes_short)) },
                                 isError = !durationIsValid,
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

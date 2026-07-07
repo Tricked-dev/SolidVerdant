@@ -175,6 +175,7 @@ fun SolidVerdantApp(
     val alwaysShowNotifications by trackingViewModel.alwaysShowNotifications.collectAsState(initial = false)
     val appTheme by trackingViewModel.appTheme.collectAsState(initial = AppThemeMode.SYSTEM)
     val optimisticRefresh by trackingViewModel.optimisticRefresh.collectAsState(initial = true)
+    val longTimerHours by trackingViewModel.longTimerHours.collectAsState(initial = 4)
     val hasSnapshot by trackingViewModel.hasSnapshot.collectAsState()
     val snapshotHydrated by trackingViewModel.snapshotHydrated.collectAsState()
 
@@ -232,11 +233,13 @@ fun SolidVerdantApp(
                 alwaysShowNotifications = alwaysShowNotifications,
                 appTheme = appTheme,
                 optimisticRefresh = optimisticRefresh,
+                longTimerHours = longTimerHours,
                 onAlwaysShowNotificationsChange = { enabled ->
                     trackingViewModel.setAlwaysShowNotifications(enabled)
                 },
                 onAppThemeChange = trackingViewModel::setAppTheme,
                 onOptimisticRefreshChange = trackingViewModel::setOptimisticRefresh,
+                onLongTimerHoursChange = trackingViewModel::setLongTimerHours,
                 onRefresh = {
                     authUiState.currentMembership?.let { membership ->
                         trackingViewModel.loadAllData(
@@ -356,6 +359,8 @@ fun SolidVerdantApp(
                         )
                     }
                 },
+                onUndoDelete = trackingViewModel::undoDelete,
+                onRetrySync = trackingViewModel::retrySync,
                 onLoadMoreEntries = trackingViewModel::loadMoreTimeEntries,
                 onLoadNewerEntries = trackingViewModel::loadNewerTimeEntries,
                 onJumpToDate = trackingViewModel::jumpToHistoryDate,
@@ -408,6 +413,7 @@ fun SolidVerdantApp(
                 onConfigReset = {
                     authViewModel.resetOAuthConfig()
                 },
+                onTestConnection = authViewModel::testConnection,
                 onAuthUrlReady = { /* URL is launched in LoginScreen */ },
                 onClearAuthUrl = {
                     authViewModel.clearAuthUrl()

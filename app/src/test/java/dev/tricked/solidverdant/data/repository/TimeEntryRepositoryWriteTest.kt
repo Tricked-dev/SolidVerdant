@@ -49,4 +49,13 @@ class TimeEntryRepositoryWriteTest {
         assertEquals(null, repo.observeActiveEntry("org1").first())
         assertTrue(db.outboxDao().peekAll().any { it.opType == OutboxOpType.DELETE })
     }
+
+    @Test fun undo_delete_restores_entry_and_cancels_delete_operation() = runTest {
+        val entry = repo.startEntry("org1", "m", "u", null, null, "x", emptyList())
+        repo.deleteEntry(entry)
+
+        assertTrue(repo.undoDelete(entry))
+        assertEquals(entry.id, repo.observeActiveEntry("org1").first()?.id)
+        assertTrue(db.outboxDao().peekAll().none { it.opType == OutboxOpType.DELETE })
+    }
 }

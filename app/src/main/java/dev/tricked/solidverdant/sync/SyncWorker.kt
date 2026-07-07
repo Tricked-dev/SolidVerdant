@@ -39,11 +39,17 @@ class SyncWorker @AssistedInject constructor(
             when (process(op)) {
                 Outcome.SUCCESS -> outboxDao.delete(op)
                 Outcome.RETRY -> {
+                    outboxDao.update(
+                        op.copy(
+                            attemptCount = op.attemptCount + 1,
+                            lastError = "Temporary server or network error; retry scheduled",
+                        )
+                    )
                     syncStatus.set(SyncStatus.Idle)
                     return Result.retry()
                 }
                 Outcome.FAIL -> {
-                    outboxDao.update(op.copy(attemptCount = op.attemptCount + 1, lastError = "permanent"))
+                    outboxDao.update(op.copy(attemptCount = op.attemptCount + 1, lastError = "Server rejected this change"))
                     syncStatus.set(SyncStatus.Error("A change could not be synced"))
                     // Skip this op so it does not wedge the queue; continue draining.
                 }

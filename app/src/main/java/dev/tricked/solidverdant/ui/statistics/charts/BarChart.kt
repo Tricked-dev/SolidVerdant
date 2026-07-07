@@ -14,6 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 
 @Composable
 fun BarChart(
@@ -22,7 +24,8 @@ fun BarChart(
     modifier: Modifier = Modifier,
 ) {
     val max = bars.maxOfOrNull { it.second }?.coerceAtLeast(0.0001f) ?: 0.0001f
-    Column(modifier = modifier) {
+    val summary = bars.joinToString(", ") { (label, seconds) -> "$label: ${seconds.toLong()} seconds" }
+    Column(modifier = modifier.semantics { contentDescription = summary }) {
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()

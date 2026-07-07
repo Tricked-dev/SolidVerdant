@@ -28,6 +28,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import timber.log.Timber
 import java.time.Instant
 import javax.inject.Inject
@@ -57,6 +59,8 @@ class TimeTrackingNotificationService : Service() {
     private var pausedAt: Instant? = null
     private var elapsedBeforePauseSeconds: Long = 0
     private var mutationInProgress: Boolean = false
+    private var longWarningJob: Job? = null
+    private var longTimerWarningVisible = false
 
     private val notificationManager: NotificationManager by lazy {
         getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -80,6 +84,7 @@ class TimeTrackingNotificationService : Service() {
                 description = intent.getStringExtra(EXTRA_DESCRIPTION)
 
                 publishNotification()
+                scheduleLongTimerWarning()
             }
 
             ACTION_SHOW_IDLE -> {
@@ -102,6 +107,12 @@ class TimeTrackingNotificationService : Service() {
                 handleResumeTracking(intent)
             }
 
+            ACTION_KEEP_RUNNING -> {
+                longTimerWarningVisible = false
+                publishNotification()
+                scheduleLongTimerWarning(snoozeSeconds = 3600)
+            }
+
             ACTION_QUICK_START -> handleQuickStart(intent)
         }
 
@@ -118,6 +129,7 @@ class TimeTrackingNotificationService : Service() {
         taskName = intent.getStringExtra(EXTRA_TASK_NAME)
         description = intent.getStringExtra(EXTRA_DESCRIPTION)
         publishNotification()
+        scheduleLongTimerWarning()
 
         serviceScope.launch {
             val membership = authRepository.getCurrentMembership()
@@ -199,6 +211,8 @@ class TimeTrackingNotificationService : Service() {
     }
 
     private fun confirmPausedState() {
+        longWarningJob?.cancel()
+        longTimerWarningVisible = false
         val now = Instant.now()
         pausedAt = now
         elapsedBeforePauseSeconds = startTime?.let { now.epochSecond - it.epochSecond } ?: 0
@@ -248,6 +262,8 @@ class TimeTrackingNotificationService : Service() {
     }
 
     private fun showIdleNotification() {
+        longWarningJob?.cancel()
+        longTimerWarningVisible = false
         isTracking = false
         isPaused = false
         startTime = null
@@ -318,6 +334,7 @@ class TimeTrackingNotificationService : Service() {
                     isPaused = false
                     isTracking = true
                     publishNotification()
+                    scheduleLongTimerWarning()
                 },
                 onFailure = { error ->
                     mutationInProgress = false
@@ -443,9 +460,9 @@ class TimeTrackingNotificationService : Service() {
             this, 1, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        return NotificationCompat.Builder(this, CHANNEL_ID_ACTIVE)
-            .setContentTitle(getString(R.string.time_tracking_notification_title))
-            .setContentText(contentText)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID_ACTIVE)
+            .setContentTitle(if (longTimerWarningVisible) getString(R.string.long_timer_notification_title) else getString(R.string.time_tracking_notification_title))
+            .setContentText(if (longTimerWarningVisible) getString(R.string.long_timer_notification_text) else contentText)
             .setSmallIcon(R.drawable.ic_timer)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -453,20 +470,39 @@ class TimeTrackingNotificationService : Service() {
             .setWhen(startTime?.toEpochMilli() ?: System.currentTimeMillis())
             .setUsesChronometer(true)
             .setChronometerCountDown(false)
-            .addAction(
-                R.drawable.ic_timer,
-                getString(R.string.pause),
-                pausePendingIntent
-            )
-            .addAction(
-                R.drawable.ic_timer,
-                getString(R.string.stop_tracking),
-                stopPendingIntent
-            )
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .build()
+        if (longTimerWarningVisible) {
+            val keepPendingIntent = PendingIntent.getService(
+                this, 5,
+                Intent(this, TimeTrackingNotificationService::class.java).apply { action = ACTION_KEEP_RUNNING },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            builder.addAction(R.drawable.ic_stop, getString(R.string.stop_now), stopPendingIntent)
+                .addAction(R.drawable.ic_timer, getString(R.string.keep_running), keepPendingIntent)
+                .addAction(R.drawable.ic_edit, getString(R.string.adjust_end_time), openAppPendingIntent)
+        } else {
+            builder.addAction(R.drawable.ic_timer, getString(R.string.pause), pausePendingIntent)
+                .addAction(R.drawable.ic_timer, getString(R.string.stop_tracking), stopPendingIntent)
+        }
+        return builder.build()
+    }
+
+    private fun scheduleLongTimerWarning(snoozeSeconds: Long? = null) {
+        longWarningJob?.cancel()
+        longWarningJob = serviceScope.launch {
+            val waitSeconds = snoozeSeconds ?: run {
+                val threshold = settingsDataStore.longTimerHours.first() * 3600L
+                val elapsed = startTime?.let { Instant.now().epochSecond - it.epochSecond } ?: 0L
+                (threshold - elapsed).coerceAtLeast(0L)
+            }
+            delay(waitSeconds * 1000L)
+            if (isTracking) {
+                longTimerWarningVisible = true
+                publishNotification()
+            }
+        }
     }
 
     private fun buildPausedNotification(): Notification {
@@ -606,6 +642,7 @@ class TimeTrackingNotificationService : Service() {
         const val ACTION_RESUME_TRACKING =
             "dev.tricked.solidverdant.ACTION_RESUME_TRACKING_NOTIFICATION"
         const val ACTION_QUICK_START = "dev.tricked.solidverdant.ACTION_QUICK_START"
+        const val ACTION_KEEP_RUNNING = "dev.tricked.solidverdant.ACTION_KEEP_RUNNING"
 
         const val EXTRA_START_TIME = "start_time"
         const val EXTRA_PROJECT_NAME = "project_name"

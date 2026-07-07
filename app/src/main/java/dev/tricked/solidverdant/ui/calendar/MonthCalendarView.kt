@@ -41,6 +41,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
@@ -83,7 +85,7 @@ fun MonthCalendarView(
                 )
                 Icon(
                     Icons.Default.CalendarMonth,
-                    contentDescription = "Show month",
+                    contentDescription = stringResource(R.string.calendar_show_month),
                     tint = MaterialTheme.colorScheme.primary,
                 )
             }
@@ -102,14 +104,14 @@ fun MonthCalendarView(
             horizontalArrangement = Arrangement.SpaceBetween,
             ) {
             IconButton(onClick = onPreviousMonth) {
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous month")
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = stringResource(R.string.calendar_previous_month))
             }
             Text(
                 text = "${state.visibleMonth.month.getDisplayName(TextStyle.FULL, Locale.getDefault())} ${state.visibleMonth.year}",
                 style = MaterialTheme.typography.titleMedium,
             )
             IconButton(onClick = onNextMonth) {
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next month")
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = stringResource(R.string.calendar_next_month))
             }
             }
 

@@ -14,6 +14,7 @@ import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.remote.RemoteDataSource
 import dev.tricked.solidverdant.sync.StartPayload
 import dev.tricked.solidverdant.sync.StopPayload
@@ -40,8 +41,20 @@ class TimeEntryRepository @Inject constructor(
     private val clock: Clock,
     private val json: Json
 ) : TimeEntryReader {
+    enum class EntrySyncStatus { SYNCED, PENDING, RETRYING, FAILED }
+
+    data class SyncOperation(
+        val entryId: String,
+        val type: OutboxOpType,
+        val status: EntrySyncStatus,
+        val attemptCount: Int,
+        val error: String?,
+    )
     fun observeProjects(orgId: String): Flow<List<Project>> =
         catalogDao.observeProjects(orgId).map { list -> list.map { it.toModel() } }
+
+    fun observeClients(orgId: String): Flow<List<Client>> =
+        catalogDao.observeClients(orgId).map { list -> list.map { it.toModel() } }
 
     fun observeTasks(orgId: String): Flow<List<Task>> =
         catalogDao.observeTasks(orgId).map { list -> list.map { it.toModel() } }
@@ -98,15 +111,35 @@ class TimeEntryRepository @Inject constructor(
 
     fun observeOutboxCount(): Flow<Int> = outboxDao.observeCount()
 
+    fun observeSyncOperations(orgId: String): Flow<List<SyncOperation>> =
+        outboxDao.observeAll().map { operations ->
+            operations.filter { it.organizationId == orgId }.map { op ->
+                SyncOperation(
+                    entryId = op.timeEntryId,
+                    type = op.opType,
+                    status = when {
+                        op.lastError?.startsWith("Server rejected") == true -> EntrySyncStatus.FAILED
+                        op.lastError != null && op.attemptCount >= 3 -> EntrySyncStatus.FAILED
+                        op.attemptCount > 0 -> EntrySyncStatus.RETRYING
+                        else -> EntrySyncStatus.PENDING
+                    },
+                    attemptCount = op.attemptCount,
+                    error = op.lastError,
+                )
+            }
+        }
+
     /** Pull the full first frame for an org and upsert into Room (last-write-wins). */
     suspend fun refreshAll(organizationId: String, memberId: String): Result<Unit> = try {
         val projects = remote.getProjects(organizationId).getOrThrow()
+        val clients = remote.getClients(organizationId).getOrThrow()
         val tasks = remote.getTasks(organizationId).getOrThrow()
         val tags = remote.getTags(organizationId).getOrThrow()
         val entries = remote.getTimeEntries(organizationId, memberId, limit = 250, offset = 0, onlyFullDates = false)
             .getOrThrow().data
 
         catalogDao.upsertProjects(projects.map { it.toEntity(organizationId) })
+        catalogDao.upsertClients(clients.map { it.toEntity(organizationId) })
         catalogDao.upsertTasks(tasks.map { it.toEntity(organizationId) })
         catalogDao.upsertTags(tags.map { it.toEntity(organizationId) })
 
@@ -204,6 +237,19 @@ class TimeEntryRepository @Inject constructor(
                 timeEntryId = entry.id, createdAtMs = now, payloadJson = "{}"
             )
         )
+    }
+
+    suspend fun undoDelete(entry: TimeEntry): Boolean {
+        if (outboxDao.cancelLatestDelete(entry.id) == 0) return false
+        val existing = timeEntryDao.getById(entry.id)
+        if (existing == null) {
+            val state = if (entry.id.startsWith("local-")) SyncState.PENDING else SyncState.SYNCED
+            timeEntryDao.upsert(entry.toEntity(updatedAt = clock.nowMs(), syncState = state))
+            timeEntryDao.replaceTagRefs(entry.id, entry.tags.map { it.id })
+        } else {
+            timeEntryDao.restoreDeleted(entry.id, existing.syncState)
+        }
+        return true
     }
 
     private fun nowIso(): String = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC)

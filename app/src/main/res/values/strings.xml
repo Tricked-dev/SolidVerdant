@@ -4,6 +4,18 @@
      file, You can obtain one at https://mozilla.org/MPL/2.0/.
 -->
 <resources>
+    <string name="search_and_filter">Search &amp; filter</string><string name="active_filters_count">%1$d active filters</string>
+    <string name="long_timer_notification_title">Long timer check</string><string name="long_timer_notification_text">This timer reached your configured duration limit.</string>
+    <string name="all_items">All %1$s</string>
+    <string name="minutes_short">min</string>
+    <string name="widget_zero_time" translatable="false">00:00:00</string>
+    <string name="overlap_policy_warning_count">%1$d overlapping entry pairs conflict with your organization’s overlap policy.</string>
+    <string name="running_entries">Running</string>
+    <string name="enable_notifications">Enable notifications</string><string name="collapse_entries">Collapse %1$d entries</string>
+    <string name="stats_empty">No tracked time in this range.</string><string name="stats_by_project">By project</string><string name="stats_trend">Trend</string><string name="stats_last_7_days">Last 7 days</string><string name="stats_last_week">Last week</string><string name="stats_this_week">This week</string><string name="stats_this_month">This month</string><string name="stats_previous_month">Previous month</string><string name="stats_custom">Custom</string><string name="apply">Apply</string><string name="stats_total">Total</string><string name="stats_entries">Entries</string><string name="stats_average_day">Avg / day</string><string name="calendar_show_month">Show month</string><string name="calendar_previous_month">Previous month</string><string name="calendar_next_month">Next month</string>
+    <string name="long_timer_warning">Long-timer warning</string><string name="long_timer_warning_description">Warn after %1$d hours. Stored only on this device.</string><string name="hours_short">%1$dh</string><string name="timer_running_long">This timer has been running for %1$d hours.</string><string name="stop_now">Stop now</string><string name="keep_running">Keep running</string><string name="adjust_end_time">Adjust end time</string><string name="overlap_warning_count">%1$d overlapping entry pairs to review. Overlaps are warnings and do not block saving.</string>
+    <string name="test_connection">Test connection</string><string name="testing_connection">Testing…</string>
+    <string name="sync_center">Sync center</string><string name="sync_synced">Synced</string><string name="sync_pending">Pending</string><string name="sync_retrying">Retrying</string><string name="sync_failed">Failed</string><string name="sync_failed_count">%1$d failed changes</string><string name="sync_retrying_count">Retrying %1$d changes</string><string name="sync_pending_count">%1$d changes waiting to sync</string>
     <!-- App Name -->
     <string name="app_name">SolidVerdant</string>
 
@@ -70,6 +82,9 @@
     <string name="start_time_tracking">Start Time Tracking</string>
     <string name="project_task">Project / Task</string>
     <string name="search_placeholder">Search…</string>
+    <string name="search_history">Search history</string>
+    <string name="needs_categorization">Needs categorization</string>
+    <string name="clear_filters">Clear filters</string>
     <string name="no_project">No Project</string>
     <string name="description_optional">Description (Optional)</string>
     <string name="no_results_found">No results found</string>
@@ -85,6 +100,9 @@
     <string name="no_time_entries">No time entries yet</string>
     <string name="edit">Edit</string>
     <string name="delete">Delete</string>
+    <string name="entry_deleted">Entry deleted</string>
+    <string name="undo">Undo</string>
+    <string name="undo_delete_too_late">This entry was already deleted on the server and can no longer be restored automatically.</string>
     <string name="no_description">No description</string>
     <string name="edit_time_entry">Edit Time Entry</string>
     <string name="add_time_entry">Add Time Entry</string>
@@ -128,6 +146,7 @@
 
     <!-- Settings -->
     <string name="settings_menu">Settings</string>
+    <string name="profile_picture">Profile picture</string>
     <string name="choose_language">Choose language</string>
     <string name="server_information">Server information</string>
     <string name="quick_start">Quick Start</string>

@@ -49,6 +49,7 @@ fun LoginScreen(
     onLoginClick: () -> Unit,
     onConfigSave: (String, String) -> Unit,
     onConfigReset: () -> Unit,
+    onTestConnection: (String, String) -> Unit,
     onAuthUrlReady: (String) -> Unit,
     onClearAuthUrl: () -> Unit,
     onClearError: () -> Unit
@@ -140,6 +141,7 @@ fun LoginScreen(
             configState = configState,
             onSave = onConfigSave,
             onReset = onConfigReset,
+            onTestConnection = onTestConnection,
             onDismiss = { showConfigDialog = false }
         )
     }

@@ -26,6 +26,8 @@ import retrofit2.http.Query
  * Retrofit API interface for Solidtime API
  */
 interface SolidtimeApi {
+    @GET("api/v1/organizations/{organization}/clients")
+    suspend fun getClients(@Path("organization") organizationId: String): dev.tricked.solidverdant.data.model.ClientsResponse
 
     /**
      * Exchange authorization code for access and refresh tokens
@@ -121,7 +123,9 @@ interface SolidtimeApi {
         @Query("member_id") memberId: String,
         @Query("only_full_dates") onlyFullDates: Boolean = true,
         @Query("limit") limit: Int = 50,
-        @Query("offset") offset: Int = 0
+        @Query("offset") offset: Int = 0,
+        @Query("start") start: String? = null,
+        @Query("end") end: String? = null,
     ): TimeEntriesResponse
 
     /**

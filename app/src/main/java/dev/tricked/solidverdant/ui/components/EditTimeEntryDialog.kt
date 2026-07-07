@@ -187,7 +187,7 @@ fun EditTimeEntryDialog(
                                     }
                                 },
                                 label = { Text(stringResource(R.string.minutes)) },
-                                suffix = { Text("min") },
+                                suffix = { Text(stringResource(R.string.minutes_short)) },
                                 isError = !durationIsValid,
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

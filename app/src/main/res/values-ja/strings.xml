@@ -4,6 +4,25 @@
      file, You can obtain one at https://mozilla.org/MPL/2.0/.
 -->
 <resources>
+    <string name="search_and_filter">検索と絞り込み</string><string name="active_filters_count">有効なフィルター: %1$d</string>
+    <string name="long_timer_notification_title">長時間タイマーの確認</string><string name="long_timer_notification_text">このタイマーは設定した時間制限に達しました。</string>
+    <string name="all_items">すべての%1$s</string>
+    <string name="minutes_short">分</string>
+    <string name="nav_track">記録</string><string name="nav_calendar">カレンダー</string><string name="nav_stats">統計</string>
+    <string name="overlap_policy_warning_count">%1$d組の重複エントリーが組織の重複ポリシーに反しています。</string>
+    <string name="running_entries">実行中</string>
+    <string name="enable_notifications">通知を有効にする</string><string name="collapse_entries">%1$d件のエントリーを折りたたむ</string>
+    <string name="stats_empty">この期間に記録された時間はありません。</string><string name="stats_by_project">プロジェクト別</string><string name="stats_trend">推移</string><string name="stats_last_7_days">過去7日間</string><string name="stats_last_week">先週</string><string name="stats_this_week">今週</string><string name="stats_this_month">今月</string><string name="stats_previous_month">先月</string><string name="stats_custom">カスタム</string><string name="apply">適用</string><string name="stats_total">合計</string><string name="stats_entries">エントリー</string><string name="stats_average_day">1日平均</string><string name="calendar_show_month">月を表示</string><string name="calendar_previous_month">前の月</string><string name="calendar_next_month">次の月</string>
+    <string name="long_timer_warning">長時間タイマーの警告</string><string name="long_timer_warning_description">%1$d時間後に警告します。この端末にのみ保存されます。</string><string name="hours_short">%1$d時間</string><string name="timer_running_long">このタイマーは%1$d時間実行されています。</string><string name="stop_now">今すぐ停止</string><string name="keep_running">続行</string><string name="adjust_end_time">終了時刻を調整</string><string name="overlap_warning_count">確認が必要な重複エントリーが%1$d組あります。保存はブロックされません。</string>
+    <string name="test_connection">接続をテスト</string><string name="testing_connection">テスト中…</string>
+    <string name="sync_center">同期センター</string><string name="sync_synced">同期済み</string><string name="sync_pending">保留中</string><string name="sync_retrying">再試行中</string><string name="sync_failed">失敗</string><string name="sync_failed_count">%1$d件の変更に失敗しました</string><string name="sync_retrying_count">%1$d件の変更を再試行中</string><string name="sync_pending_count">%1$d件の変更が同期を待機中</string>
+    <string name="profile_picture">プロフィール画像</string>
+    <string name="search_history">履歴を検索</string>
+    <string name="needs_categorization">分類が必要</string>
+    <string name="clear_filters">フィルターを解除</string>
+    <string name="entry_deleted">エントリーを削除しました</string>
+    <string name="undo">元に戻す</string>
+    <string name="undo_delete_too_late">このエントリーはすでにサーバーから削除されているため、自動的に復元できません。</string>
     <!-- App Name -->
     <string name="app_name">ソリッドグリーン</string>
     <string name="tile_label">時間追跡</string>

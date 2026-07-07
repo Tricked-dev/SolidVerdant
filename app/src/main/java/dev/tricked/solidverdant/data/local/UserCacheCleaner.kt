@@ -9,6 +9,7 @@ package dev.tricked.solidverdant.data.local
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.tricked.solidverdant.util.ShortcutManager
+import dev.tricked.solidverdant.data.local.db.AppDatabase
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -16,10 +17,12 @@ import javax.inject.Singleton
 @Singleton
 class UserCacheCleaner @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val settingsDataStore: SettingsDataStore
+    private val settingsDataStore: SettingsDataStore,
+    private val database: AppDatabase,
 ) {
     suspend fun clear() {
         settingsDataStore.clearCachedData()
+        database.clearAllTables()
         context.getSharedPreferences(TILE_STATE_PREFERENCES, Context.MODE_PRIVATE)
             .edit()
             .clear()

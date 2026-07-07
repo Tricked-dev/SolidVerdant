@@ -15,6 +15,9 @@ interface OutboxDao {
     @Query("SELECT * FROM outbox ORDER BY id ASC")
     suspend fun peekAll(): List<OutboxEntity>
 
+    @Query("SELECT * FROM outbox ORDER BY id ASC")
+    fun observeAll(): Flow<List<OutboxEntity>>
+
     @Insert
     suspend fun insert(op: OutboxEntity): Long
 
@@ -26,4 +29,7 @@ interface OutboxDao {
 
     @Query("UPDATE outbox SET timeEntryId = :newId WHERE timeEntryId = :oldId")
     suspend fun rekeyReferences(oldId: String, newId: String)
+
+    @Query("DELETE FROM outbox WHERE id = (SELECT MAX(id) FROM outbox WHERE timeEntryId = :entryId AND opType = 'DELETE')")
+    suspend fun cancelLatestDelete(entryId: String): Int
 }

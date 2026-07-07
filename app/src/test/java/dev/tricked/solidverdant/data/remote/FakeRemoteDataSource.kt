@@ -6,10 +6,12 @@ import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntriesResponse
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.Client
 
 class FakeRemoteDataSource(
     var entries: List<TimeEntry> = emptyList(),
     var projects: List<Project> = emptyList(),
+    var clients: List<Client> = emptyList(),
     var tasks: List<Task> = emptyList(),
     var tags: List<Tag> = emptyList(),
     var active: TimeEntry? = null,
@@ -23,6 +25,7 @@ class FakeRemoteDataSource(
     override suspend fun getTimeEntries(organizationId: String, memberId: String, limit: Int, offset: Int, onlyFullDates: Boolean) =
         Result.success(TimeEntriesResponse(data = entries))
     override suspend fun getProjects(organizationId: String) = Result.success(projects)
+    override suspend fun getClients(organizationId: String) = Result.success(clients)
     override suspend fun getTasks(organizationId: String) = Result.success(tasks)
     override suspend fun getTags(organizationId: String) = Result.success(tags)
     override suspend fun getActiveTimeEntry() = Result.success(active)

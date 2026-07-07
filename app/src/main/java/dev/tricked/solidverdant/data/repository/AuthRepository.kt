@@ -2,6 +2,7 @@ package dev.tricked.solidverdant.data.repository
 
 import dev.tricked.solidverdant.data.local.AuthDataStore
 import dev.tricked.solidverdant.data.model.Membership
+import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
@@ -370,7 +371,9 @@ class AuthRepository @Inject constructor(
         memberId: String,
         limit: Int = 50,
         offset: Int = 0,
-        onlyFullDates: Boolean = false
+        onlyFullDates: Boolean = false,
+        start: String? = null,
+        end: String? = null,
     ): Result<TimeEntriesResponse> {
         return try {
             val endpoint = authDataStore.getEndpoint()
@@ -380,7 +383,9 @@ class AuthRepository @Inject constructor(
                 memberId,
                 onlyFullDates = onlyFullDates,
                 limit = limit,
-                offset = offset
+                offset = offset,
+                start = start,
+                end = end,
             )
             Result.success(response)
         } catch (e: Exception) {
@@ -417,6 +422,12 @@ class AuthRepository @Inject constructor(
             Timber.e(e, "Failed to get projects")
             Result.failure(e)
         }
+    }
+
+    suspend fun getClients(organizationId: String): Result<List<Client>> = try {
+        Result.success(apiClientFactory.createApi(authDataStore.getEndpoint()).getClients(organizationId).data)
+    } catch (e: Exception) {
+        Result.failure(e)
     }
 
     /**

@@ -41,6 +41,14 @@ data class ProjectEntity(
     val organizationId: String
 )
 
+@Entity(tableName = "clients", indices = [Index("organizationId")])
+data class ClientEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val isArchived: Boolean,
+    val organizationId: String,
+)
+
 @Entity(tableName = "tasks")
 data class TaskEntity(
     @PrimaryKey val id: String,

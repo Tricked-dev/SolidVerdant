@@ -13,6 +13,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -60,6 +61,7 @@ class SettingsDataStore @Inject constructor(
         private val ALWAYS_SHOW_NOTIFICATION = booleanPreferencesKey("always_show_notification")
         private val APP_THEME = stringPreferencesKey("app_theme")
         private val OPTIMISTIC_REFRESH = booleanPreferencesKey("optimistic_refresh")
+        private val LONG_TIMER_HOURS = intPreferencesKey("long_timer_hours")
         private val WIDGET_IS_TRACKING = booleanPreferencesKey("widget_is_tracking")
         private val WIDGET_START_TIME = longPreferencesKey("widget_start_time")
         private val WIDGET_PROJECT_NAME = stringPreferencesKey("widget_project_name")
@@ -130,6 +132,7 @@ class SettingsDataStore @Inject constructor(
         val organizationId: String,
         val timeEntries: List<TimeEntry>,
         val projects: List<Project>,
+        val clients: List<dev.tricked.solidverdant.data.model.Client> = emptyList(),
         val tasks: List<Task>,
         val tags: List<Tag>,
         val activeEntry: TimeEntry?,
@@ -177,6 +180,8 @@ class SettingsDataStore @Inject constructor(
         preferences[OPTIMISTIC_REFRESH] ?: true
     }.distinctUntilChanged()
 
+    val longTimerHours: Flow<Int> = dataStore.data.map { it[LONG_TIMER_HOURS] ?: 4 }.distinctUntilChanged()
+
     suspend fun getAppTheme(): AppThemeMode = appTheme.first()
 
     /**
@@ -195,6 +200,11 @@ class SettingsDataStore @Inject constructor(
 
     suspend fun setOptimisticRefresh(enabled: Boolean) {
         dataStore.edit { preferences -> preferences[OPTIMISTIC_REFRESH] = enabled }
+    }
+
+    suspend fun setLongTimerHours(hours: Int) {
+        require(hours in 1..24)
+        dataStore.edit { it[LONG_TIMER_HOURS] = hours }
     }
 
     /**

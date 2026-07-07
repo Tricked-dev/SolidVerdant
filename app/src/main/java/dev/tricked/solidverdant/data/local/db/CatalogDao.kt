@@ -7,6 +7,9 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface CatalogDao {
+    @Upsert suspend fun upsertClients(items: List<ClientEntity>)
+    @Query("SELECT * FROM clients WHERE organizationId = :orgId")
+    fun observeClients(orgId: String): Flow<List<ClientEntity>>
     @Upsert suspend fun upsertProjects(items: List<ProjectEntity>)
     @Query("SELECT * FROM projects WHERE organizationId = :orgId")
     fun observeProjects(orgId: String): Flow<List<ProjectEntity>>
@@ -27,4 +30,5 @@ interface CatalogDao {
     @Query("DELETE FROM projects") suspend fun clearProjects()
     @Query("DELETE FROM tasks") suspend fun clearTasks()
     @Query("DELETE FROM tags") suspend fun clearTags()
+    @Query("DELETE FROM clients") suspend fun clearClients()
 }

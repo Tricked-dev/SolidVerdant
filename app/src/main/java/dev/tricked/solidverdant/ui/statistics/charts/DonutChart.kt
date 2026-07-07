@@ -7,6 +7,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.invisibleToUser
+import androidx.compose.ui.semantics.semantics
 
 @Composable
 fun DonutChart(
@@ -14,7 +16,7 @@ fun DonutChart(
     modifier: Modifier = Modifier,
 ) {
     val total = slices.sumOf { it.second.toDouble() }.toFloat().coerceAtLeast(0.0001f)
-    Canvas(modifier = modifier.size(160.dp)) {
+    Canvas(modifier = modifier.size(160.dp).semantics { invisibleToUser() }) {
         val stroke = Stroke(width = size.minDimension * 0.18f)
         val diameter = size.minDimension - stroke.width
         val topLeft = androidx.compose.ui.geometry.Offset(

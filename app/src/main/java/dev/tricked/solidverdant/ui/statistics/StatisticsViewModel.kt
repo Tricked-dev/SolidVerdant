@@ -53,12 +53,26 @@ class StatisticsViewModel @Inject constructor(
     private val refreshTrigger = MutableStateFlow(0)
 
     // --- Feature #6 fallback adapter ---
-    private fun observeTimeEntries(organizationId: String, memberId: String): Flow<List<TimeEntry>> =
+    private fun observeTimeEntries(
+        organizationId: String,
+        memberId: String,
+        range: ClosedRange<LocalDate>,
+    ): Flow<List<TimeEntry>> =
         flow {
-            emit(
-                authRepository.getTimeEntries(organizationId, memberId, limit = 500)
-                    .getOrNull()?.data ?: emptyList(),
-            )
+            val entries = mutableListOf<TimeEntry>()
+            val start = range.start.atStartOfDay(zone).toInstant().toString()
+            val end = range.endInclusive.plusDays(1).atStartOfDay(zone).toInstant().toString()
+            var offset = 0
+            do {
+                val page = authRepository.getTimeEntries(
+                    organizationId, memberId, limit = 500, offset = offset,
+                    start = start, end = end,
+                ).getOrNull() ?: break
+                entries += page.data
+                offset += page.data.size
+                val total = page.meta?.total ?: page.data.size
+            } while (page.data.size == 500 && offset < total)
+            emit(entries)
         }.flowOn(Dispatchers.IO)
 
     private fun observeProjects(organizationId: String): Flow<List<Project>> =
@@ -76,13 +90,13 @@ class StatisticsViewModel @Inject constructor(
             if (membership == null) {
                 flowOf(StatisticsUiState(isLoading = false, isEmpty = true))
             } else {
-                combine(
-                    observeTimeEntries(membership.organizationId, membership.id),
-                    observeProjects(membership.organizationId),
-                    rangeFlow,
-                ) { entries, projects, range ->
+                rangeFlow.flatMapLatest { range ->
+                    val resolved = range.resolve(LocalDate.now(zone))
+                    combine(
+                        observeTimeEntries(membership.organizationId, membership.id, resolved),
+                        observeProjects(membership.organizationId),
+                    ) { entries, projects ->
                     val today = LocalDate.now(zone)
-                    val resolved = range.resolve(today)
                     val summary = withContext(Dispatchers.Default) {
                         StatisticsAggregator.compute(
                             entries = entries,
@@ -99,6 +113,7 @@ class StatisticsViewModel @Inject constructor(
                         summary = summary,
                         isEmpty = summary.entryCount == 0,
                     )
+                    }
                 }
             }
         }.stateIn(

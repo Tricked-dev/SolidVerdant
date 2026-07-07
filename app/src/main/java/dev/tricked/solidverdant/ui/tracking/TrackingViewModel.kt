@@ -1,5 +1,7 @@
 package dev.tricked.solidverdant.ui.tracking
 
+import dev.tricked.solidverdant.R
+
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -9,6 +11,7 @@ import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.local.AppThemeMode
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.data.model.Project
+import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
@@ -54,6 +57,7 @@ data class TrackingUiState(
     val canLoadNewerHistory: Boolean = false,
     val cachedContinueEntry: TimeEntry? = null,
     val projects: List<Project> = emptyList(),
+    val clients: List<Client> = emptyList(),
     val tasks: List<Task> = emptyList(),
     val tags: List<Tag> = emptyList(),
     val elapsedSeconds: Long = 0,
@@ -63,7 +67,8 @@ data class TrackingUiState(
     val editingProjectId: String? = null,
     val editingTaskId: String? = null,
     val editingTags: List<String> = emptyList(),
-    val editingBillable: Boolean = false
+    val editingBillable: Boolean = false,
+    val syncOperations: List<TimeEntryRepository.SyncOperation> = emptyList()
 ) {
     /** Mutations retain the legacy internal flag; refresh/sync have independent flags. */
     val isMutating: Boolean get() = isLoading
@@ -93,6 +98,7 @@ class TrackingViewModel @Inject constructor(
                     .firstOrNull { it.end != null && !it.description.isNullOrBlank() }
                     ?: settingsDataStore.getCachedContinueEntry(),
                 projects = cached.projects,
+                clients = cached.clients,
                 tasks = cached.tasks,
                 tags = cached.tags,
                 editingDescription = cached.activeEntry?.description.orEmpty(),
@@ -108,6 +114,7 @@ class TrackingViewModel @Inject constructor(
     val alwaysShowNotifications = settingsDataStore.alwaysShowNotification
     val appTheme = settingsDataStore.appTheme
     val optimisticRefresh = settingsDataStore.optimisticRefresh
+    val longTimerHours = settingsDataStore.longTimerHours
     private val _snapshotHydrated = MutableStateFlow(false)
     val snapshotHydrated: StateFlow<Boolean> = _snapshotHydrated.asStateFlow()
     private val _hasSnapshot = MutableStateFlow(false)
@@ -119,6 +126,7 @@ class TrackingViewModel @Inject constructor(
     private var activeEntryMonitorJob: Job? = null
     private var monitoredOrganizationId: String? = null
     private var dataCollectorJob: Job? = null
+    private var syncCollectorJob: Job? = null
     private var firstFrameCacheJob: Job? = null
     private var collectingOrganizationId: String? = null
     private var lastCollectedActiveId: String? = null
@@ -160,6 +168,10 @@ class TrackingViewModel @Inject constructor(
 
     fun setOptimisticRefresh(enabled: Boolean) {
         viewModelScope.launch { settingsDataStore.setOptimisticRefresh(enabled) }
+    }
+
+    fun setLongTimerHours(hours: Int) {
+        viewModelScope.launch { settingsDataStore.setLongTimerHours(hours) }
     }
 
     /**
@@ -224,6 +236,8 @@ class TrackingViewModel @Inject constructor(
             return
         }
         dataCollectorJob?.cancel()
+        syncCollectorJob?.cancel()
+        syncCollectorJob?.cancel()
         firstFrameCacheJob?.cancel()
         collectingOrganizationId = organizationId
         lastCollectedActiveId = null
@@ -234,14 +248,18 @@ class TrackingViewModel @Inject constructor(
                 timeEntryRepository.observeTimeEntries(organizationId),
                 timeEntryRepository.observeProjects(organizationId),
                 timeEntryRepository.observeTasks(organizationId),
-                timeEntryRepository.observeTags(organizationId),
+                combine(
+                    timeEntryRepository.observeTags(organizationId),
+                    timeEntryRepository.observeClients(organizationId),
+                ) { tags, clients -> tags to clients },
                 timeEntryRepository.observeActiveEntry(organizationId)
-            ) { entries, projects, tasks, tags, active ->
+            ) { entries, projects, tasks, catalog, active ->
                 TrackingData(
                     entries = entries,
                     projects = projects.filterNot { it.isArchived },
                     tasks = tasks.filterNot { it.isDone },
-                    tags = tags,
+                    tags = catalog.first,
+                    clients = catalog.second,
                     active = active
                 )
             }.collect { data ->
@@ -255,6 +273,7 @@ class TrackingViewModel @Inject constructor(
                     projects = data.projects,
                     tasks = data.tasks,
                     tags = data.tags,
+                    clients = data.clients,
                     currentTimeEntry = data.active,
                     isTracking = data.active != null,
                     hasLoadedTimeEntries = true,
@@ -280,6 +299,7 @@ class TrackingViewModel @Inject constructor(
                             organizationId = organizationId,
                             timeEntries = data.entries.take(FIRST_FRAME_ENTRY_LIMIT),
                             projects = data.projects,
+                            clients = data.clients,
                             tasks = data.tasks,
                             tags = data.tags,
                             activeEntry = data.active,
@@ -293,11 +313,17 @@ class TrackingViewModel @Inject constructor(
                 }
             }
         }
+        syncCollectorJob = viewModelScope.launch {
+            timeEntryRepository.observeSyncOperations(organizationId).collect { operations ->
+                _uiState.value = _uiState.value.copy(syncOperations = operations)
+            }
+        }
     }
 
     private data class TrackingData(
         val entries: List<TimeEntry>,
         val projects: List<Project>,
+        val clients: List<Client>,
         val tasks: List<Task>,
         val tags: List<Tag>,
         val active: TimeEntry?
@@ -1154,12 +1180,28 @@ class TrackingViewModel @Inject constructor(
 
             // Optimistic soft-delete + outbox enqueue; the collector removes it from the list.
             timeEntryRepository.deleteEntry(entry)
-            syncTrigger.requestSync()
+            // Give the Snackbar undo action a real cancellation window before syncing.
+            delay(DELETE_UNDO_WINDOW_MS)
+            if (_uiState.value.syncOperations.any {
+                    it.entryId == timeEntryId && it.type == dev.tricked.solidverdant.data.local.db.OutboxOpType.DELETE
+                }) {
+                syncTrigger.requestSync()
+            }
 
             _uiState.value = _uiState.value.copy(isLoading = false)
             Timber.d("Time entry deleted successfully (optimistic)")
         }
     }
+
+    fun undoDelete(entry: TimeEntry) {
+        viewModelScope.launch {
+            if (!timeEntryRepository.undoDelete(entry)) {
+                _uiState.value = _uiState.value.copy(error = context.getString(R.string.undo_delete_too_late))
+            }
+        }
+    }
+
+    fun retrySync() = syncTrigger.requestSync()
 
     /**
      * Clear error message
@@ -1200,5 +1242,6 @@ class TrackingViewModel @Inject constructor(
         const val HISTORY_REFRESH_LIMIT = 250
         const val FIRST_FRAME_ENTRY_LIMIT = 30
         const val FIRST_FRAME_CACHE_DEBOUNCE_MS = 500L
+        const val DELETE_UNDO_WINDOW_MS = 5_000L
     }
 }

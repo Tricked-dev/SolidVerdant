@@ -1,6 +1,10 @@
 package dev.tricked.solidverdant.ui.auth
 
 import androidx.lifecycle.ViewModel
+import android.content.Context
+import coil.imageLoader
+import coil.memory.MemoryCache
+import dagger.hilt.android.qualifiers.ApplicationContext
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.tricked.solidverdant.data.local.UserCacheCleaner
@@ -8,6 +12,7 @@ import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.model.Membership
 import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.repository.AuthRepository
+import dev.tricked.solidverdant.data.remote.ConnectionTester
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -38,7 +43,10 @@ data class AuthUiState(
  */
 data class OAuthConfigState(
     val endpoint: String = "",
-    val clientId: String = ""
+    val clientId: String = "",
+    val isTesting: Boolean = false,
+    val testSuccess: Boolean? = null,
+    val testMessage: String? = null,
 )
 
 enum class AuthState { Unknown, LoggedIn, LoggedOut }
@@ -51,6 +59,8 @@ class AuthViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val userCacheCleaner: UserCacheCleaner,
     private val settingsDataStore: SettingsDataStore,
+    private val connectionTester: ConnectionTester,
+    @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -235,6 +245,16 @@ class AuthViewModel @Inject constructor(
         }
     }
 
+    fun testConnection(endpoint: String, clientId: String) {
+        viewModelScope.launch {
+            _configState.value = _configState.value.copy(isTesting = true, testSuccess = null, testMessage = null)
+            val result = connectionTester.test(endpoint.removeSuffix("/"), clientId)
+            _configState.value = _configState.value.copy(
+                isTesting = false, testSuccess = result.success, testMessage = result.message,
+            )
+        }
+    }
+
     /**
      * Reset OAuth configuration to defaults
      */
@@ -260,6 +280,10 @@ class AuthViewModel @Inject constructor(
      */
     fun logout() {
         viewModelScope.launch {
+            _uiState.value.user?.profilePhotoUrl?.takeIf { it.isNotBlank() }?.let { url ->
+                context.imageLoader.memoryCache?.remove(MemoryCache.Key(url))
+                context.imageLoader.diskCache?.remove(url)
+            }
             userCacheCleaner.clear()
             // Clear account-owned data before changing auth state. Once auth is cleared,
             // navigation can dispose this ViewModel and cancel any remaining work.
