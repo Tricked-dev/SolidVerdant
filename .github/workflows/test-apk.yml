@@ -1,0 +1,44 @@
+name: Test APK
+
+# Manually build a release-signed, separately-installable test APK
+# (dev.tricked.solidverdant.test) from any branch. Uploads the APK as a build
+# artifact only — it never touches the public "nightly" release.
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Decode and install keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > ${{ runner.temp }}/my-release-key.jks
+
+      - name: Build test (.test) APK
+        run: ./gradlew app:assembleQa
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/my-release-key.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+      - name: Upload test APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: solidverdant-test-apk-${{ github.ref_name }}
+          path: app/build/outputs/apk/qa/*.apk
+          if-no-files-found: error
+          retention-days: 14
