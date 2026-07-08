@@ -119,9 +119,7 @@ class TimeTrackingTileService : TileService() {
                     val projectName = intent.getStringExtra(EXTRA_PROJECT_NAME)
                     val taskName = intent.getStringExtra(EXTRA_TASK_NAME)
 
-                    Timber.d(
-                        "Received start tracking broadcast: project=$projectName, task=$taskName, projectId=$projectId, taskId=$taskId",
-                    )
+                    Timber.d("Received start tracking broadcast from tile")
 
                     // Optimistic update immediately
                     setOptimisticStarting(projectName, taskName)
@@ -222,7 +220,7 @@ class TimeTrackingTileService : TileService() {
     }
 
     private fun doStartTracking(projectId: String?, taskId: String?, description: String, projectName: String?, taskName: String?) {
-        Timber.d("doStartTracking called: projectId=$projectId, taskId=$taskId, projectName=$projectName, taskName=$taskName")
+        Timber.d("Starting time entry from tile")
         serviceScope.launch {
             try {
                 Timber.d("Fetching memberships and user info...")

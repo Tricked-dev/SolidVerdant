@@ -22,7 +22,7 @@ fun parseOAuthConfig(text: String): ParsedOAuthConfig {
     if (trimmed.isEmpty()) return ParsedOAuthConfig()
 
     val uuidMatch = uuid.find(trimmed)
-    var clientId = uuidMatch?.value
+    val clientId = uuidMatch?.value
     var endpoint: String? = null
 
     // Accept the terse form copied by some deployments: <server>:<uuid>.

@@ -258,10 +258,7 @@ class InboxViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Create a completed entry to fill a gap. Mirrors the manual-create path (network-backed), so it
-     * requires connectivity; failure is surfaced without losing the inbox list.
-     */
+    /** Create a completed entry to fill a gap through the offline Room/outbox path. */
     fun fillGap(
         description: String?,
         projectId: String?,
@@ -274,19 +271,21 @@ class InboxViewModel @Inject constructor(
         val ctx = context ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isRefreshing = true, actionError = null) }
-            authRepository.createTimeEntry(
-                organizationId = ctx.organizationId,
-                memberId = ctx.memberId,
-                userId = ctx.userId,
-                start = start,
-                end = end,
-                description = description ?: "",
-                projectId = projectId,
-                taskId = taskId,
-                tags = tags,
-                billable = billable,
-            ).onSuccess {
-                timeEntryRepository.refreshAll(ctx.organizationId, ctx.memberId)
+            runCatching {
+                timeEntryRepository.createCompletedEntry(
+                    organizationId = ctx.organizationId,
+                    memberId = ctx.memberId,
+                    userId = ctx.userId,
+                    description = description ?: "",
+                    projectId = projectId,
+                    taskId = taskId,
+                    tagIds = tags,
+                    billable = billable,
+                    start = start,
+                    end = end,
+                )
+                syncTrigger.requestSync()
+            }.onSuccess {
                 _uiState.update { it.copy(isRefreshing = false) }
             }.onFailure {
                 Timber.w(it, "Failed to fill gap")

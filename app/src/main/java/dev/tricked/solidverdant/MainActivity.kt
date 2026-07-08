@@ -32,6 +32,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import dev.tricked.solidverdant.data.local.AppThemeMode
 import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.reminder.ReminderWorker
 import dev.tricked.solidverdant.sync.SyncStatusReporter
 import dev.tricked.solidverdant.ui.auth.AuthState
 import dev.tricked.solidverdant.ui.auth.AuthViewModel
@@ -66,6 +67,7 @@ open class MainActivity : ComponentActivity() {
     private var stoppedAtElapsedRealtime: Long? = null
     private var handoffOrganizationId by mutableStateOf<String?>(null)
     private var editActiveEntryRequested by mutableStateOf(false)
+    private var pendingReviewRoute by mutableStateOf<String?>(null)
     private val startupTheme = MutableStateFlow(AppThemeMode.SYSTEM)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -102,6 +104,8 @@ open class MainActivity : ComponentActivity() {
                             onHandoffConsumed = { handoffOrganizationId = null },
                             editActiveEntryRequested = editActiveEntryRequested,
                             onEditActiveEntryConsumed = { editActiveEntryRequested = false },
+                            pendingReviewRoute = pendingReviewRoute,
+                            onPendingReviewRouteConsumed = { pendingReviewRoute = null },
                         )
                     }
                 }
@@ -148,6 +152,12 @@ open class MainActivity : ComponentActivity() {
             editActiveEntryRequested = true
             intent.removeExtra(EXTRA_EDIT_ACTIVE_ENTRY)
         }
+        intent?.getStringExtra(ReminderWorker.EXTRA_OPEN_REVIEW_ROUTE)?.let { route ->
+            if (route in setOf(ReviewRoutes.END_OF_DAY, ReviewRoutes.REMINDER_SETTINGS, ReviewRoutes.MANAGE_TEMPLATES)) {
+                pendingReviewRoute = route
+            }
+            intent.removeExtra(ReminderWorker.EXTRA_OPEN_REVIEW_ROUTE)
+        }
         intent?.data?.let { uri ->
             handleDeepLink(uri)
         }
@@ -187,6 +197,8 @@ fun SolidVerdantApp(
     onHandoffConsumed: () -> Unit = {},
     editActiveEntryRequested: Boolean = false,
     onEditActiveEntryConsumed: () -> Unit = {},
+    pendingReviewRoute: String? = null,
+    onPendingReviewRouteConsumed: () -> Unit = {},
 ) {
     val authUiState by authViewModel.uiState.collectAsState()
     val configState by authViewModel.configState.collectAsState()
@@ -226,7 +238,8 @@ fun SolidVerdantApp(
         snapshotHydrated,
     ) {
         val membership = authUiState.currentMembership
-        val mayRefresh = snapshotHydrated && membership != null &&
+        val mayRefresh = snapshotHydrated &&
+            membership != null &&
             (!hasSnapshot || optimisticRefresh || authUiState.hasRevalidated)
         if (membership != null && mayRefresh) {
             trackingViewModel.loadAllData(
@@ -245,6 +258,15 @@ fun SolidVerdantApp(
                 reviewBadgeViewModel.setOrganization(currentMembership?.organizationId)
             }
             val inboxBadgeCount by reviewBadgeViewModel.openIssueCount.collectAsState()
+            LaunchedEffect(pendingReviewRoute, currentMembership?.organizationId) {
+                val route = pendingReviewRoute
+                if (route != null && currentMembership != null) {
+                    navController.navigate(route) {
+                        launchSingleTop = true
+                    }
+                    onPendingReviewRouteConsumed()
+                }
+            }
             MainNavHost(
                 navController = navController,
                 inboxBadgeCount = inboxBadgeCount,

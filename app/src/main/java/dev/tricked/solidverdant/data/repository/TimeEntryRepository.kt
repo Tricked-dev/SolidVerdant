@@ -245,6 +245,60 @@ class TimeEntryRepository @Inject constructor(
         )
     }
 
+    suspend fun createCompletedEntry(
+        organizationId: String,
+        memberId: String,
+        userId: String,
+        description: String,
+        projectId: String?,
+        taskId: String?,
+        tagIds: List<String>,
+        billable: Boolean,
+        start: String,
+        end: String,
+    ): TimeEntry {
+        val now = clock.nowMs()
+        val localId = "local-create-${java.util.UUID.randomUUID()}"
+        val entry = TimeEntry(
+            id = localId,
+            description = description,
+            userId = userId,
+            start = start,
+            end = end,
+            duration = null,
+            taskId = taskId,
+            projectId = projectId,
+            tags = tagIds.map { Tag(it) },
+            billable = billable,
+            organizationId = organizationId,
+        )
+        timeEntryDao.upsert(entry.toEntity(updatedAt = now, syncState = SyncState.PENDING))
+        timeEntryDao.replaceTagRefs(localId, tagIds)
+        outboxDao.insert(
+            OutboxEntity(
+                opType = OutboxOpType.CREATE,
+                organizationId = organizationId,
+                timeEntryId = localId,
+                createdAtMs = now,
+                clientId = newClientId(),
+                payloadJson = json.encodeToString(
+                    CreatePayload(
+                        memberId,
+                        userId,
+                        start,
+                        end,
+                        description,
+                        projectId,
+                        taskId,
+                        billable,
+                        tagIds,
+                    ),
+                ),
+            ),
+        )
+        return entry
+    }
+
     suspend fun deleteEntry(entry: TimeEntry) {
         val now = clock.nowMs()
         // If the entry was never synced (still local-*), just drop it; otherwise soft-delete.
