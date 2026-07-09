@@ -74,6 +74,7 @@ class UiReactivityE2eTest {
 
     @Test
     fun elapsedTimerVisiblyTicksWhileTracking() {
+        assumeApi30OrNewer()
         e2e.mockServer.presetLoggedInWorld(seededEntry = null)
         e2e.launchApp()
         val robot = TrackRobot(e2e.composeRule).waitForHistory()

@@ -9,6 +9,7 @@ package dev.tricked.solidverdant.e2e.flows
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidTest
 import dev.tricked.solidverdant.e2e.E2eRule
+import dev.tricked.solidverdant.e2e.assumeApi30OrNewer
 import dev.tricked.solidverdant.e2e.robots.TrackRobot
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -40,6 +41,7 @@ class OfflineCreateSyncE2eTest {
 
     @Test
     fun startedEntryIsPostedToServerOnSync() {
+        assumeApi30OrNewer()
         // Logged-in world with no pre-existing entries.
         e2e.mockServer.presetLoggedInWorld(seededEntry = null)
 

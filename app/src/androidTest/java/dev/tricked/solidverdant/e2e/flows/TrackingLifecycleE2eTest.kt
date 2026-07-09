@@ -12,6 +12,7 @@ import dev.tricked.solidverdant.e2e.E2eRule
 import dev.tricked.solidverdant.e2e.assumeApi30OrNewer
 import dev.tricked.solidverdant.e2e.robots.TrackRobot
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -27,6 +28,9 @@ class TrackingLifecycleE2eTest {
 
     @get:Rule
     val e2e = E2eRule(this)
+
+    @Before
+    fun skipOnApi29Ci() = assumeApi30OrNewer()
 
     @Test
     fun startThenStopSyncsACompletedEntryToTheServer() {
@@ -56,7 +60,6 @@ class TrackingLifecycleE2eTest {
 
     @Test
     fun runningTimerSurvivesActivityRecreation() {
-        assumeApi30OrNewer()
         e2e.mockServer.presetLoggedInWorld(seededEntry = null)
         val scenario = e2e.launchApp()
         val robot = TrackRobot(e2e.composeRule).waitForHistory()
