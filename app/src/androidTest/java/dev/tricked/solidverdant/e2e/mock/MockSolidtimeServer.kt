@@ -51,7 +51,9 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 class MockSolidtimeServer {
 
-    private val server = MockWebServer()
+    // Recreated on every start(): a MockWebServer cannot be restarted after shutdown(), and the
+    // RetryRule restarts the harness between attempts.
+    private var server = MockWebServer()
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -81,8 +83,24 @@ class MockSolidtimeServer {
     // ---- Lifecycle ----------------------------------------------------------------------------
 
     fun start() {
+        // Fresh instance + cleared catalogue so a RetryRule re-run does not reuse a shut-down
+        // server or inherit entries the previous (failed) attempt seeded.
+        server = MockWebServer()
+        resetCatalogue()
         server.dispatcher = dispatcher
         server.start()
+    }
+
+    private fun resetCatalogue() {
+        user = defaultUser()
+        memberships.clear()
+        projects.clear()
+        tasks.clear()
+        tags.clear()
+        clients.clear()
+        timeEntries.clear()
+        activeEntry = null
+        recordedCalls.clear()
     }
 
     /** Base URL to seed into AuthDataStore, e.g. `http://127.0.0.1:<port>/`. */
