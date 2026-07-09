@@ -16,6 +16,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidTest
 import dev.tricked.solidverdant.e2e.E2eRule
 import dev.tricked.solidverdant.e2e.TestTags
+import dev.tricked.solidverdant.e2e.assumeApi30OrNewer
 import dev.tricked.solidverdant.e2e.mock.MockSolidtimeServer
 import dev.tricked.solidverdant.e2e.robots.TrackRobot
 import dev.tricked.solidverdant.ui.tracking.TrackingTestTags
@@ -54,6 +55,7 @@ class UiReactivityE2eTest {
 
     @Test
     fun entryCreatedElsewhereShowsAfterPullToRefresh() {
+        assumeApi30OrNewer()
         e2e.mockServer.presetLoggedInWorld()
         e2e.launchApp()
         val robot = TrackRobot(e2e.composeRule).waitForHistory().assertEntryVisible("Seeded work")
