@@ -48,9 +48,6 @@ abstract class Robot(protected val composeRule: ComposeTestRule) {
         composeRule.onAllNodes(hasTestTag(tag) and isEnabled()).onFirst()
 
     companion object {
-        // Generous enough for a cold-booted, JIT-warming CI emulator (API 29 x86 on GitHub
-        // Actions is markedly slower than a local image). waitUntil returns as soon as the
-        // condition holds, so this only adds headroom on slow hardware, never latency on fast.
-        const val DEFAULT_TIMEOUT_MS = 30_000L
+        const val DEFAULT_TIMEOUT_MS = 10_000L
     }
 }
