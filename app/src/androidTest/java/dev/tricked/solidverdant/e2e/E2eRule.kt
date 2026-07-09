@@ -134,11 +134,7 @@ class E2eRule(private val test: Any) : TestRule {
         }
     }
 
-    override fun apply(base: Statement, description: Description): Statement = RuleChain
-        // Outermost: a failed attempt re-runs the whole chain below, so each retry starts from a
-        // fresh mock server + clean WorkManager/Room/DataStore rather than contaminated state.
-        .outerRule(RetryRule())
-        .around(hiltRule)
+    override fun apply(base: Statement, description: Description): Statement = RuleChain.outerRule(hiltRule)
         .around(setupRule)
         .around(composeRule)
         .apply(base, description)
