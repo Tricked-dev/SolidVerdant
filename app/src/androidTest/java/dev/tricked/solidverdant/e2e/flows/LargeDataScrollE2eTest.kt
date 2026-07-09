@@ -63,18 +63,22 @@ class LargeDataScrollE2eTest {
     }
 }
 
+// The stress dataset takes noticeably longer to compose on the slow CI emulator, so these
+// mirror the generous Robot.DEFAULT_TIMEOUT_MS budget rather than a tight 15s.
+private const val SCROLL_WAIT_MS = 30_000L
+
 private fun ComposeTestRule.waitForTag(tag: String) {
-    waitUntil(15_000) { onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty() }
+    waitUntil(SCROLL_WAIT_MS) { onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty() }
 }
 
 private fun ComposeTestRule.tapTag(tag: String) {
     val matcher = hasTestTag(tag) and isEnabled()
-    waitUntil(15_000) { onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
+    waitUntil(SCROLL_WAIT_MS) { onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
     onAllNodes(matcher).onFirst().performClick()
 }
 
 private fun ComposeTestRule.waitForScrollable() {
-    waitUntil(15_000) { onAllNodes(hasScrollAction()).fetchSemanticsNodes().isNotEmpty() }
+    waitUntil(SCROLL_WAIT_MS) { onAllNodes(hasScrollAction()).fetchSemanticsNodes().isNotEmpty() }
 }
 
 private fun ComposeTestRule.swipeScrollable(times: Int) {
