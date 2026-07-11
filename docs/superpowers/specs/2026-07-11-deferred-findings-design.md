@@ -27,8 +27,10 @@ local edit was based on.
 - Snapshot = canonical JSON of the conflict-relevant fields: `start`, `end` (both stored as
   **epoch millis**, parsed leniently from the entity's ISO strings so server formatting variance
   — offset form, fractional seconds — cannot fabricate conflicts), `description` (null ≡ ""),
-  `projectId`, `taskId`, `billable`, sorted `tagIds`. All comparisons use this parsed form,
-  never raw strings.
+  `projectId`, `taskId`, `billable`, sorted `tagIds`. All comparisons use this parsed form —
+  with one refinement (adopted during implementation): an *unparseable* timestamp keeps its raw
+  string and compares by raw equality, so a malformed server value fails toward a visible
+  conflict instead of masking one via `null == null`.
 - Captured for **STOP, UPDATE, and DELETE** ops (START/CREATE create server state and need no
   base). Rule, applied inside the same transaction that enqueues the op, **before** the local
   mutation is written to the entity:
