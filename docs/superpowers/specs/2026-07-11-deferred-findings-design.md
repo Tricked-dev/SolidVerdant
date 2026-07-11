@@ -24,26 +24,40 @@ local edit was based on.
 ### Base snapshot
 
 - New nullable column `baseSnapshotJson` on `outbox` (Room v4→v5, `MIGRATION_4_5`).
-- Snapshot = canonical JSON of the conflict-relevant fields: `start`, `end`, `description`,
-  `projectId`, `taskId`, `billable`, sorted `tagIds`.
-- Captured when an UPDATE or DELETE op is enqueued:
-  - entry currently `SYNCED` → snapshot of the current entity (last server-acked state);
-  - an op for this entry is already queued → reuse that op's base (the edit chain shares one base);
-  - entry born locally with its CREATE still queued → base `null` (nothing on the server to
-    diverge from; op pushes blind, as today).
+- Snapshot = canonical JSON of the conflict-relevant fields: `start`, `end` (both stored as
+  **epoch millis**, parsed leniently from the entity's ISO strings so server formatting variance
+  — offset form, fractional seconds — cannot fabricate conflicts), `description` (null ≡ ""),
+  `projectId`, `taskId`, `billable`, sorted `tagIds`. All comparisons use this parsed form,
+  never raw strings.
+- Captured for **STOP, UPDATE, and DELETE** ops (START/CREATE create server state and need no
+  base). Rule, applied inside the same transaction that enqueues the op, **before** the local
+  mutation is written to the entity:
+  1. a queued op for this entry already carries a base → reuse the oldest such base (an offline
+     STOP→UPDATE chain shares the pre-stop base);
+  2. else a queued START/CREATE exists for the entry → base `null` (born locally; nothing on the
+     server to diverge from; pushes blind as today);
+  3. else → snapshot the entity's **pre-mutation** content (the last server-acked content — this
+     covers the real flows: `updateEntry` snapshots before upserting the edit, `stopEntry` before
+     writing `end`, and the soft-delete path snapshots the untouched content even though
+     `softDeleteLocal` has already flipped the row to `PENDING`).
 
 ### Push side (SyncWorker)
 
-- Before draining UPDATE/DELETE ops for an org, fetch the org's current entries once via the
-  existing list endpoint (window sized to cover the queued ops' base `start` values, one request
-  per org per sync run) and index by id.
-- Per UPDATE/DELETE op with a base:
+- Before draining STOP/UPDATE/DELETE ops for an org, fetch the org's current entries via the
+  existing paginated list call (reusing the existing 250/page loop), over the window
+  `[min(base starts, local starts) − 1 day, now + 1 day]`, and index by id. One windowed fetch
+  per org per sync run; on fetch failure the ops stay queued and retry as today.
+- Per STOP/UPDATE/DELETE op with a base:
   - server content == base → safe; PUT/DELETE as today.
   - server content ≠ base → **conflict**: store the server copy on the entity
-    (`conflictServerJson`), set `syncState = CONFLICT`, delete the entry's queued ops.
-  - entry absent from the fetched window → PUT anyway; a `404` response is treated as
-    "deleted on server" → conflict with `conflictServerJson = null` marker.
-- No base (null) → push blind, as today.
+    (`conflictServerJson`), set `syncState = CONFLICT`, delete **all** of the entry's queued ops.
+  - entry absent from the fully-paginated window, or the push returns `404` → treated as
+    "deleted on server" → conflict with the `"DELETED"` marker. (Residual, documented risk: a
+    server edit that moved the entry's `start` more than a day outside the window shows up as a
+    deleted-on-server conflict rather than an edit conflict — wrong flavor, but visible and
+    losslessly resolvable, never a silent overwrite.)
+- No base (null) → push blind, as today (STOP without a base keeps today's dead-letter behavior
+  on 404).
 
 ### Pull side (`TimeEntryDao.applyServerEntries`)
 
@@ -62,24 +76,41 @@ Replaces today's silent skip for `PENDING` rows:
 - `CONFLICT` entries are excluded from outbox pushes (their ops were deleted) and from the
   supersession logic.
 
+### Conflicted entries are edit-locked
+
+- Repository mutations (`updateEntry`, delete) refuse entries with `syncState = CONFLICT`; the
+  edit dialog disables saving with a "resolve the sync conflict in Review first" hint, and
+  conflicted rows carry a small badge in entry lists.
+- **Exception — stopping:** a conflicted *running* entry can still be stopped (time capture must
+  never be blocked). The stop writes `end` into the local row only, enqueues nothing; the row is
+  the recovery copy, so *Keep mine* pushes the stop with everything else, and *Keep theirs*
+  restores the server copy (which may still be running — consistent with choosing "theirs").
+
 ### Review surface
 
 - New `InboxIssueType.CONFLICT`, generated from DB state (entries with `syncState = CONFLICT`),
   not from analyzer heuristics; conflict cards are pinned above other issue types and are **not**
   swipe-dismissible — the user must choose.
-- Card shows both versions (field-level "mine vs theirs" summary) with actions:
-  - **Keep mine** → re-enqueue UPDATE with base = the stored server copy; entry `PENDING`.
-    If the server copy is the deleted marker → enqueue CREATE instead.
-  - **Keep theirs** → overwrite the entity with the server copy, `SYNCED`, clear conflict.
-    If deleted marker → delete the local row.
+- Card shows both versions (field-level "mine vs theirs" summary; project/task/tag ids resolved
+  to names via the local catalog, falling back to a shortened id when no longer present). A
+  `pendingDelete` row renders "mine" as *deleted*.
+- Actions, by what "mine" is:
+  - **Keep mine**, mine = edit → re-enqueue UPDATE with base = the stored server copy; `PENDING`.
+  - **Keep mine**, mine = deletion → re-enqueue DELETE with base = the stored server copy.
+  - **Keep mine**, theirs = `"DELETED"` marker → enqueue CREATE (recreate on the server).
+  - **Keep theirs** → overwrite the entity with the server copy (clearing `pendingDelete` if
+    set), `SYNCED`, clear conflict. If theirs is the deleted marker → delete the local row.
 - Field-level merge is explicitly out of scope for this pass (revisit if conflicts prove common).
 
 ### Tests
 
 Unit/Robolectric: push conflict (server diverged), push pass (server == base), pull conflict,
-pull skip (server == base), 404-delete conflict, keep-mine and keep-theirs resolution (incl.
-delete marker), base reuse across chained edits, migration v4→v5, conflict card presence and
-non-dismissibility. Divergence axes per the finding: description, project, billable, tags.
+pull skip (server == base), 404/absent-window-delete conflict, STOP-op conflict (offline stop vs
+web edit), local-delete vs server-edit conflict, keep-mine and keep-theirs resolution (edit,
+deletion, and deleted-marker variants), base reuse across STOP→UPDATE chains, timestamp-format
+variance does NOT conflict (offset vs Z, fractional seconds), edit-lock enforcement + stop
+exception on conflicted rows, migration v4→v5, conflict card presence and non-dismissibility.
+Divergence axes per the finding: description, project, billable, tags.
 
 ---
 
@@ -108,8 +139,9 @@ Account policy (via provider):
 - Review: `ReviewDayViewModel`, `InboxViewModel`, `InboxPane`, `ReviewDayPane` display,
   `InboxRepository` gap analysis (working window interpreted in the account zone),
   `EntryTrustRules`.
-- Entry editing/display in `TrackingScreen` / `TrackingViewModel` (dates shown and picked in the
-  account zone so the phone agrees with the web app).
+- Entry editing/display in `TrackingScreen` / `TrackingViewModel` and `EditTimeEntryDialog`
+  (the actual date/time-editing surface, listed explicitly so it isn't missed) — dates shown and
+  picked in the account zone so the phone agrees with the web app.
 
 Device-local (unchanged): `ReminderScheduler`, `ReminderWorker` (a 17:00 reminder fires at 17:00
 where the user physically is).
@@ -134,8 +166,11 @@ invisibly while B is logged in and reappear when A returns.
 - Owner identity = Solidtime server endpoint (`AuthDataStore.ENDPOINT`) + `User.id` — the app
   supports multiple server instances, so user id alone is insufficient.
 - Backfill: migrations can't read DataStore, so legacy rows keep `NULL` owners and are
-  **claimed on next authenticated access** (one `UPDATE ... WHERE ownerUserId IS NULL` stamping
-  the current account, run when the template list is first observed while logged in).
+  **claimed when the auth cache is written** (login / auth refresh): one
+  `UPDATE ... WHERE ownerUserId IS NULL` stamping the current account. Claiming at auth time
+  rather than first-list-view narrows the misclaim window; the residual case (upgrade installed,
+  account A never triggers an auth refresh before logging out, B logs in and claims A's legacy
+  rows) is accepted and documented — it can only affect rows from before this feature existed.
 - All template queries filter by owner + org; new inserts stamp the owner.
 - Logout (`UserCacheCleaner.clear`): replace `database.clearAllTables()` with a dynamic sweep —
   enumerate the DB's tables at runtime and clear all **except** `entry_templates` (list-based
@@ -158,6 +193,9 @@ retained for anything that *creates* entries.
 ### Design
 
 - `InboxSettingsDataStore` gains `horizonStartMs: Long?` + `horizonChosen: Boolean`.
+  `horizonChosen && horizonStartMs == null` means *Everything* (still bounded by the 370-day
+  gap cap). `horizonChosen` defaults false, so existing users see the picker once on their next
+  visit — intended: it is exactly the "how far back should Review look?" onboarding they never got.
 - First Inbox open with `horizonChosen == false`: instead of the issue list, show a picker —
   *Today / This week / Last 30 days / Everything* — which sets the horizon and unlocks the list.
 - `InboxAnalyzer` clamps **all** issue types (gaps, overlaps, missing metadata, long duration) to
