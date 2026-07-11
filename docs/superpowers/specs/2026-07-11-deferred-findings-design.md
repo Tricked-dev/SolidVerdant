@@ -67,8 +67,9 @@ Replaces today's silent skip for `PENDING` rows:
 - no base available (e.g. local CREATE not yet pushed) → keep today's skip.
 - **rows already in `CONFLICT` are never upserted by pull** (the row is the recovery copy; the
   existing `PENDING`-only guard must be widened, since conflict rows have no queued ops left).
-  If a pulled server copy differs from the stored `conflictServerJson`, only that column is
-  refreshed so resolution always acts on the latest "theirs". No absence-detection is attempted
+  If a pulled server copy differs from the stored `conflictServerJson` (canonical parsed-field
+  comparison, not raw JSON), only that column is refreshed so resolution always acts on the
+  latest "theirs". No absence-detection is attempted
   while unresolved — if the entry was meanwhile deleted server-side, the eventual *Keep mine*
   push hits 404 and re-conflicts with the `"DELETED"` marker, which is self-correcting.
 
