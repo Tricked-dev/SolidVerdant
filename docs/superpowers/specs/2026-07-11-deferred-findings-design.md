@@ -65,6 +65,12 @@ Replaces today's silent skip for `PENDING` rows:
 - queued op has a base and server content == base → skip (remote unchanged; our edit will push).
 - server content ≠ base (or `pendingDelete` row with diverged server) → mark `CONFLICT` as above.
 - no base available (e.g. local CREATE not yet pushed) → keep today's skip.
+- **rows already in `CONFLICT` are never upserted by pull** (the row is the recovery copy; the
+  existing `PENDING`-only guard must be widened, since conflict rows have no queued ops left).
+  If a pulled server copy differs from the stored `conflictServerJson`, only that column is
+  refreshed so resolution always acts on the latest "theirs". No absence-detection is attempted
+  while unresolved — if the entry was meanwhile deleted server-side, the eventual *Keep mine*
+  push hits 404 and re-conflicts with the `"DELETED"` marker, which is self-correcting.
 
 ### Storage
 
@@ -94,12 +100,18 @@ Replaces today's silent skip for `PENDING` rows:
 - Card shows both versions (field-level "mine vs theirs" summary; project/task/tag ids resolved
   to names via the local catalog, falling back to a shortened id when no longer present). A
   `pendingDelete` row renders "mine" as *deleted*.
-- Actions, by what "mine" is:
+- Actions, by what "mine" is. **Both actions clear `conflictServerJson` and exit the `CONFLICT`
+  state** (Keep mine → `PENDING`, Keep theirs → `SYNCED`):
   - **Keep mine**, mine = edit → re-enqueue UPDATE with base = the stored server copy; `PENDING`.
   - **Keep mine**, mine = deletion → re-enqueue DELETE with base = the stored server copy.
-  - **Keep mine**, theirs = `"DELETED"` marker → enqueue CREATE (recreate on the server).
+  - **Keep mine**, theirs = `"DELETED"` marker → enqueue CREATE (recreate on the server). The op
+    carries the row's old *server* id, not a `local-` id — the worker's reconcile path rekeys
+    whatever id the op carries, but this is covered by an explicit end-to-end test since other
+    invariants (dead-letter cascade guard) assume CREATEs carry `local-` ids.
   - **Keep theirs** → overwrite the entity with the server copy (clearing `pendingDelete` if
-    set), `SYNCED`, clear conflict. If theirs is the deleted marker → delete the local row.
+    set), `SYNCED`. If theirs is the deleted marker → delete the local row. If theirs is still
+    running, the restored running entry is accepted as-is even if another timer is now running
+    locally — existing running-entry invariants apply, no special handling.
 - Field-level merge is explicitly out of scope for this pass (revisit if conflicts prove common).
 
 ### Tests
@@ -109,7 +121,9 @@ pull skip (server == base), 404/absent-window-delete conflict, STOP-op conflict 
 web edit), local-delete vs server-edit conflict, keep-mine and keep-theirs resolution (edit,
 deletion, and deleted-marker variants), base reuse across STOP→UPDATE chains, timestamp-format
 variance does NOT conflict (offset vs Z, fractional seconds), edit-lock enforcement + stop
-exception on conflicted rows, migration v4→v5, conflict card presence and non-dismissibility.
+exception on conflicted rows, **pull leaves CONFLICT rows untouched except a `conflictServerJson`
+refresh**, recreate-after-server-delete syncs and rekeys end-to-end, migration v4→v5, conflict
+card presence and non-dismissibility.
 Divergence axes per the finding: description, project, billable, tags.
 
 ---
@@ -200,7 +214,9 @@ retained for anything that *creates* entries.
   *Today / This week / Last 30 days / Everything* — which sets the horizon and unlocks the list.
 - `InboxAnalyzer` clamps **all** issue types (gaps, overlaps, missing metadata, long duration) to
   windows intersecting `[horizonStart, now]`; badge count follows automatically (same inputs).
-  The 370-day gap cap remains as an outer bound.
+  The 370-day gap cap remains as an outer bound. While `horizonChosen == false` the analyzer
+  clamps to *today* — the badge never shows the historical backlog before the user has picked a
+  horizon (that badge is the adoption problem this finding exists to fix).
 - Horizon is visible as a chip next to the count ("Since 11 Jun"), tappable → inbox settings
   sheet, where it can be widened/narrowed later.
 - Cards grouped by day (sticky day headers, newest first) with a per-day "Dismiss all" (batch
