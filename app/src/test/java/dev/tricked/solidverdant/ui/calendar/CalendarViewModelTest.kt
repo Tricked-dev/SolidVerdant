@@ -12,6 +12,11 @@ import dev.tricked.solidverdant.data.calendar.DeviceCalendar
 import dev.tricked.solidverdant.data.calendar.DeviceCalendarEvent
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.TimeEntryReader
+import dev.tricked.solidverdant.domain.time.TemporalPolicy
+import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
+import io.mockk.coEvery
+import io.mockk.every
+import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -77,11 +82,21 @@ class CalendarViewModelTest {
         organizationId = "org1",
     )
 
+    // Device-zone + Monday policy, matching the pre-policy ZoneId.systemDefault() /
+    // WeekFields(MONDAY) behaviour these bucket/day-count assertions were written against.
+    private fun policyProvider(
+        policy: TemporalPolicy = TemporalPolicy(java.time.ZoneId.systemDefault(), java.time.DayOfWeek.MONDAY),
+    ): TemporalPolicyProvider = mockk {
+        every { this@mockk.policy } returns kotlinx.coroutines.flow.flowOf(policy)
+        coEvery { current() } returns policy
+    }
+
     private fun vm(
         reader: TimeEntryReader,
         source: CalendarEventSource = FakeEventSource(),
         settings: CalendarOverlaySettings = FakeOverlaySettings(),
-    ) = CalendarViewModel(reader, source, settings)
+        temporalPolicyProvider: TemporalPolicyProvider = policyProvider(),
+    ) = CalendarViewModel(reader, source, settings, temporalPolicyProvider)
 
     @Test
     fun buildsBucketsAndTotalsPerDay() = runTest {

@@ -125,8 +125,8 @@ private fun WeekCalendarContent(
     onToday: () -> Unit,
     projects: List<Project>,
 ) {
-    val zone = remember { ZoneId.systemDefault() }
-    val today = remember { LocalDate.now() }
+    val zone = state.zone
+    val today = remember(zone) { LocalDate.now(zone) }
     val now = remember { Instant.now() }
     val locale = Locale.getDefault()
 

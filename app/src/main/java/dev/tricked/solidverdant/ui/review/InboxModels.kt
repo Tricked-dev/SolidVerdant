@@ -11,6 +11,7 @@ import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.domain.inbox.InboxCheckConfig
 import dev.tricked.solidverdant.domain.inbox.InboxIssue
+import java.time.ZoneId
 
 /** Transient, one-shot failures the Inbox surfaces as a snackbar. Mapped to strings in the pane. */
 enum class InboxActionError { REFRESH_FAILED, CREATE_FAILED, RESOLVE_FAILED }
@@ -38,6 +39,8 @@ data class InboxUiState(
     val projects: List<Project> = emptyList(),
     val tasks: List<Task> = emptyList(),
     val tags: List<Tag> = emptyList(),
+    /** Account temporal-policy zone for gap windows and shown-in-zone formatting. */
+    val zone: ZoneId = ZoneId.systemDefault(),
 ) {
     /** All issues resolved: show the reassuring "all caught up" state. */
     val isCaughtUp: Boolean get() = !isLoading && issues.isEmpty()

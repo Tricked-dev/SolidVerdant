@@ -22,6 +22,8 @@ import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
+import dev.tricked.solidverdant.domain.time.TemporalPolicy
+import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import dev.tricked.solidverdant.service.TimeTrackingNotificationService
 import dev.tricked.solidverdant.sync.SyncTrigger
 import dev.tricked.solidverdant.util.IsoTimes
@@ -40,10 +42,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
@@ -117,6 +121,8 @@ data class TrackingUiState(
     val editingBillable: Boolean = false,
     val syncOperations: List<TimeEntryRepository.SyncOperation> = emptyList(),
     val conflictedEntryIds: Set<String> = emptySet(),
+    /** Account temporal-policy zone; history filtering and new-entry pickers use it. */
+    val zone: ZoneId = ZoneId.systemDefault(),
 ) {
     /** Mutations retain the legacy internal flag; refresh/sync have independent flags. */
     val isMutating: Boolean get() = isLoading
@@ -132,8 +138,14 @@ class TrackingViewModel @Inject constructor(
     private val settingsDataStore: SettingsDataStore,
     private val timeEntryRepository: TimeEntryRepository,
     private val syncTrigger: SyncTrigger,
+    private val temporalPolicyProvider: TemporalPolicyProvider,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
+
+    // Account temporal-policy zone. Seeded synchronously (first-frame correct) and kept current by
+    // the collector in init. Provider owns the device-zone fallback.
+    @Volatile
+    private var currentPolicy: TemporalPolicy = runBlocking { temporalPolicyProvider.current() }
 
     private val cachedTrackingState = settingsDataStore.getCachedTrackingState()
     private val _uiState = MutableStateFlow(
@@ -156,10 +168,23 @@ class TrackingViewModel @Inject constructor(
                 editingTaskId = cached.activeEntry?.taskId,
                 editingTags = cached.activeEntry?.tags?.map { it.id }.orEmpty(),
                 editingBillable = cached.activeEntry?.billable ?: false,
+                zone = currentPolicy.zone,
             )
-        } ?: TrackingUiState(cachedContinueEntry = settingsDataStore.getCachedContinueEntry()),
+        } ?: TrackingUiState(
+            cachedContinueEntry = settingsDataStore.getCachedContinueEntry(),
+            zone = currentPolicy.zone,
+        ),
     )
     val uiState: StateFlow<TrackingUiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            temporalPolicyProvider.policy.collect { policy ->
+                currentPolicy = policy
+                _uiState.value = _uiState.value.copy(zone = policy.zone)
+            }
+        }
+    }
 
     val alwaysShowNotifications = settingsDataStore.alwaysShowNotification
     val appTheme = settingsDataStore.appTheme

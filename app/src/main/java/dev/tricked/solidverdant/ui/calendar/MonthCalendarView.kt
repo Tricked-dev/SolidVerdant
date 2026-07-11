@@ -138,7 +138,7 @@ fun MonthCalendarView(
                 }
 
                 // Grid
-                val weeks = monthGridWeeks(state.visibleMonth)
+                val weeks = monthGridWeeks(state.visibleMonth, state.weekStart)
                 val maxSeconds = state.bucketsByDate.values.maxOfOrNull { it.totalSeconds } ?: 1L
                 weeks.forEach { week ->
                     Row(modifier = Modifier.fillMaxWidth()) {
@@ -213,6 +213,7 @@ fun MonthCalendarView(
                 entries = entries,
                 projects = projects,
                 tasks = tasks,
+                zone = state.zone,
                 scrollState = timelineScrollState,
                 fillViewport = true,
                 onEntryClick = onEntryClick,
@@ -226,6 +227,7 @@ fun MonthCalendarView(
                         entries = entries,
                         projects = projects,
                         tasks = tasks,
+                        zone = state.zone,
                         scrollState = timelineScrollState,
                         onEntryClick = onEntryClick,
                     )
@@ -248,14 +250,14 @@ fun DayTimeline(
     entries: List<TimeEntry>,
     projects: List<Project>,
     tasks: List<Task>,
+    zone: ZoneId,
     onEntryClick: (TimeEntry) -> Unit,
     scrollState: ScrollState? = null,
     fillViewport: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val now = remember { Instant.now() }
-    val zone = remember { ZoneId.systemDefault() }
-    val today = remember { LocalDate.now() }
+    val today = remember(zone) { LocalDate.now(zone) }
     val noDescription = stringResource(R.string.calendar_entry_untitled)
     val initialScroll = with(LocalDensity.current) { (CalendarHourHeight * INITIAL_SCROLL_HOURS).roundToPx() }
     val effectiveScrollState = scrollState ?: rememberScrollState(initial = initialScroll)

@@ -10,11 +10,11 @@ import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.local.db.InboxDismissalDao
 import dev.tricked.solidverdant.domain.inbox.InboxAnalyzer
 import dev.tricked.solidverdant.domain.inbox.InboxSettingsDataStore
+import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
@@ -44,6 +44,7 @@ class InboxRepositoryImpl @Inject constructor(
     private val settingsDataStore: SettingsDataStore,
     private val dismissalDao: InboxDismissalDao,
     private val clock: Clock,
+    private val temporalPolicyProvider: TemporalPolicyProvider,
 ) : InboxRepository {
 
     override fun observeOpenIssueCount(organizationId: String): Flow<Int> = combine(
@@ -51,7 +52,8 @@ class InboxRepositoryImpl @Inject constructor(
         inboxSettingsDataStore.settings,
         settingsDataStore.longTimerHours,
         dismissalDao.observeDismissals(organizationId),
-    ) { entries, settings, longTimerHours, dismissals ->
+        temporalPolicyProvider.policy,
+    ) { entries, settings, longTimerHours, dismissals, policy ->
         val now = clock.nowMs()
         val retentionMs = TimeUnit.DAYS.toMillis(InboxAnalyzer.DISMISSAL_RETENTION_DAYS)
         val activeDismissedKeys = dismissals
@@ -63,7 +65,7 @@ class InboxRepositoryImpl @Inject constructor(
             config = settings.toConfig(longTimerHours),
             dismissedKeys = activeDismissedKeys,
             nowMs = now,
-            zone = ZoneId.systemDefault(),
+            zone = policy.zone,
         )
     }.distinctUntilChanged()
 }

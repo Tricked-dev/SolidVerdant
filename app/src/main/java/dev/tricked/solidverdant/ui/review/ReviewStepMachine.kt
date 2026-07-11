@@ -7,6 +7,7 @@
 package dev.tricked.solidverdant.ui.review
 
 import dev.tricked.solidverdant.data.model.TimeEntry
+import java.time.ZoneId
 
 /**
  * The kind of correction a single review step represents. Ordered by urgency: a still-running timer
@@ -90,6 +91,8 @@ data class ReviewDayUiState(
     val runningEntry: TimeEntry? = null,
     val uncategorizedById: Map<String, TimeEntry> = emptyMap(),
     val projects: List<ReviewProject> = emptyList(),
+    /** Account temporal-policy zone for "today" and shown-in-zone clock formatting. */
+    val zone: ZoneId = ZoneId.systemDefault(),
 ) {
     /** Billable share of tracked time, 0..100, or null when nothing is tracked. */
     val billablePercent: Int?

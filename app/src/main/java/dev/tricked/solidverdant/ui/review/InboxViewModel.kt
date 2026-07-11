@@ -22,6 +22,8 @@ import dev.tricked.solidverdant.domain.inbox.InboxAnalyzer
 import dev.tricked.solidverdant.domain.inbox.InboxIssue
 import dev.tricked.solidverdant.domain.inbox.InboxSettings
 import dev.tricked.solidverdant.domain.inbox.InboxSettingsDataStore
+import dev.tricked.solidverdant.domain.time.TemporalPolicy
+import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import dev.tricked.solidverdant.sync.SyncTrigger
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.Dispatchers
@@ -36,6 +38,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.time.DayOfWeek
@@ -61,6 +64,7 @@ class InboxViewModel @Inject constructor(
     private val dismissalDao: InboxDismissalDao,
     private val syncTrigger: SyncTrigger,
     private val clock: Clock,
+    private val temporalPolicyProvider: TemporalPolicyProvider,
 ) : ViewModel() {
 
     private data class OrgContext(val organizationId: String, val memberId: String, val userId: String, val preventOverlap: Boolean)
@@ -76,10 +80,15 @@ class InboxViewModel @Inject constructor(
         val dismissals: List<InboxDismissalEntity>,
     )
 
-    private val zone: ZoneId = ZoneId.systemDefault()
+    // Account temporal-policy zone, used for gap-analysis day/window boundaries and shown-in-zone
+    // formatting downstream. Seeded synchronously from the provider's cached read (first-frame
+    // correct), then kept current by the collector in init. Provider owns the device-zone fallback.
+    @Volatile
+    private var currentPolicy: TemporalPolicy = runBlocking { temporalPolicyProvider.current() }
+    private val zone: ZoneId get() = currentPolicy.zone
     private val retentionMs = TimeUnit.DAYS.toMillis(InboxAnalyzer.DISMISSAL_RETENTION_DAYS)
 
-    private val _uiState = MutableStateFlow(InboxUiState())
+    private val _uiState = MutableStateFlow(InboxUiState(zone = currentPolicy.zone))
     val uiState: StateFlow<InboxUiState> = _uiState.asStateFlow()
 
     @Volatile
@@ -100,6 +109,12 @@ class InboxViewModel @Inject constructor(
     }.distinctUntilChanged()
 
     init {
+        viewModelScope.launch {
+            temporalPolicyProvider.policy.collect { policy ->
+                currentPolicy = policy
+                _uiState.update { it.copy(zone = policy.zone) }
+            }
+        }
         viewModelScope.launch { observeInbox() }
     }
 

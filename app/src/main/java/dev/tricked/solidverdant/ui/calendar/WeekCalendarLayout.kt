@@ -47,7 +47,7 @@ val CalendarTotalHeight = CalendarHourHeight * HOURS_PER_DAY
  * 24h column. Unparseable starts fall back to the day start; a running entry (no end) extends to
  * [now]. The height is floored at [MIN_ENTRY_HEIGHT_FRACTION] so very short entries stay visible.
  */
-fun timelineOffsets(entry: TimeEntry, day: LocalDate, now: Instant, zone: ZoneId = ZoneId.systemDefault()): Pair<Float, Float> {
+fun timelineOffsets(entry: TimeEntry, day: LocalDate, now: Instant, zone: ZoneId): Pair<Float, Float> {
     val dayStart = day.atStartOfDay(zone).toInstant()
     val secondsInDay = SECONDS_PER_DAY.toFloat()
     val start = try {
@@ -248,12 +248,7 @@ fun layoutTimedEvents(events: List<DeviceCalendarEvent>, day: LocalDate, zone: Z
  * entries in adjacent columns. Ordering is stable so the same input always produces the same
  * lanes, including after process recreation or an offline refresh.
  */
-fun layoutTrackedEntries(
-    entries: List<TimeEntry>,
-    day: LocalDate,
-    now: Instant,
-    zone: ZoneId = ZoneId.systemDefault(),
-): List<TrackedEntryBlock> {
+fun layoutTrackedEntries(entries: List<TimeEntry>, day: LocalDate, now: Instant, zone: ZoneId): List<TrackedEntryBlock> {
     data class Clipped(val entry: TimeEntry, val startSec: Long, val endSec: Long)
 
     val dayStart = day.atStartOfDay(zone).toInstant()

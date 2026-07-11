@@ -164,6 +164,7 @@ internal fun ReviewContent(
                 ProgressHeader(state)
                 ReviewItemCard(
                     item = current,
+                    zone = state.zone,
                     onStop = onStop,
                     onKeepRunning = onKeepRunning,
                     onAdjustEnd = onAdjustEnd,
@@ -276,6 +277,7 @@ private fun ProgressHeader(state: ReviewDayUiState) {
 @Composable
 private fun ReviewItemCard(
     item: ReviewItem,
+    zone: ZoneId,
     onStop: () -> Unit,
     onKeepRunning: () -> Unit,
     onAdjustEnd: () -> Unit,
@@ -295,7 +297,7 @@ private fun ReviewItemCard(
                     Text(stringResource(R.string.review_item_running_title), style = MaterialTheme.typography.titleMedium)
                     Text(stringResource(R.string.review_item_running_body), style = MaterialTheme.typography.bodyMedium)
                     EntryDescription(item.description)
-                    item.startIso?.let { StartedAt(it) }
+                    item.startIso?.let { StartedAt(it, zone) }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = onStop, modifier = Modifier.heightIn(min = 48.dp)) {
                             Text(stringResource(R.string.review_action_stop))
@@ -329,7 +331,7 @@ private fun ReviewItemCard(
                     Text(stringResource(R.string.review_item_uncategorized_title), style = MaterialTheme.typography.titleMedium)
                     Text(stringResource(R.string.review_item_uncategorized_body), style = MaterialTheme.typography.bodyMedium)
                     EntryDescription(item.description)
-                    TimeRange(item.startIso, item.endIso)
+                    TimeRange(item.startIso, item.endIso, zone)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { onAssign(item) }, modifier = Modifier.heightIn(min = 48.dp)) {
                             Text(stringResource(R.string.review_action_assign_project))
@@ -359,8 +361,8 @@ private fun EntryDescription(description: String?) {
 }
 
 @Composable
-private fun StartedAt(startIso: String) {
-    val time = remember(startIso) { formatClock(startIso) }
+private fun StartedAt(startIso: String, zone: ZoneId) {
+    val time = remember(startIso, zone) { formatClock(startIso, zone) }
     if (time != null) {
         Text(
             text = stringResource(R.string.review_started_at, time),
@@ -371,9 +373,9 @@ private fun StartedAt(startIso: String) {
 }
 
 @Composable
-private fun TimeRange(startIso: String?, endIso: String?) {
-    val start = remember(startIso) { startIso?.let { formatClock(it) } }
-    val end = remember(endIso) { endIso?.let { formatClock(it) } }
+private fun TimeRange(startIso: String?, endIso: String?, zone: ZoneId) {
+    val start = remember(startIso, zone) { startIso?.let { formatClock(it, zone) } }
+    val end = remember(endIso, zone) { endIso?.let { formatClock(it, zone) } }
     if (start != null && end != null) {
         Text(
             text = stringResource(R.string.review_time_range, start, end),
@@ -477,8 +479,8 @@ private const val SECONDS_PER_MINUTE = 60
 private val CLOCK_FORMAT: DateTimeFormatter = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
 
 /** Format an ISO instant string as a local wall-clock time, or null if it cannot be parsed. */
-private fun formatClock(iso: String): String? = runCatching {
-    OffsetDateTime.parse(iso).atZoneSameInstant(ZoneId.systemDefault()).toLocalTime().format(CLOCK_FORMAT)
+private fun formatClock(iso: String, zone: ZoneId): String? = runCatching {
+    OffsetDateTime.parse(iso).atZoneSameInstant(zone).toLocalTime().format(CLOCK_FORMAT)
 }.recoverCatching {
-    java.time.Instant.parse(iso).atZone(ZoneId.systemDefault()).toLocalTime().format(CLOCK_FORMAT)
+    java.time.Instant.parse(iso).atZone(zone).toLocalTime().format(CLOCK_FORMAT)
 }.getOrNull()

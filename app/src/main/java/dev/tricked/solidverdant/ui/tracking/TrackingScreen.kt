@@ -817,6 +817,7 @@ fun TrackingScreen(
                             tasks = uiState.tasks,
                             clients = uiState.clients,
                             syncOperations = uiState.syncOperations,
+                            zone = uiState.zone,
                         ).groupBy { entry ->
                             IsoTimes.localDate(entry.start) ?: LocalDate.MIN
                         }
@@ -1035,6 +1036,7 @@ fun TrackingScreen(
     showEditDialog?.let { entry ->
         TimeEntryFormSheet(
             entry = entry,
+            zone = uiState.zone,
             suggestedStart = null,
             projects = uiState.projects,
             tasks = uiState.tasks,
@@ -1054,18 +1056,19 @@ fun TrackingScreen(
 
     // Add-entry dialog
     if (showAddDialog) {
-        val suggestedStart = remember(uiState.timeEntries) {
-            val now = ZonedDateTime.now(ZoneId.systemDefault())
+        val suggestedStart = remember(uiState.timeEntries, uiState.zone) {
+            val now = ZonedDateTime.now(uiState.zone)
             uiState.timeEntries
                 .mapNotNull { it.end }
                 .mapNotNull { runCatching { ZonedDateTime.parse(it, DateTimeFormatter.ISO_DATE_TIME) }.getOrNull() }
                 .maxOrNull()
-                ?.withZoneSameInstant(ZoneId.systemDefault())
+                ?.withZoneSameInstant(uiState.zone)
                 ?.takeIf { it.toLocalDate() == now.toLocalDate() && it.isBefore(now) }
                 ?: now.minusHours(1)
         }
         TimeEntryFormSheet(
             entry = null,
+            zone = uiState.zone,
             suggestedStart = suggestedStart,
             projects = uiState.projects,
             tasks = uiState.tasks,
@@ -2566,6 +2569,7 @@ private fun CompactTimeEntryRow(
 @Composable
 private fun TimeEntryFormSheet(
     entry: TimeEntry?, // null = create mode
+    zone: ZoneId, // account temporal-policy zone for the new-entry fallback start
     suggestedStart: ZonedDateTime?, // create mode: pre-filled start (end of last entry / now-1h)
     projects: List<Project>,
     tasks: List<Task>,
@@ -2586,7 +2590,7 @@ private fun TimeEntryFormSheet(
     var templateMenuExpanded by remember { mutableStateOf(false) }
     val originalStart = remember(entry?.id) {
         entry?.let { ZonedDateTime.parse(it.start, DateTimeFormatter.ISO_DATE_TIME) }
-            ?: (suggestedStart ?: ZonedDateTime.now(ZoneId.systemDefault()).minusHours(1))
+            ?: (suggestedStart ?: ZonedDateTime.now(zone).minusHours(1))
                 .withSecond(0).withNano(0)
     }
     val originalEnd = remember(entry?.id) {

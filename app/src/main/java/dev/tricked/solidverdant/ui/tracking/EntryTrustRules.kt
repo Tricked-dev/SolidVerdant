@@ -75,7 +75,7 @@ object EntryTrustRules {
         tasks: List<Task>,
         clients: List<Client> = emptyList(),
         syncOperations: List<TimeEntryRepository.SyncOperation> = emptyList(),
-        zone: ZoneId = ZoneId.systemDefault(),
+        zone: ZoneId,
     ): List<TimeEntry> {
         val query = filter.query.trim()
         val projectNames = projects.associate { it.id to it.name }

@@ -117,7 +117,7 @@ fun InboxPane() {
         viewModel.consumeActionError()
     }
 
-    val zone = remember { ZoneId.systemDefault() }
+    val zone = state.zone
     val projectsById = remember(state.projects) { state.projects.associateBy { it.id } }
 
     Box(modifier = Modifier.fillMaxSize()) {
