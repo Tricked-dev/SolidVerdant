@@ -25,6 +25,7 @@ import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.User
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -49,6 +50,14 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     private val dataStore = context.settingsDataStore
     private val immediateCache = context.getSharedPreferences("immediate_ui_cache", Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true }
+
+    /**
+     * Change token for the synchronous [immediateCache] auth entries. The immediate cache has no
+     * built-in change-notification path, so [cacheAuth]/[clearCachedData] bump this counter to let
+     * [observeCachedAuth] re-read and re-emit. The synchronous read is intentional (first-frame
+     * pattern); we only need a signal that something changed.
+     */
+    private val authCacheChanges = MutableStateFlow(0)
 
     init {
         // Warm the SharedPreferences file on a background thread so the synchronous
@@ -148,7 +157,14 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
                 }
             }
             .apply()
+        authCacheChanges.value += 1
     }
+
+    /**
+     * Emits the current [getCachedAuth] immediately and re-emits whenever the cached auth changes
+     * (via [cacheAuth]/[clearCachedData]). The read is synchronous by design (first-frame pattern).
+     */
+    fun observeCachedAuth(): Flow<CachedAuth?> = authCacheChanges.map { getCachedAuth() }
 
     fun cacheCurrentMembership(id: String) {
         immediateCache.edit().putString(CURRENT_MEMBERSHIP_ID, id).apply()
@@ -191,6 +207,7 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     /** Clear cached account data while preserving the user's app preferences. */
     suspend fun clearCachedData() {
         immediateCache.edit().clear().commit()
+        authCacheChanges.value += 1
         dataStore.edit(::clearWidgetState)
     }
 
