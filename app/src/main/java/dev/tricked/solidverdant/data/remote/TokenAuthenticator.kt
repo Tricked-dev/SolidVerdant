@@ -7,6 +7,7 @@
 package dev.tricked.solidverdant.data.remote
 
 import dev.tricked.solidverdant.data.local.AuthDataStore
+import dev.tricked.solidverdant.data.local.UserCacheCleaner
 import dev.tricked.solidverdant.data.model.TokenResponse
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -102,10 +103,18 @@ private class HttpTokenRefresher(private val json: Json, private val client: OkH
 
 /** Refreshes an expired access token, allowing at most one refresh at a time. */
 @Singleton
-class TokenAuthenticator internal constructor(private val storage: TokenStorage, private val refresher: TokenRefresher) : Authenticator {
+class TokenAuthenticator internal constructor(
+    private val storage: TokenStorage,
+    // Nullable with a default so existing unit tests can keep constructing this with just
+    // (storage) { refresher }. Kept before [refresher] so the trailing-lambda test call sites bind
+    // the lambda to [refresher] (the last param). Hilt always supplies a real instance.
+    private val userCacheCleaner: UserCacheCleaner? = null,
+    private val refresher: TokenRefresher,
+) : Authenticator {
     @Inject
-    constructor(authDataStore: AuthDataStore, json: Json) : this(
+    constructor(authDataStore: AuthDataStore, json: Json, userCacheCleaner: UserCacheCleaner) : this(
         DataStoreTokenStorage(authDataStore),
+        userCacheCleaner,
         HttpTokenRefresher(json),
     )
 
@@ -128,8 +137,10 @@ class TokenAuthenticator internal constructor(private val storage: TokenStorage,
                 val refreshToken = storage.refreshToken()
                 if (refreshToken.isNullOrEmpty()) {
                     // Nothing can recover this session: clear the dead access token so the app
-                    // returns to login instead of silently 401ing every request.
+                    // returns to login instead of silently 401ing every request. Also clear the
+                    // account cache so the next signed-in user can't read this account's data.
                     storage.clearTokens()
+                    userCacheCleaner?.clear()
                     return@runBlocking null
                 }
 
@@ -141,7 +152,9 @@ class TokenAuthenticator internal constructor(private val storage: TokenStorage,
                         }
                         RefreshResult.Invalid -> {
                             // The server rejected the refresh token; the credentials are dead.
+                            // Clear tokens and the account cache so account isolation holds.
                             storage.clearTokens()
+                            userCacheCleaner?.clear()
                             null
                         }
                         // Transient failure: preserve credentials so a later request can retry.

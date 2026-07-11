@@ -34,7 +34,7 @@ style:
     ignoreNamedArgument: true
     ignoreEnums: false
     ignoreRanges: false
-    ignoreExtensionFunction: true
+    ignoreExtensionFunctions: true
 
   # Discourage hardcoded ARGB colors in feature code. Colors must come from the shared kit
   # (MaterialTheme.colorScheme / SemanticColors in ui/theme), never a raw Color(0x..) literal.

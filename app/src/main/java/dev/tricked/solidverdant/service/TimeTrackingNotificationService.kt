@@ -29,11 +29,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.time.Instant
+import java.util.Locale
 import javax.inject.Inject
 
 /**
@@ -123,6 +123,12 @@ class TimeTrackingNotificationService : Service() {
                 }
             }
 
+            ACTION_SHOW_LONG_TIMER_WARNING -> {
+                handleShowLongTimerWarning(
+                    entryStartEpochMs = intent.getLongExtra(EXTRA_ENTRY_START_EPOCH_MS, -1L),
+                )
+            }
+
             ACTION_QUICK_START -> handleQuickStart(intent)
         }
 
@@ -164,6 +170,46 @@ class TimeTrackingNotificationService : Service() {
                 Timber.e(error, "Quick start failed")
                 stopService()
             }
+        }
+    }
+
+    /**
+     * Durable entrypoint used by [LongTimerWarningWorker]: shows the forgotten-timer warning even
+     * if this service process died and was relaunched fresh (no in-memory tracking state). Falls
+     * back to querying the server for the active entry, mirroring [dev.tricked.solidverdant.receiver.BootReceiver]'s
+     * restore path, and only shows the warning if it is still the same entry the warning was
+     * scheduled for.
+     */
+    private fun handleShowLongTimerWarning(entryStartEpochMs: Long) {
+        if (isTracking) {
+            val currentStartMatches = entryStartEpochMs < 0 ||
+                startTime?.toEpochMilli() == entryStartEpochMs
+            if (currentStartMatches) {
+                longTimerWarningVisible = true
+                publishNotification()
+            }
+            return
+        }
+
+        serviceScope.launch {
+            val activeEntry = authRepository.getActiveTimeEntry().getOrNull()
+            if (activeEntry == null) {
+                Timber.d("Long timer warning skipped: no active entry")
+                return@launch
+            }
+            val activeStart = runCatching { Instant.parse(activeEntry.start) }.getOrNull()
+            if (activeStart == null ||
+                (entryStartEpochMs >= 0 && activeStart.toEpochMilli() != entryStartEpochMs)
+            ) {
+                Timber.d("Long timer warning skipped: active entry no longer matches")
+                return@launch
+            }
+
+            isTracking = true
+            startTime = activeStart
+            description = activeEntry.description
+            longTimerWarningVisible = true
+            publishNotification()
         }
     }
 
@@ -221,7 +267,7 @@ class TimeTrackingNotificationService : Service() {
     }
 
     private fun confirmPausedState() {
-        longWarningJob?.cancel()
+        cancelLongTimerWarning()
         longTimerWarningVisible = false
         val now = Instant.now()
         pausedAt = now
@@ -272,7 +318,7 @@ class TimeTrackingNotificationService : Service() {
     }
 
     private fun showIdleNotification() {
-        longWarningJob?.cancel()
+        cancelLongTimerWarning()
         longTimerWarningVisible = false
         isTracking = false
         isPaused = false
@@ -317,6 +363,7 @@ class TimeTrackingNotificationService : Service() {
     }
 
     private fun showPausedNotification() {
+        cancelLongTimerWarning()
         // Calculate elapsed time before pausing
         val now = Instant.now()
         pausedAt = now
@@ -495,7 +542,6 @@ class TimeTrackingNotificationService : Service() {
             .setChronometerCountDown(false)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
         if (longTimerWarningVisible) {
             val keepPendingIntent = PendingIntent.getService(
                 this,
@@ -519,22 +565,59 @@ class TimeTrackingNotificationService : Service() {
             builder.addAction(R.drawable.ic_timer, getString(R.string.pause), pausePendingIntent)
                 .addAction(R.drawable.ic_timer, getString(R.string.stop_tracking), stopPendingIntent)
         }
+        builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(buildRedactedPublicNotification(R.string.notification_public_tracking_title))
         return builder.build()
     }
 
+    /**
+     * A lock-screen-safe stand-in for a work-bearing notification: no description, project, task,
+     * tags, organization, or duration. Used as [NotificationCompat.Builder.setPublicVersion] so the
+     * rich content stays private while the lock screen still shows that a timer is active.
+     */
+    private fun buildRedactedPublicNotification(titleRes: Int): Notification = NotificationCompat.Builder(this, CHANNEL_ID_ACTIVE)
+        .setContentTitle(getString(titleRes))
+        .setSmallIcon(R.drawable.ic_timer)
+        .setOngoing(true)
+        .setCategory(NotificationCompat.CATEGORY_STATUS)
+        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+        .build()
+
+    /**
+     * Persists the next warning deadline and schedules it with WorkManager so the warning survives
+     * process death (a plain in-process `delay()` does not: this service can be killed and returns
+     * START_NOT_STICKY, so nothing would ever fire the warning again). [LongTimerWarningWorker]
+     * reads the persisted deadline back and posts the warning if it's still applicable.
+     */
     private fun scheduleLongTimerWarning(snoozeSeconds: Long? = null) {
         longWarningJob?.cancel()
+        val entryStart = startTime ?: return
         longWarningJob = serviceScope.launch {
             val waitSeconds = snoozeSeconds ?: run {
                 val threshold = settingsDataStore.longTimerHours.first() * 3600L
-                val elapsed = startTime?.let { Instant.now().epochSecond - it.epochSecond } ?: 0L
+                val elapsed = Instant.now().epochSecond - entryStart.epochSecond
                 (threshold - elapsed).coerceAtLeast(0L)
             }
-            delay(waitSeconds * 1000L)
-            if (isTracking) {
-                longTimerWarningVisible = true
-                publishNotification()
-            }
+            val deadlineEpochMs = System.currentTimeMillis() + waitSeconds * 1000L
+            settingsDataStore.setLongTimerWarningDeadline(
+                deadlineEpochMs = deadlineEpochMs,
+                entryStartEpochMs = entryStart.toEpochMilli(),
+            )
+            LongTimerWarningWorker.schedule(
+                context = this@TimeTrackingNotificationService,
+                delaySeconds = waitSeconds,
+                entryStartEpochMs = entryStart.toEpochMilli(),
+            )
+        }
+    }
+
+    /** Cancel any pending warning: the timer stopped, paused, or is no longer eligible. */
+    private fun cancelLongTimerWarning() {
+        longWarningJob?.cancel()
+        LongTimerWarningWorker.cancel(this)
+        serviceScope.launch {
+            settingsDataStore.clearLongTimerWarningDeadline()
         }
     }
 
@@ -609,7 +692,8 @@ class TimeTrackingNotificationService : Service() {
             )
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(buildRedactedPublicNotification(R.string.notification_public_paused_title))
             .build()
     }
 
@@ -617,10 +701,11 @@ class TimeTrackingNotificationService : Service() {
         val hours = totalSeconds / 3600
         val minutes = (totalSeconds % 3600) / 60
         val seconds = totalSeconds % 60
-        return String.format("%02d:%02d:%02d", hours, minutes, seconds)
+        return String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, minutes, seconds)
     }
 
     private fun stopService() {
+        cancelLongTimerWarning()
         isForeground = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -670,12 +755,19 @@ class TimeTrackingNotificationService : Service() {
         const val ACTION_KEEP_RUNNING = "dev.tricked.solidverdant.ACTION_KEEP_RUNNING"
         const val ACTION_REFRESH_LONG_TIMER = "dev.tricked.solidverdant.ACTION_REFRESH_LONG_TIMER"
 
+        /** Durable trigger posted by [LongTimerWarningWorker]; see [handleShowLongTimerWarning]. */
+        const val ACTION_SHOW_LONG_TIMER_WARNING =
+            "dev.tricked.solidverdant.ACTION_SHOW_LONG_TIMER_WARNING"
+
         const val EXTRA_START_TIME = "start_time"
         const val EXTRA_PROJECT_NAME = "project_name"
         const val EXTRA_TASK_NAME = "task_name"
         const val EXTRA_DESCRIPTION = "description"
         const val EXTRA_PROJECT_ID = "project_id"
         const val EXTRA_TASK_ID = "task_id"
+
+        /** Epoch millis of the entry's start time the warning was scheduled for; see [ACTION_SHOW_LONG_TIMER_WARNING]. */
+        const val EXTRA_ENTRY_START_EPOCH_MS = "entry_start_epoch_ms"
 
         /**
          * Show the idle "quick start" prompt.
@@ -722,6 +814,8 @@ class TimeTrackingNotificationService : Service() {
             )
             // Reuses existing strings so no new resource is required: title "Time Tracking",
             // body "Tracking time" — accurate (a timer is still running) and tapping opens the app.
+            // A timer is running, so this states work state; keep it private on the lock screen
+            // with a redacted public version, same as the other tracking notifications.
             val notification = NotificationCompat.Builder(context, CHANNEL_ID_IDLE)
                 .setContentTitle(context.getString(R.string.time_tracking_notification_title))
                 .setContentText(context.getString(R.string.notification_tracking_default))
@@ -730,7 +824,16 @@ class TimeTrackingNotificationService : Service() {
                 .setContentIntent(openPendingIntent)
                 .setCategory(NotificationCompat.CATEGORY_STATUS)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
-                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+                .setPublicVersion(
+                    NotificationCompat.Builder(context, CHANNEL_ID_IDLE)
+                        .setContentTitle(context.getString(R.string.notification_public_tracking_title))
+                        .setSmallIcon(R.drawable.ic_timer)
+                        .setCategory(NotificationCompat.CATEGORY_STATUS)
+                        .setPriority(NotificationCompat.PRIORITY_LOW)
+                        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                        .build(),
+                )
                 .build()
             try {
                 NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
@@ -751,7 +854,10 @@ class TimeTrackingNotificationService : Service() {
             ).apply {
                 description = context.getString(R.string.notification_channel_active_description)
                 setShowBadge(false)
-                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                // Work-bearing notifications posted on this channel (description, project, task)
+                // must not leak to the lock screen; setPublicVersion(...) on each notification
+                // supplies the redacted lock-screen content.
+                lockscreenVisibility = Notification.VISIBILITY_PRIVATE
                 setSound(null, null) // Silent
             }
 
@@ -762,7 +868,9 @@ class TimeTrackingNotificationService : Service() {
             ).apply {
                 description = context.getString(R.string.notification_channel_idle_description)
                 setShowBadge(false)
-                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                // The resume-prompt notification posted here states a timer is running; keep the
+                // channel default private so its setPublicVersion(...) redaction is respected.
+                lockscreenVisibility = Notification.VISIBILITY_PRIVATE
                 setSound(null, null) // Silent
             }
 
@@ -879,6 +987,24 @@ class TimeTrackingNotificationService : Service() {
                     action = ACTION_KEEP_RUNNING
                 },
             )
+        }
+
+        /**
+         * Durable trigger invoked by [LongTimerWarningWorker]. May run with the service process
+         * already dead, so this uses `startForegroundService`: [handleShowLongTimerWarning] will
+         * re-promote to a foreground service via [publishNotification] once it confirms the entry
+         * is still running.
+         */
+        fun showLongTimerWarning(context: Context, entryStartEpochMs: Long) {
+            val intent = Intent(context, TimeTrackingNotificationService::class.java).apply {
+                action = ACTION_SHOW_LONG_TIMER_WARNING
+                putExtra(EXTRA_ENTRY_START_EPOCH_MS, entryStartEpochMs)
+            }
+            try {
+                context.startForegroundService(intent)
+            } catch (e: IllegalStateException) {
+                Timber.w(e, "Could not deliver long timer warning: background start not allowed")
+            }
         }
     }
 }

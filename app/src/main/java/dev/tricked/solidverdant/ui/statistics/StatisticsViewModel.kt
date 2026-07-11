@@ -11,6 +11,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.tricked.solidverdant.data.export.CsvExporter
+import dev.tricked.solidverdant.data.local.AuthDataStore
+import dev.tricked.solidverdant.data.local.db.CatalogDao
+import dev.tricked.solidverdant.data.local.db.MembershipEntity
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
@@ -23,6 +26,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -96,6 +100,8 @@ class StatisticsViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val timeEntryRepository: TimeEntryRepository,
     private val csvExporter: CsvExporter,
+    private val authDataStore: AuthDataStore,
+    private val catalogDao: CatalogDao,
 ) : ViewModel() {
 
     private val zone: ZoneId = ZoneId.systemDefault()
@@ -148,7 +154,40 @@ class StatisticsViewModel @Inject constructor(
         emit(RemoteEntries(failed = true))
     }.flowOn(Dispatchers.IO)
 
-    private val membershipFlow = flow { emit(authRepository.getCurrentMembership()) }.flowOn(Dispatchers.IO)
+    /**
+     * Best-effort display name for the current organization, used only to label the CSV export.
+     * Backed by a one-shot network call and cached per organization id for the life of the
+     * ViewModel; a failed/offline lookup falls back to the organization id rather than blocking or
+     * emptying the reactive [uiState] below, which never depends on this succeeding.
+     */
+    @Volatile
+    private var cachedOrgName: Pair<String, String>? = null
+
+    private suspend fun resolveOrgName(organizationId: String): String {
+        cachedOrgName?.let { (id, name) -> if (id == organizationId) return name }
+        val name = runCatching { authRepository.getCurrentMembership() }
+            .getOrNull()
+            ?.takeIf { it.organizationId == organizationId }
+            ?.organization?.name
+            ?: organizationId
+        cachedOrgName = organizationId to name
+        return name
+    }
+
+    /**
+     * Reactive current membership, backed by Room-cached data so Statistics reflects cached state
+     * immediately when opened offline and re-scopes as soon as the user switches organization —
+     * mirroring [dev.tricked.solidverdant.ui.templates.ManageTemplatesViewModel]. Unlike the previous
+     * one-shot `authRepository.getCurrentMembership()` network call, this never yields a false empty
+     * state purely because the network is unavailable, and it re-emits on org switch without
+     * requiring ViewModel recreation.
+     */
+    private val membershipFlow: Flow<MembershipEntity?> = combine(
+        authDataStore.currentMembershipId,
+        catalogDao.observeMemberships(),
+    ) { selectedId, memberships ->
+        memberships.firstOrNull { it.id == selectedId } ?: memberships.firstOrNull()
+    }.distinctUntilChanged()
 
     val uiState: StateFlow<StatisticsUiState> =
         membershipFlow.flatMapLatest { membership ->
@@ -156,7 +195,7 @@ class StatisticsViewModel @Inject constructor(
                 flowOf(StatisticsUiState(isLoading = false, isEmpty = true))
             } else {
                 val orgId = membership.organizationId
-                val orgName = membership.organization.name
+                val memberId = membership.id
                 val catalogFlow = combine(
                     timeEntryRepository.observeProjects(orgId),
                     timeEntryRepository.observeClients(orgId),
@@ -175,10 +214,11 @@ class StatisticsViewModel @Inject constructor(
                         combine(
                             timeEntryRepository.observeTimeEntries(orgId),
                             catalogFlow,
-                            loadRemoteEntries(orgId, membership.id, fetchRange),
+                            loadRemoteEntries(orgId, memberId, fetchRange),
                             filtersFlow,
                         ) { cachedEntries, catalog, remote, filters ->
                             val entries = remote.entries ?: cachedEntries
+                            val orgName = resolveOrgName(orgId)
                             val computed = withContext(Dispatchers.Default) {
                                 val filtered = StatisticsAggregator.applyFilters(entries, catalog.projects, filters)
                                 val current = StatisticsAggregator.compute(

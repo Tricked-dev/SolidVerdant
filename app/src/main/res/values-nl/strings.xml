@@ -152,6 +152,9 @@
     <string name="time_tracking_notification_title">Tijdregistratie</string>
     <string name="notification_tracking_default">Tijd registreren</string>
     <string name="notification_quick_start_ready">Klaar om tijd te registreren</string>
+    <!-- Redacted lock-screen (public) versions: must never include description, project, task, tags, org, or duration. -->
+    <string name="notification_public_tracking_title">Timer loopt</string>
+    <string name="notification_public_paused_title">Timer gepauzeerd</string>
 
     <!-- Settings -->
     <string name="settings_menu">Instellingen</string>

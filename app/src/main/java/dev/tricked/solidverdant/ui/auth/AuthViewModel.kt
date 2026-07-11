@@ -22,6 +22,7 @@ import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.remote.ConnectionTestCode
 import dev.tricked.solidverdant.data.remote.ConnectionTester
 import dev.tricked.solidverdant.data.repository.AuthRepository
+import dev.tricked.solidverdant.sync.SyncScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -72,6 +73,7 @@ class AuthViewModel @Inject constructor(
     private val userCacheCleaner: UserCacheCleaner,
     private val settingsDataStore: SettingsDataStore,
     private val connectionTester: ConnectionTester,
+    private val syncScheduler: SyncScheduler,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -138,7 +140,7 @@ class AuthViewModel @Inject constructor(
 
             authRepository.initializeOAuthFlow()
                 .onSuccess { authUrl ->
-                    Timber.d("OAuth flow started, auth URL: $authUrl")
+                    Timber.d("OAuth flow started")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         authUrl = authUrl,
@@ -316,6 +318,10 @@ class AuthViewModel @Inject constructor(
                     context.imageLoader.diskCache?.remove(url)
                 }
             }
+            // Cancel any in-flight/queued sync before clearing the cache so it can't
+            // re-insert the outgoing account's rows into the just-cleared database.
+            // TODO: warn the user about unsynced changes before logging out (follow-up).
+            syncScheduler.cancelSync()
             userCacheCleaner.clear()
             // Clear account-owned data before changing auth state. Once auth is cleared,
             // navigation can dispose this ViewModel and cancel any remaining work.

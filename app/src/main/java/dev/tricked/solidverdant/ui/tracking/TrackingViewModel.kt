@@ -181,6 +181,15 @@ class TrackingViewModel @Inject constructor(
     private var historyWindowMode = HistoryWindowMode.RECENT
     private var isInitialized = false
 
+    /**
+     * SV-019: one in-flight "commit the delete once the undo window closes" job per soft-deleted
+     * entry id. Only the local soft-delete happens synchronously in [deleteTimeEntry]; the actual
+     * outbox commit (server DELETE, or cancelling an unsynced entry's START/CREATE - see
+     * [TimeEntryRepository.commitDelete]) is deferred to this job so it can be cancelled outright
+     * by [undoDelete] with nothing ever having reached the outbox to race the sync worker.
+     */
+    private val pendingDeleteCommitJobs = mutableMapOf<String, Job>()
+
     init {
         // Room is now the read source-of-truth; there is no separate snapshot to hydrate.
         _snapshotHydrated.value = true
@@ -1209,7 +1218,13 @@ class TrackingViewModel @Inject constructor(
     }
 
     /**
-     * Delete a time entry
+     * Delete a time entry.
+     *
+     * SV-019: only the local soft-delete happens here, synchronously with no outbox op created -
+     * so nothing exists yet for the sync worker to race against. The server-facing commit (DELETE
+     * for a synced entry, or cancelling the START/CREATE for a never-synced one - SV-008) is
+     * deferred behind the undo window in [pendingDeleteCommitJobs] and only runs if [undoDelete]
+     * doesn't cancel it first.
      */
     fun deleteTimeEntry(organizationId: String, timeEntryId: String) {
         viewModelScope.launch {
@@ -1223,24 +1238,30 @@ class TrackingViewModel @Inject constructor(
                 return@launch
             }
 
-            // Optimistic soft-delete + outbox enqueue; the collector removes it from the list.
-            timeEntryRepository.deleteEntry(entry)
-            // Give the Snackbar undo action a real cancellation window before syncing.
-            delay(DELETE_UNDO_WINDOW_MS)
-            if (_uiState.value.syncOperations.any {
-                    it.entryId == timeEntryId && it.type == dev.tricked.solidverdant.data.local.db.OutboxOpType.DELETE
-                }
-            ) {
+            // Optimistic local-only soft-delete; the collector removes it from the list. No
+            // outbox op exists yet, so there is nothing here for the sync worker to act on.
+            timeEntryRepository.softDeleteLocal(entry)
+
+            pendingDeleteCommitJobs.remove(timeEntryId)?.cancel()
+            pendingDeleteCommitJobs[timeEntryId] = viewModelScope.launch {
+                // Give the Snackbar undo action a real cancellation window before committing.
+                delay(DELETE_UNDO_WINDOW_MS)
+                timeEntryRepository.commitDelete(entry)
+                pendingDeleteCommitJobs.remove(timeEntryId)
                 syncTrigger.requestSync()
             }
 
             _uiState.value = _uiState.value.copy(isLoading = false)
-            Timber.d("Time entry deleted successfully (optimistic)")
+            Timber.d("Time entry soft-deleted successfully (optimistic)")
         }
     }
 
     fun undoDelete(entry: TimeEntry) {
         viewModelScope.launch {
+            // Cancel the deferred server-facing commit first: if the window hasn't closed yet,
+            // this guarantees nothing was ever enqueued to the outbox for the repository undo path
+            // to race against.
+            pendingDeleteCommitJobs.remove(entry.id)?.cancel()
             if (!timeEntryRepository.undoDelete(entry, historyMemberId)) {
                 _uiState.value = _uiState.value.copy(error = context.getString(R.string.undo_delete_too_late))
             } else {

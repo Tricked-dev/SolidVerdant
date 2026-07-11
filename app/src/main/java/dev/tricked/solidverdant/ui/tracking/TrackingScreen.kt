@@ -42,6 +42,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.WindowInsets
@@ -57,6 +58,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -64,6 +66,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.material.icons.Icons
@@ -381,15 +384,11 @@ fun TrackingScreen(
         // Permission result is handled, no action needed
     }
 
-    // Request notification permission on first start tracking
-    DisposableEffect(uiState.isTracking) {
-        if (uiState.isTracking && !NotificationPermissionHelper.hasNotificationPermission(context)) {
-            if (context is android.app.Activity) {
-                NotificationPermissionHelper.requestNotificationPermission(context)
-            }
-        }
-        onDispose { }
-    }
+    // SV-014: Do not auto-request POST_NOTIFICATIONS when tracking starts — that force-prompts a
+    // system dialog over the UI (breaks E2E robots, poor UX). The permission is instead requested
+    // from explicit user actions: the "Enable notifications" app-bar action below, and the
+    // "Always show notifications" toggle opt-in (see onCheckedChange on that Switch). The
+    // persistent notification still shows normally if permission is already granted.
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -581,7 +580,14 @@ fun TrackingScreen(
                             }
                             Switch(
                                 checked = alwaysShowNotifications,
-                                onCheckedChange = onAlwaysShowNotificationsChange
+                                onCheckedChange = { enabled ->
+                                    // SV-014: request POST_NOTIFICATIONS only when the user opts in here,
+                                    // never automatically when tracking starts.
+                                    if (enabled && !NotificationPermissionHelper.hasNotificationPermission(context)) {
+                                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    }
+                                    onAlwaysShowNotificationsChange(enabled)
+                                }
                             )
                         }
 
@@ -1757,12 +1763,20 @@ internal fun TrackingControls(
 
             // Billable checkbox
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .toggleable(
+                        value = uiState.editingBillable,
+                        enabled = !uiState.isMutating,
+                        role = Role.Checkbox,
+                        onValueChange = onBillableChange
+                    ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Checkbox(
                     checked = uiState.editingBillable,
-                    onCheckedChange = onBillableChange,
+                    onCheckedChange = null,
                     enabled = !uiState.isMutating
                 )
                 Text(
@@ -2829,12 +2843,19 @@ private fun TimeEntryFormSheet(
                 }
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .toggleable(
+                            value = billable,
+                            role = Role.Checkbox,
+                            onValueChange = { billable = it }
+                        ),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Checkbox(
                         checked = billable,
-                        onCheckedChange = { billable = it }
+                        onCheckedChange = null
                     )
                     Text(
                         text = stringResource(R.string.billable),
@@ -3202,7 +3223,7 @@ internal fun formatElapsedTime(seconds: Long): String {
     val hours = safeSeconds / 3600
     val minutes = (safeSeconds % 3600) / 60
     val secs = safeSeconds % 60
-    return String.format("%02d:%02d:%02d", hours, minutes, secs)
+    return String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, minutes, secs)
 }
 
 /**
@@ -3340,7 +3361,7 @@ private fun formatDuration(seconds: Int): String {
     val hours = seconds / 3600
     val minutes = (seconds % 3600) / 60
     val secs = seconds % 60
-    return String.format("%02d:%02d:%02d", hours, minutes, secs)
+    return String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, minutes, secs)
 }
 
 /** Date-picker millis are UTC-midnight instants; resolve them back to the picked date. */

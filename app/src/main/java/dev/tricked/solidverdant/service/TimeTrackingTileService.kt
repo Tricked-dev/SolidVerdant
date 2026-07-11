@@ -21,6 +21,7 @@ import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import dagger.hilt.android.AndroidEntryPoint
 import dev.tricked.solidverdant.R
@@ -148,7 +149,14 @@ class TimeTrackingTileService : TileService() {
         }
 
         Timber.d("TileService registering broadcast receiver with actions: ${filter.actionsIterator().asSequence().toList()}")
-        registerReceiver(broadcastReceiver, filter, RECEIVER_NOT_EXPORTED)
+        // Context.RECEIVER_NOT_EXPORTED requires API 33; minSdk is 29. ContextCompat resolves the
+        // right registration flags on all supported API levels without an SDK_INT guard.
+        ContextCompat.registerReceiver(
+            this,
+            broadcastReceiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
     }
 
     override fun onStartListening() {

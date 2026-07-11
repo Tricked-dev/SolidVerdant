@@ -150,6 +150,9 @@
     <string name="time_tracking_notification_title">時間追跡</string>
     <string name="notification_tracking_default">時間を追跡中</string>
     <string name="notification_quick_start_ready">時間追跡の準備完了</string>
+    <!-- Redacted lock-screen (public) versions: must never include description, project, task, tags, org, or duration. -->
+    <string name="notification_public_tracking_title">タイマー実行中</string>
+    <string name="notification_public_paused_title">タイマー一時停止中</string>
 
     <!-- Settings -->
     <string name="settings_menu">設定</string>

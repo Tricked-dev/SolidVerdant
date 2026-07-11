@@ -256,8 +256,23 @@ class ReviewDayViewModel @Inject constructor(
         }.onFailure { _message.value = R.string.review_msg_action_failed }
     }
 
-    /** Acknowledge the current item as intentional and move on without changing it. */
-    fun keepAsIs(item: ReviewItem) = markHandled(item.id)
+    /**
+     * Acknowledge the current item as intentional and move on without changing it.
+     *
+     * SV-029: for a failed-sync item this also discards the underlying dead-lettered outbox
+     * operation, so it stops permanently reappearing in Track's Sync center with only a
+     * re-failing Retry - "keep as is" here means "stop trying to sync this change", not merely
+     * "advance the review wizard".
+     */
+    fun keepAsIs(item: ReviewItem) {
+        if (item.type == ReviewItemType.FAILED_SYNC) {
+            viewModelScope.launch {
+                runCatching { repository.discardFailedSync(item.entryId) }
+                    .onFailure { _message.value = R.string.review_msg_action_failed }
+            }
+        }
+        markHandled(item.id)
+    }
 
     /** Restart the review from the first item. */
     fun reviewAgain() {

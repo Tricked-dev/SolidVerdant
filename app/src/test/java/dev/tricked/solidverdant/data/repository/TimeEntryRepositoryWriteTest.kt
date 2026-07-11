@@ -9,6 +9,7 @@ package dev.tricked.solidverdant.data.repository
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import dev.tricked.solidverdant.data.local.db.AppDatabase
+import dev.tricked.solidverdant.data.local.db.OutboxEntity
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
 import dev.tricked.solidverdant.data.local.db.SyncState
 import dev.tricked.solidverdant.data.local.db.toEntity
@@ -47,6 +48,7 @@ class TimeEntryRepositoryWriteTest {
             FakeRemoteDataSource(),
             clock,
             Json { encodeDefaults = true },
+            db,
         )
     }
 
@@ -70,6 +72,7 @@ class TimeEntryRepositoryWriteTest {
             fake,
             clock,
             Json { encodeDefaults = true },
+            db,
         )
         // Local PENDING edit (an unsynced correction) for the same id.
         val localEdit = serverVersion.copy(description = "my local edit")
@@ -100,6 +103,7 @@ class TimeEntryRepositoryWriteTest {
             fake,
             clock,
             Json { encodeDefaults = true },
+            db,
         )
         // Soft-deleted row awaiting server delete must not be resurrected by a pull.
         db.timeEntryDao().upsert(
@@ -120,16 +124,37 @@ class TimeEntryRepositoryWriteTest {
         assertEquals(entry.id, ops.first().timeEntryId)
     }
 
-    @Test fun delete_soft_deletes_locally_and_enqueues() = runTest {
+    @Test fun delete_of_never_synced_entry_cancels_create_and_enqueues_no_delete() = runTest {
+        // SV-008: deleting an entry that never reached the server (local- id) must cancel its queued
+        // START/CREATE and enqueue NO server DELETE - otherwise the START uploads first on the next
+        // drain and resurrects the "deleted" entry on the server.
         val e = repo.startEntry("org1", "m", "u", null, null, "x", emptyList())
         repo.deleteEntry(e)
         assertEquals(null, repo.observeActiveEntry("org1").first())
+        val ops = db.outboxDao().peekAll()
+        assertTrue(ops.none { it.opType == OutboxOpType.DELETE })
+        assertTrue(ops.none { it.opType == OutboxOpType.START })
+    }
+
+    @Test fun delete_of_synced_entry_enqueues_server_delete() = runTest {
+        val entry = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "x",
+        )
+        db.timeEntryDao().upsert(entry.toEntity(1L, SyncState.SYNCED))
+        repo.deleteEntry(entry)
         assertTrue(db.outboxDao().peekAll().any { it.opType == OutboxOpType.DELETE })
     }
 
-    @Test fun undo_delete_restores_entry_and_cancels_delete_operation() = runTest {
+    @Test fun undo_within_window_restores_entry_and_never_enqueues_delete() = runTest {
+        // SV-019: within the undo window a delete is only a local soft-delete (no outbox op), so undo
+        // is a pure local restore and no DELETE can race the SyncWorker to the server.
         val entry = repo.startEntry("org1", "m", "u", null, null, "x", emptyList())
-        repo.deleteEntry(entry)
+        repo.softDeleteLocal(entry)
 
         assertTrue(repo.undoDelete(entry, "m"))
         assertEquals(entry.id, repo.observeActiveEntry("org1").first()?.id)
@@ -154,5 +179,190 @@ class TimeEntryRepositoryWriteTest {
         val recreated = repo.observeTimeEntries("org1").first().single()
         assertTrue(recreated.id.startsWith("local-restore-"))
         assertEquals(OutboxOpType.CREATE, db.outboxDao().peekAll().single().opType)
+    }
+
+    @Test fun refreshAll_tombstones_server_deleted_entry_within_range() = runTest {
+        // SV-020: a SYNCED row with no pending outbox op, whose server counterpart is gone from the
+        // fetched page, must be deleted locally once its start falls inside the observed min/max range.
+        val serverOne = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "will be deleted on server",
+        )
+        db.timeEntryDao().upsert(serverOne.toEntity(updatedAt = 1L, syncState = SyncState.SYNCED))
+
+        // The fetched page brackets server-1's start with an earlier and a later entry, so the
+        // min/max range computed from `entries` covers server-1's start even though it's absent
+        // from the page itself.
+        val earlier = TimeEntry(
+            id = "server-earlier",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-01T00:00:00Z",
+            end = "2026-07-01T01:00:00Z",
+            description = "earlier",
+        )
+        val later = TimeEntry(
+            id = "server-later",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-14T00:00:00Z",
+            end = "2026-07-14T01:00:00Z",
+            description = "later",
+        )
+        val fake = FakeRemoteDataSource(entries = listOf(earlier, later))
+        val repo2 = TimeEntryRepository(
+            db.timeEntryDao(),
+            db.catalogDao(),
+            db.outboxDao(),
+            db.syncMetaDao(),
+            fake,
+            clock,
+            Json { encodeDefaults = true },
+            db,
+        )
+
+        repo2.refreshAll("org1", "member")
+
+        assertEquals(null, db.timeEntryDao().getById("server-1"))
+    }
+
+    @Test fun refreshAll_does_not_tombstone_pending_local_row_within_range() = runTest {
+        // SV-020: a PENDING (unsynced) row must survive tombstoning even though it's missing from
+        // the server page and its start falls within the observed range.
+        val localPending = TimeEntry(
+            id = "local-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "unsynced local entry",
+        )
+        db.timeEntryDao().upsert(localPending.toEntity(updatedAt = 1L, syncState = SyncState.PENDING))
+
+        val earlier = TimeEntry(
+            id = "server-earlier",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-01T00:00:00Z",
+            end = "2026-07-01T01:00:00Z",
+            description = "earlier",
+        )
+        val later = TimeEntry(
+            id = "server-later",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-14T00:00:00Z",
+            end = "2026-07-14T01:00:00Z",
+            description = "later",
+        )
+        val fake = FakeRemoteDataSource(entries = listOf(earlier, later))
+        val repo2 = TimeEntryRepository(
+            db.timeEntryDao(),
+            db.catalogDao(),
+            db.outboxDao(),
+            db.syncMetaDao(),
+            fake,
+            clock,
+            Json { encodeDefaults = true },
+            db,
+        )
+
+        repo2.refreshAll("org1", "member")
+
+        assertEquals("local-1", db.timeEntryDao().getById("local-1")?.id)
+        assertEquals(SyncState.PENDING, db.timeEntryDao().getById("local-1")?.syncState)
+    }
+
+    @Test fun refreshAll_does_not_tombstone_synced_row_outside_range() = runTest {
+        // SV-020: a SYNCED row whose start falls outside the fetched page's observed [min,max]
+        // range must not be touched by tombstoning, even though it's absent from the page.
+        val outOfRange = TimeEntry(
+            id = "server-out-of-range",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-08-20T00:00:00Z",
+            end = "2026-08-20T01:00:00Z",
+            description = "far in the future, outside fetched range",
+        )
+        db.timeEntryDao().upsert(outOfRange.toEntity(updatedAt = 1L, syncState = SyncState.SYNCED))
+
+        val earlier = TimeEntry(
+            id = "server-earlier",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-01T00:00:00Z",
+            end = "2026-07-01T01:00:00Z",
+            description = "earlier",
+        )
+        val later = TimeEntry(
+            id = "server-later",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-14T00:00:00Z",
+            end = "2026-07-14T01:00:00Z",
+            description = "later",
+        )
+        val fake = FakeRemoteDataSource(entries = listOf(earlier, later))
+        val repo2 = TimeEntryRepository(
+            db.timeEntryDao(),
+            db.catalogDao(),
+            db.outboxDao(),
+            db.syncMetaDao(),
+            fake,
+            clock,
+            Json { encodeDefaults = true },
+            db,
+        )
+
+        repo2.refreshAll("org1", "member")
+
+        assertEquals("server-out-of-range", db.timeEntryDao().getById("server-out-of-range")?.id)
+    }
+
+    @Test fun undoDelete_of_synced_entry_restores_to_synced() = runTest {
+        // SV-024: undoing a delete of a server-known (synced) entry within the soft-delete window
+        // must restore it to SyncState.SYNCED, not PENDING, since no local edit occurred.
+        val entry = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "x",
+        )
+        db.timeEntryDao().upsert(entry.toEntity(1L, SyncState.SYNCED))
+
+        repo.deleteEntry(entry)
+        assertTrue(repo.undoDelete(entry, "m"))
+
+        val restored = db.timeEntryDao().getById("server-1")
+        assertEquals(SyncState.SYNCED, restored?.syncState)
+        assertEquals(false, restored?.pendingDelete)
+        assertTrue(db.outboxDao().peekAll().none { it.opType == OutboxOpType.DELETE })
+    }
+
+    @Test fun discardFailedSync_removes_dead_lettered_ops_for_entry() = runTest {
+        // SV-029: discardFailedSync should delete only the dead-lettered outbox op(s) for the given
+        // entry, and report success via its Boolean return value.
+        val entryId = "server-1"
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = "org1",
+                timeEntryId = entryId,
+                payloadJson = "{}",
+                createdAtMs = 1L,
+                attemptCount = 5,
+                lastError = "boom",
+                deadLettered = true,
+            ),
+        )
+
+        assertTrue(repo.discardFailedSync(entryId))
+        assertTrue(db.outboxDao().peekAll().none { it.timeEntryId == entryId })
     }
 }

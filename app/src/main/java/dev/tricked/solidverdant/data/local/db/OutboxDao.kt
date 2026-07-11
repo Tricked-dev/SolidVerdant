@@ -47,6 +47,15 @@ interface OutboxDao {
     @Query("DELETE FROM outbox WHERE id = (SELECT MAX(id) FROM outbox WHERE timeEntryId = :entryId AND opType = 'DELETE')")
     suspend fun cancelLatestDelete(entryId: String): Int
 
+    /**
+     * Whether a DELETE op is currently queued for an entry. Used to distinguish, in
+     * [dev.tricked.solidverdant.data.repository.TimeEntryRepository.undoDelete], an undo tapped
+     * while the SV-019 undo window is still open (soft-deleted locally, nothing enqueued yet) from
+     * one tapped after the window closed and a server-facing op already exists.
+     */
+    @Query("SELECT EXISTS(SELECT 1 FROM outbox WHERE timeEntryId = :entryId AND opType = 'DELETE')")
+    suspend fun hasPendingDelete(entryId: String): Boolean
+
     @Query("UPDATE outbox SET attemptCount = 0, lastError = NULL, deadLettered = 0 WHERE timeEntryId = :entryId")
     suspend fun resetForRetry(entryId: String): Int
 
@@ -57,4 +66,40 @@ interface OutboxDao {
      */
     @Query("UPDATE outbox SET deadLettered = 1, lastError = :error WHERE timeEntryId = :entryId AND deadLettered = 0")
     suspend fun deadLetterByEntryId(entryId: String, error: String): Int
+
+    /**
+     * Re-read a single op by id immediately before processing it. Used by the sync drain to avoid
+     * acting on a stale in-memory snapshot after an earlier op in the same run rekeyed this op's
+     * `timeEntryId` (local- id -> server id) via [rekeyReferences].
+     */
+    @Query("SELECT * FROM outbox WHERE id = :id")
+    suspend fun getById(id: Long): OutboxEntity?
+
+    /**
+     * Whether a newer (higher id), still-eligible op exists for the same entry. Used to detect that
+     * a just-revived dead-lettered UPDATE has been superseded by later local state (a subsequent
+     * UPDATE/STOP/DELETE that already synced or is still queued) and should be dropped rather than
+     * reverting the entry to older data.
+     */
+    @Query(
+        "SELECT COUNT(*) FROM outbox WHERE timeEntryId = :entryId AND id > :afterId AND deadLettered = 0",
+    )
+    suspend fun countNewerPending(entryId: String, afterId: Long): Int
+
+    /**
+     * Discard every queued operation for an entry that never reached the server (still on its
+     * `local-` id). Used when deleting a never-synced entry (SV-008): the entry's own
+     * START/CREATE, plus any dependent STOP/UPDATE, must be cancelled outright rather than
+     * followed by a server DELETE, since the server has never heard of this entry.
+     */
+    @Query("DELETE FROM outbox WHERE timeEntryId = :entryId")
+    suspend fun deleteByTimeEntryId(entryId: String)
+
+    /**
+     * Discard a dead-lettered (permanently failed) operation for an entry. Used when the user
+     * acknowledges a failed-sync review item as intentional (SV-029, "keep as is"): the op would
+     * otherwise keep surfacing in Track's Sync center forever with only a re-failing Retry.
+     */
+    @Query("DELETE FROM outbox WHERE timeEntryId = :entryId AND deadLettered = 1")
+    suspend fun deleteDeadLetteredByEntryId(entryId: String): Int
 }

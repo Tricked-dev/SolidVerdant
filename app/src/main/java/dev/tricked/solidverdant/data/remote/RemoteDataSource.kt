@@ -37,6 +37,8 @@ interface RemoteDataSource {
         projectId: String?,
         taskId: String?,
         description: String,
+        // Capture-time start (ISO-8601) so an offline-queued START keeps its real start time.
+        startTime: String,
     ): Result<TimeEntry>
     suspend fun createTimeEntry(
         organizationId: String,
@@ -45,7 +47,15 @@ interface RemoteDataSource {
         entry: TimeEntry,
         tags: List<String>,
     ): Result<TimeEntry>
-    suspend fun stopTimeEntry(organizationId: String, timeEntryId: String, userId: String, startTime: String): Result<TimeEntry>
+
+    // endTime: capture-time end (ISO-8601) so an offline-queued STOP keeps its real end time.
+    suspend fun stopTimeEntry(
+        organizationId: String,
+        timeEntryId: String,
+        userId: String,
+        startTime: String,
+        endTime: String,
+    ): Result<TimeEntry>
     suspend fun updateTimeEntry(organizationId: String, timeEntry: TimeEntry, tags: List<String>): Result<TimeEntry>
     suspend fun deleteTimeEntry(organizationId: String, timeEntryId: String): Result<Unit>
 }
@@ -66,14 +76,15 @@ class AuthRemoteDataSource @Inject constructor(private val authRepository: AuthR
         projectId: String?,
         taskId: String?,
         description: String,
-    ) = authRepository.startTimeEntry(organizationId, memberId, userId, projectId, taskId, description)
+        startTime: String,
+    ) = authRepository.startTimeEntry(organizationId, memberId, userId, projectId, taskId, description, startIso = startTime)
     override suspend fun createTimeEntry(organizationId: String, memberId: String, userId: String, entry: TimeEntry, tags: List<String>) =
         authRepository.createTimeEntry(
             organizationId, memberId, userId, entry.start, requireNotNull(entry.end),
             entry.description.orEmpty(), entry.projectId, entry.taskId, tags, entry.billable,
         )
-    override suspend fun stopTimeEntry(organizationId: String, timeEntryId: String, userId: String, startTime: String) =
-        authRepository.stopTimeEntry(organizationId, timeEntryId, userId, startTime)
+    override suspend fun stopTimeEntry(organizationId: String, timeEntryId: String, userId: String, startTime: String, endTime: String) =
+        authRepository.stopTimeEntry(organizationId, timeEntryId, userId, startTime, endIso = endTime)
     override suspend fun updateTimeEntry(organizationId: String, timeEntry: TimeEntry, tags: List<String>) =
         authRepository.updateTimeEntry(organizationId, timeEntry, tags)
     override suspend fun deleteTimeEntry(organizationId: String, timeEntryId: String) =

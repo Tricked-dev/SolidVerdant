@@ -16,6 +16,12 @@ data class StartPayload(
     val taskId: String?,
     val description: String,
     val tagIds: List<String>,
+    /**
+     * The actual capture-time start timestamp (ISO-8601, matching [CreatePayload.start]'s
+     * serialization). Must NOT be recomputed at sync time, otherwise an entry started while
+     * offline is stamped with the reconnect time instead of when it was really started.
+     */
+    val start: String = "",
 )
 
 @Serializable
@@ -32,7 +38,16 @@ data class CreatePayload(
 )
 
 @Serializable
-data class StopPayload(val userId: String, val start: String)
+data class StopPayload(
+    val userId: String,
+    val start: String,
+    /**
+     * The actual capture-time end timestamp (ISO-8601, matching [CreatePayload.end]'s
+     * serialization). Must NOT be recomputed at sync time, otherwise an entry stopped while
+     * offline is stamped with the reconnect time instead of when it was really stopped.
+     */
+    val end: String = "",
+)
 
 @Serializable
 data class UpdatePayload(

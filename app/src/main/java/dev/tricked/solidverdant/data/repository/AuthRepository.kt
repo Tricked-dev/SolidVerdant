@@ -72,7 +72,7 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
             state = pkceData.state,
         )
 
-        Timber.d("OAuth flow initialized, auth URL: $authUrl")
+        Timber.d("OAuth flow initialized")
         Result.success(authUrl)
     } catch (e: Exception) {
         Timber.e(e, "Failed to initialize OAuth flow")
@@ -213,18 +213,22 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
         projectId: String? = null,
         taskId: String? = null,
         description: String = "",
+        // The actual capture-time start timestamp (ISO-8601). Pass the value captured when tracking
+        // really began so an offline-captured start is not stamped with the reconnect/sync time.
+        // Null/blank falls back to now() for callers that do not thread a captured value.
+        startIso: String? = null,
     ): Result<TimeEntry> = try {
         val endpoint = authDataStore.getEndpoint()
         val api = apiClientFactory.createApi(endpoint)
 
         // Use current time in format: Y-m-d\TH:i:s\Z (e.g., 2025-12-01T21:32:10Z)
         val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
-        val now = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC)
-            .format(formatter)
+        val start = startIso?.takeIf { it.isNotBlank() }
+            ?: java.time.ZonedDateTime.now().withZoneSameInstant(java.time.ZoneOffset.UTC).format(formatter)
 
         val request = dev.tricked.solidverdant.data.model.StartTimeEntryRequest(
             memberId = memberId,
-            start = now,
+            start = start,
             description = description,
             projectId = projectId,
             taskId = taskId,
@@ -232,7 +236,7 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
         )
 
         val response = api.startTimeEntry(organizationId, request)
-        Timber.d("Time entry started: ${response.data?.id}")
+        Timber.d("Time entry started")
         Result.success(response.data!!)
     } catch (e: Exception) {
         Timber.e(e, "Failed to start time entry")
@@ -288,7 +292,7 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
             created
         }
 
-        Timber.d("Manual time entry created: ${final.id}")
+        Timber.d("Manual time entry created")
         Result.success(final)
     } catch (e: Exception) {
         Timber.e(e, "Failed to create manual time entry")
@@ -298,23 +302,32 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
     /**
      * Stop the active time entry
      */
-    suspend fun stopTimeEntry(organizationId: String, timeEntryId: String, userId: String, startTime: String): Result<TimeEntry> = try {
+    suspend fun stopTimeEntry(
+        organizationId: String,
+        timeEntryId: String,
+        userId: String,
+        startTime: String,
+        // The actual capture-time end timestamp (ISO-8601). Pass the value captured when tracking
+        // really ended so an offline-captured stop is not stamped with the reconnect/sync time.
+        // Null/blank falls back to now() for callers that do not thread a captured value.
+        endIso: String? = null,
+    ): Result<TimeEntry> = try {
         val endpoint = authDataStore.getEndpoint()
         val api = apiClientFactory.createApi(endpoint)
 
         // Use current time in format: Y-m-d\TH:i:s\Z (e.g., 2025-12-01T21:32:10Z)
         val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
-        val now = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC)
-            .format(formatter)
+        val end = endIso?.takeIf { it.isNotBlank() }
+            ?: java.time.ZonedDateTime.now().withZoneSameInstant(java.time.ZoneOffset.UTC).format(formatter)
 
         val request = dev.tricked.solidverdant.data.model.StopTimeEntryRequest(
             userId = userId,
             start = startTime,
-            end = now,
+            end = end,
         )
 
         val response = api.stopTimeEntry(organizationId, timeEntryId, request)
-        Timber.d("Time entry stopped: ${response.data?.id}")
+        Timber.d("Time entry stopped")
         Result.success(response.data!!)
     } catch (e: Exception) {
         Timber.e(e, "Failed to stop time entry")
@@ -434,7 +447,7 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
         )
 
         val response = api.updateTimeEntry(organizationId, timeEntry.id, request)
-        Timber.d("Time entry updated: ${response.data?.id}")
+        Timber.d("Time entry updated")
         Result.success(response.data!!)
     } catch (e: Exception) {
         Timber.e(e, "Failed to update time entry")
@@ -448,7 +461,7 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
         val endpoint = authDataStore.getEndpoint()
         val api = apiClientFactory.createApi(endpoint)
         api.deleteTimeEntry(organizationId, timeEntryId)
-        Timber.d("Time entry deleted: $timeEntryId")
+        Timber.d("Time entry deleted")
         Result.success(Unit)
     } catch (e: Exception) {
         Timber.e(e, "Failed to delete time entry")

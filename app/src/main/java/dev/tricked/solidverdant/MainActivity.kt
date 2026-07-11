@@ -167,13 +167,11 @@ open class MainActivity : ComponentActivity() {
      * Handle OAuth callback deep link
      */
     private fun handleDeepLink(uri: Uri) {
-        Timber.d("Handling deep link: $uri")
+        Timber.d("Handling auth deep link")
 
         if (uri.scheme == "solidtime" && uri.host == "oauth" && uri.path == "/callback") {
             val code = uri.getQueryParameter("code")
             val state = uri.getQueryParameter("state")
-
-            Timber.d("OAuth callback received - code: ${code?.take(10)}..., state: ${state?.take(10)}...")
 
             authViewModel.handleOAuthCallback(code, state)
         }

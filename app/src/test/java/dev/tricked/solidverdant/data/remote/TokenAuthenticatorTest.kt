@@ -6,7 +6,11 @@
 
 package dev.tricked.solidverdant.data.remote
 
+import dev.tricked.solidverdant.data.local.UserCacheCleaner
 import dev.tricked.solidverdant.data.model.TokenResponse
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
 import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
@@ -83,6 +87,47 @@ class TokenAuthenticatorTest {
         assertNull(storage.access)
         assertNull(storage.refresh)
         assertEquals("refresh must not be attempted without a refresh token", 0, refreshCalls.get())
+    }
+
+    @Test
+    fun `missing refresh token clears the account cache`() {
+        val storage = FakeTokenStorage("access", null)
+        val userCacheCleaner = mockk<UserCacheCleaner>()
+        coEvery { userCacheCleaner.clear() } returns Unit
+        val authenticator = TokenAuthenticator(storage, userCacheCleaner) { _, _, _ ->
+            error("refresh must not be attempted without a refresh token")
+        }
+
+        assertNull(authenticator.authenticate(null, unauthorized("access")))
+
+        coVerify(exactly = 1) { userCacheCleaner.clear() }
+    }
+
+    @Test
+    fun `definitive refresh rejection clears the account cache`() {
+        val storage = FakeTokenStorage("access", "refresh")
+        val userCacheCleaner = mockk<UserCacheCleaner>()
+        coEvery { userCacheCleaner.clear() } returns Unit
+        val authenticator = TokenAuthenticator(storage, userCacheCleaner) { _, _, _ -> RefreshResult.Invalid }
+
+        assertNull(authenticator.authenticate(null, unauthorized("access")))
+
+        coVerify(exactly = 1) { userCacheCleaner.clear() }
+    }
+
+    @Test
+    fun `successful refresh does not clear the account cache`() {
+        val storage = FakeTokenStorage("access", "refresh")
+        val userCacheCleaner = mockk<UserCacheCleaner>()
+        coEvery { userCacheCleaner.clear() } returns Unit
+        val authenticator = TokenAuthenticator(storage, userCacheCleaner) { _, _, _ ->
+            RefreshResult.Success(TokenResponse("new-access", "new-refresh"))
+        }
+
+        val retried = authenticator.authenticate(null, unauthorized("access"))
+
+        assertEquals("Bearer new-access", retried?.header("Authorization"))
+        coVerify(exactly = 0) { userCacheCleaner.clear() }
     }
 
     @Test

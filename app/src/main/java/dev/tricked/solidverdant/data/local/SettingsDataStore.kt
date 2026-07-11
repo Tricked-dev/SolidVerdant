@@ -77,6 +77,8 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         private val APP_THEME = stringPreferencesKey("app_theme")
         private val OPTIMISTIC_REFRESH = booleanPreferencesKey("optimistic_refresh")
         private val LONG_TIMER_HOURS = intPreferencesKey("long_timer_hours")
+        private val LONG_TIMER_WARNING_DEADLINE_EPOCH_MS = longPreferencesKey("long_timer_warning_deadline_epoch_ms")
+        private val LONG_TIMER_WARNING_ENTRY_START_EPOCH_MS = longPreferencesKey("long_timer_warning_entry_start_epoch_ms")
         private val WIDGET_IS_TRACKING = booleanPreferencesKey("widget_is_tracking")
         private val WIDGET_START_TIME = longPreferencesKey("widget_start_time")
         private val WIDGET_PROJECT_NAME = stringPreferencesKey("widget_project_name")
@@ -213,6 +215,36 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     }.distinctUntilChanged()
 
     val longTimerHours: Flow<Int> = dataStore.data.map { it[LONG_TIMER_HOURS] ?: 4 }.distinctUntilChanged()
+
+    /**
+     * Deadline (epoch millis) at which the forgotten-timer warning should next fire, plus the
+     * start time (epoch millis) of the running entry it was scheduled for. Persisting this lets a
+     * [dev.tricked.solidverdant.service.LongTimerWarningWorker] restore the warning after process
+     * death instead of relying on an in-memory `delay()` inside the service.
+     */
+    data class LongTimerWarningDeadline(val deadlineEpochMs: Long, val entryStartEpochMs: Long)
+
+    val longTimerWarningDeadline: Flow<LongTimerWarningDeadline?> = dataStore.data.map { preferences ->
+        val deadline = preferences[LONG_TIMER_WARNING_DEADLINE_EPOCH_MS] ?: return@map null
+        val entryStart = preferences[LONG_TIMER_WARNING_ENTRY_START_EPOCH_MS] ?: return@map null
+        LongTimerWarningDeadline(deadline, entryStart)
+    }.distinctUntilChanged()
+
+    /** Persist the next warning deadline for the entry that started at [entryStartEpochMs]. */
+    suspend fun setLongTimerWarningDeadline(deadlineEpochMs: Long, entryStartEpochMs: Long) {
+        dataStore.edit { preferences ->
+            preferences[LONG_TIMER_WARNING_DEADLINE_EPOCH_MS] = deadlineEpochMs
+            preferences[LONG_TIMER_WARNING_ENTRY_START_EPOCH_MS] = entryStartEpochMs
+        }
+    }
+
+    /** Clear the persisted deadline, e.g. when the timer stops or is paused. */
+    suspend fun clearLongTimerWarningDeadline() {
+        dataStore.edit { preferences ->
+            preferences.remove(LONG_TIMER_WARNING_DEADLINE_EPOCH_MS)
+            preferences.remove(LONG_TIMER_WARNING_ENTRY_START_EPOCH_MS)
+        }
+    }
 
     suspend fun getAppTheme(): AppThemeMode = appTheme.first()
 

@@ -98,4 +98,38 @@ interface TimeEntryDao {
             replaceTagRefs(entity.id, tagIdsByEntry[entity.id].orEmpty())
         }
     }
+
+    /**
+     * IDs of local rows that must be tombstoned after fetching a bounded server page (SV-020):
+     * rows that are `SYNCED` (never a locally-unsynced edit), have no `pendingDelete` flag, have no
+     * outbox operation still queued against them (never clobber an unsynced local mutation), fall
+     * within the fetched `[rangeStart, rangeEnd]` window (by `start`, inclusive), and whose id is
+     * absent from the ids the server just returned for that same window. Callers must derive
+     * [rangeStart]/[rangeEnd] from the actual bounds of the page(s) fetched — never a wider window
+     * than what was actually pulled, or an entry outside the fetch would be wrongly deleted.
+     */
+    @Query(
+        "SELECT id FROM time_entries WHERE organizationId = :orgId AND syncState = 'SYNCED' " +
+            "AND pendingDelete = 0 AND start >= :rangeStart AND start <= :rangeEnd " +
+            "AND id NOT IN (:serverIds) " +
+            "AND id NOT IN (SELECT timeEntryId FROM outbox)",
+    )
+    suspend fun findTombstoneCandidates(orgId: String, rangeStart: String, rangeEnd: String, serverIds: List<String>): List<String>
+
+    @Query("DELETE FROM time_entries WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<String>)
+
+    /**
+     * Remove local rows that the server no longer has, scoped to a known fetched window
+     * (SV-020: server-side deletions never propagated locally before this). See
+     * [findTombstoneCandidates] for exactly which rows are eligible; entries outside
+     * [rangeStart, rangeEnd], still pending, or mid-flight in the outbox are never touched.
+     */
+    @Transaction
+    suspend fun tombstoneMissing(orgId: String, rangeStart: String, rangeEnd: String, serverIds: List<String>) {
+        // SQLite caps bound-variable count; the id lists here are page-sized (<= a few hundred)
+        // so a single IN-clause is safe without chunking.
+        val toDelete = findTombstoneCandidates(orgId, rangeStart, rangeEnd, serverIds)
+        if (toDelete.isNotEmpty()) deleteByIds(toDelete)
+    }
 }

@@ -48,11 +48,25 @@ class SyncWorker @AssistedInject constructor(
         // Entries whose creating op has been dead-lettered in this run; their dependent ops
         // (still referencing the local- id) can never succeed and are skipped/cascaded.
         val failedEntryIds = mutableSetOf<String>()
-        for (op in ops) {
+        // A previous op in this same drain may rekey an entry's id (local- id -> server id) after a
+        // successful START/CREATE. The `ops` list above is a snapshot taken once at the top of the
+        // run, so later entries in that list still hold the dead local id in memory even though
+        // `rekeyReferences` already rewrote the DB rows. Track the mapping here and apply it to each
+        // op immediately before it is processed (and again before any write-back), so a STOP/UPDATE
+        // in the same drain targets the real server id instead of 404ing on the retired local one.
+        val rekeyed = mutableMapOf<String, String>()
+        var retryResult: Result? = null
+        for (rawOp in ops) {
+            val op = rawOp.rekeyedWith(rekeyed)
             if (op.timeEntryId in failedEntryIds) continue
-            when (process(op)) {
-                Outcome.SUCCESS -> outboxDao.delete(op)
-                Outcome.RETRY -> {
+            when (val outcome = process(op)) {
+                is Outcome.Success -> {
+                    outboxDao.delete(op)
+                    // Record the rekey so every remaining op for this entry in this same drain
+                    // (still holding the old id in its in-memory snapshot) is remapped before use.
+                    outcome.rekeyedTo?.let { rekeyed[op.timeEntryId] = it }
+                }
+                Outcome.Retry -> {
                     val attempts = op.attemptCount + 1
                     if (attempts >= MAX_ATTEMPTS) {
                         // Transient retries exhausted -> move to dead-letter and keep draining.
@@ -64,19 +78,41 @@ class SyncWorker @AssistedInject constructor(
                                 lastError = "Temporary server or network error; retry scheduled",
                             ),
                         )
-                        syncStatus.set(SyncStatus.Idle)
-                        return Result.retry()
+                        // Don't abort the whole drain on one transient failure: keep flushing the
+                        // remaining independent ops and only ask WorkManager to retry this run
+                        // (which will re-attempt the failed op) once the rest have been tried.
+                        retryResult = Result.retry()
                     }
                 }
-                Outcome.FAIL -> {
+                Outcome.Fail -> {
                     // Server rejected the change: this will never succeed, so dead-letter it now.
                     deadLetter(op, "Server rejected this change", failedEntryIds)
                     syncStatus.set(SyncStatus.Error("A change could not be synced"))
                 }
+                Outcome.Superseded -> {
+                    // A revived dead-lettered op that a later, already-applied write has made
+                    // stale; drop it rather than reverting the entry to older state.
+                    outboxDao.delete(op)
+                }
             }
+        }
+        if (retryResult != null) {
+            syncStatus.set(SyncStatus.Idle)
+            return retryResult
         }
         if (syncStatus.status.value !is SyncStatus.Error) syncStatus.set(SyncStatus.Idle)
         return Result.success()
+    }
+
+    /** Rewrite [OutboxEntity.timeEntryId] through the in-run rekey map, following chained hops. */
+    private fun OutboxEntity.rekeyedWith(rekeyed: Map<String, String>): OutboxEntity {
+        var id = timeEntryId
+        var next = rekeyed[id]
+        while (next != null && next != id) {
+            id = next
+            next = rekeyed[id]
+        }
+        return if (id == timeEntryId) this else copy(timeEntryId = id)
     }
 
     /**
@@ -92,11 +128,21 @@ class SyncWorker @AssistedInject constructor(
             failedEntryIds += op.timeEntryId
             outboxDao.deadLetterByEntryId(op.timeEntryId, error)
         } else {
+            // op.timeEntryId already reflects any in-run rekey (see rekeyedWith above), so this
+            // write-back can't clobber a rekeyed id back to a retired local- id.
             outboxDao.update(op.copy(attemptCount = op.attemptCount + 1, lastError = error, deadLettered = true))
         }
     }
 
-    private enum class Outcome { SUCCESS, RETRY, FAIL }
+    private sealed class Outcome {
+        /** [rekeyedTo] is set only when this op reconciled a local- id to a new server id. */
+        data class Success(val rekeyedTo: String? = null) : Outcome()
+        data object Retry : Outcome()
+        data object Fail : Outcome()
+
+        /** A revived dead-lettered op superseded by a later write; drop without touching the server. */
+        data object Superseded : Outcome()
+    }
 
     private suspend fun process(op: OutboxEntity): Outcome = try {
         when (op.opType) {
@@ -104,18 +150,31 @@ class SyncWorker @AssistedInject constructor(
                 val p = json.decodeFromString<StartPayload>(op.payloadJson)
                 // Idempotency: if a previous attempt already committed on the server but its
                 // response was lost, the server now has our single active entry. Adopt it instead
-                // of starting a duplicate.
-                val adopted = if (op.attemptCount > 0) remote.getActiveTimeEntry().getOrNull() else null
+                // of starting a duplicate. Run this scan unconditionally (not just on retries) so a
+                // process death after the server call committed but before this op was deleted still
+                // adopts the existing entry on the next run instead of re-POSTing a duplicate.
+                val adopted = remote.getActiveTimeEntry().getOrNull()
+                    ?.takeIf { it.userId == p.userId }
                 val server = adopted
-                    ?: remote.startTimeEntry(op.organizationId, p.memberId, p.userId, p.projectId, p.taskId, p.description).getOrThrow()
+                    ?: remote.startTimeEntry(
+                        op.organizationId,
+                        p.memberId,
+                        p.userId,
+                        p.projectId,
+                        p.taskId,
+                        p.description,
+                        startTime = p.start,
+                    ).getOrThrow()
                 reconcile(op.timeEntryId, server, fallbackTagIds = p.tagIds)
-                Outcome.SUCCESS
             }
             OutboxOpType.CREATE -> {
                 val p = json.decodeFromString<CreatePayload>(op.payloadJson)
-                // Idempotency: on a retry, a matching completed entry may already exist from a
-                // committed-but-unacked prior attempt; adopt it rather than creating a duplicate.
-                val adopted = if (op.attemptCount > 0) findCreatedDuplicate(op.organizationId, p) else null
+                // Idempotency: a matching completed entry may already exist from a committed-but-
+                // unacked prior attempt (including a hard process death right after the server
+                // commit); adopt it rather than creating a duplicate. Run unconditionally, not just
+                // when attemptCount > 0 - attemptCount is only bumped on a *transient* failure, so it
+                // never reflects "we may have already committed this on the server".
+                val adopted = findCreatedDuplicate(op.organizationId, p)
                 val server = adopted ?: run {
                     val local = TimeEntry(
                         id = op.timeEntryId, userId = p.userId, organizationId = op.organizationId,
@@ -125,33 +184,47 @@ class SyncWorker @AssistedInject constructor(
                     remote.createTimeEntry(op.organizationId, p.memberId, p.userId, local, p.tagIds).getOrThrow()
                 }
                 reconcile(op.timeEntryId, server, fallbackTagIds = p.tagIds)
-                Outcome.SUCCESS
             }
             OutboxOpType.STOP -> {
                 val p = json.decodeFromString<StopPayload>(op.payloadJson)
-                val server = remote.stopTimeEntry(op.organizationId, op.timeEntryId, p.userId, p.start).getOrThrow()
+                val server = remote.stopTimeEntry(op.organizationId, op.timeEntryId, p.userId, p.start, endTime = p.end).getOrThrow()
                 persistSynced(server)
-                Outcome.SUCCESS
+                Outcome.Success()
             }
             OutboxOpType.UPDATE -> {
-                val p = json.decodeFromString<UpdatePayload>(op.payloadJson)
-                val entry = TimeEntry(
-                    id = op.timeEntryId, description = p.description, userId = p.userId,
-                    start = p.start, end = p.end, projectId = p.projectId, taskId = p.taskId,
-                    billable = p.billable, organizationId = op.organizationId,
-                )
-                val server = remote.updateTimeEntry(op.organizationId, entry, p.tagIds).getOrThrow()
-                persistSynced(server, p.tagIds)
-                Outcome.SUCCESS
+                // A dead-lettered UPDATE revived via resetForRetry re-enters peekPending() with
+                // deadLettered already cleared, so that flag can't be used here to gate this check -
+                // it must run for every UPDATE. Guard against a revived-but-superseded op: a later
+                // write for the same entry may have already synced (and been deleted from the
+                // outbox) or may still be queued behind this one. Detect the "already synced newer
+                // state" case by comparing this op's enqueue time against the entry's last-synced
+                // time; detect the "still queued newer op" case via a row-count check. Either way,
+                // applying this stale UPDATE now would revert the entry to older data.
+                val newerQueued = outboxDao.countNewerPending(op.timeEntryId, op.id) > 0
+                val current = timeEntryDao.getById(op.timeEntryId)
+                val newerSynced = current != null && current.syncState == SyncState.SYNCED && current.updatedAt > op.createdAtMs
+                if (newerQueued || newerSynced) {
+                    Outcome.Superseded
+                } else {
+                    val p = json.decodeFromString<UpdatePayload>(op.payloadJson)
+                    val entry = TimeEntry(
+                        id = op.timeEntryId, description = p.description, userId = p.userId,
+                        start = p.start, end = p.end, projectId = p.projectId, taskId = p.taskId,
+                        billable = p.billable, organizationId = op.organizationId,
+                    )
+                    val server = remote.updateTimeEntry(op.organizationId, entry, p.tagIds).getOrThrow()
+                    persistSynced(server, p.tagIds)
+                    Outcome.Success()
+                }
             }
             OutboxOpType.DELETE -> {
                 // A purely-local entry never reached the server; treat as done.
                 if (op.timeEntryId.startsWith("local-")) {
-                    Outcome.SUCCESS
+                    Outcome.Success()
                 } else {
                     remote.deleteTimeEntry(op.organizationId, op.timeEntryId).getOrThrow()
                     timeEntryDao.deleteById(op.timeEntryId)
-                    Outcome.SUCCESS
+                    Outcome.Success()
                 }
             }
         }
@@ -182,16 +255,20 @@ class SyncWorker @AssistedInject constructor(
         }
     }
 
-    private suspend fun reconcile(localId: String, server: TimeEntry, fallbackTagIds: List<String>? = null) {
-        if (localId != server.id) {
+    private suspend fun reconcile(localId: String, server: TimeEntry, fallbackTagIds: List<String>? = null): Outcome.Success {
+        val rekeyedTo = if (localId != server.id) {
             timeEntryDao.rekey(localId, server.id)
             outboxDao.rekeyReferences(localId, server.id)
+            server.id
+        } else {
+            null
         }
         timeEntryDao.upsert(server.toEntity(updatedAt = clock.nowMs(), syncState = SyncState.SYNCED))
         // Preserve the server's authoritative tag set; only fall back to the queued tags when the
         // server returned none (avoids clobbering a server-side tag merge).
         val tagIds = server.tags.map { it.id }.ifEmpty { fallbackTagIds.orEmpty() }
         timeEntryDao.replaceTagRefs(server.id, tagIds)
+        return Outcome.Success(rekeyedTo)
     }
 
     private suspend fun persistSynced(server: TimeEntry, fallbackTagIds: List<String>? = null) {
@@ -201,10 +278,10 @@ class SyncWorker @AssistedInject constructor(
     }
 
     private fun classify(e: Exception): Outcome = when {
-        e is IOException -> Outcome.RETRY
-        e is HttpException && e.code() == 429 -> Outcome.RETRY
-        e is HttpException && e.code() >= 500 -> Outcome.RETRY
-        else -> Outcome.FAIL
+        e is IOException -> Outcome.Retry
+        e is HttpException && e.code() == 429 -> Outcome.Retry
+        e is HttpException && e.code() >= 500 -> Outcome.Retry
+        else -> Outcome.Fail
     }
 
     companion object {

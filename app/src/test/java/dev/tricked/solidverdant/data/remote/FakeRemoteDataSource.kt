@@ -30,6 +30,10 @@ class FakeRemoteDataSource(
     var updateResult: (TimeEntry) -> TimeEntry = { it },
 ) : RemoteDataSource {
     val started = mutableListOf<Triple<String, String?, String?>>()
+
+    // Capture-time timestamps received on the last START/STOP call, for SV-017 assertions.
+    var lastStartTime: String? = null
+    var lastEndTime: String? = null
     val deleted = mutableListOf<String>()
 
     override suspend fun getTimeEntries(organizationId: String, memberId: String, limit: Int, offset: Int, onlyFullDates: Boolean) =
@@ -48,17 +52,21 @@ class FakeRemoteDataSource(
         projectId: String?,
         taskId: String?,
         description: String,
+        startTime: String,
     ): Result<TimeEntry> {
         writeError?.let { return Result.failure(it) }
         if (failNextWrite) return Result.failure(java.io.IOException("offline"))
         started += Triple(description, projectId, taskId)
+        lastStartTime = startTime
         return Result.success(
             startResult(
                 TimeEntry(
                     id = "server-1",
                     description = description,
                     userId = userId,
-                    start = "2026-01-01T09:00:00Z",
+                    // Echo the capture-time start the caller sent, so a test can assert the offline
+                    // START timestamp is preserved rather than fabricated at sync time (SV-017).
+                    start = startTime.ifBlank { "2026-01-01T09:00:00Z" },
                     end = null,
                     projectId = projectId,
                     taskId = taskId,
@@ -70,18 +78,20 @@ class FakeRemoteDataSource(
     override suspend fun createTimeEntry(organizationId: String, memberId: String, userId: String, entry: TimeEntry, tags: List<String>) =
         writeError?.let { Result.failure(it) }
             ?: if (failNextWrite) Result.failure(java.io.IOException("offline")) else Result.success(startResult(entry))
-    override suspend fun stopTimeEntry(organizationId: String, timeEntryId: String, userId: String, startTime: String) =
+    override suspend fun stopTimeEntry(organizationId: String, timeEntryId: String, userId: String, startTime: String, endTime: String) =
         writeError?.let { Result.failure(it) }
             ?: if (failNextWrite) {
                 Result.failure(java.io.IOException("offline"))
             } else {
+                lastEndTime = endTime
                 Result.success(
                     stopResult(
                         TimeEntry(
                             id = timeEntryId,
                             userId = userId,
                             start = startTime,
-                            end = "2026-01-01T10:00:00Z",
+                            // Echo the capture-time end the caller sent (SV-017).
+                            end = endTime.ifBlank { "2026-01-01T10:00:00Z" },
                             organizationId = organizationId,
                         ),
                     ),

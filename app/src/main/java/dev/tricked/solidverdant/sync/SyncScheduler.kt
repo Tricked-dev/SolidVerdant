@@ -33,6 +33,11 @@ class SyncScheduler @Inject constructor(@ApplicationContext private val context:
             .enqueueUniqueWork(UNIQUE_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
     }
 
+    /** Cancels any queued or in-flight sync work, e.g. before clearing the account cache on logout. */
+    fun cancelSync() {
+        WorkManager.getInstance(context).cancelUniqueWork(UNIQUE_NAME)
+    }
+
     companion object {
         const val UNIQUE_NAME = "outbox-sync"
     }

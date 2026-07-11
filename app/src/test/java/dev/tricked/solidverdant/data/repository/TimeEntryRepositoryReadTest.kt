@@ -48,6 +48,7 @@ class TimeEntryRepositoryReadTest {
             remote,
             clock,
             Json { encodeDefaults = true },
+            db,
         )
     }
 

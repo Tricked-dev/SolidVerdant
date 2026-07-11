@@ -37,6 +37,7 @@ class TrackingViewModelSyncTest {
                 override fun nowMs() = 1L
             },
             Json { encodeDefaults = true },
+            db,
         )
         val entry = repo.startEntry("org1", "m", "u", null, null, "hi", emptyList())
         assertTrue(entry.id.startsWith("local-"))

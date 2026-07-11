@@ -25,10 +25,13 @@ class UserCacheCleaner @Inject constructor(
     suspend fun clear() = withContext(Dispatchers.IO) {
         settingsDataStore.clearCachedData()
         database.clearAllTables()
+        // apply() is safe here: nothing after this reads the prefs back, and we're already
+        // off the main thread (Dispatchers.IO), so there's no ordering requirement forcing
+        // a synchronous commit().
         context.getSharedPreferences(TILE_STATE_PREFERENCES, Context.MODE_PRIVATE)
             .edit()
             .clear()
-            .commit()
+            .apply()
         ShortcutManager.clearShortcuts(context)
     }
 

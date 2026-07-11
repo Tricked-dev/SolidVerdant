@@ -225,4 +225,160 @@ class SyncWorkerTest {
         assertEquals(SyncState.SYNCED, stored?.syncState)
         assertEquals(3600, stored?.duration)
     }
+
+    // SV-017: an offline START must transmit the timestamp captured when the user actually
+    // pressed start, not a value recomputed at sync time (which would be whenever connectivity
+    // happened to return).
+    @Test fun offline_start_sends_captured_start_time_not_sync_time() = runTest {
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.START,
+                organizationId = "org1",
+                timeEntryId = "local-1",
+                createdAtMs = 1L,
+                payloadJson = json.encodeToString(
+                    StartPayload("m1", "u1", null, null, "work", emptyList(), start = "2020-01-01T09:00:00Z"),
+                ),
+            ),
+        )
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+        assertEquals("2020-01-01T09:00:00Z", remote.lastStartTime)
+    }
+
+    // SV-017: an offline STOP must transmit the capture-time end timestamp, not a sync-time value.
+    @Test fun offline_stop_sends_captured_end_time_not_sync_time() = runTest {
+        val local = TimeEntry(
+            id = "server-1",
+            userId = "u1",
+            organizationId = "org1",
+            start = "2020-01-01T09:00:00Z",
+            end = "2020-01-01T10:00:00Z",
+        )
+        db.timeEntryDao().upsert(local.toEntity(updatedAt = 1L, syncState = SyncState.PENDING))
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.STOP,
+                organizationId = "org1",
+                timeEntryId = local.id,
+                createdAtMs = 1L,
+                payloadJson = json.encodeToString(
+                    StopPayload("u1", local.start, end = "2020-01-01T10:00:00Z"),
+                ),
+            ),
+        )
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+        assertEquals("2020-01-01T10:00:00Z", remote.lastEndTime)
+    }
+
+    // SV-018: a START and its dependent STOP for the same local- id, drained in the same run, must
+    // have the STOP rekeyed to the server id the START reconciled to - not 404 (or dead-letter) on
+    // the retired local- id. Mirrors failed_create_cascades_dead_letter_to_dependent_ops but for the
+    // success path: both ops must clear from the outbox and the STOP must actually reach the server.
+    @Test fun start_then_stop_in_one_drain_rekeys_stop_to_server_id() = runTest {
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.START,
+                organizationId = "org1",
+                timeEntryId = "local-1",
+                createdAtMs = 1L,
+                payloadJson = json.encodeToString(
+                    StartPayload("m1", "u1", null, null, "work", emptyList(), start = "2020-01-01T09:00:00Z"),
+                ),
+            ),
+        )
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.STOP,
+                organizationId = "org1",
+                timeEntryId = "local-1",
+                createdAtMs = 2L,
+                payloadJson = json.encodeToString(
+                    StopPayload("u1", "2020-01-01T09:00:00Z", end = "2020-01-01T10:00:00Z"),
+                ),
+            ),
+        )
+        remote.startResult = { it.copy(id = "server-42") }
+
+        val result = buildWorker().doWork()
+        assertEquals(ListenableWorker.Result.success(), result)
+        // Both ops drained cleanly - no dead-letter cascade like the failure-path test asserts.
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+        // The STOP actually reached the server (for the rekeyed id), proving it did not 404 on the
+        // retired local- id.
+        assertEquals("2020-01-01T10:00:00Z", remote.lastEndTime)
+        assertNull(db.timeEntryDao().getById("local-1"))
+        assertEquals(SyncState.SYNCED, db.timeEntryDao().getById("server-42")?.syncState)
+    }
+
+    // SV-025: a dead-lettered UPDATE that is revived (deadLettered reset for retry) but has since
+    // been superseded by a newer synced state for the same entry must be dropped as Outcome.Superseded
+    // rather than replayed over the newer data.
+    @Test fun superseded_revived_update_is_dropped_without_server_call() = runTest {
+        val newer = TimeEntry(
+            id = "server-1",
+            userId = "u1",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "newer",
+        )
+        // The entry already reflects newer, already-synced state (updatedAt is after the stale
+        // op's createdAtMs below), so countNewerPending/newerSynced must classify the revived
+        // UPDATE as superseded.
+        db.timeEntryDao().upsert(newer.toEntity(updatedAt = 100L, syncState = SyncState.SYNCED))
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = "org1",
+                timeEntryId = "server-1",
+                createdAtMs = 1L, // older than the entry's updatedAt = 100L above
+                // Already revived: deadLettered reset to false by resetForRetry, so it re-enters
+                // peekPending() and must be re-evaluated for staleness.
+                deadLettered = false,
+                payloadJson = json.encodeToString(
+                    UpdatePayload("u1", "2026-07-07T08:00:00Z", "2026-07-07T09:00:00Z", "stale", null, null, true, emptyList()),
+                ),
+            ),
+        )
+
+        val result = buildWorker().doWork()
+        assertEquals(ListenableWorker.Result.success(), result)
+        // Dropped outright: no server call was made to overwrite the newer state.
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+        val stored = db.timeEntryDao().getById("server-1")
+        assertEquals("newer", stored?.description)
+        assertEquals(SyncState.SYNCED, stored?.syncState)
+    }
+
+    // SV-023: START duplicate-adoption runs unconditionally, not only when a prior attempt already
+    // bumped attemptCount. A brand-new (attemptCount = 0) START op must still adopt a matching
+    // already-active server entry instead of re-POSTing a duplicate start.
+    @Test fun fresh_start_adopts_existing_active_entry_unconditionally() = runTest {
+        remote.active = TimeEntry(
+            id = "server-9",
+            userId = "u1",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = null,
+        )
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.START,
+                organizationId = "org1",
+                timeEntryId = "local-1",
+                createdAtMs = 1L,
+                attemptCount = 0, // first attempt, not a retry - adoption must still run
+                payloadJson = json.encodeToString(StartPayload("m1", "u1", null, null, "work", emptyList())),
+            ),
+        )
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+        // No duplicate start POST; op cleared and reconciled to the already-active server entry.
+        assertTrue(remote.started.isEmpty())
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+        assertNull(db.timeEntryDao().getById("local-1"))
+        assertEquals(SyncState.SYNCED, db.timeEntryDao().getById("server-9")?.syncState)
+    }
 }

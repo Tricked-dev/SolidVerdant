@@ -161,6 +161,9 @@
     <string name="time_tracking_notification_title">Time Tracking</string>
     <string name="notification_tracking_default">Tracking time</string>
     <string name="notification_quick_start_ready">Ready to track time</string>
+    <!-- Redacted lock-screen (public) versions: must never include description, project, task, tags, org, or duration. -->
+    <string name="notification_public_tracking_title">Timer running</string>
+    <string name="notification_public_paused_title">Timer paused</string>
 
     <!-- Settings -->
     <string name="settings_menu">Settings</string>
