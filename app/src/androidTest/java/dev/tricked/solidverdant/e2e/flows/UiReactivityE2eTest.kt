@@ -9,14 +9,9 @@ package dev.tricked.solidverdant.e2e.flows
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.hasTestTag
-import androidx.compose.ui.test.onFirst
-import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeDown
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidTest
 import dev.tricked.solidverdant.e2e.E2eRule
-import dev.tricked.solidverdant.e2e.TestTags
-import dev.tricked.solidverdant.e2e.assumeApi30OrNewer
 import dev.tricked.solidverdant.e2e.mock.MockSolidtimeServer
 import dev.tricked.solidverdant.e2e.robots.TrackRobot
 import dev.tricked.solidverdant.ui.tracking.TrackingTestTags
@@ -48,14 +43,13 @@ class UiReactivityE2eTest {
         e2e.mockServer.timeEntries.removeAll { it.id == "seed-entry-1" }
         e2e.mockServer.addTimeEntry(renamed)
 
-        pullToRefresh()
+        refreshAndAwait(robot)
 
         robot.assertEntryVisible("Renamed on server")
     }
 
     @Test
     fun entryCreatedElsewhereShowsAfterPullToRefresh() {
-        assumeApi30OrNewer()
         e2e.mockServer.presetLoggedInWorld()
         e2e.launchApp()
         val robot = TrackRobot(e2e.composeRule).waitForHistory().assertEntryVisible("Seeded work")
@@ -67,14 +61,13 @@ class UiReactivityE2eTest {
             ),
         )
 
-        pullToRefresh()
+        refreshAndAwait(robot)
 
         robot.assertEntryVisible("Booked from the web app")
     }
 
     @Test
     fun elapsedTimerVisiblyTicksWhileTracking() {
-        assumeApi30OrNewer()
         e2e.mockServer.presetLoggedInWorld(seededEntry = null)
         e2e.launchApp()
         val robot = TrackRobot(e2e.composeRule).waitForHistory()
@@ -89,13 +82,22 @@ class UiReactivityE2eTest {
         robot.tapStop()
     }
 
-    private fun pullToRefresh() {
-        e2e.composeRule.onAllNodes(hasTestTag(TestTags.TRACK_HISTORY_LIST)).onFirst()
-            .performTouchInput { swipeDown(durationMillis = 400) }
-        e2e.composeRule.waitForIdle()
-    }
-
-    private fun elapsedText(): String = e2e.composeRule.onAllNodes(hasTestTag(TrackingTestTags.ELAPSED_TIMER))
+    private fun elapsedText(): String = e2e.composeRule.onAllNodes(
+        hasTestTag(TrackingTestTags.ELAPSED_TIMER),
+        useUnmergedTree = true,
+    )
         .fetchSemanticsNodes().firstOrNull()
         ?.config?.getOrNull(SemanticsProperties.Text)?.joinToString() ?: ""
+
+    private fun refreshAndAwait(robot: TrackRobot) {
+        val requestsBeforeRefresh = e2e.mockServer.callsMatching("GET", "/time-entries").size
+        robot.tapRefresh()
+        e2e.composeRule.waitUntil(REFRESH_WAIT_MS) {
+            e2e.mockServer.callsMatching("GET", "/time-entries").size > requestsBeforeRefresh
+        }
+    }
+
+    private companion object {
+        const val REFRESH_WAIT_MS = 30_000L
+    }
 }

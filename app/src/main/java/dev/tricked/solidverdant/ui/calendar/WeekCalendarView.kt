@@ -219,6 +219,7 @@ private fun WeekGrid(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .testTag(CalendarTestTags.WEEK_GRID)
             .verticalScroll(scrollState),
     ) {
         Box(modifier = Modifier.fillMaxWidth().height(CalendarTotalHeight)) {

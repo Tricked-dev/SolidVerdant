@@ -769,7 +769,10 @@ fun TrackingScreen(
                             animationSpec = infiniteRepeatable(tween(900), RepeatMode.Restart),
                             label = "sync rotation"
                         )
-                        IconButton(onClick = onRefresh) {
+                        IconButton(
+                            onClick = onRefresh,
+                            modifier = Modifier.testTag(TrackingTestTags.REFRESH_BUTTON),
+                        ) {
                             Icon(
                                 imageVector = Icons.Default.Refresh,
                                 contentDescription = stringResource(R.string.refresh),

@@ -31,7 +31,9 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
     /** Assert a history entry with [description] is shown, waiting for background refresh/sync. */
     fun assertEntryVisible(description: String): TrackRobot = apply {
         waitUntilTextExists(description)
-        composeRule.onAllNodes(hasText(description, substring = true)).onFirst().assertIsDisplayed()
+        composeRule.onAllNodes(hasText(description, substring = true), useUnmergedTree = true)
+            .onFirst()
+            .assertIsDisplayed()
     }
 
     fun entryRowCount(): Int = nodesWithTag(TestTags.TRACK_ENTRY_ROW).fetchSemanticsNodes().size
@@ -44,6 +46,11 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
     fun tapStop(): TrackRobot = apply {
         waitUntilEnabledTagExists(TestTags.TRACK_STOP_BUTTON)
         firstEnabledNodeWithTag(TestTags.TRACK_STOP_BUTTON).performClick()
+    }
+
+    fun tapRefresh(): TrackRobot = apply {
+        waitUntilEnabledTagExists(TestTags.TRACK_REFRESH_BUTTON)
+        firstEnabledNodeWithTag(TestTags.TRACK_REFRESH_BUTTON).performClick()
     }
 
     fun assertStopButtonVisible(): TrackRobot = apply {
@@ -101,7 +108,7 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
         // Wait until the sheet is gone so later text assertions match history rows, not the
         // sheet's own fields.
         composeRule.waitUntil(DEFAULT_TIMEOUT_MS) {
-            composeRule.onAllNodes(hasTestTag(TestTags.TRACK_SHEET_SAVE_BUTTON))
+            composeRule.onAllNodes(hasTestTag(TestTags.TRACK_SHEET_SAVE_BUTTON), useUnmergedTree = true)
                 .fetchSemanticsNodes().isEmpty()
         }
     }
@@ -109,13 +116,14 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
     /** Wait until no history row shows [description] (e.g. after delete). */
     fun waitUntilEntryGone(description: String, timeoutMs: Long = DEFAULT_TIMEOUT_MS): TrackRobot = apply {
         composeRule.waitUntil(timeoutMs) {
-            composeRule.onAllNodes(hasText(description, substring = true)).fetchSemanticsNodes().isEmpty()
+            composeRule.onAllNodes(hasText(description, substring = true), useUnmergedTree = true)
+                .fetchSemanticsNodes().isEmpty()
         }
     }
 
     /** Tap the snackbar action with [label] (localized text resolved by the caller). */
     fun tapSnackbarAction(label: String): TrackRobot = apply {
         waitUntilTextExists(label)
-        composeRule.onAllNodes(hasText(label)).onFirst().performClick()
+        composeRule.onAllNodes(hasText(label), useUnmergedTree = true).onFirst().performClick()
     }
 }

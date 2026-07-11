@@ -9,10 +9,8 @@ package dev.tricked.solidverdant.e2e.flows
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidTest
 import dev.tricked.solidverdant.e2e.E2eRule
-import dev.tricked.solidverdant.e2e.assumeApi30OrNewer
 import dev.tricked.solidverdant.e2e.robots.TrackRobot
 import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -28,9 +26,6 @@ class TrackingLifecycleE2eTest {
 
     @get:Rule
     val e2e = E2eRule(this)
-
-    @Before
-    fun skipOnApi29Ci() = assumeApi30OrNewer()
 
     @Test
     fun startThenStopSyncsACompletedEntryToTheServer() {

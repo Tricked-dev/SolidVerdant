@@ -125,7 +125,13 @@ class MockSolidtimeServer {
     }
 
     /** Deterministic large dataset used by scrolling and composition stress tests. */
-    fun presetStressWorld(entryCount: Int = 250, projectCount: Int = 120, taskCount: Int = 480, tagCount: Int = 160) {
+    fun presetStressWorld(
+        entryCount: Int = 250,
+        projectCount: Int = 120,
+        taskCount: Int = 480,
+        tagCount: Int = 160,
+        newest: Instant = Instant.parse("2026-07-07T16:00:00Z"),
+    ) {
         presetLoggedInWorld(seededEntry = null)
         clients.clear()
         clients += (0 until 40).map { Client("client-$it", "Client ${it.toString().padStart(3, '0')}") }
@@ -150,7 +156,6 @@ class MockSolidtimeServer {
         }
         tags.clear()
         tags += (0 until tagCount).map { Tag("tag-$it", "Tag ${it.toString().padStart(3, '0')}") }
-        val newest = Instant.parse("2026-07-07T16:00:00Z")
         timeEntries.clear()
         timeEntries += (0 until entryCount).map { index ->
             val start = newest.minusSeconds(index * 1_800L)

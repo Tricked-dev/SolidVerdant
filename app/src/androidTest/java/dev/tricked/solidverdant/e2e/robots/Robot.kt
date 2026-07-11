@@ -6,6 +6,7 @@
 
 package dev.tricked.solidverdant.e2e.robots
 
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -22,30 +23,26 @@ import androidx.compose.ui.test.onFirst
 abstract class Robot(protected val composeRule: ComposeTestRule) {
 
     protected fun waitUntilTagExists(tag: String, timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
-        composeRule.waitUntil(timeoutMs) {
-            composeRule.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty()
-        }
+        composeRule.waitUntil(timeoutMs) { nodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty() }
     }
 
     protected fun waitUntilTextExists(text: String, timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
-        composeRule.waitUntil(timeoutMs) {
-            composeRule.onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty()
-        }
+        composeRule.waitUntil(timeoutMs) { nodes(hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty() }
     }
 
-    protected fun nodesWithTag(tag: String) = composeRule.onAllNodes(hasTestTag(tag))
+    protected fun nodesWithTag(tag: String) = nodes(hasTestTag(tag))
 
-    protected fun firstNodeWithTag(tag: String): SemanticsNodeInteraction = composeRule.onAllNodes(hasTestTag(tag)).onFirst()
+    protected fun firstNodeWithTag(tag: String): SemanticsNodeInteraction = nodes(hasTestTag(tag)).onFirst()
 
     protected fun waitUntilEnabledTagExists(tag: String, timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
         val matcher = hasTestTag(tag) and isEnabled()
-        composeRule.waitUntil(timeoutMs) {
-            composeRule.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
-        }
+        composeRule.waitUntil(timeoutMs) { nodes(matcher).fetchSemanticsNodes().isNotEmpty() }
     }
 
-    protected fun firstEnabledNodeWithTag(tag: String): SemanticsNodeInteraction =
-        composeRule.onAllNodes(hasTestTag(tag) and isEnabled()).onFirst()
+    protected fun firstEnabledNodeWithTag(tag: String): SemanticsNodeInteraction = nodes(hasTestTag(tag) and isEnabled()).onFirst()
+
+    /** Test tags often live below a clickable/scrollable production container. */
+    private fun nodes(matcher: SemanticsMatcher) = composeRule.onAllNodes(matcher, useUnmergedTree = true)
 
     companion object {
         const val DEFAULT_TIMEOUT_MS = 10_000L
