@@ -92,6 +92,21 @@ A user traveling, on a device tz ≠ their Solidtime profile tz, or with a non-M
 
 **Thoughts / approach.** Low urgency. Upgrade AGP when a version pinned for SDK 37 lands (Renovate should surface it — the repo already wires Renovate). Until then, track the warning explicitly rather than suppressing it silently.
 
+**Attempt 2026-07-12 — BLOCKED (no changes landed; tree unchanged from baseline).**
+
+Targeted upgrade: `androidGradlePlugin` 8.13.2 → **9.2.1**, Gradle wrapper 8.13 → **9.4.1**, `kotlin` 2.1.10 → **2.3.10**, `ksp` 2.1.10-1.0.30 → matching 2.3.x, `compose-compiler` plugin ref follows `kotlin`, plus forced `room` 2.6.1 → 2.7.x. Verified from official release notes before touching the tree.
+
+**Blocker: detekt has no stable Gradle-9 / Kotlin-2.3 release, and the detekt plugin is applied at configuration time.**
+- AGP 9.2.0/9.2.1 requires **Gradle 9.4.1** and has a built-in-Kotlin runtime dependency that pins **KGP 2.3.10** (auto-upgrades any lower KGP). See developer.android.com/build/releases/agp-9-2-0-release-notes.
+- `app/build.gradle.kts:16` does `alias(libs.plugins.detekt)`. The task is detached from `check`, but the plugin is still **applied**, so it must be config-time compatible with Gradle 9 + Kotlin 2.3.10.
+- detekt **1.23.8** (Feb 2025) is the **last stable release**. It cannot read Kotlin 2.3.0+ metadata (detekt issue #8865, closed "not planned" — no 1.23.x fix will ship: "class 'kotlin.Unit' was compiled with an incompatible version... metadata version is 2.3.0, but the compiler version 2.0.0 can read versions up to 2.1.0") and is not Gradle-9 compatible.
+- The only detekt supporting Gradle 9 + Kotlin 2.3 is **2.0.0-alpha.x** (latest 2.0.0-alpha.5, June 2026; built against Kotlin 2.4 / Gradle 9.5.1 / AGP 9.2.1 / JDK 25) — a **pre-release alpha**. Moving a production static-analysis plugin to an alpha violates the "minimum compatible *stable* version" discipline for a P3 build-hygiene task, so this was not landed.
+
+**What a future attempt needs (any ONE unblocks it):**
+1. A **stable detekt 2.0.0** release supporting Gradle 9.4+ / Kotlin 2.3+ — then bump detekt alongside AGP/Gradle/Kotlin/KSP/Room in one pass. (This is the clean path; watch detekt/detekt releases.)
+2. OR decouple detekt from the main build entirely (remove `alias(libs.plugins.detekt)` from `app/build.gradle.kts` and run it as a separate, independently-versioned convention/module) so the app build no longer forces detekt onto the AGP-9 Kotlin toolchain. Larger refactor; own PR.
+3. When landing, also handle the AGP 9 R8 change: `-keepattributes *Annotation*` no longer matches runtime-invisible annotations — must explicitly add `RuntimeInvisibleAnnotations,RuntimeInvisibleParameterAnnotations,RuntimeInvisibleTypeAnnotations`. And confirm `room` ≥ 2.7.x for KSP 2.3.
+
 ---
 
 *Everything else from the review (SV-001, SV-007–SV-010, SV-013–SV-026, SV-028, SV-029, plus the lint items) is being fixed and regression-tested in the automated pass. SV-003 was retracted (the missing widget string is intentionally `translatable="false"`).*
