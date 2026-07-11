@@ -63,8 +63,10 @@ These keep feature screens consistent with the shared design system. They are en
 Spotless (ktlint + MPL license headers from `spotless/`, max line length 140) is the formatting
 authority. Run `./gradlew spotlessCheck` to verify and `./gradlew spotlessApply` to fix before
 committing. Composables are exempt from function-naming; everything else follows ktlint defaults.
-Renovate (`.github/workflows/renovate.yml` + `renovate.json`) keeps dependencies current; it needs
-the `RENOVATE_TOKEN` repository secret.
+Renovate (`.github/workflows/renovate.yml` + `renovate.json`) keeps dependencies current with the
+built-in `GITHUB_TOKEN` and explicit contents/issues/pull-request write permissions. GitHub may
+hold CI runs created by that token for maintainer approval; use an App or PAT token only when
+fully automatic, no-approval CI triggering is required.
 
 ## Verification
 
