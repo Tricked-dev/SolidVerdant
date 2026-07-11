@@ -7,6 +7,7 @@
 package dev.tricked.solidverdant.sync
 
 import kotlinx.serialization.json.Json
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -30,7 +31,7 @@ class ConflictSnapshotTest {
         assertTrue(a.matches(b))
     }
 
-    @Test fun `timestamp format variance does not differ`() {
+    @Test fun `timestamp format variance does not fabricate a conflict`() {
         val a = ConflictSnapshot.of(
             start = "2026-07-11T09:00:00Z",
             end = "2026-07-11T10:00:00Z",
@@ -147,7 +148,38 @@ class ConflictSnapshotTest {
         val original = baseline()
         val encoded = json.encodeToString(ConflictSnapshot.serializer(), original)
         val decoded = json.decodeFromString(ConflictSnapshot.serializer(), encoded)
+        assertEquals(original, decoded)
         assertTrue(original.matches(decoded))
+    }
+
+    @Test fun `directly-constructed snapshot with unsorted tags still matches its sorted twin`() {
+        val sorted = baseline()
+        val unsorted = sorted.copy(tagIds = listOf("b", "a"))
+        assertTrue(sorted.matches(unsorted))
+        assertTrue(unsorted.matches(sorted))
+    }
+
+    @Test fun `parseable and unparseable timestamps never match`() {
+        val parseable = ConflictSnapshot.of(
+            start = "2026-07-11T09:00:00Z",
+            end = null,
+            description = "work",
+            projectId = null,
+            taskId = null,
+            billable = false,
+            tagIds = emptyList(),
+        )
+        val unparseable = ConflictSnapshot.of(
+            start = "not-a-real-timestamp",
+            end = null,
+            description = "work",
+            projectId = null,
+            taskId = null,
+            billable = false,
+            tagIds = emptyList(),
+        )
+        assertFalse(parseable.matches(unparseable))
+        assertFalse(unparseable.matches(parseable))
     }
 
     @Test fun `unparseable timestamp falls back to raw-string comparison`() {
