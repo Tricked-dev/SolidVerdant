@@ -23,9 +23,21 @@ interface TemplateDao {
 
     @Query(
         "SELECT * FROM entry_templates WHERE organizationId = :orgId " +
+            "AND ownerEndpoint = :endpoint AND ownerUserId = :userId " +
             "ORDER BY isFavorite DESC, sortOrder ASC, createdAtMs ASC",
     )
-    fun observeTemplates(orgId: String): Flow<List<TemplateEntity>>
+    fun observeTemplates(orgId: String, endpoint: String, userId: String): Flow<List<TemplateEntity>>
+
+    /**
+     * Stamp the current account onto legacy templates that predate ownership tracking (all
+     * pre-v6 rows have NULL owners). Runs once at login: a subsequent claim by a different account
+     * matches no rows (they are now owned) and affects 0 rows. Returns the number of rows claimed.
+     */
+    @Query(
+        "UPDATE entry_templates SET ownerEndpoint = :endpoint, ownerUserId = :userId " +
+            "WHERE ownerUserId IS NULL",
+    )
+    suspend fun claimUnowned(endpoint: String, userId: String): Int
 
     @Query("SELECT * FROM entry_templates WHERE id = :id")
     suspend fun getById(id: String): TemplateEntity?

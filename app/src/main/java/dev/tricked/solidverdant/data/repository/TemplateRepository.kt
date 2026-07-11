@@ -6,11 +6,16 @@
 
 package dev.tricked.solidverdant.data.repository
 
+import dev.tricked.solidverdant.data.local.AuthDataStore
+import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.local.db.TemplateDao
 import dev.tricked.solidverdant.data.local.db.TemplateEntity
 import dev.tricked.solidverdant.util.Clock
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 import javax.inject.Inject
@@ -64,7 +69,13 @@ fun TemplateEntity.toModel(): EntryTemplate = EntryTemplate(
     createdAtMs = createdAtMs,
 )
 
-fun EntryTemplate.toEntity(): TemplateEntity = TemplateEntity(
+/**
+ * Owner columns are infrastructure, not part of the [EntryTemplate] product model, so they are
+ * passed in explicitly by the repository (resolved from the current account) rather than carried on
+ * the model. Only the owning account can see or edit a template, so re-stamping the current owner on
+ * every write is safe and keeps the row scoped to its account.
+ */
+fun EntryTemplate.toEntity(ownerEndpoint: String? = null, ownerUserId: String? = null): TemplateEntity = TemplateEntity(
     id = id,
     organizationId = organizationId,
     name = name,
@@ -76,6 +87,8 @@ fun EntryTemplate.toEntity(): TemplateEntity = TemplateEntity(
     isFavorite = isFavorite,
     sortOrder = sortOrder,
     createdAtMs = createdAtMs,
+    ownerEndpoint = ownerEndpoint,
+    ownerUserId = ownerUserId,
 )
 
 /**
@@ -84,11 +97,33 @@ fun EntryTemplate.toEntity(): TemplateEntity = TemplateEntity(
  * (favorites survive per-account, matching gap analysis retention #787).
  */
 @Singleton
-class TemplateRepository @Inject constructor(private val templateDao: TemplateDao, private val clock: Clock) {
-    fun observeTemplates(organizationId: String): Flow<List<EntryTemplate>> =
-        templateDao.observeTemplates(organizationId).map { list -> list.map { it.toModel() } }
+class TemplateRepository @Inject constructor(
+    private val templateDao: TemplateDao,
+    private val clock: Clock,
+    private val authDataStore: AuthDataStore,
+    private val settingsDataStore: SettingsDataStore,
+) {
+    /** Current account = (server endpoint, Solidtime user id). Null userId = no account signed in. */
+    private fun currentUserId(): String? = settingsDataStore.getCachedAuth()?.user?.id
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun observeTemplates(organizationId: String): Flow<List<EntryTemplate>> = authDataStore.endpoint.flatMapLatest { endpoint ->
+        val userId = currentUserId()
+        if (userId == null) {
+            flowOf(emptyList())
+        } else {
+            templateDao.observeTemplates(organizationId, endpoint, userId)
+                .map { list -> list.map { it.toModel() } }
+        }
+    }
 
     suspend fun getTemplate(id: String): EntryTemplate? = templateDao.getById(id)?.toModel()
+
+    /**
+     * Stamp the current account onto legacy (NULL-owner) templates. Called once when the auth cache
+     * is written at login. Returns rows claimed; a second claim by a different account is a no-op.
+     */
+    suspend fun claimUnowned(endpoint: String, userId: String): Int = templateDao.claimUnowned(endpoint, userId)
 
     /**
      * Create a new template appended after existing ones (so it does not jump ahead of the user's
@@ -104,7 +139,11 @@ class TemplateRepository @Inject constructor(private val templateDao: TemplateDa
         billable: Boolean,
         isFavorite: Boolean,
     ): EntryTemplate {
-        val existing = templateDao.observeTemplates(organizationId).first()
+        val ownerEndpoint = authDataStore.endpoint.first()
+        val ownerUserId = currentUserId()
+        val existing = ownerUserId?.let {
+            templateDao.observeTemplates(organizationId, ownerEndpoint, it).first()
+        } ?: emptyList()
         val nextOrder = (existing.maxOfOrNull { it.sortOrder } ?: -1) + 1
         val template = EntryTemplate(
             id = "template-" + UUID.randomUUID().toString(),
@@ -119,7 +158,7 @@ class TemplateRepository @Inject constructor(private val templateDao: TemplateDa
             sortOrder = nextOrder,
             createdAtMs = clock.nowMs(),
         )
-        templateDao.upsert(template.toEntity())
+        templateDao.upsert(template.toEntity(ownerEndpoint, ownerUserId))
         return template
     }
 
@@ -129,7 +168,9 @@ class TemplateRepository @Inject constructor(private val templateDao: TemplateDa
             name = template.name?.trim()?.takeIf { it.isNotEmpty() },
             description = template.description?.trim()?.takeIf { it.isNotEmpty() },
         )
-        templateDao.upsert(normalized.toEntity())
+        // Only the owning account can reach this template, so re-stamping the current owner keeps
+        // ownership intact (the model carries no owner columns to preserve).
+        templateDao.upsert(normalized.toEntity(authDataStore.endpoint.first(), currentUserId()))
     }
 
     suspend fun deleteTemplate(id: String) {
@@ -148,8 +189,14 @@ class TemplateRepository @Inject constructor(private val templateDao: TemplateDa
      */
     suspend fun persistOrder(templates: List<EntryTemplate>) {
         if (templates.isEmpty()) return
+        // These map from the owner-less model, so re-stamp the current account (only the owner can
+        // reach these rows) to avoid nulling the owner columns on reorder.
+        val ownerEndpoint = authDataStore.endpoint.first()
+        val ownerUserId = currentUserId()
         templateDao.upsertAll(
-            templates.mapIndexed { index, template -> template.copy(sortOrder = index).toEntity() },
+            templates.mapIndexed { index, template ->
+                template.copy(sortOrder = index).toEntity(ownerEndpoint, ownerUserId)
+            },
         )
     }
 }
