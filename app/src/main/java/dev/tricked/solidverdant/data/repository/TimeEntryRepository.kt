@@ -16,6 +16,7 @@ import dev.tricked.solidverdant.data.local.db.SyncMetaDao
 import dev.tricked.solidverdant.data.local.db.SyncMetaEntity
 import dev.tricked.solidverdant.data.local.db.SyncState
 import dev.tricked.solidverdant.data.local.db.TimeEntryDao
+import dev.tricked.solidverdant.data.local.db.TimeEntryEntity
 import dev.tricked.solidverdant.data.local.db.toEntity
 import dev.tricked.solidverdant.data.local.db.toModel
 import dev.tricked.solidverdant.data.model.Client
@@ -52,7 +53,9 @@ class TimeEntryRepository @Inject constructor(
     private val json: Json,
     private val database: AppDatabase,
 ) : TimeEntryReader {
-    enum class EntrySyncStatus { SYNCED, PENDING, RETRYING, FAILED }
+    enum class EntrySyncStatus { SYNCED, PENDING, RETRYING, FAILED, CONFLICT }
+
+    data class SyncConflict(val local: TimeEntry, val server: TimeEntry?, val serverDeleted: Boolean, val localDeleted: Boolean)
 
     data class SyncOperation(
         val entryId: String,
@@ -82,6 +85,31 @@ class TimeEntryRepository @Inject constructor(
         }
     }
 
+    fun observeConflicts(organizationId: String): Flow<List<SyncConflict>> = combine(
+        timeEntryDao.observeConflicts(organizationId),
+        catalogDao.observeTags(organizationId),
+        timeEntryDao.observeTagRefs(organizationId),
+    ) { entities, tagEntities, tagRefs ->
+        val tagsById = tagEntities.associate { it.id to it.toModel() }
+        val tagIdsByEntry = tagRefs.groupBy({ it.timeEntryId }, { it.tagId })
+        entities.mapNotNull { entity ->
+            val localTags = tagIdsByEntry[entity.id].orEmpty().mapNotNull { tagsById[it] }
+            val serverJson = entity.conflictServerJson
+            val serverDeleted = serverJson == ConflictSnapshot.DELETED_MARKER
+            val server = if (serverDeleted || serverJson == null) {
+                null
+            } else {
+                runCatching { json.decodeFromString<TimeEntry>(serverJson) }.getOrNull()
+            }
+            SyncConflict(
+                local = entity.toModel(localTags),
+                server = server,
+                serverDeleted = serverDeleted,
+                localDeleted = entity.pendingDelete,
+            )
+        }
+    }
+
     override suspend fun loadMonth(organizationId: String, memberId: String, month: YearMonth) {
         val pageSize = 250
         var offset = 0
@@ -105,7 +133,7 @@ class TimeEntryRepository @Inject constructor(
                 return
             }
             val now = clock.nowMs()
-            timeEntryDao.applyServerEntries(
+            applyServerEntries(
                 response.data.map { it.toEntity(updatedAt = now, syncState = SyncState.SYNCED) },
                 response.data.associate { entry -> entry.id to entry.tags.map { it.id } },
             )
@@ -136,8 +164,12 @@ class TimeEntryRepository @Inject constructor(
 
     fun observeOutboxCount(): Flow<Int> = outboxDao.observeCount()
 
-    fun observeSyncOperations(orgId: String): Flow<List<SyncOperation>> = outboxDao.observeAll().map { operations ->
-        operations.filter { it.organizationId == orgId }.map { op ->
+    fun observeSyncOperations(orgId: String): Flow<List<SyncOperation>> = combine(
+        outboxDao.observeAll(),
+        timeEntryDao.observeConflicts(orgId),
+    ) { operations, conflicts ->
+        val conflictIds = conflicts.map { it.id }.toSet()
+        val queued = operations.filter { it.organizationId == orgId && it.timeEntryId !in conflictIds }.map { op ->
             SyncOperation(
                 entryId = op.timeEntryId,
                 type = op.opType,
@@ -148,6 +180,15 @@ class TimeEntryRepository @Inject constructor(
                 },
                 attemptCount = op.attemptCount,
                 error = op.lastError,
+            )
+        }
+        queued + conflicts.map { conflict ->
+            SyncOperation(
+                entryId = conflict.id,
+                type = OutboxOpType.UPDATE,
+                status = EntrySyncStatus.CONFLICT,
+                attemptCount = 0,
+                error = null,
             )
         }
     }
@@ -176,7 +217,7 @@ class TimeEntryRepository @Inject constructor(
         // Single transaction; the pending-edit/soft-delete guard lives in applyServerEntries.
         // (The previous `updatedAt > now` guard was dead code: updatedAt is always stamped in
         // the past, so it never held and pending edits/deletes were silently overwritten.)
-        timeEntryDao.applyServerEntries(
+        applyServerEntries(
             entries.map { it.toEntity(updatedAt = now, syncState = SyncState.SYNCED) },
             entries.associate { entry -> entry.id to entry.tags.map { it.id } },
         )
@@ -246,6 +287,15 @@ class TimeEntryRepository @Inject constructor(
         val now = clock.nowMs()
         val end = nowIso()
         database.withTransaction {
+            val current = timeEntryDao.getById(entry.id)
+            if (current?.syncState == SyncState.CONFLICT) {
+                // Stopping is the one mutation allowed on a conflicted row: time capture must not
+                // be blocked. Keep the row conflicted and preserve the server recovery copy.
+                timeEntryDao.upsert(
+                    current.copy(end = end, updatedAt = now, pendingDelete = false),
+                )
+                return@withTransaction
+            }
             val base = captureBaseSnapshot(entry.id)
             timeEntryDao.upsert(entry.copy(end = end).toEntity(updatedAt = now, syncState = SyncState.PENDING))
             outboxDao.insert(
@@ -265,6 +315,9 @@ class TimeEntryRepository @Inject constructor(
     suspend fun updateEntry(entry: TimeEntry, tagIds: List<String>) {
         val now = clock.nowMs()
         database.withTransaction {
+            check(timeEntryDao.getById(entry.id)?.syncState != SyncState.CONFLICT) {
+                "Resolve the sync conflict in Review before editing this entry"
+            }
             val base = captureBaseSnapshot(entry.id)
             timeEntryDao.upsert(entry.toEntity(updatedAt = now, syncState = SyncState.PENDING))
             timeEntryDao.replaceTagRefs(entry.id, tagIds)
@@ -358,6 +411,8 @@ class TimeEntryRepository @Inject constructor(
      */
     suspend fun softDeleteLocal(entry: TimeEntry) {
         val now = clock.nowMs()
+        val current = timeEntryDao.getById(entry.id)
+        if (current?.syncState == SyncState.CONFLICT) return
         timeEntryDao.upsert(entry.toEntity(updatedAt = now, syncState = SyncState.PENDING, pendingDelete = true))
     }
 
@@ -376,6 +431,7 @@ class TimeEntryRepository @Inject constructor(
     suspend fun commitDelete(entry: TimeEntry) {
         val now = clock.nowMs()
         database.withTransaction {
+            if (timeEntryDao.getById(entry.id)?.syncState == SyncState.CONFLICT) return@withTransaction
             if (entry.id.startsWith("local-")) {
                 timeEntryDao.deleteById(entry.id)
                 outboxDao.deleteByTimeEntryId(entry.id)
@@ -476,6 +532,180 @@ class TimeEntryRepository @Inject constructor(
      * otherwise the op keeps surfacing in Track's Sync center forever with only a re-failing Retry.
      */
     suspend fun discardFailedSync(entryId: String): Boolean = outboxDao.deleteDeadLetteredByEntryId(entryId) > 0
+
+    suspend fun resolveKeepMine(conflict: SyncConflict, memberId: String?): Boolean {
+        val current = timeEntryDao.getById(conflict.local.id) ?: return false
+        if (current.syncState != SyncState.CONFLICT) return false
+        val serverJson = current.conflictServerJson ?: return false
+        if (conflict.serverDeleted && memberId == null) return false
+        if (!conflict.serverDeleted && conflict.server == null) return false
+        val serverBaseSnapshot = conflict.server?.let { server ->
+            json.encodeToString(
+                ConflictSnapshot.of(
+                    server.start,
+                    server.end,
+                    server.description,
+                    server.projectId,
+                    server.taskId,
+                    server.billable,
+                    server.tags.map { it.id },
+                ),
+            )
+        }
+        val now = clock.nowMs()
+        database.withTransaction {
+            outboxDao.deleteByTimeEntryId(current.id)
+            if (conflict.serverDeleted) {
+                val membership = requireNotNull(memberId)
+                timeEntryDao.upsert(
+                    current.copy(syncState = SyncState.PENDING, pendingDelete = false, conflictServerJson = null, updatedAt = now),
+                )
+                timeEntryDao.replaceTagRefs(current.id, conflict.local.tags.map { it.id })
+                outboxDao.insert(
+                    OutboxEntity(
+                        opType = OutboxOpType.CREATE,
+                        organizationId = current.organizationId,
+                        timeEntryId = current.id,
+                        createdAtMs = now,
+                        clientId = newClientId(),
+                        payloadJson = json.encodeToString(
+                            CreatePayload(
+                                membership,
+                                current.userId,
+                                current.start,
+                                current.end ?: nowIso(),
+                                current.description.orEmpty(),
+                                current.projectId,
+                                current.taskId,
+                                current.billable,
+                                conflict.local.tags.map { it.id },
+                            ),
+                        ),
+                    ),
+                )
+            } else if (current.pendingDelete) {
+                timeEntryDao.upsert(current.copy(syncState = SyncState.PENDING, conflictServerJson = null, updatedAt = now))
+                outboxDao.insert(
+                    OutboxEntity(
+                        opType = OutboxOpType.DELETE,
+                        organizationId = current.organizationId,
+                        timeEntryId = current.id,
+                        createdAtMs = now,
+                        clientId = newClientId(),
+                        payloadJson = "{}",
+                        baseSnapshotJson = serverBaseSnapshot,
+                    ),
+                )
+            } else {
+                timeEntryDao.upsert(current.copy(syncState = SyncState.PENDING, conflictServerJson = null, updatedAt = now))
+                timeEntryDao.replaceTagRefs(current.id, conflict.local.tags.map { it.id })
+                outboxDao.insert(
+                    OutboxEntity(
+                        opType = OutboxOpType.UPDATE,
+                        organizationId = current.organizationId,
+                        timeEntryId = current.id,
+                        createdAtMs = now,
+                        clientId = newClientId(),
+                        payloadJson = json.encodeToString(
+                            UpdatePayload(
+                                current.userId,
+                                current.start,
+                                current.end,
+                                current.description,
+                                current.projectId,
+                                current.taskId,
+                                current.billable,
+                                conflict.local.tags.map { it.id },
+                            ),
+                        ),
+                        baseSnapshotJson = serverBaseSnapshot,
+                    ),
+                )
+            }
+        }
+        return true
+    }
+
+    suspend fun resolveKeepMine(entryId: String, memberId: String?): Boolean {
+        return resolveKeepMine(conflictFor(entryId) ?: return false, memberId)
+    }
+
+    suspend fun resolveKeepTheirs(conflict: SyncConflict): Boolean {
+        val current = timeEntryDao.getById(conflict.local.id) ?: return false
+        if (current.syncState != SyncState.CONFLICT) return false
+        val server = conflict.server ?: run {
+            if (current.conflictServerJson != ConflictSnapshot.DELETED_MARKER) return false
+            timeEntryDao.clearTagRefs(current.id)
+            timeEntryDao.deleteById(current.id)
+            return true
+        }
+        val now = clock.nowMs()
+        database.withTransaction {
+            timeEntryDao.upsert(server.toEntity(updatedAt = now, syncState = SyncState.SYNCED))
+            timeEntryDao.replaceTagRefs(server.id, server.tags.map { it.id })
+            outboxDao.deleteByTimeEntryId(current.id)
+        }
+        return true
+    }
+
+    suspend fun resolveKeepTheirs(entryId: String): Boolean {
+        return resolveKeepTheirs(conflictFor(entryId) ?: return false)
+    }
+
+    private suspend fun conflictFor(entryId: String): SyncConflict? {
+        val entity = timeEntryDao.getById(entryId) ?: return null
+        if (entity.syncState != SyncState.CONFLICT) return null
+        val localTags = timeEntryDao.tagIdsFor(entryId).map { Tag(it) }
+        val serverJson = entity.conflictServerJson ?: return null
+        val serverDeleted = serverJson == ConflictSnapshot.DELETED_MARKER
+        val server = if (serverDeleted) null else runCatching { json.decodeFromString<TimeEntry>(serverJson) }.getOrNull()
+        return SyncConflict(
+            local = entity.toModel(localTags),
+            server = server,
+            serverDeleted = serverDeleted,
+            localDeleted = entity.pendingDelete,
+        )
+    }
+
+    private suspend fun applyServerEntries(entries: List<TimeEntryEntity>, tagIdsByEntry: Map<String, List<String>>) {
+        val bases = outboxDao.peekAll()
+            .filter { it.baseSnapshotJson != null }
+            .groupBy { it.timeEntryId }
+            .mapValues { (_, ops) -> ops.minBy { it.id }.baseSnapshotJson!! }
+        val serverJsonByEntry = entries.associate { entity ->
+            val tags = tagIdsByEntry[entity.id].orEmpty().map { Tag(it) }
+            entity.id to json.encodeToString(
+                TimeEntry(
+                    entity.id,
+                    entity.description,
+                    entity.userId,
+                    entity.start,
+                    entity.end,
+                    entity.duration,
+                    entity.taskId,
+                    entity.projectId,
+                    tags,
+                    entity.billable,
+                    entity.organizationId,
+                ),
+            )
+        }
+        database.withTransaction {
+            timeEntryDao.applyServerEntries(
+                entries = entries,
+                tagIdsByEntry = tagIdsByEntry,
+                baseSnapshotsByEntry = bases,
+                serverJsonByEntry = serverJsonByEntry,
+            )
+            // Pull-side conflicts no longer have a meaningful queued write. Clear them in the
+            // same transaction so Review immediately becomes the sole recovery surface.
+            entries.forEach { entity ->
+                if (timeEntryDao.getById(entity.id)?.syncState == SyncState.CONFLICT) {
+                    outboxDao.deleteByTimeEntryId(entity.id)
+                }
+            }
+        }
+    }
 
     /**
      * SV-027 base-snapshot capture for a STOP/UPDATE/DELETE enqueue, applied inside the same

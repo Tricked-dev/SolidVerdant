@@ -136,10 +136,7 @@ fun InboxPane() {
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     items(items = state.issues, key = { it.key }) { issue ->
-                        DismissibleIssue(
-                            issue = issue,
-                            onDismiss = { viewModel.dismiss(issue) },
-                        ) {
+                        val card = @Composable {
                             InboxIssueCard(
                                 issue = issue,
                                 preventOverlap = state.preventOverlap,
@@ -147,6 +144,7 @@ fun InboxPane() {
                                 zone = zone,
                                 onQuickFix = {
                                     editTarget = when (issue.type) {
+                                        InboxIssueType.CONFLICT -> null
                                         InboxIssueType.GAP -> {
                                             val entry = viewModel.blankEntryFor(
                                                 startIso = isoOf(issue.startMs, zone),
@@ -158,6 +156,17 @@ fun InboxPane() {
                                     }
                                 },
                                 onDismiss = { viewModel.dismiss(issue) },
+                                onKeepMine = { viewModel.keepMine(issue) },
+                                onKeepTheirs = { viewModel.keepTheirs(issue) },
+                            )
+                        }
+                        if (issue.type == InboxIssueType.CONFLICT) {
+                            card()
+                        } else {
+                            DismissibleIssue(
+                                issue = issue,
+                                onDismiss = { viewModel.dismiss(issue) },
+                                content = card,
                             )
                         }
                     }
@@ -341,11 +350,23 @@ internal fun InboxIssueCard(
     zone: ZoneId,
     onQuickFix: () -> Unit,
     onDismiss: () -> Unit,
+    onKeepMine: () -> Unit = {},
+    onKeepTheirs: () -> Unit = {},
 ) {
+    if (issue.type == InboxIssueType.CONFLICT) {
+        ConflictIssueCard(
+            issue = issue,
+            projectsById = projectsById,
+            onKeepMine = onKeepMine,
+            onKeepTheirs = onKeepTheirs,
+        )
+        return
+    }
     val title: String
     val body: String
     val actionLabel: String
     when (issue.type) {
+        InboxIssueType.CONFLICT -> return
         InboxIssueType.OVERLAP -> {
             title = stringResource(R.string.inbox_issue_overlap_title)
             body = if (preventOverlap) {
@@ -373,6 +394,7 @@ internal fun InboxIssueCard(
     }
 
     val subject = when (issue.type) {
+        InboxIssueType.CONFLICT -> null
         InboxIssueType.GAP -> null
         InboxIssueType.OVERLAP -> issue.primaryEntry?.let { entrySubject(it, projectsById) }
         else -> issue.primaryEntry?.let { entrySubject(it, projectsById) }
@@ -407,6 +429,66 @@ internal fun InboxIssueCard(
             }
         }
     }
+}
+
+@Composable
+private fun ConflictIssueCard(issue: InboxIssue, projectsById: Map<String, Project>, onKeepMine: () -> Unit, onKeepTheirs: () -> Unit) {
+    val mine = issue.primaryEntry
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = stringResource(R.string.inbox_issue_conflict_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = stringResource(R.string.inbox_issue_conflict_body),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = stringResource(
+                    R.string.inbox_conflict_mine,
+                    when {
+                        issue.conflictLocalDeleted -> stringResource(R.string.inbox_conflict_deleted)
+                        mine == null -> stringResource(R.string.inbox_conflict_unavailable)
+                        else -> conflictVersionText(mine, projectsById)
+                    },
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = stringResource(
+                    R.string.inbox_conflict_theirs,
+                    when {
+                        issue.conflictServerDeleted -> stringResource(R.string.inbox_conflict_deleted)
+                        issue.conflictServer == null -> stringResource(R.string.inbox_conflict_unavailable)
+                        else -> conflictVersionText(issue.conflictServer, projectsById)
+                    },
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            ) {
+                TextButton(onClick = onKeepTheirs) { Text(stringResource(R.string.inbox_conflict_keep_theirs)) }
+                FilledTonalButton(onClick = onKeepMine) { Text(stringResource(R.string.inbox_conflict_keep_mine)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun conflictVersionText(entry: TimeEntry, projectsById: Map<String, Project>): String {
+    val empty = stringResource(R.string.inbox_conflict_empty_value)
+    val description = entry.description?.takeIf { it.isNotBlank() } ?: empty
+    val project = entry.projectId?.let { projectsById[it]?.name ?: it } ?: empty
+    val tags = entry.tags.joinToString(", ") { it.name.ifBlank { it.id } }.ifBlank { empty }
+    return stringResource(R.string.inbox_conflict_version_summary, description, project, tags)
 }
 
 @Composable

@@ -23,6 +23,8 @@ interface RemoteDataSource {
         limit: Int,
         offset: Int,
         onlyFullDates: Boolean,
+        start: String? = null,
+        end: String? = null,
     ): Result<TimeEntriesResponse>
     suspend fun getProjects(organizationId: String): Result<List<Project>>
     suspend fun getClients(organizationId: String): Result<List<Client>>
@@ -61,8 +63,15 @@ interface RemoteDataSource {
 }
 
 class AuthRemoteDataSource @Inject constructor(private val authRepository: AuthRepository) : RemoteDataSource {
-    override suspend fun getTimeEntries(organizationId: String, memberId: String, limit: Int, offset: Int, onlyFullDates: Boolean) =
-        authRepository.getTimeEntries(organizationId, memberId, limit, offset, onlyFullDates)
+    override suspend fun getTimeEntries(
+        organizationId: String,
+        memberId: String,
+        limit: Int,
+        offset: Int,
+        onlyFullDates: Boolean,
+        start: String?,
+        end: String?,
+    ) = authRepository.getTimeEntries(organizationId, memberId, limit, offset, onlyFullDates, start, end)
     override suspend fun getProjects(organizationId: String) = authRepository.getProjects(organizationId)
     override suspend fun getClients(organizationId: String) = authRepository.getClients(organizationId)
     override suspend fun getTasks(organizationId: String) = authRepository.getTasks(organizationId)

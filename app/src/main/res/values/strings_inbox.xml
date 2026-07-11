@@ -50,6 +50,17 @@
     <string name="inbox_issue_long_body">This entry is %1$s long. Check that it ended when you expected.</string>
     <string name="inbox_action_review">Review</string>
 
+    <string name="inbox_issue_conflict_title">Entry changed elsewhere</string>
+    <string name="inbox_issue_conflict_body">This entry was edited on this device and on the server. Choose which version to keep.</string>
+    <string name="inbox_conflict_mine">Mine: %1$s</string>
+    <string name="inbox_conflict_theirs">Server: %1$s</string>
+    <string name="inbox_conflict_deleted">Deleted</string>
+    <string name="inbox_conflict_unavailable">Unavailable</string>
+    <string name="inbox_conflict_empty_value">—</string>
+    <string name="inbox_conflict_version_summary">%1$s · %2$s · %3$s</string>
+    <string name="inbox_conflict_keep_mine">Keep mine</string>
+    <string name="inbox_conflict_keep_theirs">Keep server</string>
+
     <string name="inbox_action_dismiss">Dismiss</string>
     <string name="inbox_entry_untitled">Untitled entry</string>
 

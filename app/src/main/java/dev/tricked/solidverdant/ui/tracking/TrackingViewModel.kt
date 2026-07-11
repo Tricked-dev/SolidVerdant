@@ -107,6 +107,7 @@ data class TrackingUiState(
     val editingTags: List<String> = emptyList(),
     val editingBillable: Boolean = false,
     val syncOperations: List<TimeEntryRepository.SyncOperation> = emptyList(),
+    val conflictedEntryIds: Set<String> = emptySet(),
 ) {
     /** Mutations retain the legacy internal flag; refresh/sync have independent flags. */
     val isMutating: Boolean get() = isLoading
@@ -300,7 +301,10 @@ class TrackingViewModel @Inject constructor(
         historyWindowMode = HistoryWindowMode.RECENT
         dataCollectorJob = viewModelScope.launch {
             combine(
-                timeEntryRepository.observeTimeEntries(organizationId),
+                combine(
+                    timeEntryRepository.observeTimeEntries(organizationId),
+                    timeEntryRepository.observeConflicts(organizationId),
+                ) { entries, conflicts -> entries to conflicts.map { it.local.id }.toSet() },
                 timeEntryRepository.observeProjects(organizationId),
                 timeEntryRepository.observeTasks(organizationId),
                 combine(
@@ -308,9 +312,10 @@ class TrackingViewModel @Inject constructor(
                     timeEntryRepository.observeClients(organizationId),
                 ) { tags, clients -> tags to clients },
                 timeEntryRepository.observeActiveEntry(organizationId),
-            ) { entries, projects, tasks, catalog, active ->
+            ) { entriesAndConflicts, projects, tasks, catalog, active ->
                 TrackingData(
-                    entries = entries,
+                    entries = entriesAndConflicts.first,
+                    conflictedEntryIds = entriesAndConflicts.second,
                     projects = projects.filterNot { it.isArchived },
                     tasks = tasks.filterNot { it.isDone },
                     tags = catalog.first,
@@ -348,6 +353,7 @@ class TrackingViewModel @Inject constructor(
                     tasks = data.tasks,
                     tags = data.tags,
                     clients = data.clients,
+                    conflictedEntryIds = data.conflictedEntryIds,
                     currentTimeEntry = data.active,
                     isTracking = data.active != null,
                     hasLoadedTimeEntries = true,
@@ -412,6 +418,7 @@ class TrackingViewModel @Inject constructor(
 
     private data class TrackingData(
         val entries: List<TimeEntry>,
+        val conflictedEntryIds: Set<String>,
         val projects: List<Project>,
         val clients: List<Client>,
         val tasks: List<Task>,

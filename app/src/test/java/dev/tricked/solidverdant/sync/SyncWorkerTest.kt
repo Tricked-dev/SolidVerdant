@@ -15,6 +15,8 @@ import dev.tricked.solidverdant.data.local.db.OutboxEntity
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
 import dev.tricked.solidverdant.data.local.db.SyncState
 import dev.tricked.solidverdant.data.local.db.toEntity
+import dev.tricked.solidverdant.data.model.Membership
+import dev.tricked.solidverdant.data.model.Organization
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.FakeRemoteDataSource
 import dev.tricked.solidverdant.util.Clock
@@ -55,7 +57,7 @@ class SyncWorkerTest {
                     appContext: android.content.Context,
                     workerClassName: String,
                     params: androidx.work.WorkerParameters,
-                ) = SyncWorker(appContext, params, db.outboxDao(), db.timeEntryDao(), remote, json, clock, status)
+                ) = SyncWorker(appContext, params, db.outboxDao(), db.timeEntryDao(), db, remote, json, clock, status)
             }).build()
 
     @Test fun start_op_reconciles_temp_id_to_server_id() = runTest {
@@ -224,6 +226,136 @@ class SyncWorkerTest {
         val stored = db.timeEntryDao().getById(local.id)
         assertEquals(SyncState.SYNCED, stored?.syncState)
         assertEquals(3600, stored?.duration)
+    }
+
+    @Test fun update_conflict_preserves_mine_and_does_not_write_server() = runTest {
+        val base = TimeEntry(
+            id = "server-1",
+            userId = "u1",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "before",
+        )
+        val server = base.copy(description = "web edit")
+        remote.entries = listOf(server)
+        remote.memberships = listOf(Membership("m1", "member", Organization("org1", "Org", "USD")))
+        val local = base.copy(description = "mine")
+        db.timeEntryDao().upsert(local.toEntity(2L, SyncState.PENDING))
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = "org1",
+                timeEntryId = local.id,
+                createdAtMs = 2L,
+                payloadJson = json.encodeToString(
+                    UpdatePayload(
+                        "u1",
+                        local.start,
+                        local.end,
+                        local.description,
+                        local.projectId,
+                        local.taskId,
+                        local.billable,
+                        emptyList(),
+                    ),
+                ),
+                baseSnapshotJson = json.encodeToString(
+                    ConflictSnapshot.of(base.start, base.end, base.description, base.projectId, base.taskId, base.billable, emptyList()),
+                ),
+            ),
+        )
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        assertEquals(SyncState.CONFLICT, db.timeEntryDao().getById(local.id)?.syncState)
+        assertEquals("mine", db.timeEntryDao().getById(local.id)?.description)
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+    }
+
+    @Test fun update_pushes_when_server_still_matches_base() = runTest {
+        val base = TimeEntry(
+            id = "server-1",
+            userId = "u1",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "before",
+        )
+        remote.entries = listOf(base)
+        remote.memberships = listOf(Membership("m1", "member", Organization("org1", "Org", "USD")))
+        remote.updateResult = { it.copy(description = "server ack") }
+        val local = base.copy(description = "mine")
+        db.timeEntryDao().upsert(local.toEntity(2L, SyncState.PENDING))
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = "org1",
+                timeEntryId = local.id,
+                createdAtMs = 2L,
+                payloadJson = json.encodeToString(
+                    UpdatePayload(
+                        "u1",
+                        local.start,
+                        local.end,
+                        local.description,
+                        local.projectId,
+                        local.taskId,
+                        local.billable,
+                        emptyList(),
+                    ),
+                ),
+                baseSnapshotJson = json.encodeToString(
+                    ConflictSnapshot.of(base.start, base.end, base.description, base.projectId, base.taskId, base.billable, emptyList()),
+                ),
+            ),
+        )
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        assertEquals(SyncState.SYNCED, db.timeEntryDao().getById(local.id)?.syncState)
+        assertEquals("server ack", db.timeEntryDao().getById(local.id)?.description)
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+    }
+
+    @Test fun absent_server_entry_becomes_deleted_conflict() = runTest {
+        val local = TimeEntry(
+            id = "server-1",
+            userId = "u1",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "mine",
+        )
+        remote.entries = emptyList()
+        remote.memberships = listOf(Membership("m1", "member", Organization("org1", "Org", "USD")))
+        db.timeEntryDao().upsert(local.toEntity(2L, SyncState.PENDING))
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.DELETE,
+                organizationId = "org1",
+                timeEntryId = local.id,
+                createdAtMs = 2L,
+                payloadJson = "{}",
+                baseSnapshotJson = json.encodeToString(
+                    ConflictSnapshot.of(
+                        local.start,
+                        local.end,
+                        local.description,
+                        local.projectId,
+                        local.taskId,
+                        local.billable,
+                        emptyList(),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        assertEquals(SyncState.CONFLICT, db.timeEntryDao().getById(local.id)?.syncState)
+        assertEquals(ConflictSnapshot.DELETED_MARKER, db.timeEntryDao().getById(local.id)?.conflictServerJson)
+        assertTrue(db.outboxDao().peekAll().isEmpty())
     }
 
     // SV-017: an offline START must transmit the timestamp captured when the user actually

@@ -33,11 +33,15 @@ data class InboxIssue(
     val primaryEntry: TimeEntry? = null,
     /** For overlaps, the other entry involved. */
     val secondaryEntry: TimeEntry? = null,
+    /** A persisted local/remote sync conflict; unlike analyzer issues this cannot be dismissed. */
+    val conflictServer: TimeEntry? = null,
+    val conflictServerDeleted: Boolean = false,
+    val conflictLocalDeleted: Boolean = false,
     /** For [InboxIssueType.MISSING_METADATA], which fields are absent. */
     val missingFields: Set<MissingField> = emptySet(),
 )
 
-enum class InboxIssueType { OVERLAP, GAP, MISSING_METADATA, LONG_DURATION }
+enum class InboxIssueType { CONFLICT, OVERLAP, GAP, MISSING_METADATA, LONG_DURATION }
 
 enum class MissingField { PROJECT, TASK, DESCRIPTION, TAGS }
 

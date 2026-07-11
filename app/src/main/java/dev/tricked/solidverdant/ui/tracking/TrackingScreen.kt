@@ -295,7 +295,7 @@ fun TrackingScreen(
 
     LaunchedEffect(editActiveEntryRequested, uiState.currentTimeEntry) {
         if (editActiveEntryRequested) {
-            uiState.currentTimeEntry?.let { showEditDialog = it }
+            uiState.currentTimeEntry?.takeUnless { it.id in uiState.conflictedEntryIds }?.let { showEditDialog = it }
             if (uiState.currentTimeEntry != null) onEditActiveEntryConsumed()
         }
     }
@@ -852,8 +852,17 @@ fun TrackingScreen(
                     }
                 }
                 val overlapCount = uiState.overlapCount
-                val onHistoryEdit = remember<(TimeEntry) -> Unit> { { entry -> showEditDialog = entry } }
-                val onHistoryDelete = remember<(TimeEntry) -> Unit> { { entry -> deletedEntry = entry; onDeleteEntry(entry.id) } }
+                val onHistoryEdit = remember(uiState.conflictedEntryIds) {
+                    { entry: TimeEntry -> if (entry.id !in uiState.conflictedEntryIds) showEditDialog = entry }
+                }
+                val onHistoryDelete = remember(uiState.conflictedEntryIds) {
+                    { entry: TimeEntry ->
+                        if (entry.id !in uiState.conflictedEntryIds) {
+                            deletedEntry = entry
+                            onDeleteEntry(entry.id)
+                        }
+                    }
+                }
                 val onHistoryDateClick = remember<(LocalDate) -> Unit> { { date -> calendarInitialDate = date } }
 
                 LaunchedEffect(uiState.historyJumpDate, groupedEntries) {
@@ -1040,6 +1049,7 @@ fun TrackingScreen(
             preventOverlap = currentMembership?.organization?.preventOverlappingTimeEntries == true,
             templates = templateState.templates,
             onSaveAsTemplate = onSaveTemplateFromForm,
+            saveEnabled = entry.id !in uiState.conflictedEntryIds,
         )
     }
 
@@ -1329,8 +1339,10 @@ private fun SyncCenter(
 ) {
     val failed = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.FAILED }
     val retrying = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.RETRYING }
+    val conflicts = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.CONFLICT }
     val summaryStatus = when {
         failed > 0 -> TimeEntryRepository.EntrySyncStatus.FAILED
+        conflicts > 0 -> TimeEntryRepository.EntrySyncStatus.CONFLICT
         retrying > 0 -> TimeEntryRepository.EntrySyncStatus.RETRYING
         else -> TimeEntryRepository.EntrySyncStatus.PENDING
     }
@@ -1349,6 +1361,7 @@ private fun SyncCenter(
                 Text(
                     when {
                         failed > 0 -> stringResource(R.string.sync_failed_count, failed)
+                        conflicts > 0 -> stringResource(R.string.sync_conflict_count, conflicts)
                         retrying > 0 -> stringResource(R.string.sync_retrying_count, retrying)
                         else -> stringResource(R.string.sync_pending_count, operations.size)
                     },
@@ -2563,6 +2576,7 @@ private fun TimeEntryFormSheet(
     preventOverlap: Boolean = false,
     templates: List<EntryTemplate> = emptyList(),
     onSaveAsTemplate: ((TemplateDraft) -> Unit)? = null,
+    saveEnabled: Boolean = true,
 ) {
     var description by remember { mutableStateOf(entry?.description ?: "") }
     var projectId by remember { mutableStateOf(entry?.projectId) }
@@ -2865,6 +2879,14 @@ private fun TimeEntryFormSheet(
 
                 EntryValidationBanner(result = validation, durationHours = durationHours)
 
+                if (!saveEnabled) {
+                    Text(
+                        text = stringResource(R.string.sync_conflict_edit_locked),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
@@ -2892,7 +2914,7 @@ private fun TimeEntryFormSheet(
                                 endTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
                             )
                         },
-                        enabled = durationIsValid && validation.canSave,
+                        enabled = saveEnabled && durationIsValid && validation.canSave,
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.testTag(TrackingTestTags.SHEET_SAVE_BUTTON)
                     ) {

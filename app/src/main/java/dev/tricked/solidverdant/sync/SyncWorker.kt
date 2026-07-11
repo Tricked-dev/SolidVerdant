@@ -8,10 +8,12 @@ package dev.tricked.solidverdant.sync
 
 import android.content.Context
 import androidx.hilt.work.HiltWorker
+import androidx.room.withTransaction
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import dev.tricked.solidverdant.data.local.db.AppDatabase
 import dev.tricked.solidverdant.data.local.db.OutboxDao
 import dev.tricked.solidverdant.data.local.db.OutboxEntity
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
@@ -25,6 +27,8 @@ import kotlinx.serialization.json.Json
 import retrofit2.HttpException
 import timber.log.Timber
 import java.io.IOException
+import java.time.Duration
+import java.time.Instant
 
 @HiltWorker
 class SyncWorker @AssistedInject constructor(
@@ -32,6 +36,7 @@ class SyncWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
     private val outboxDao: OutboxDao,
     private val timeEntryDao: TimeEntryDao,
+    private val database: AppDatabase,
     private val remote: RemoteDataSource,
     private val json: Json,
     private val clock: Clock,
@@ -45,6 +50,7 @@ class SyncWorker @AssistedInject constructor(
         // (The per-org filtering in observeSyncOperations is only for scoping the UI display.)
         // Dead-lettered ops are excluded so permanently-failed work is never re-attempted.
         val ops = outboxDao.peekPending() // id ASC
+        val conflictIndexes = loadConflictIndexes(ops)
         // Entries whose creating op has been dead-lettered in this run; their dependent ops
         // (still referencing the local- id) can never succeed and are skipped/cascaded.
         val failedEntryIds = mutableSetOf<String>()
@@ -57,9 +63,12 @@ class SyncWorker @AssistedInject constructor(
         val rekeyed = mutableMapOf<String, String>()
         var retryResult: Result? = null
         for (rawOp in ops) {
-            val op = rawOp.rekeyedWith(rekeyed)
+            // A conflict can delete every queued operation for the entry. Re-read before acting
+            // so a stale snapshot from the initial drain cannot write after the conflict was saved.
+            val stored = outboxDao.getById(rawOp.id) ?: continue
+            val op = stored.rekeyedWith(rekeyed)
             if (op.timeEntryId in failedEntryIds) continue
-            when (val outcome = process(op)) {
+            when (val outcome = process(op, conflictIndexes)) {
                 is Outcome.Success -> {
                     outboxDao.delete(op)
                     // Record the rekey so every remaining op for this entry in this same drain
@@ -144,93 +153,198 @@ class SyncWorker @AssistedInject constructor(
         data object Superseded : Outcome()
     }
 
-    private suspend fun process(op: OutboxEntity): Outcome = try {
-        when (op.opType) {
-            OutboxOpType.START -> {
-                val p = json.decodeFromString<StartPayload>(op.payloadJson)
-                // Idempotency: if a previous attempt already committed on the server but its
-                // response was lost, the server now has our single active entry. Adopt it instead
-                // of starting a duplicate. Run this scan unconditionally (not just on retries) so a
-                // process death after the server call committed but before this op was deleted still
-                // adopts the existing entry on the next run instead of re-POSTing a duplicate.
-                val adopted = remote.getActiveTimeEntry().getOrNull()
-                    ?.takeIf { it.userId == p.userId }
-                val server = adopted
-                    ?: remote.startTimeEntry(
-                        op.organizationId,
-                        p.memberId,
-                        p.userId,
-                        p.projectId,
-                        p.taskId,
-                        p.description,
-                        startTime = p.start,
-                    ).getOrThrow()
-                reconcile(op.timeEntryId, server, fallbackTagIds = p.tagIds)
+    private suspend fun process(op: OutboxEntity, conflictIndexes: Map<String, ConflictIndex>): Outcome {
+        return try {
+            if (timeEntryDao.getById(op.timeEntryId)?.syncState == SyncState.CONFLICT) {
+                outboxDao.deleteByTimeEntryId(op.timeEntryId)
+                return Outcome.Superseded
             }
-            OutboxOpType.CREATE -> {
-                val p = json.decodeFromString<CreatePayload>(op.payloadJson)
-                // Idempotency: a matching completed entry may already exist from a committed-but-
-                // unacked prior attempt (including a hard process death right after the server
-                // commit); adopt it rather than creating a duplicate. Run unconditionally, not just
-                // when attemptCount > 0 - attemptCount is only bumped on a *transient* failure, so it
-                // never reflects "we may have already committed this on the server".
-                val adopted = findCreatedDuplicate(op.organizationId, p)
-                val server = adopted ?: run {
-                    val local = TimeEntry(
-                        id = op.timeEntryId, userId = p.userId, organizationId = op.organizationId,
-                        start = p.start, end = p.end, description = p.description,
-                        projectId = p.projectId, taskId = p.taskId, billable = p.billable,
-                    )
-                    remote.createTimeEntry(op.organizationId, p.memberId, p.userId, local, p.tagIds).getOrThrow()
+            if (op.opType in CONFLICT_CHECK_OPS && op.baseSnapshotJson != null) {
+                when (val index = conflictIndexes[op.organizationId]) {
+                    is ConflictIndex.Failed -> return Outcome.Retry
+                    is ConflictIndex.Ready -> {
+                        val server = index.entries[op.timeEntryId]
+                        if (server == null) {
+                            markConflict(op.timeEntryId, ConflictSnapshot.DELETED_MARKER)
+                            return Outcome.Success()
+                        }
+                        val base = json.decodeFromString<ConflictSnapshot>(op.baseSnapshotJson)
+                        val serverSnapshot = server.toConflictSnapshot()
+                        if (!base.matches(serverSnapshot)) {
+                            markConflict(op.timeEntryId, json.encodeToString(server))
+                            return Outcome.Success()
+                        }
+                    }
+                    null -> return Outcome.Retry
                 }
-                reconcile(op.timeEntryId, server, fallbackTagIds = p.tagIds)
             }
-            OutboxOpType.STOP -> {
-                val p = json.decodeFromString<StopPayload>(op.payloadJson)
-                val server = remote.stopTimeEntry(op.organizationId, op.timeEntryId, p.userId, p.start, endTime = p.end).getOrThrow()
-                persistSynced(server)
+            when (op.opType) {
+                OutboxOpType.START -> {
+                    val p = json.decodeFromString<StartPayload>(op.payloadJson)
+                    // Idempotency: if a previous attempt already committed on the server but its
+                    // response was lost, the server now has our single active entry. Adopt it instead
+                    // of starting a duplicate. Run this scan unconditionally (not just on retries) so a
+                    // process death after the server call committed but before this op was deleted still
+                    // adopts the existing entry on the next run instead of re-POSTing a duplicate.
+                    val adopted = remote.getActiveTimeEntry().getOrNull()
+                        ?.takeIf { it.userId == p.userId }
+                    val server = adopted
+                        ?: remote.startTimeEntry(
+                            op.organizationId,
+                            p.memberId,
+                            p.userId,
+                            p.projectId,
+                            p.taskId,
+                            p.description,
+                            startTime = p.start,
+                        ).getOrThrow()
+                    reconcile(op.timeEntryId, server, fallbackTagIds = p.tagIds)
+                }
+                OutboxOpType.CREATE -> {
+                    val p = json.decodeFromString<CreatePayload>(op.payloadJson)
+                    // Idempotency: a matching completed entry may already exist from a committed-but-
+                    // unacked prior attempt (including a hard process death right after the server
+                    // commit); adopt it rather than creating a duplicate. Run unconditionally, not just
+                    // when attemptCount > 0 - attemptCount is only bumped on a *transient* failure, so it
+                    // never reflects "we may have already committed this on the server".
+                    val adopted = findCreatedDuplicate(op.organizationId, p)
+                    val server = adopted ?: run {
+                        val local = TimeEntry(
+                            id = op.timeEntryId, userId = p.userId, organizationId = op.organizationId,
+                            start = p.start, end = p.end, description = p.description,
+                            projectId = p.projectId, taskId = p.taskId, billable = p.billable,
+                        )
+                        remote.createTimeEntry(op.organizationId, p.memberId, p.userId, local, p.tagIds).getOrThrow()
+                    }
+                    reconcile(op.timeEntryId, server, fallbackTagIds = p.tagIds)
+                }
+                OutboxOpType.STOP -> {
+                    val p = json.decodeFromString<StopPayload>(op.payloadJson)
+                    val server = remote.stopTimeEntry(op.organizationId, op.timeEntryId, p.userId, p.start, endTime = p.end).getOrThrow()
+                    persistSynced(server)
+                    Outcome.Success()
+                }
+                OutboxOpType.UPDATE -> {
+                    // A dead-lettered UPDATE revived via resetForRetry re-enters peekPending() with
+                    // deadLettered already cleared, so that flag can't be used here to gate this check -
+                    // it must run for every UPDATE. Guard against a revived-but-superseded op: a later
+                    // write for the same entry may have already synced (and been deleted from the
+                    // outbox) or may still be queued behind this one. Detect the "already synced newer
+                    // state" case by comparing this op's enqueue time against the entry's last-synced
+                    // time; detect the "still queued newer op" case via a row-count check. Either way,
+                    // applying this stale UPDATE now would revert the entry to older data.
+                    val newerQueued = outboxDao.countNewerPending(op.timeEntryId, op.id) > 0
+                    val current = timeEntryDao.getById(op.timeEntryId)
+                    val newerSynced = current != null && current.syncState == SyncState.SYNCED && current.updatedAt > op.createdAtMs
+                    if (newerQueued || newerSynced) {
+                        Outcome.Superseded
+                    } else {
+                        val p = json.decodeFromString<UpdatePayload>(op.payloadJson)
+                        val entry = TimeEntry(
+                            id = op.timeEntryId, description = p.description, userId = p.userId,
+                            start = p.start, end = p.end, projectId = p.projectId, taskId = p.taskId,
+                            billable = p.billable, organizationId = op.organizationId,
+                        )
+                        val server = remote.updateTimeEntry(op.organizationId, entry, p.tagIds).getOrThrow()
+                        persistSynced(server, p.tagIds)
+                        Outcome.Success()
+                    }
+                }
+                OutboxOpType.DELETE -> {
+                    // A purely-local entry never reached the server; treat as done.
+                    if (op.timeEntryId.startsWith("local-")) {
+                        Outcome.Success()
+                    } else {
+                        remote.deleteTimeEntry(op.organizationId, op.timeEntryId).getOrThrow()
+                        timeEntryDao.deleteById(op.timeEntryId)
+                        Outcome.Success()
+                    }
+                }
+            }
+        } catch (e: HttpException) {
+            if (e.code() == 404 && op.opType in CONFLICT_CHECK_OPS && op.baseSnapshotJson != null) {
+                markConflict(op.timeEntryId, ConflictSnapshot.DELETED_MARKER)
                 Outcome.Success()
+            } else {
+                classify(e)
             }
-            OutboxOpType.UPDATE -> {
-                // A dead-lettered UPDATE revived via resetForRetry re-enters peekPending() with
-                // deadLettered already cleared, so that flag can't be used here to gate this check -
-                // it must run for every UPDATE. Guard against a revived-but-superseded op: a later
-                // write for the same entry may have already synced (and been deleted from the
-                // outbox) or may still be queued behind this one. Detect the "already synced newer
-                // state" case by comparing this op's enqueue time against the entry's last-synced
-                // time; detect the "still queued newer op" case via a row-count check. Either way,
-                // applying this stale UPDATE now would revert the entry to older data.
-                val newerQueued = outboxDao.countNewerPending(op.timeEntryId, op.id) > 0
-                val current = timeEntryDao.getById(op.timeEntryId)
-                val newerSynced = current != null && current.syncState == SyncState.SYNCED && current.updatedAt > op.createdAtMs
-                if (newerQueued || newerSynced) {
-                    Outcome.Superseded
-                } else {
-                    val p = json.decodeFromString<UpdatePayload>(op.payloadJson)
-                    val entry = TimeEntry(
-                        id = op.timeEntryId, description = p.description, userId = p.userId,
-                        start = p.start, end = p.end, projectId = p.projectId, taskId = p.taskId,
-                        billable = p.billable, organizationId = op.organizationId,
-                    )
-                    val server = remote.updateTimeEntry(op.organizationId, entry, p.tagIds).getOrThrow()
-                    persistSynced(server, p.tagIds)
-                    Outcome.Success()
+        } catch (e: Exception) {
+            Timber.w(e, "Outbox op ${op.id} failed")
+            classify(e)
+        }
+    }
+
+    private suspend fun markConflict(entryId: String, serverJson: String) {
+        database.withTransaction {
+            val local = timeEntryDao.getById(entryId) ?: return@withTransaction
+            timeEntryDao.upsert(local.copy(syncState = SyncState.CONFLICT, conflictServerJson = serverJson))
+            outboxDao.deleteByTimeEntryId(entryId)
+        }
+    }
+
+    private suspend fun loadConflictIndexes(ops: List<OutboxEntity>): Map<String, ConflictIndex> {
+        val byOrganization = ops
+            .filter { it.opType in CONFLICT_CHECK_OPS && it.baseSnapshotJson != null }
+            .groupBy { it.organizationId }
+        return byOrganization.mapValues { (organizationId, organizationOps) ->
+            runCatching {
+                val memberId = memberIdFor(organizationId, organizationOps)
+                val bounds = conflictWindow(organizationOps)
+                val entries = mutableListOf<TimeEntry>()
+                var offset = 0
+                while (offset < MAX_PAGE_SCAN) {
+                    val response = remote.getTimeEntries(
+                        organizationId,
+                        memberId,
+                        limit = PAGE_SIZE,
+                        offset = offset,
+                        onlyFullDates = false,
+                        start = bounds.first,
+                        end = bounds.second,
+                    ).getOrThrow()
+                    entries += response.data
+                    if (response.data.isEmpty() || response.data.size < PAGE_SIZE ||
+                        offset + response.data.size >= (response.meta?.total ?: Int.MAX_VALUE)
+                    ) {
+                        break
+                    }
+                    offset += response.data.size
                 }
+                ConflictIndex.Ready(entries.associateBy { it.id })
+            }.getOrElse { error ->
+                Timber.w(error, "Could not fetch conflict comparison data")
+                ConflictIndex.Failed
             }
-            OutboxOpType.DELETE -> {
-                // A purely-local entry never reached the server; treat as done.
-                if (op.timeEntryId.startsWith("local-")) {
-                    Outcome.Success()
-                } else {
-                    remote.deleteTimeEntry(op.organizationId, op.timeEntryId).getOrThrow()
-                    timeEntryDao.deleteById(op.timeEntryId)
-                    Outcome.Success()
+        }
+    }
+
+    private suspend fun memberIdFor(organizationId: String, ops: List<OutboxEntity>): String {
+        val payloadMember = ops.firstNotNullOfOrNull { op ->
+            when (op.opType) {
+                OutboxOpType.START -> runCatching { json.decodeFromString<StartPayload>(op.payloadJson).memberId }.getOrNull()
+                OutboxOpType.CREATE -> runCatching { json.decodeFromString<CreatePayload>(op.payloadJson).memberId }.getOrNull()
+                else -> null
+            }
+        }
+        if (!payloadMember.isNullOrBlank()) return payloadMember
+        return remote.getMyMemberships().getOrThrow().firstOrNull { it.organizationId == organizationId }?.id
+            ?: throw IOException("No membership available for queued sync")
+    }
+
+    private suspend fun conflictWindow(ops: List<OutboxEntity>): Pair<String?, String?> {
+        val instants = buildList {
+            ops.forEach { op ->
+                val base = runCatching { json.decodeFromString<ConflictSnapshot>(op.baseSnapshotJson!!) }.getOrNull()
+                base?.startMs?.let(::add)
+                timeEntryDao.getById(op.timeEntryId)?.start?.let { raw ->
+                    runCatching { Instant.parse(raw).toEpochMilli() }.getOrNull()?.let(::add)
                 }
             }
         }
-    } catch (e: Exception) {
-        Timber.w(e, "Outbox op ${op.id} failed")
-        classify(e)
+        if (instants.isEmpty()) return null to null
+        val padding = Duration.ofDays(1).toMillis()
+        return Instant.ofEpochMilli(instants.min() - padding).toString() to
+            Instant.ofEpochMilli(maxOf(instants.max() + padding, clock.nowMs() + padding)).toString()
     }
 
     /**
@@ -285,7 +399,26 @@ class SyncWorker @AssistedInject constructor(
     }
 
     companion object {
+        private const val PAGE_SIZE = 250
+        private const val MAX_PAGE_SCAN = 15_000
+        private val CONFLICT_CHECK_OPS = setOf(OutboxOpType.STOP, OutboxOpType.UPDATE, OutboxOpType.DELETE)
+
         /** Cap on transient retries before an op is moved to the dead-letter state. */
         const val MAX_ATTEMPTS = 5
     }
 }
+
+private sealed class ConflictIndex {
+    data class Ready(val entries: Map<String, TimeEntry>) : ConflictIndex()
+    data object Failed : ConflictIndex()
+}
+
+private fun TimeEntry.toConflictSnapshot(): ConflictSnapshot = ConflictSnapshot.of(
+    start = start,
+    end = end,
+    description = description,
+    projectId = projectId,
+    taskId = taskId,
+    billable = billable,
+    tagIds = tags.map { it.id },
+)

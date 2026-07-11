@@ -43,6 +43,17 @@
     <string name="inbox_issue_long_body">この項目は %1$s です。想定どおりに終了したか確認してください。</string>
     <string name="inbox_action_review">レビュー</string>
 
+    <string name="inbox_issue_conflict_title">別の場所で項目が変更されました</string>
+    <string name="inbox_issue_conflict_body">この項目は端末とサーバーの両方で変更されています。残すバージョンを選択してください。</string>
+    <string name="inbox_conflict_mine">自分の版: %1$s</string>
+    <string name="inbox_conflict_theirs">サーバー: %1$s</string>
+    <string name="inbox_conflict_deleted">削除済み</string>
+    <string name="inbox_conflict_unavailable">利用できません</string>
+    <string name="inbox_conflict_empty_value">—</string>
+    <string name="inbox_conflict_version_summary">%1$s · %2$s · %3$s</string>
+    <string name="inbox_conflict_keep_mine">自分の版を残す</string>
+    <string name="inbox_conflict_keep_theirs">サーバー版を残す</string>
+
     <string name="inbox_action_dismiss">閉じる</string>
     <string name="inbox_entry_untitled">無題の項目</string>
 

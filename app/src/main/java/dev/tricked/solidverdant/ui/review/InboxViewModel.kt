@@ -69,6 +69,7 @@ class InboxViewModel @Inject constructor(
 
     private data class InboxData(
         val entries: List<TimeEntry>,
+        val conflicts: List<TimeEntryRepository.SyncConflict>,
         val projects: List<Project>,
         val tasks: List<Task>,
         val tags: List<Tag>,
@@ -113,7 +114,10 @@ class InboxViewModel @Inject constructor(
             } else {
                 maybeInitialRefresh(ctx)
                 combine(
-                    timeEntryRepository.observeTimeEntries(ctx.organizationId),
+                    combine(
+                        timeEntryRepository.observeTimeEntries(ctx.organizationId),
+                        timeEntryRepository.observeConflicts(ctx.organizationId),
+                    ) { entries, conflicts -> entries to conflicts },
                     timeEntryRepository.observeProjects(ctx.organizationId),
                     timeEntryRepository.observeTasks(ctx.organizationId),
                     timeEntryRepository.observeTags(ctx.organizationId),
@@ -124,10 +128,12 @@ class InboxViewModel @Inject constructor(
                     ) { settings, longTimerHours, dismissals ->
                         Triple(settings, longTimerHours, dismissals)
                     },
-                ) { entries, projects, tasks, tags, config ->
+                ) { entryData, projects, tasks, tags, config ->
+                    val (entries, conflicts) = entryData
                     val (settings, longTimerHours, dismissals) = config
                     ctx to InboxData(
                         entries = entries,
+                        conflicts = conflicts,
                         projects = projects.filterNot { it.isArchived },
                         tasks = tasks.filterNot { it.isDone },
                         tags = tags,
@@ -151,7 +157,22 @@ class InboxViewModel @Inject constructor(
                     .filter { now - it.dismissedAtMs <= retentionMs }
                     .map { it.issueKey }
                     .toSet()
-                Triple(now, config, InboxAnalyzer.analyze(data.entries, config, activeDismissed, now, zone))
+                val analyzerIssues = InboxAnalyzer.analyze(data.entries, config, activeDismissed, now, zone)
+                val conflictIssues = data.conflicts.map { conflict ->
+                    val startMs = parseEpochMillis(conflict.local.start) ?: now
+                    val endMs = conflict.local.end?.let(::parseEpochMillis) ?: now
+                    InboxIssue(
+                        key = "conflict:${conflict.local.id}",
+                        type = dev.tricked.solidverdant.domain.inbox.InboxIssueType.CONFLICT,
+                        startMs = startMs,
+                        endMs = maxOf(startMs, endMs),
+                        primaryEntry = conflict.local,
+                        conflictServer = conflict.server,
+                        conflictServerDeleted = conflict.serverDeleted,
+                        conflictLocalDeleted = conflict.localDeleted,
+                    )
+                }
+                Triple(now, config, conflictIssues + analyzerIssues)
             }
             pruneExpiredDismissals(data.dismissals, now)
             _uiState.update {
@@ -159,7 +180,7 @@ class InboxViewModel @Inject constructor(
                     isLoading = false,
                     organizationId = ctx.organizationId,
                     issues = issues,
-                    hasEntries = data.entries.isNotEmpty(),
+                    hasEntries = data.entries.isNotEmpty() || data.conflicts.isNotEmpty(),
                     config = config,
                     preventOverlap = ctx.preventOverlap,
                     projects = data.projects,
@@ -191,6 +212,7 @@ class InboxViewModel @Inject constructor(
 
     /** Persist a dismissal for [issue]; the analyzer immediately drops it from the list. */
     fun dismiss(issue: InboxIssue) {
+        if (issue.type == dev.tricked.solidverdant.domain.inbox.InboxIssueType.CONFLICT) return
         val ctx = context ?: return
         viewModelScope.launch {
             dismissalDao.upsert(
@@ -222,6 +244,41 @@ class InboxViewModel @Inject constructor(
 
     fun consumeRefreshError() {
         _uiState.update { it.copy(refreshError = false) }
+    }
+
+    fun keepMine(issue: InboxIssue) {
+        if (issue.type != dev.tricked.solidverdant.domain.inbox.InboxIssueType.CONFLICT) return
+        val ctx = context ?: return
+        val entryId = issue.primaryEntry?.id ?: return
+        viewModelScope.launch {
+            runCatching { timeEntryRepository.resolveKeepMine(entryId, ctx.memberId) }
+                .onSuccess { resolved ->
+                    if (resolved) {
+                        syncTrigger.requestSync()
+                    } else {
+                        _uiState.update { it.copy(actionError = InboxActionError.RESOLVE_FAILED) }
+                    }
+                }
+                .onFailure {
+                    Timber.w(it, "Failed to keep local conflict version")
+                    _uiState.update { it.copy(actionError = InboxActionError.RESOLVE_FAILED) }
+                }
+        }
+    }
+
+    fun keepTheirs(issue: InboxIssue) {
+        if (issue.type != dev.tricked.solidverdant.domain.inbox.InboxIssueType.CONFLICT) return
+        val entryId = issue.primaryEntry?.id ?: return
+        viewModelScope.launch {
+            runCatching { timeEntryRepository.resolveKeepTheirs(entryId) }
+                .onSuccess { resolved ->
+                    if (!resolved) _uiState.update { it.copy(actionError = InboxActionError.RESOLVE_FAILED) }
+                }
+                .onFailure {
+                    Timber.w(it, "Failed to keep server conflict version")
+                    _uiState.update { it.copy(actionError = InboxActionError.RESOLVE_FAILED) }
+                }
+        }
     }
 
     /**
@@ -348,4 +405,8 @@ class InboxViewModel @Inject constructor(
             expired.forEach { runCatching { dismissalDao.deleteByKey(it.issueKey) } }
         }
     }
+
+    private fun parseEpochMillis(value: String): Long? = runCatching {
+        java.time.OffsetDateTime.parse(value).toInstant().toEpochMilli()
+    }.getOrNull()
 }

@@ -44,6 +44,17 @@
     <string name="inbox_issue_long_body">Dit item duurt %1$s. Controleer of het op het verwachte moment is gestopt.</string>
     <string name="inbox_action_review">Nakijken</string>
 
+    <string name="inbox_issue_conflict_title">Item elders gewijzigd</string>
+    <string name="inbox_issue_conflict_body">Dit item is op dit apparaat en op de server gewijzigd. Kies welke versie je wilt behouden.</string>
+    <string name="inbox_conflict_mine">Mijn versie: %1$s</string>
+    <string name="inbox_conflict_theirs">Server: %1$s</string>
+    <string name="inbox_conflict_deleted">Verwijderd</string>
+    <string name="inbox_conflict_unavailable">Niet beschikbaar</string>
+    <string name="inbox_conflict_empty_value">—</string>
+    <string name="inbox_conflict_version_summary">%1$s · %2$s · %3$s</string>
+    <string name="inbox_conflict_keep_mine">Mijn versie houden</string>
+    <string name="inbox_conflict_keep_theirs">Serverversie houden</string>
+
     <string name="inbox_action_dismiss">Negeren</string>
     <string name="inbox_entry_untitled">Item zonder titel</string>
 

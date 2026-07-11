@@ -64,6 +64,11 @@ fun SyncChip(status: EntrySyncStatus, modifier: Modifier = Modifier, showLabel: 
             color = MaterialTheme.colorScheme.syncFailed
             labelRes = R.string.sync_failed
         }
+        EntrySyncStatus.CONFLICT -> {
+            icon = Icons.Filled.SyncProblem
+            color = MaterialTheme.colorScheme.error
+            labelRes = R.string.sync_conflict
+        }
     }
     val label = stringResource(labelRes)
     Row(

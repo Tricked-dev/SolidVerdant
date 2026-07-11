@@ -20,6 +20,7 @@ import dev.tricked.solidverdant.data.remote.ApiClientFactory
 import dev.tricked.solidverdant.util.PKCEUtil
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import retrofit2.HttpException
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -460,7 +461,8 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
     suspend fun deleteTimeEntry(organizationId: String, timeEntryId: String): Result<Unit> = try {
         val endpoint = authDataStore.getEndpoint()
         val api = apiClientFactory.createApi(endpoint)
-        api.deleteTimeEntry(organizationId, timeEntryId)
+        val response = api.deleteTimeEntry(organizationId, timeEntryId)
+        if (!response.isSuccessful) throw HttpException(response)
         Timber.d("Time entry deleted")
         Result.success(Unit)
     } catch (e: Exception) {

@@ -13,6 +13,7 @@ import dev.tricked.solidverdant.data.local.db.OutboxEntity
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
 import dev.tricked.solidverdant.data.local.db.SyncState
 import dev.tricked.solidverdant.data.local.db.toEntity
+import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.FakeRemoteDataSource
 import dev.tricked.solidverdant.sync.ConflictSnapshot
@@ -36,6 +37,7 @@ class TimeEntryRepositoryWriteTest {
     private val clock = object : Clock {
         override fun nowMs() = 1234L
     }
+    private val testJson = Json { encodeDefaults = true }
 
     @Before fun setup() {
         db = Room.inMemoryDatabaseBuilder(
@@ -461,5 +463,200 @@ class TimeEntryRepositoryWriteTest {
 
         val updateOp = db.outboxDao().peekAll().single { it.opType == OutboxOpType.UPDATE }
         assertNull(updateOp.baseSnapshotJson)
+    }
+
+    @Test fun refresh_marks_diverged_pending_edit_as_conflict_and_drops_outbox() = runTest {
+        val base = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "before",
+        )
+        val server = base.copy(description = "changed on web")
+        val fake = FakeRemoteDataSource(entries = listOf(server))
+        val repo2 =
+            TimeEntryRepository(
+                db.timeEntryDao(),
+                db.catalogDao(),
+                db.outboxDao(),
+                db.syncMetaDao(),
+                fake,
+                clock,
+                Json {
+                    encodeDefaults =
+                        true
+                },
+                db,
+            )
+        db.timeEntryDao().upsert(base.copy(description = "mine").toEntity(2L, SyncState.PENDING))
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = "org1",
+                timeEntryId = base.id,
+                createdAtMs = 2L,
+                payloadJson = "{}",
+                baseSnapshotJson = testJson.encodeToString(
+                    ConflictSnapshot.of(base.start, base.end, base.description, base.projectId, base.taskId, base.billable, emptyList()),
+                ),
+            ),
+        )
+
+        repo2.refreshAll("org1", "member")
+
+        val stored = db.timeEntryDao().getById(base.id)
+        assertEquals(SyncState.CONFLICT, stored?.syncState)
+        assertEquals("mine", stored?.description)
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+        assertTrue(stored?.conflictServerJson?.contains("changed on web") == true)
+    }
+
+    @Test fun refresh_keeps_pending_edit_when_server_still_matches_base() = runTest {
+        val server = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "before",
+        )
+        val fake = FakeRemoteDataSource(entries = listOf(server))
+        val repo2 =
+            TimeEntryRepository(
+                db.timeEntryDao(),
+                db.catalogDao(),
+                db.outboxDao(),
+                db.syncMetaDao(),
+                fake,
+                clock,
+                Json {
+                    encodeDefaults =
+                        true
+                },
+                db,
+            )
+        db.timeEntryDao().upsert(server.copy(description = "mine").toEntity(2L, SyncState.PENDING))
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = "org1",
+                timeEntryId = server.id,
+                createdAtMs = 2L,
+                payloadJson = "{}",
+                baseSnapshotJson = testJson.encodeToString(
+                    ConflictSnapshot.of(
+                        server.start,
+                        server.end,
+                        server.description,
+                        server.projectId,
+                        server.taskId,
+                        server.billable,
+                        emptyList(),
+                    ),
+                ),
+            ),
+        )
+
+        repo2.refreshAll("org1", "member")
+
+        assertEquals(SyncState.PENDING, db.timeEntryDao().getById(server.id)?.syncState)
+        assertEquals("mine", db.timeEntryDao().getById(server.id)?.description)
+        assertEquals(1, db.outboxDao().peekAll().size)
+    }
+
+    @Test fun keep_mine_requeues_update_against_conflicting_server_copy() = runTest {
+        val server = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "server",
+        )
+        val local = server.copy(description = "mine", tags = listOf(Tag("tag-1")))
+        val json = Json { encodeDefaults = true }
+        db.timeEntryDao().upsert(
+            local.toEntity(2L, SyncState.CONFLICT).copy(conflictServerJson = json.encodeToString(server)),
+        )
+        db.timeEntryDao().replaceTagRefs(local.id, listOf("tag-1"))
+
+        assertTrue(repo.resolveKeepMine(local.id, "member"))
+
+        val stored = db.timeEntryDao().getById(local.id)
+        val op = db.outboxDao().peekAll().single()
+        assertEquals(SyncState.PENDING, stored?.syncState)
+        assertNull(stored?.conflictServerJson)
+        assertEquals(OutboxOpType.UPDATE, op.opType)
+        assertEquals("server", Json.decodeFromString<ConflictSnapshot>(op.baseSnapshotJson!!).description)
+    }
+
+    @Test fun keep_theirs_restores_server_copy_and_clears_conflict() = runTest {
+        val local = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "mine",
+        )
+        val server = local.copy(description = "server")
+        val json = Json { encodeDefaults = true }
+        db.timeEntryDao().upsert(local.toEntity(2L, SyncState.CONFLICT).copy(conflictServerJson = json.encodeToString(server)))
+
+        assertTrue(repo.resolveKeepTheirs(local.id))
+
+        val stored = db.timeEntryDao().getById(local.id)
+        assertEquals(SyncState.SYNCED, stored?.syncState)
+        assertEquals("server", stored?.description)
+        assertNull(stored?.conflictServerJson)
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+    }
+
+    @Test fun conflicted_entry_can_stop_but_other_mutations_are_locked() = runTest {
+        val entry = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = null,
+            description = "mine",
+        )
+        db.timeEntryDao().upsert(
+            entry.toEntity(2L, SyncState.CONFLICT).copy(conflictServerJson = ConflictSnapshot.DELETED_MARKER),
+        )
+
+        repo.stopEntry(entry, "u")
+
+        assertEquals(SyncState.CONFLICT, db.timeEntryDao().getById(entry.id)?.syncState)
+        assertTrue(db.timeEntryDao().getById(entry.id)?.end != null)
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+        runCatching { repo.updateEntry(entry.copy(description = "blocked"), emptyList()) }
+            .onSuccess { error("Expected conflicted edit to be rejected") }
+            .onFailure { assertTrue(it is IllegalStateException) }
+    }
+
+    @Test fun keep_mine_recreates_an_entry_deleted_on_server() = runTest {
+        val entry = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "mine",
+        )
+        db.timeEntryDao().upsert(
+            entry.toEntity(2L, SyncState.CONFLICT).copy(conflictServerJson = ConflictSnapshot.DELETED_MARKER),
+        )
+
+        assertTrue(repo.resolveKeepMine(entry.id, "member"))
+
+        val stored = db.timeEntryDao().getById(entry.id)
+        val op = db.outboxDao().peekAll().single()
+        assertEquals(SyncState.PENDING, stored?.syncState)
+        assertEquals(OutboxOpType.CREATE, op.opType)
+        assertEquals(entry.id, op.timeEntryId)
+        assertNull(op.baseSnapshotJson)
     }
 }

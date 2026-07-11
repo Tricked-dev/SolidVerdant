@@ -36,8 +36,15 @@ class FakeRemoteDataSource(
     var lastEndTime: String? = null
     val deleted = mutableListOf<String>()
 
-    override suspend fun getTimeEntries(organizationId: String, memberId: String, limit: Int, offset: Int, onlyFullDates: Boolean) =
-        Result.success(TimeEntriesResponse(data = entries))
+    override suspend fun getTimeEntries(
+        organizationId: String,
+        memberId: String,
+        limit: Int,
+        offset: Int,
+        onlyFullDates: Boolean,
+        start: String?,
+        end: String?,
+    ) = Result.success(TimeEntriesResponse(data = entries))
     override suspend fun getProjects(organizationId: String) = Result.success(projects)
     override suspend fun getClients(organizationId: String) = Result.success(clients)
     override suspend fun getTasks(organizationId: String) = Result.success(tasks)
