@@ -111,4 +111,62 @@ class MigrationTest {
         }
         helper.close()
     }
+
+    @Test fun migration_4_5_adds_conflict_columns() {
+        val helper = openHelper(4) { db ->
+            db.execSQL(
+                "CREATE TABLE outbox (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "opType TEXT NOT NULL, organizationId TEXT NOT NULL, timeEntryId TEXT NOT NULL, " +
+                    "payloadJson TEXT NOT NULL, createdAtMs INTEGER NOT NULL, " +
+                    "attemptCount INTEGER NOT NULL, lastError TEXT, clientId TEXT NOT NULL, " +
+                    "deadLettered INTEGER NOT NULL)",
+            )
+            db.execSQL(
+                "INSERT INTO outbox (opType, organizationId, timeEntryId, payloadJson, createdAtMs, " +
+                    "attemptCount, clientId, deadLettered) " +
+                    "VALUES ('START', 'org1', 'local-1', '{}', 1, 0, 'client-1', 0)",
+            )
+            db.execSQL(
+                "CREATE TABLE time_entries (`id` TEXT NOT NULL, `description` TEXT, " +
+                    "`userId` TEXT NOT NULL, `start` TEXT NOT NULL, `end` TEXT, `duration` INTEGER, " +
+                    "`taskId` TEXT, `projectId` TEXT, `billable` INTEGER NOT NULL, " +
+                    "`organizationId` TEXT NOT NULL, `updatedAt` INTEGER NOT NULL, " +
+                    "`syncState` TEXT NOT NULL, `pendingDelete` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+            )
+            db.execSQL(
+                "INSERT INTO time_entries (id, description, userId, start, end, duration, taskId, " +
+                    "projectId, billable, organizationId, updatedAt, syncState, pendingDelete) " +
+                    "VALUES ('te1', 'desc', 'user1', '2026-07-11T00:00:00Z', NULL, NULL, NULL, NULL, " +
+                    "0, 'org1', 1, 'SYNCED', 0)",
+            )
+        }
+        val db = helper.writableDatabase
+
+        AppDatabase.MIGRATION_4_5.migrate(db)
+
+        // Pre-existing rows read the new nullable columns back as NULL.
+        db.query("SELECT baseSnapshotJson FROM outbox WHERE timeEntryId = 'local-1'").use { c ->
+            c.moveToFirst()
+            assertEquals(null, c.getString(0))
+        }
+        db.query("SELECT conflictServerJson FROM time_entries WHERE id = 'te1'").use { c ->
+            c.moveToFirst()
+            assertEquals(null, c.getString(0))
+        }
+
+        // A row can be written with syncState='CONFLICT' and read back.
+        db.execSQL(
+            "INSERT INTO time_entries (id, description, userId, start, end, duration, taskId, " +
+                "projectId, billable, organizationId, updatedAt, syncState, pendingDelete, " +
+                "conflictServerJson) " +
+                "VALUES ('te2', 'desc2', 'user1', '2026-07-11T00:00:00Z', NULL, NULL, NULL, NULL, " +
+                "0, 'org1', 1, 'CONFLICT', 0, '{\"id\":\"te2\"}')",
+        )
+        db.query("SELECT syncState, conflictServerJson FROM time_entries WHERE id = 'te2'").use { c ->
+            c.moveToFirst()
+            assertEquals("CONFLICT", c.getString(0))
+            assertEquals("{\"id\":\"te2\"}", c.getString(1))
+        }
+        helper.close()
+    }
 }

@@ -33,4 +33,9 @@ data class OutboxEntity(
      * the user can inspect and explicitly retry it.
      */
     val deadLettered: Boolean = false,
+    /**
+     * The last server-acked TimeEntry JSON this outbox operation's local edit was based on
+     * (SV-027 conflict detection "base" snapshot). Null when no snapshot was captured.
+     */
+    val baseSnapshotJson: String? = null,
 )

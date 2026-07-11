@@ -27,7 +27,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TemplateEntity::class,
         InboxDismissalEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -104,6 +104,23 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+        /**
+         * v4 -> v5 adds sync-conflict-detection columns (SV-027):
+         *  - `outbox.baseSnapshotJson`: last server-acked content a local edit was based on.
+         *  - `time_entries.conflictServerJson`: full server TimeEntry JSON ("theirs") captured at
+         *    conflict-detection time.
+         * Both are additive nullable columns; no existing data changes. [SyncState.CONFLICT] is
+         * stored as its name via [Converters], same as the existing enum values, so no column-type
+         * change is needed for `syncState` itself.
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `outbox` ADD COLUMN `baseSnapshotJson` TEXT")
+                db.execSQL("ALTER TABLE `time_entries` ADD COLUMN `conflictServerJson` TEXT")
+            }
+        }
+
+        val MIGRATIONS: Array<Migration> =
+            arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
     }
 }

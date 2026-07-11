@@ -10,7 +10,7 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-enum class SyncState { SYNCED, PENDING }
+enum class SyncState { SYNCED, PENDING, CONFLICT }
 
 @Entity(
     tableName = "time_entries",
@@ -30,6 +30,11 @@ data class TimeEntryEntity(
     val updatedAt: Long,
     val syncState: SyncState,
     val pendingDelete: Boolean,
+    /**
+     * Full server TimeEntry JSON captured as "theirs" at conflict-detection time (SV-027). Null
+     * unless [syncState] is [SyncState.CONFLICT].
+     */
+    val conflictServerJson: String? = null,
 )
 
 @Entity(tableName = "projects")
