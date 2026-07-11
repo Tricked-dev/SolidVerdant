@@ -24,6 +24,7 @@ import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.RemoteDataSource
+import dev.tricked.solidverdant.sync.ConflictSnapshot
 import dev.tricked.solidverdant.sync.CreatePayload
 import dev.tricked.solidverdant.sync.StartPayload
 import dev.tricked.solidverdant.sync.StopPayload
@@ -245,6 +246,7 @@ class TimeEntryRepository @Inject constructor(
         val now = clock.nowMs()
         val end = nowIso()
         database.withTransaction {
+            val base = captureBaseSnapshot(entry.id)
             timeEntryDao.upsert(entry.copy(end = end).toEntity(updatedAt = now, syncState = SyncState.PENDING))
             outboxDao.insert(
                 OutboxEntity(
@@ -254,6 +256,7 @@ class TimeEntryRepository @Inject constructor(
                     createdAtMs = now,
                     clientId = newClientId(),
                     payloadJson = json.encodeToString(StopPayload(userId, entry.start, end = end)),
+                    baseSnapshotJson = base,
                 ),
             )
         }
@@ -262,6 +265,7 @@ class TimeEntryRepository @Inject constructor(
     suspend fun updateEntry(entry: TimeEntry, tagIds: List<String>) {
         val now = clock.nowMs()
         database.withTransaction {
+            val base = captureBaseSnapshot(entry.id)
             timeEntryDao.upsert(entry.toEntity(updatedAt = now, syncState = SyncState.PENDING))
             timeEntryDao.replaceTagRefs(entry.id, tagIds)
             outboxDao.insert(
@@ -283,6 +287,7 @@ class TimeEntryRepository @Inject constructor(
                             tagIds,
                         ),
                     ),
+                    baseSnapshotJson = base,
                 ),
             )
         }
@@ -375,6 +380,11 @@ class TimeEntryRepository @Inject constructor(
                 timeEntryDao.deleteById(entry.id)
                 outboxDao.deleteByTimeEntryId(entry.id)
             } else {
+                // softDeleteLocal has already flipped this row to PENDING by the time we get here,
+                // but the content fields are still the last server-acked ones - captureBaseSnapshot
+                // reads them from the entity, not from `entry`, so the PENDING flag flip is
+                // irrelevant to what gets snapshotted (SV-027 rule 3).
+                val base = captureBaseSnapshot(entry.id)
                 outboxDao.insert(
                     OutboxEntity(
                         opType = OutboxOpType.DELETE,
@@ -383,6 +393,7 @@ class TimeEntryRepository @Inject constructor(
                         createdAtMs = now,
                         clientId = newClientId(),
                         payloadJson = "{}",
+                        baseSnapshotJson = base,
                     ),
                 )
             }
@@ -465,6 +476,33 @@ class TimeEntryRepository @Inject constructor(
      * otherwise the op keeps surfacing in Track's Sync center forever with only a re-failing Retry.
      */
     suspend fun discardFailedSync(entryId: String): Boolean = outboxDao.deleteDeadLetteredByEntryId(entryId) > 0
+
+    /**
+     * SV-027 base-snapshot capture for a STOP/UPDATE/DELETE enqueue, applied inside the same
+     * transaction that enqueues the op, before the local mutation is written. Rules, in order:
+     * 1. a queued op for this entry already carries a base -> reuse the oldest such base (an
+     *    offline STOP->UPDATE chain shares the pre-stop base);
+     * 2. else a queued START/CREATE exists for the entry -> null (born locally, nothing on the
+     *    server to diverge from);
+     * 3. else -> snapshot the entity's pre-mutation content (the last server-acked content).
+     */
+    private suspend fun captureBaseSnapshot(entryId: String): String? {
+        outboxDao.oldestBaseSnapshot(entryId)?.let { return it }
+        if (outboxDao.hasPendingCreateOrStart(entryId)) return null
+        val current = timeEntryDao.getById(entryId) ?: return null
+        val tagIds = timeEntryDao.tagIdsFor(entryId)
+        return json.encodeToString(
+            ConflictSnapshot.of(
+                start = current.start,
+                end = current.end,
+                description = current.description,
+                projectId = current.projectId,
+                taskId = current.taskId,
+                billable = current.billable,
+                tagIds = tagIds,
+            ),
+        )
+    }
 
     /** Stable idempotency key for a new outbox operation; persisted on the row (see OutboxEntity). */
     private fun newClientId(): String = java.util.UUID.randomUUID().toString()

@@ -15,12 +15,14 @@ import dev.tricked.solidverdant.data.local.db.SyncState
 import dev.tricked.solidverdant.data.local.db.toEntity
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.FakeRemoteDataSource
+import dev.tricked.solidverdant.sync.ConflictSnapshot
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -364,5 +366,100 @@ class TimeEntryRepositoryWriteTest {
 
         assertTrue(repo.discardFailedSync(entryId))
         assertTrue(db.outboxDao().peekAll().none { it.timeEntryId == entryId })
+    }
+
+    @Test fun update_on_synced_entry_captures_pre_mutation_base() = runTest {
+        // SV-027 rule 3: no queued op yet, no queued START/CREATE -> base = pre-mutation content.
+        val entry = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "old text",
+        )
+        db.timeEntryDao().upsert(entry.toEntity(1L, SyncState.SYNCED))
+
+        repo.updateEntry(entry.copy(description = "new text"), tagIds = emptyList())
+
+        val op = db.outboxDao().peekAll().single { it.opType == OutboxOpType.UPDATE }
+        val base = Json.decodeFromString<ConflictSnapshot>(op.baseSnapshotJson!!)
+        assertEquals("old text", base.description)
+    }
+
+    @Test fun stop_captures_pre_stop_base() = runTest {
+        // SV-027 rule 3: base for a STOP op must reflect the entry before `end` was written.
+        val entry = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = null,
+            description = "running",
+        )
+        db.timeEntryDao().upsert(entry.toEntity(1L, SyncState.SYNCED))
+
+        repo.stopEntry(entry, "u")
+
+        val op = db.outboxDao().peekAll().single { it.opType == OutboxOpType.STOP }
+        val base = Json.decodeFromString<ConflictSnapshot>(op.baseSnapshotJson!!)
+        assertNull(base.endMs)
+    }
+
+    @Test fun delete_captures_base_despite_pending_flag() = runTest {
+        // SV-027 rule 3: softDeleteLocal flips syncState to PENDING before commitDelete enqueues the
+        // DELETE op, but the base must still be the untouched (pre-delete) server-acked content.
+        val entry = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "untouched content",
+        )
+        db.timeEntryDao().upsert(entry.toEntity(1L, SyncState.SYNCED))
+
+        repo.softDeleteLocal(entry)
+        repo.commitDelete(entry)
+
+        val op = db.outboxDao().peekAll().single { it.opType == OutboxOpType.DELETE }
+        val base = Json.decodeFromString<ConflictSnapshot>(op.baseSnapshotJson!!)
+        assertEquals("untouched content", base.description)
+    }
+
+    @Test fun chained_ops_reuse_oldest_base() = runTest {
+        // SV-027 rule 1: an offline STOP -> UPDATE chain must share the pre-stop base, not
+        // re-snapshot the just-written (post-stop) content.
+        val entry = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = null,
+            description = "pre-stop text",
+        )
+        db.timeEntryDao().upsert(entry.toEntity(1L, SyncState.SYNCED))
+
+        repo.stopEntry(entry, "u")
+        val stopped = entry.copy(end = "2026-07-07T09:00:00Z")
+        repo.updateEntry(stopped.copy(description = "edited offline"), tagIds = emptyList())
+
+        val ops = db.outboxDao().peekAll()
+        val stopBase = Json.decodeFromString<ConflictSnapshot>(ops.single { it.opType == OutboxOpType.STOP }.baseSnapshotJson!!)
+        val updateBase = Json.decodeFromString<ConflictSnapshot>(ops.single { it.opType == OutboxOpType.UPDATE }.baseSnapshotJson!!)
+        assertEquals(stopBase, updateBase)
+        assertEquals("pre-stop text", updateBase.description)
+        assertNull(updateBase.endMs)
+    }
+
+    @Test fun ops_on_locally_created_entry_have_null_base() = runTest {
+        // SV-027 rule 2: a queued START/CREATE for the entry means it was born locally - nothing on
+        // the server to diverge from, so subsequent ops get a null base.
+        val entry = repo.startEntry("org1", "m", "u", null, null, "x", emptyList())
+
+        repo.updateEntry(entry.copy(description = "edited"), tagIds = emptyList())
+
+        val updateOp = db.outboxDao().peekAll().single { it.opType == OutboxOpType.UPDATE }
+        assertNull(updateOp.baseSnapshotJson)
     }
 }
