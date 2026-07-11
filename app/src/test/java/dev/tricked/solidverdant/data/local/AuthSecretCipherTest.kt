@@ -1,12 +1,19 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.local
 
-import javax.crypto.KeyGenerator
-import javax.crypto.SecretKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
 
 class AuthSecretCipherTest {
     private val key = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
@@ -41,5 +48,30 @@ class AuthSecretCipherTest {
     @Test(expected = IllegalArgumentException::class)
     fun `plaintext cannot be read as ciphertext`() {
         cipher.decrypt("legacy-plaintext-token")
+    }
+
+    @Test
+    fun `decryptOrNull returns null when the key is lost`() {
+        val encrypted = cipher.encrypt("access-token-secret")
+
+        // Simulates the Keystore key being lost or invalidated (data restore to a new device):
+        // the envelope is intact but no longer decryptable with the current key.
+        val rotatedKey = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
+        val rotatedCipher = AuthSecretCipher(object : SecretKeyProvider {
+            override fun getOrCreate(): SecretKey = rotatedKey
+        })
+
+        assertNull(rotatedCipher.decryptOrNull(encrypted))
+    }
+
+    @Test
+    fun `decryptOrNull returns null for a corrupt envelope`() {
+        assertNull(cipher.decryptOrNull("enc:v1:not-valid-base64-payload"))
+    }
+
+    @Test
+    fun `decryptOrNull recovers a valid secret`() {
+        val encrypted = cipher.encrypt("access-token-secret")
+        assertEquals("access-token-secret", cipher.decryptOrNull(encrypted))
     }
 }

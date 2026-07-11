@@ -197,4 +197,11 @@
     <string name="widget_not_tracking">追跡していません</string>
     <string name="widget_login_required">ログインが必要です</string>
 
+    <!-- 時間エントリの検証（編集・作成） -->
+    <string name="entry_error_end_before_start">終了時刻は開始時刻より後にしてください。</string>
+    <string name="entry_error_duration_too_long">このエントリは24時間を超えています。開始と終了の時刻を確認してください。</string>
+    <string name="entry_warning_long_duration">このエントリは%1$d時間です。正しい場合のみ保存してください。</string>
+    <string name="entry_warning_overlap">このエントリは他のエントリと重複しています。重複は許可されますが、フラグが付く場合があります。</string>
+    <string name="entry_warning_overlap_policy">このエントリは他のエントリと重複しており、組織のポリシーで推奨されていません。</string>
+
 </resources>

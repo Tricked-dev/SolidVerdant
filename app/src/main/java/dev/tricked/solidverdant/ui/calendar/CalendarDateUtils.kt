@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.calendar
 
 import dev.tricked.solidverdant.data.model.TimeEntry
@@ -24,12 +30,18 @@ fun monthGridWeeks(month: YearMonth, weekStart: DayOfWeek = DayOfWeek.MONDAY): L
         .chunked(7)
 }
 
-fun entryLocalDate(entry: TimeEntry): LocalDate = try {
+/**
+ * Resolves the local date an entry started on, or null when [TimeEntry.start] cannot be parsed.
+ *
+ * Returning null (rather than falling back to today) keeps malformed entries from polluting the
+ * current day's totals; callers must skip null buckets. Mirrors the aggregator's safe startDate.
+ */
+fun entryLocalDate(entry: TimeEntry): LocalDate? = try {
     ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME)
         .withZoneSameInstant(ZoneId.systemDefault())
         .toLocalDate()
 } catch (_: Exception) {
-    LocalDate.now()
+    null
 }
 
 fun entryDurationSeconds(entry: TimeEntry, now: Instant): Long {

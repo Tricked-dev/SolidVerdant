@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.service
 
 import android.annotation.SuppressLint
@@ -18,11 +24,11 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.edit
 import dagger.hilt.android.AndroidEntryPoint
 import dev.tricked.solidverdant.R
-import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.ApiClientFactory
 import dev.tricked.solidverdant.data.repository.AuthRepository
+import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.ui.tile.ProjectSelectionActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -113,7 +119,7 @@ class TimeTrackingTileService : TileService() {
                     val projectName = intent.getStringExtra(EXTRA_PROJECT_NAME)
                     val taskName = intent.getStringExtra(EXTRA_TASK_NAME)
 
-                    Timber.d("Received start tracking broadcast: project=$projectName, task=$taskName, projectId=$projectId, taskId=$taskId")
+                    Timber.d("Received start tracking broadcast from tile")
 
                     // Optimistic update immediately
                     setOptimisticStarting(projectName, taskName)
@@ -213,14 +219,8 @@ class TimeTrackingTileService : TileService() {
         }
     }
 
-    private fun doStartTracking(
-        projectId: String?,
-        taskId: String?,
-        description: String,
-        projectName: String?,
-        taskName: String?
-    ) {
-        Timber.d("doStartTracking called: projectId=$projectId, taskId=$taskId, projectName=$projectName, taskName=$taskName")
+    private fun doStartTracking(projectId: String?, taskId: String?, description: String, projectName: String?, taskName: String?) {
+        Timber.d("Starting time entry from tile")
         serviceScope.launch {
             try {
                 Timber.d("Fetching memberships and user info...")
@@ -243,7 +243,7 @@ class TimeTrackingTileService : TileService() {
                     userId = user.id,
                     projectId = projectId,
                     taskId = taskId,
-                    description = description
+                    description = description,
                 )
 
                 result.onSuccess { entry ->
@@ -257,7 +257,7 @@ class TimeTrackingTileService : TileService() {
                         startTime = Instant.parse(entry.start),
                         projectName = projectName,
                         taskName = taskName,
-                        description = description.takeIf { it.isNotBlank() }
+                        description = description.takeIf { it.isNotBlank() },
                     )
 
                     refreshTile()
@@ -287,7 +287,7 @@ class TimeTrackingTileService : TileService() {
                     organizationId = activeEntry.organizationId,
                     timeEntryId = activeEntry.id,
                     userId = activeEntry.userId,
-                    startTime = activeEntry.start
+                    startTime = activeEntry.start,
                 )
 
                 result.onSuccess {
@@ -333,7 +333,7 @@ class TimeTrackingTileService : TileService() {
                     organizationId = cached.organizationId,
                     timeEntryId = cached.entryId,
                     userId = cached.userId,
-                    startTime = cached.startTime
+                    startTime = cached.startTime,
                 )
 
                 result.onSuccess {
@@ -426,11 +426,11 @@ class TimeTrackingTileService : TileService() {
                         val activeEntry = result.getOrNull()
                         if (activeEntry != null) {
                             val entryChanged = activeEntry.id != cachedId ||
-                                    activeEntry.projectId != prefs.getString(
-                                PREF_LAST_PROJECT_ID,
-                                null
-                            ) ||
-                                    activeEntry.taskId != prefs.getString(PREF_LAST_TASK_ID, null)
+                                activeEntry.projectId != prefs.getString(
+                                    PREF_LAST_PROJECT_ID,
+                                    null,
+                                ) ||
+                                activeEntry.taskId != prefs.getString(PREF_LAST_TASK_ID, null)
 
                             val (projectName, taskName) = if (entryChanged) {
                                 loadNames(activeEntry).also { (project, task) ->
@@ -439,13 +439,13 @@ class TimeTrackingTileService : TileService() {
                             } else {
                                 Pair(
                                     prefs.getString(PREF_LAST_PROJECT_NAME, null),
-                                    prefs.getString(PREF_LAST_TASK_NAME, null)
+                                    prefs.getString(PREF_LAST_TASK_NAME, null),
                                 )
                             }
 
                             applyState(
                                 tile,
-                                TileState.Active(projectName, taskName, activeEntry.description)
+                                TileState.Active(projectName, taskName, activeEntry.description),
                             )
 
                             // (Re)assert the tracking notification whenever an entry is
@@ -459,7 +459,7 @@ class TimeTrackingTileService : TileService() {
                                 startTime = Instant.parse(activeEntry.start),
                                 projectName = projectName,
                                 taskName = taskName,
-                                description = activeEntry.description
+                                description = activeEntry.description,
                             )
                         } else if (cachedId != null) {
                             // Network succeeded, no active entry - stopped externally
@@ -484,7 +484,6 @@ class TimeTrackingTileService : TileService() {
                         Timber.d("Network failed: ${result.exceptionOrNull()?.message}, keeping cached state")
                     }
                 }
-
             } catch (e: Exception) {
                 Timber.e(e, "Failed to update tile")
                 applyFallbackState()
@@ -523,11 +522,7 @@ class TimeTrackingTileService : TileService() {
     private sealed class TileState {
         object NotLoggedIn : TileState()
         object Inactive : TileState()
-        data class Active(
-            val projectName: String?,
-            val taskName: String?,
-            val description: String?
-        ) : TileState()
+        data class Active(val projectName: String?, val taskName: String?, val description: String?) : TileState()
 
         data class Starting(val projectName: String?, val taskName: String?) : TileState()
         object Stopping : TileState()
@@ -560,7 +555,7 @@ class TimeTrackingTileService : TileService() {
                 tile.label = state.projectName ?: "Tracking"
                 tile.subtitle = state.taskName
                     ?: state.description?.takeIf { it.isNotEmpty() }
-                            ?: "Tap to stop"
+                    ?: "Tap to stop"
                 tile.icon = Icon.createWithResource(this, R.drawable.ic_stop)
             }
 
@@ -620,16 +615,14 @@ class TimeTrackingTileService : TileService() {
         }
     }
 
-    private fun getOptimisticState(): TileState? {
-        return when (prefs.getString(PREF_OPTIMISTIC_STATE, null)) {
-            "starting" -> TileState.Starting(
-                prefs.getString(PREF_OPTIMISTIC_PROJECT, null),
-                prefs.getString(PREF_OPTIMISTIC_TASK, null)
-            )
+    private fun getOptimisticState(): TileState? = when (prefs.getString(PREF_OPTIMISTIC_STATE, null)) {
+        "starting" -> TileState.Starting(
+            prefs.getString(PREF_OPTIMISTIC_PROJECT, null),
+            prefs.getString(PREF_OPTIMISTIC_TASK, null),
+        )
 
-            "stopping" -> TileState.Stopping
-            else -> null
-        }
+        "stopping" -> TileState.Stopping
+        else -> null
     }
 
     private fun clearOptimisticState() {
@@ -686,12 +679,7 @@ class TimeTrackingTileService : TileService() {
         return CachedEntry(entryId, orgId, userId, startTime)
     }
 
-    private data class CachedEntry(
-        val entryId: String,
-        val organizationId: String,
-        val userId: String,
-        val startTime: String
-    )
+    private data class CachedEntry(val entryId: String, val organizationId: String, val userId: String, val startTime: String)
 
     private suspend fun loadNames(entry: TimeEntry): Pair<String?, String?> {
         val cachedProject = prefs.getString(PREF_LAST_PROJECT_NAME, null)
@@ -743,8 +731,10 @@ class TimeTrackingTileService : TileService() {
         val intent = Intent(this, ProjectSelectionActivity::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             val pendingIntent = PendingIntent.getActivity(
-                this, 0, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                this,
+                0,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
             startActivityAndCollapse(pendingIntent)
         } else {
@@ -770,7 +760,7 @@ class TimeTrackingTileService : TileService() {
             val channel = NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
                 "Time Tracking Errors",
-                NotificationManager.IMPORTANCE_HIGH
+                NotificationManager.IMPORTANCE_HIGH,
             )
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }

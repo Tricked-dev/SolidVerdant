@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fase 2 statistieken: filters, vergelijking met vorige periode, uitsplitsing en CSV-export. -->
+
+    <!-- CSV-exportkolomkoppen. -->
+    <string name="stats2_csv_col_entry_id">Vermelding-ID</string>
+    <string name="stats2_csv_col_start">Begin</string>
+    <string name="stats2_csv_col_end">Einde</string>
+    <string name="stats2_csv_col_timezone">Tijdzone</string>
+    <string name="stats2_csv_col_duration_seconds">Duur (seconden)</string>
+    <string name="stats2_csv_col_duration">Duur</string>
+    <string name="stats2_csv_col_organization">Organisatie</string>
+    <string name="stats2_csv_col_project">Project</string>
+    <string name="stats2_csv_col_client">Klant</string>
+    <string name="stats2_csv_col_task">Taak</string>
+    <string name="stats2_csv_col_tags">Labels</string>
+    <string name="stats2_csv_col_description">Omschrijving</string>
+    <string name="stats2_csv_col_billable">Factureerbaar</string>
+    <string name="stats2_yes">Ja</string>
+    <string name="stats2_no">Nee</string>
+
+    <!-- Exportactie en feedback. -->
+    <string name="stats2_export">CSV exporteren</string>
+    <string name="stats2_export_content_description">Exporteer het huidige gefilterde bereik als CSV</string>
+    <string name="stats2_exporting">Export voorbereiden…</string>
+    <string name="stats2_export_empty">Niets te exporteren voor dit bereik</string>
+    <string name="stats2_export_error">Kan de export niet maken. Probeer het opnieuw.</string>
+    <string name="stats2_export_chooser_title">Tijdregistraties delen (CSV)</string>
+
+    <!-- Filterbalk en filtervenster. -->
+    <string name="stats2_filters">Filters</string>
+    <string name="stats2_filters_content_description">Statistiekfilters bewerken</string>
+    <string name="stats2_filter_sheet_title">Statistieken filteren</string>
+    <string name="stats2_active_scope_none">Alle geregistreerde tijd wordt getoond</string>
+    <string name="stats2_clear_filters">Wissen</string>
+    <string name="stats2_clear_filters_content_description">Alle statistiekfilters wissen</string>
+    <string name="stats2_reset">Herstellen</string>
+    <string name="stats2_apply">Toepassen</string>
+    <string name="stats2_filter_projects">Projecten</string>
+    <string name="stats2_filter_clients">Klanten</string>
+    <string name="stats2_filter_tasks">Taken</string>
+    <string name="stats2_filter_tags">Labels</string>
+    <string name="stats2_filter_billable">Factureerbaarheid</string>
+    <string name="stats2_billable_all">Alles</string>
+    <string name="stats2_billable_billable">Factureerbaar</string>
+    <string name="stats2_billable_nonbillable">Niet-factureerbaar</string>
+    <string name="stats2_filter_empty_projects">Geen projecten beschikbaar</string>
+    <string name="stats2_filter_empty_clients">Geen klanten beschikbaar</string>
+    <string name="stats2_filter_empty_tasks">Geen taken beschikbaar</string>
+    <string name="stats2_filter_empty_tags">Geen labels beschikbaar</string>
+    <string name="stats2_no_project">Geen project</string>
+    <plurals name="stats2_active_filters">
+        <item quantity="one">%1$d filter actief</item>
+        <item quantity="other">%1$d filters actief</item>
+    </plurals>
+
+    <!-- Vergelijking met vorige periode. -->
+    <string name="stats2_comparison_title">t.o.v. vorige periode</string>
+    <string name="stats2_comparison_range">%1$s – %2$s</string>
+    <string name="stats2_comparison_no_data">Geen geregistreerde tijd in de vorige periode</string>
+    <string name="stats2_metric_total">Totaal</string>
+    <string name="stats2_metric_billable">Factureerbaar</string>
+    <string name="stats2_metric_avg_per_day">Gem. / dag</string>
+    <string name="stats2_top_changes">Grootste projectwijzigingen</string>
+    <string name="stats2_delta_percent">%1$s%%</string>
+    <string name="stats2_delta_new">nieuw</string>
+    <string name="stats2_delta_flat">geen wijziging</string>
+    <string name="stats2_delta_increase_content_description">omhoog %1$s</string>
+    <string name="stats2_delta_decrease_content_description">omlaag %1$s</string>
+    <string name="stats2_delta_flat_content_description">geen wijziging t.o.v. vorige periode</string>
+
+    <!-- Uitsplitsingvenster. -->
+    <string name="stats2_drilldown_close">Sluiten</string>
+    <string name="stats2_drilldown_empty">Geen vermeldingen in deze selectie</string>
+    <string name="stats2_drilldown_total">Totaal %1$s</string>
+    <string name="stats2_drilldown_no_description">(geen omschrijving)</string>
+    <string name="stats2_drilldown_project_content_description">Toon vermeldingen voor %1$s</string>
+    <string name="stats2_drilldown_bucket_content_description">Toon vermeldingen voor %1$s</string>
+    <plurals name="stats2_drilldown_entries">
+        <item quantity="one">%1$d vermelding</item>
+        <item quantity="other">%1$d vermeldingen</item>
+    </plurals>
+</resources>

@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.repository
 
 import dev.tricked.solidverdant.data.local.db.CatalogDao
@@ -10,27 +16,27 @@ import dev.tricked.solidverdant.data.local.db.SyncState
 import dev.tricked.solidverdant.data.local.db.TimeEntryDao
 import dev.tricked.solidverdant.data.local.db.toEntity
 import dev.tricked.solidverdant.data.local.db.toModel
+import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
-import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.remote.RemoteDataSource
+import dev.tricked.solidverdant.sync.CreatePayload
 import dev.tricked.solidverdant.sync.StartPayload
 import dev.tricked.solidverdant.sync.StopPayload
 import dev.tricked.solidverdant.sync.UpdatePayload
-import dev.tricked.solidverdant.sync.CreatePayload
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 import timber.log.Timber
-import javax.inject.Inject
-import javax.inject.Singleton
 import java.time.YearMonth
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import javax.inject.Inject
+import javax.inject.Singleton
 
 @Singleton
 class TimeEntryRepository @Inject constructor(
@@ -40,7 +46,7 @@ class TimeEntryRepository @Inject constructor(
     private val syncMetaDao: SyncMetaDao,
     private val remote: RemoteDataSource,
     private val clock: Clock,
-    private val json: Json
+    private val json: Json,
 ) : TimeEntryReader {
     enum class EntrySyncStatus { SYNCED, PENDING, RETRYING, FAILED }
 
@@ -51,29 +57,26 @@ class TimeEntryRepository @Inject constructor(
         val attemptCount: Int,
         val error: String?,
     )
-    fun observeProjects(orgId: String): Flow<List<Project>> =
-        catalogDao.observeProjects(orgId).map { list -> list.map { it.toModel() } }
+    fun observeProjects(orgId: String): Flow<List<Project>> = catalogDao.observeProjects(orgId).map { list -> list.map { it.toModel() } }
 
-    fun observeClients(orgId: String): Flow<List<Client>> =
-        catalogDao.observeClients(orgId).map { list -> list.map { it.toModel() } }
+    fun observeClients(orgId: String): Flow<List<Client>> = catalogDao.observeClients(orgId).map { list -> list.map { it.toModel() } }
 
-    fun observeTasks(orgId: String): Flow<List<Task>> =
-        catalogDao.observeTasks(orgId).map { list -> list.map { it.toModel() } }
+    fun observeTasks(orgId: String): Flow<List<Task>> = catalogDao.observeTasks(orgId).map { list -> list.map { it.toModel() } }
 
-    fun observeTags(orgId: String): Flow<List<Tag>> =
-        catalogDao.observeTags(orgId).map { list -> list.map { it.toModel() } }
+    fun observeTags(orgId: String): Flow<List<Tag>> = catalogDao.observeTags(orgId).map { list -> list.map { it.toModel() } }
 
-    override fun observeTimeEntries(organizationId: String): Flow<List<TimeEntry>> =
-        combine(
-            timeEntryDao.observeVisibleEntries(organizationId),
-            catalogDao.observeTags(organizationId)
-        ) { entities, tagEntities ->
-            val tagsById = tagEntities.associate { it.id to it.toModel() }
-            entities.map { entity ->
-                val tags = timeEntryDao.tagIdsFor(entity.id).mapNotNull { tagsById[it] }
-                entity.toModel(tags)
-            }
+    override fun observeTimeEntries(organizationId: String): Flow<List<TimeEntry>> = combine(
+        timeEntryDao.observeVisibleEntries(organizationId),
+        catalogDao.observeTags(organizationId),
+        timeEntryDao.observeTagRefs(organizationId),
+    ) { entities, tagEntities, tagRefs ->
+        val tagsById = tagEntities.associate { it.id to it.toModel() }
+        val tagIdsByEntry = tagRefs.groupBy({ it.timeEntryId }, { it.tagId })
+        entities.map { entity ->
+            val tags = tagIdsByEntry[entity.id].orEmpty().mapNotNull { tagsById[it] }
+            entity.toModel(tags)
         }
+    }
 
     override suspend fun loadMonth(organizationId: String, memberId: String, month: YearMonth) {
         val pageSize = 250
@@ -81,19 +84,20 @@ class TimeEntryRepository @Inject constructor(
         val targetStart = month.atDay(1)
         while (offset < 15_000) {
             val response = remote.getTimeEntries(
-                organizationId, memberId, pageSize, offset, onlyFullDates = false
+                organizationId,
+                memberId,
+                pageSize,
+                offset,
+                onlyFullDates = false,
             ).getOrElse {
                 Timber.e(it, "Failed loading calendar month %s", month)
                 return
             }
             val now = clock.nowMs()
-            response.data.forEach { entry ->
-                val local = timeEntryDao.getById(entry.id)
-                if (local == null || local.syncState != SyncState.PENDING) {
-                    timeEntryDao.upsert(entry.toEntity(updatedAt = now, syncState = SyncState.SYNCED))
-                    timeEntryDao.replaceTagRefs(entry.id, entry.tags.map { it.id })
-                }
-            }
+            timeEntryDao.applyServerEntries(
+                response.data.map { it.toEntity(updatedAt = now, syncState = SyncState.SYNCED) },
+                response.data.associate { entry -> entry.id to entry.tags.map { it.id } },
+            )
             val dates = response.data.mapNotNull { entry ->
                 runCatching {
                     ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME).toLocalDate()
@@ -105,30 +109,27 @@ class TimeEntryRepository @Inject constructor(
         }
     }
 
-    fun observeActiveEntry(orgId: String): Flow<TimeEntry?> =
-        timeEntryDao.observeActive(orgId).map { entity ->
-            entity?.toModel(timeEntryDao.tagIdsFor(entity.id).map { Tag(it) })
-        }
+    fun observeActiveEntry(orgId: String): Flow<TimeEntry?> = timeEntryDao.observeActive(orgId).map { entity ->
+        entity?.toModel(timeEntryDao.tagIdsFor(entity.id).map { Tag(it) })
+    }
 
     fun observeOutboxCount(): Flow<Int> = outboxDao.observeCount()
 
-    fun observeSyncOperations(orgId: String): Flow<List<SyncOperation>> =
-        outboxDao.observeAll().map { operations ->
-            operations.filter { it.organizationId == orgId }.map { op ->
-                SyncOperation(
-                    entryId = op.timeEntryId,
-                    type = op.opType,
-                    status = when {
-                        op.lastError?.startsWith("Server rejected") == true -> EntrySyncStatus.FAILED
-                        op.lastError != null && op.attemptCount >= 3 -> EntrySyncStatus.FAILED
-                        op.attemptCount > 0 -> EntrySyncStatus.RETRYING
-                        else -> EntrySyncStatus.PENDING
-                    },
-                    attemptCount = op.attemptCount,
-                    error = op.lastError,
-                )
-            }
+    fun observeSyncOperations(orgId: String): Flow<List<SyncOperation>> = outboxDao.observeAll().map { operations ->
+        operations.filter { it.organizationId == orgId }.map { op ->
+            SyncOperation(
+                entryId = op.timeEntryId,
+                type = op.opType,
+                status = when {
+                    op.deadLettered -> EntrySyncStatus.FAILED
+                    op.attemptCount > 0 -> EntrySyncStatus.RETRYING
+                    else -> EntrySyncStatus.PENDING
+                },
+                attemptCount = op.attemptCount,
+                error = op.lastError,
+            )
         }
+    }
 
     /** Pull the full first frame for an org and upsert into Room (last-write-wins). */
     suspend fun refreshAll(organizationId: String, memberId: String): Result<Unit> = try {
@@ -151,15 +152,13 @@ class TimeEntryRepository @Inject constructor(
         }
 
         val now = clock.nowMs()
-        entries.forEach { remoteEntry ->
-            val local = timeEntryDao.getById(remoteEntry.id)
-            // Last-write-wins: keep a strictly-newer PENDING local edit.
-            if (local != null && local.syncState == SyncState.PENDING && local.updatedAt > now) {
-                return@forEach
-            }
-            timeEntryDao.upsert(remoteEntry.toEntity(updatedAt = now, syncState = SyncState.SYNCED))
-            timeEntryDao.replaceTagRefs(remoteEntry.id, remoteEntry.tags.map { it.id })
-        }
+        // Single transaction; the pending-edit/soft-delete guard lives in applyServerEntries.
+        // (The previous `updatedAt > now` guard was dead code: updatedAt is always stamped in
+        // the past, so it never held and pending edits/deletes were silently overwritten.)
+        timeEntryDao.applyServerEntries(
+            entries.map { it.toEntity(updatedAt = now, syncState = SyncState.SYNCED) },
+            entries.associate { entry -> entry.id to entry.tags.map { it.id } },
+        )
         syncMetaDao.upsert(SyncMetaEntity(organizationId, now))
         Result.success(Unit)
     } catch (e: Exception) {
@@ -170,8 +169,13 @@ class TimeEntryRepository @Inject constructor(
     // ---- Optimistic writes + outbox enqueue ----
 
     suspend fun startEntry(
-        organizationId: String, memberId: String, userId: String,
-        projectId: String?, taskId: String?, description: String, tagIds: List<String>
+        organizationId: String,
+        memberId: String,
+        userId: String,
+        projectId: String?,
+        taskId: String?,
+        description: String,
+        tagIds: List<String>,
     ): TimeEntry {
         val now = clock.nowMs()
         val localId = "local-" + java.util.UUID.randomUUID().toString()
@@ -179,18 +183,21 @@ class TimeEntryRepository @Inject constructor(
         val entry = TimeEntry(
             id = localId, description = description, userId = userId, start = start,
             end = null, duration = null, taskId = taskId, projectId = projectId,
-            billable = false, organizationId = organizationId
+            billable = false, organizationId = organizationId,
         )
         timeEntryDao.upsert(entry.toEntity(updatedAt = now, syncState = SyncState.PENDING))
         timeEntryDao.replaceTagRefs(localId, tagIds)
         outboxDao.insert(
             OutboxEntity(
-                opType = OutboxOpType.START, organizationId = organizationId,
-                timeEntryId = localId, createdAtMs = now,
+                opType = OutboxOpType.START,
+                organizationId = organizationId,
+                timeEntryId = localId,
+                createdAtMs = now,
+                clientId = newClientId(),
                 payloadJson = json.encodeToString(
-                    StartPayload(memberId, userId, projectId, taskId, description, tagIds)
-                )
-            )
+                    StartPayload(memberId, userId, projectId, taskId, description, tagIds),
+                ),
+            ),
         )
         return entry
     }
@@ -201,10 +208,13 @@ class TimeEntryRepository @Inject constructor(
         timeEntryDao.upsert(entry.copy(end = end).toEntity(updatedAt = now, syncState = SyncState.PENDING))
         outboxDao.insert(
             OutboxEntity(
-                opType = OutboxOpType.STOP, organizationId = entry.organizationId,
-                timeEntryId = entry.id, createdAtMs = now,
-                payloadJson = json.encodeToString(StopPayload(userId, entry.start))
-            )
+                opType = OutboxOpType.STOP,
+                organizationId = entry.organizationId,
+                timeEntryId = entry.id,
+                createdAtMs = now,
+                clientId = newClientId(),
+                payloadJson = json.encodeToString(StopPayload(userId, entry.start)),
+            ),
         )
     }
 
@@ -214,14 +224,79 @@ class TimeEntryRepository @Inject constructor(
         timeEntryDao.replaceTagRefs(entry.id, tagIds)
         outboxDao.insert(
             OutboxEntity(
-                opType = OutboxOpType.UPDATE, organizationId = entry.organizationId,
-                timeEntryId = entry.id, createdAtMs = now,
+                opType = OutboxOpType.UPDATE,
+                organizationId = entry.organizationId,
+                timeEntryId = entry.id,
+                createdAtMs = now,
+                clientId = newClientId(),
                 payloadJson = json.encodeToString(
-                    UpdatePayload(entry.userId, entry.start, entry.end, entry.description,
-                        entry.projectId, entry.taskId, entry.billable, tagIds)
-                )
-            )
+                    UpdatePayload(
+                        entry.userId,
+                        entry.start,
+                        entry.end,
+                        entry.description,
+                        entry.projectId,
+                        entry.taskId,
+                        entry.billable,
+                        tagIds,
+                    ),
+                ),
+            ),
         )
+    }
+
+    suspend fun createCompletedEntry(
+        organizationId: String,
+        memberId: String,
+        userId: String,
+        description: String,
+        projectId: String?,
+        taskId: String?,
+        tagIds: List<String>,
+        billable: Boolean,
+        start: String,
+        end: String,
+    ): TimeEntry {
+        val now = clock.nowMs()
+        val localId = "local-create-${java.util.UUID.randomUUID()}"
+        val entry = TimeEntry(
+            id = localId,
+            description = description,
+            userId = userId,
+            start = start,
+            end = end,
+            duration = null,
+            taskId = taskId,
+            projectId = projectId,
+            tags = tagIds.map { Tag(it) },
+            billable = billable,
+            organizationId = organizationId,
+        )
+        timeEntryDao.upsert(entry.toEntity(updatedAt = now, syncState = SyncState.PENDING))
+        timeEntryDao.replaceTagRefs(localId, tagIds)
+        outboxDao.insert(
+            OutboxEntity(
+                opType = OutboxOpType.CREATE,
+                organizationId = organizationId,
+                timeEntryId = localId,
+                createdAtMs = now,
+                clientId = newClientId(),
+                payloadJson = json.encodeToString(
+                    CreatePayload(
+                        memberId,
+                        userId,
+                        start,
+                        end,
+                        description,
+                        projectId,
+                        taskId,
+                        billable,
+                        tagIds,
+                    ),
+                ),
+            ),
+        )
+        return entry
     }
 
     suspend fun deleteEntry(entry: TimeEntry) {
@@ -234,9 +309,13 @@ class TimeEntryRepository @Inject constructor(
         }
         outboxDao.insert(
             OutboxEntity(
-                opType = OutboxOpType.DELETE, organizationId = entry.organizationId,
-                timeEntryId = entry.id, createdAtMs = now, payloadJson = "{}"
-            )
+                opType = OutboxOpType.DELETE,
+                organizationId = entry.organizationId,
+                timeEntryId = entry.id,
+                createdAtMs = now,
+                clientId = newClientId(),
+                payloadJson = "{}",
+            ),
         )
     }
 
@@ -248,16 +327,21 @@ class TimeEntryRepository @Inject constructor(
             val restored = entry.copy(id = "local-restore-${java.util.UUID.randomUUID()}")
             timeEntryDao.upsert(restored.toEntity(updatedAt = now, syncState = SyncState.PENDING))
             timeEntryDao.replaceTagRefs(restored.id, entry.tags.map { it.id })
-            outboxDao.insert(OutboxEntity(
-                opType = OutboxOpType.CREATE,
-                organizationId = entry.organizationId,
-                timeEntryId = restored.id,
-                createdAtMs = now,
-                payloadJson = json.encodeToString(CreatePayload(
-                    membership, entry.userId, entry.start, end, entry.description.orEmpty(),
-                    entry.projectId, entry.taskId, entry.billable, entry.tags.map { it.id },
-                )),
-            ))
+            outboxDao.insert(
+                OutboxEntity(
+                    opType = OutboxOpType.CREATE,
+                    organizationId = entry.organizationId,
+                    timeEntryId = restored.id,
+                    createdAtMs = now,
+                    clientId = newClientId(),
+                    payloadJson = json.encodeToString(
+                        CreatePayload(
+                            membership, entry.userId, entry.start, end, entry.description.orEmpty(),
+                            entry.projectId, entry.taskId, entry.billable, entry.tags.map { it.id },
+                        ),
+                    ),
+                ),
+            )
             return true
         }
         val existing = timeEntryDao.getById(entry.id)
@@ -272,6 +356,9 @@ class TimeEntryRepository @Inject constructor(
     }
 
     suspend fun prepareRetry(entryId: String): Boolean = outboxDao.resetForRetry(entryId) > 0
+
+    /** Stable idempotency key for a new outbox operation; persisted on the row (see OutboxEntity). */
+    private fun newClientId(): String = java.util.UUID.randomUUID().toString()
 
     private fun nowIso(): String = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC)
         .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'"))

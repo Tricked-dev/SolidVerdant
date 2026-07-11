@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.tracking
 
 import androidx.room.Room
@@ -18,12 +24,19 @@ import org.robolectric.RobolectricTestRunner
 class TrackingViewModelSyncTest {
     @Test fun start_from_repository_yields_optimistic_local_entry() = runTest {
         val db = Room.inMemoryDatabaseBuilder(
-            ApplicationProvider.getApplicationContext(), AppDatabase::class.java
+            ApplicationProvider.getApplicationContext(),
+            AppDatabase::class.java,
         ).allowMainThreadQueries().build()
         val repo = TimeEntryRepository(
-            db.timeEntryDao(), db.catalogDao(), db.outboxDao(), db.syncMetaDao(),
-            FakeRemoteDataSource(), object : Clock { override fun nowMs() = 1L },
-            Json { encodeDefaults = true }
+            db.timeEntryDao(),
+            db.catalogDao(),
+            db.outboxDao(),
+            db.syncMetaDao(),
+            FakeRemoteDataSource(),
+            object : Clock {
+                override fun nowMs() = 1L
+            },
+            Json { encodeDefaults = true },
         )
         val entry = repo.startEntry("org1", "m", "u", null, null, "hi", emptyList())
         assertTrue(entry.id.startsWith("local-"))

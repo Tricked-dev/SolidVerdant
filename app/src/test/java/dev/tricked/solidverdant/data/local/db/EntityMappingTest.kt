@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.local.db
 
 import dev.tricked.solidverdant.data.model.Tag
@@ -12,7 +18,7 @@ class EntityMappingTest {
             start = "2026-01-01T09:00:00Z", end = "2026-01-01T10:00:00Z",
             duration = 3600, taskId = "t1", projectId = "p1",
             tags = listOf(Tag("tag1", "urgent")), billable = true,
-            organizationId = "org1"
+            organizationId = "org1",
         )
         val entity = model.toEntity(updatedAt = 42L)
         val back = entity.toModel(tags = listOf(Tag("tag1", "urgent")))

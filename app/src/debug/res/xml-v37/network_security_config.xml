@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-only override for API 37+ devices. Mirrors the main xml-v37 config (SNI/ECH
+  encryption stays enabled) but permits cleartext to loopback so the on-device E2E
+  harness can reach MockWebServer at http://127.0.0.1:<port>.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <domainEncryption mode="enabled" />
+    </base-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>

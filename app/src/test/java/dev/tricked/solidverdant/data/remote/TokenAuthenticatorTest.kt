@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.remote
 
 import dev.tricked.solidverdant.data.model.TokenResponse
@@ -24,7 +30,7 @@ class TokenAuthenticatorTest {
                 refreshCalls.incrementAndGet()
                 enteredRefresh.countDown()
                 check(releaseRefresh.await(5, TimeUnit.SECONDS))
-                TokenResponse("new-access", "new-refresh")
+                RefreshResult.Success(TokenResponse("new-access", "new-refresh"))
             }
             val pool = Executors.newFixedThreadPool(2)
             try {
@@ -45,13 +51,38 @@ class TokenAuthenticatorTest {
     }
 
     @Test
-    fun `refresh failure leaves credentials intact`() {
+    fun `transient refresh failure leaves credentials intact`() {
         val storage = FakeTokenStorage("access", "refresh")
-        val authenticator = TokenAuthenticator(storage) { _, _, _ -> null }
+        val authenticator = TokenAuthenticator(storage) { _, _, _ -> RefreshResult.Transient }
 
         assertNull(authenticator.authenticate(null, unauthorized("access")))
         assertEquals("access", storage.access)
         assertEquals("refresh", storage.refresh)
+    }
+
+    @Test
+    fun `definitive refresh rejection clears the dead credentials`() {
+        val storage = FakeTokenStorage("access", "refresh")
+        val authenticator = TokenAuthenticator(storage) { _, _, _ -> RefreshResult.Invalid }
+
+        assertNull(authenticator.authenticate(null, unauthorized("access")))
+        assertNull(storage.access)
+        assertNull(storage.refresh)
+    }
+
+    @Test
+    fun `missing refresh token clears the dead access token`() {
+        val storage = FakeTokenStorage("access", null)
+        val refreshCalls = AtomicInteger()
+        val authenticator = TokenAuthenticator(storage) { _, _, _ ->
+            refreshCalls.incrementAndGet()
+            RefreshResult.Invalid
+        }
+
+        assertNull(authenticator.authenticate(null, unauthorized("access")))
+        assertNull(storage.access)
+        assertNull(storage.refresh)
+        assertEquals("refresh must not be attempted without a refresh token", 0, refreshCalls.get())
     }
 
     @Test
@@ -60,7 +91,7 @@ class TokenAuthenticatorTest {
         val refreshCalls = AtomicInteger()
         val authenticator = TokenAuthenticator(storage) { _, _, _ ->
             refreshCalls.incrementAndGet()
-            null
+            RefreshResult.Invalid
         }
 
         val retried = authenticator.authenticate(null, unauthorized("old-access"))
@@ -82,10 +113,7 @@ class TokenAuthenticatorTest {
             .build()
     }
 
-    private class FakeTokenStorage(
-        @Volatile var access: String?,
-        @Volatile var refresh: String?
-    ) : TokenStorage {
+    private class FakeTokenStorage(@Volatile var access: String?, @Volatile var refresh: String?) : TokenStorage {
         override suspend fun accessToken() = access
         override suspend fun refreshToken() = refresh
         override suspend fun endpoint() = "https://example.test"
@@ -93,6 +121,10 @@ class TokenAuthenticatorTest {
         override suspend fun saveTokens(accessToken: String, refreshToken: String) {
             access = accessToken
             refresh = refreshToken
+        }
+        override suspend fun clearTokens() {
+            access = null
+            refresh = null
         }
     }
 }

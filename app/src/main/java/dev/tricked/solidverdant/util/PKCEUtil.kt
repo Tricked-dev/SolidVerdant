@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.util
 
 import android.util.Base64
@@ -77,7 +83,7 @@ object PKCEUtil {
         clientId: String,
         codeChallenge: String,
         state: String,
-        redirectUri: String = REDIRECT_URI
+        redirectUri: String = REDIRECT_URI,
     ): String {
         val cleanEndpoint = endpoint.removeSuffix("/")
         return buildString {
@@ -97,16 +103,13 @@ object PKCEUtil {
      * @param bytes Bytes to encode
      * @return Base64 URL-encoded string without padding
      */
-    private fun base64UrlEncode(bytes: ByteArray): String {
-        return Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
-    }
+    private fun base64UrlEncode(bytes: ByteArray): String =
+        Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
 
     /**
      * URL-encodes a string
      * @param value String to encode
      * @return URL-encoded string
      */
-    private fun urlEncode(value: String): String {
-        return java.net.URLEncoder.encode(value, "UTF-8")
-    }
+    private fun urlEncode(value: String): String = java.net.URLEncoder.encode(value, "UTF-8")
 }

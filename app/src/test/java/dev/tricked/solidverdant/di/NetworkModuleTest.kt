@@ -1,6 +1,11 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.di
 
-import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
@@ -47,32 +52,31 @@ class NetworkModuleTest {
         assertFalse(output.contains("secret-session"))
     }
 
-    private fun fakeChain(request: Request): okhttp3.Interceptor.Chain =
-        object : okhttp3.Interceptor.Chain {
-            override fun request(): Request = request
+    private fun fakeChain(request: Request): okhttp3.Interceptor.Chain = object : okhttp3.Interceptor.Chain {
+        override fun request(): Request = request
 
-            override fun proceed(request: Request): Response = Response.Builder()
-                .request(request)
-                .protocol(Protocol.HTTP_1_1)
-                .code(200)
-                .message("OK")
-                .body("{}".toResponseBody())
-                .build()
+        override fun proceed(request: Request): Response = Response.Builder()
+            .request(request)
+            .protocol(Protocol.HTTP_1_1)
+            .code(200)
+            .message("OK")
+            .body("{}".toResponseBody())
+            .build()
 
-            override fun connection() = null
+        override fun connection() = null
 
-            override fun call() = throw UnsupportedOperationException()
+        override fun call() = throw UnsupportedOperationException()
 
-            override fun connectTimeoutMillis() = 30_000
+        override fun connectTimeoutMillis() = 30_000
 
-            override fun withConnectTimeout(timeout: Int, unit: java.util.concurrent.TimeUnit) = this
+        override fun withConnectTimeout(timeout: Int, unit: java.util.concurrent.TimeUnit) = this
 
-            override fun readTimeoutMillis() = 30_000
+        override fun readTimeoutMillis() = 30_000
 
-            override fun withReadTimeout(timeout: Int, unit: java.util.concurrent.TimeUnit) = this
+        override fun withReadTimeout(timeout: Int, unit: java.util.concurrent.TimeUnit) = this
 
-            override fun writeTimeoutMillis() = 30_000
+        override fun writeTimeoutMillis() = 30_000
 
-            override fun withWriteTimeout(timeout: Int, unit: java.util.concurrent.TimeUnit) = this
-        }
+        override fun withWriteTimeout(timeout: Int, unit: java.util.concurrent.TimeUnit) = this
+    }
 }

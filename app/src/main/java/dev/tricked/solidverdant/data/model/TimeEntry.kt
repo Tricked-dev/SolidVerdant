@@ -1,5 +1,12 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.model
 
+import androidx.compose.runtime.Stable
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
@@ -13,6 +20,7 @@ import kotlinx.serialization.json.jsonPrimitive
 /**
  * Time entry representing a tracking session
  */
+@Stable
 @Serializable
 data class TimeEntry(
     val id: String,
@@ -30,35 +38,33 @@ data class TimeEntry(
     val tags: List<Tag> = emptyList(),
     val billable: Boolean = false,
     @SerialName("organization_id")
-    val organizationId: String
+    val organizationId: String,
 )
 
 /**
  * Tag associated with a time entry
  */
+@Stable
 @Serializable
-data class Tag(
-    val id: String,
-    val name: String = ""
-)
+data class Tag(val id: String, val name: String = "")
 
 /** The API returns tag objects in some endpoints and tag IDs in time-entry lists. */
 object TimeEntryTagsSerializer : JsonTransformingSerializer<List<Tag>>(ListSerializer(Tag.serializer())) {
-    override fun transformDeserialize(element: kotlinx.serialization.json.JsonElement) =
-        JsonArray(
-            element.jsonArray.map { tag ->
-                if (tag is JsonPrimitive) {
-                    JsonObject(mapOf("id" to JsonPrimitive(tag.jsonPrimitive.content)))
-                } else {
-                    tag
-                }
+    override fun transformDeserialize(element: kotlinx.serialization.json.JsonElement) = JsonArray(
+        element.jsonArray.map { tag ->
+            if (tag is JsonPrimitive) {
+                JsonObject(mapOf("id" to JsonPrimitive(tag.jsonPrimitive.content)))
+            } else {
+                tag
             }
-        )
+        },
+    )
 }
 
 /**
  * User profile information
  */
+@Stable
 @Serializable
 data class User(
     val id: String,
@@ -68,18 +74,15 @@ data class User(
     val profilePhotoUrl: String = "",
     val timezone: String = "UTC",
     @SerialName("week_start")
-    val weekStart: String = "monday"
+    val weekStart: String = "monday",
 )
 
 /**
  * Organization membership information
  */
+@Stable
 @Serializable
-data class Membership(
-    val id: String,
-    val role: String,
-    val organization: Organization
-) {
+data class Membership(val id: String, val role: String, val organization: Organization) {
     // Convenience property to get organization ID
     val organizationId: String
         get() = organization.id
@@ -88,38 +91,33 @@ data class Membership(
 /**
  * Organization information
  */
+@Stable
 @Serializable
 data class Organization(
     val id: String,
     val name: String,
     val currency: String,
     @SerialName("prevent_overlapping_time_entries")
-    val preventOverlappingTimeEntries: Boolean = false
+    val preventOverlappingTimeEntries: Boolean = false,
 )
 
 /**
  * Response wrapper for time entry API calls
  */
 @Serializable
-data class TimeEntryResponse(
-    val data: TimeEntry? = null
-)
+data class TimeEntryResponse(val data: TimeEntry? = null)
 
 /**
  * Response wrapper for user API calls
  */
 @Serializable
-data class UserResponse(
-    val data: User
-)
+data class UserResponse(val data: User)
 
 /**
  * Response wrapper for memberships API calls
  */
 @Serializable
-data class MembershipsResponse(
-    val data: List<Membership>
-)
+data class MembershipsResponse(val data: List<Membership>)
 
 /**
  * Request to start a new time entry, or create a completed one when [end] is set
@@ -136,7 +134,7 @@ data class StartTimeEntryRequest(
     @SerialName("task_id")
     val taskId: String? = null,
     val billable: Boolean = false,
-    val tags: List<String> = emptyList()
+    val tags: List<String> = emptyList(),
 )
 
 /**
@@ -147,12 +145,13 @@ data class StopTimeEntryRequest(
     @SerialName("user_id")
     val userId: String,
     val start: String,
-    val end: String
+    val end: String,
 )
 
 /**
  * Project information
  */
+@Stable
 @Serializable
 data class Project(
     val id: String,
@@ -171,19 +170,17 @@ data class Project(
     @SerialName("spent_time")
     val spentTime: Int = 0,
     @SerialName("is_public")
-    val isPublic: Boolean = false
+    val isPublic: Boolean = false,
 )
 
+@Stable
 @Serializable
-data class Client(
-    val id: String,
-    val name: String,
-    @SerialName("is_archived") val isArchived: Boolean = false,
-)
+data class Client(val id: String, val name: String, @SerialName("is_archived") val isArchived: Boolean = false)
 
 /**
  * Task information
  */
+@Stable
 @Serializable
 data class Task(
     val id: String,
@@ -199,16 +196,14 @@ data class Task(
     @SerialName("created_at")
     val createdAt: String,
     @SerialName("updated_at")
-    val updatedAt: String
+    val updatedAt: String,
 )
 
 /**
  * Response wrapper for projects API calls
  */
 @Serializable
-data class ProjectsResponse(
-    val data: List<Project>
-)
+data class ProjectsResponse(val data: List<Project>)
 
 @Serializable data class ClientsResponse(val data: List<Client>)
 
@@ -216,33 +211,26 @@ data class ProjectsResponse(
  * Response wrapper for tasks API calls
  */
 @Serializable
-data class TasksResponse(
-    val data: List<Task>
-)
+data class TasksResponse(val data: List<Task>)
 
 /**
  * Response wrapper for tags API calls
  */
 @Serializable
-data class TagsResponse(
-    val data: List<Tag>
-)
+data class TagsResponse(val data: List<Tag>)
 
 /**
  * Response wrapper for multiple time entries
  */
 @Serializable
-data class TimeEntriesResponse(
-    val data: List<TimeEntry>,
-    val meta: TimeEntriesMeta? = null
-)
+data class TimeEntriesResponse(val data: List<TimeEntry>, val meta: TimeEntriesMeta? = null)
 
 @Serializable
 data class TimeEntriesMeta(
     val total: Int? = null,
     @SerialName("current_page") val currentPage: Int? = null,
     @SerialName("last_page") val lastPage: Int? = null,
-    @SerialName("per_page") val perPage: Int? = null
+    @SerialName("per_page") val perPage: Int? = null,
 )
 
 /**
@@ -260,5 +248,5 @@ data class UpdateTimeEntryRequest(
     @SerialName("task_id")
     val taskId: String? = null,
     val billable: Boolean = false,
-    val tags: List<String> = emptyList()
+    val tags: List<String> = emptyList(),
 )

@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.config
 
 import org.junit.Assert.assertEquals
@@ -10,7 +16,7 @@ class OAuthConfigParserTest {
     fun parsesLabelledValues() {
         assertEquals(
             ParsedOAuthConfig("https://example.com", clientId),
-            parseOAuthConfig("server:https://example.com/\nclient:$clientId")
+            parseOAuthConfig("server:https://example.com/\nclient:$clientId"),
         )
     }
 
@@ -18,7 +24,7 @@ class OAuthConfigParserTest {
     fun findsUrlAndUuidInSurroundingText() {
         assertEquals(
             ParsedOAuthConfig("https://example.com", clientId),
-            parseOAuthConfig("Use https://example.com with $clientId to log in")
+            parseOAuthConfig("Use https://example.com with $clientId to log in"),
         )
     }
 
@@ -26,7 +32,7 @@ class OAuthConfigParserTest {
     fun parsesCompactPair() {
         assertEquals(
             ParsedOAuthConfig("my-server", clientId),
-            parseOAuthConfig("my-server:$clientId")
+            parseOAuthConfig("my-server:$clientId"),
         )
     }
 
@@ -34,7 +40,7 @@ class OAuthConfigParserTest {
     fun parsesCompactUrlPairWithoutIncludingUuidInUrl() {
         assertEquals(
             ParsedOAuthConfig("https://example.com", clientId),
-            parseOAuthConfig("https://example.com:$clientId")
+            parseOAuthConfig("https://example.com:$clientId"),
         )
     }
 
@@ -47,7 +53,7 @@ class OAuthConfigParserTest {
     fun findsServerWithoutAClientId() {
         assertEquals(
             ParsedOAuthConfig(endpoint = "https://example.com"),
-            parseOAuthConfig("server = https://example.com/")
+            parseOAuthConfig("server = https://example.com/"),
         )
     }
 
@@ -55,7 +61,7 @@ class OAuthConfigParserTest {
     fun acceptsQuotedJsonStyleServerLabel() {
         assertEquals(
             ParsedOAuthConfig("https://example.com", clientId),
-            parseOAuthConfig("\"server\": \"https://example.com\",\n\"client\": \"$clientId\"")
+            parseOAuthConfig("\"server\": \"https://example.com\",\n\"client\": \"$clientId\""),
         )
     }
 
@@ -64,7 +70,7 @@ class OAuthConfigParserTest {
         val versionSevenId = "01890F3E-7B5A-7CC2-98C4-DC0C0C07398F"
         assertEquals(
             ParsedOAuthConfig(clientId = versionSevenId),
-            parseOAuthConfig("client_id: $versionSevenId")
+            parseOAuthConfig("client_id: $versionSevenId"),
         )
     }
 
@@ -82,7 +88,7 @@ class OAuthConfigParserTest {
     fun trimsPunctuationAroundDetectedValues() {
         assertEquals(
             ParsedOAuthConfig("https://example.com", clientId),
-            parseOAuthConfig("Connect to (https://example.com/), client: $clientId.")
+            parseOAuthConfig("Connect to (https://example.com/), client: $clientId."),
         )
     }
 
@@ -95,7 +101,7 @@ class OAuthConfigParserTest {
     fun acceptsExplicitUnusualServerUrlForManualCorrection() {
         assertEquals(
             ParsedOAuthConfig(endpoint = "https:///example"),
-            parseOAuthConfig("server:https:///example")
+            parseOAuthConfig("server:https:///example"),
         )
     }
 }

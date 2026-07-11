@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shared UI kit strings. Feature strings live in their own files; reuse existing
+         keys (retry, sync_pending/retrying/failed) rather than duplicating them here. -->
+    <string name="uikit_untitled_entry">Untitled entry</string>
+</resources>

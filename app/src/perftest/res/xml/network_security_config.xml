@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Perftest-only override (mirrors debug): the release-type perf build runs the same on-device E2E harness. Keeps cleartext disabled everywhere except loopback, where the
+  on-device E2E harness runs MockWebServer (http://127.0.0.1:<port>). Release/QA builds
+  are unaffected; they use the strict config in src/main.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>

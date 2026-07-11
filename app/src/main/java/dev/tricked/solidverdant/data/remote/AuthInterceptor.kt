@@ -1,9 +1,16 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.remote
 
 import dev.tricked.solidverdant.data.local.AuthDataStore
 import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 import okhttp3.Response
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -14,9 +21,7 @@ import javax.inject.Singleton
  * OkHttp interceptor. This is a known pattern in Android networking.
  */
 @Singleton
-class AuthInterceptor @Inject constructor(
-    private val authDataStore: AuthDataStore
-) : Interceptor {
+class AuthInterceptor @Inject constructor(private val authDataStore: AuthDataStore) : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
@@ -26,9 +31,16 @@ class AuthInterceptor @Inject constructor(
             return chain.proceed(originalRequest)
         }
 
-        // Get access token from DataStore
+        // Get access token from DataStore. The read must never throw here: an undecryptable secret
+        // (Keystore key lost/invalidated) would otherwise crash every API call. Treat any failure as
+        // "no token" and proceed unauthenticated; the flows clear the corrupt secret separately.
         val accessToken = runBlocking {
-            authDataStore.getAccessToken()
+            try {
+                authDataStore.getAccessToken()
+            } catch (e: Exception) {
+                Timber.w("Failed to read access token; proceeding without authorization")
+                null
+            }
         }
 
         // Add Authorization header if token exists

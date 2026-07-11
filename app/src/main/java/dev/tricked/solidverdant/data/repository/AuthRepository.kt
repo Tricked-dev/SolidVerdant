@@ -1,13 +1,19 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.repository
 
 import dev.tricked.solidverdant.data.local.AuthDataStore
-import dev.tricked.solidverdant.data.model.Membership
 import dev.tricked.solidverdant.data.model.Client
+import dev.tricked.solidverdant.data.model.Membership
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
-import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.TimeEntriesResponse
+import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.UpdateTimeEntryRequest
 import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.remote.ApiClientFactory
@@ -23,10 +29,7 @@ import javax.inject.Singleton
  * Handles OAuth2 flow, token management, and API calls
  */
 @Singleton
-class AuthRepository @Inject constructor(
-    private val authDataStore: AuthDataStore,
-    private val apiClientFactory: ApiClientFactory
-) {
+class AuthRepository @Inject constructor(private val authDataStore: AuthDataStore, private val apiClientFactory: ApiClientFactory) {
     companion object {
         private const val REDIRECT_URI = "solidtime://oauth/callback"
     }
@@ -47,35 +50,33 @@ class AuthRepository @Inject constructor(
      * Initialize the OAuth2 authorization flow
      * @return Result containing the authorization URL to open in browser
      */
-    suspend fun initializeOAuthFlow(): Result<String> {
-        return try {
-            // Generate PKCE data
-            val pkceData = PKCEUtil.generatePKCEData()
+    suspend fun initializeOAuthFlow(): Result<String> = try {
+        // Generate PKCE data
+        val pkceData = PKCEUtil.generatePKCEData()
 
-            // Store PKCE data for later verification
-            authDataStore.savePKCEData(
-                codeVerifier = pkceData.codeVerifier,
-                state = pkceData.state
-            )
+        // Store PKCE data for later verification
+        authDataStore.savePKCEData(
+            codeVerifier = pkceData.codeVerifier,
+            state = pkceData.state,
+        )
 
-            // Get current config
-            val currentEndpoint = authDataStore.getEndpoint()
-            val currentClientId = authDataStore.getClientId()
+        // Get current config
+        val currentEndpoint = authDataStore.getEndpoint()
+        val currentClientId = authDataStore.getClientId()
 
-            // Build authorization URL
-            val authUrl = PKCEUtil.buildAuthorizationUrl(
-                endpoint = currentEndpoint,
-                clientId = currentClientId,
-                codeChallenge = pkceData.codeChallenge,
-                state = pkceData.state
-            )
+        // Build authorization URL
+        val authUrl = PKCEUtil.buildAuthorizationUrl(
+            endpoint = currentEndpoint,
+            clientId = currentClientId,
+            codeChallenge = pkceData.codeChallenge,
+            state = pkceData.state,
+        )
 
-            Timber.d("OAuth flow initialized, auth URL: $authUrl")
-            Result.success(authUrl)
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to initialize OAuth flow")
-            Result.failure(e)
-        }
+        Timber.d("OAuth flow initialized, auth URL: $authUrl")
+        Result.success(authUrl)
+    } catch (e: Exception) {
+        Timber.e(e, "Failed to initialize OAuth flow")
+        Result.failure(e)
     }
 
     /**
@@ -112,13 +113,13 @@ class AuthRepository @Inject constructor(
                 clientId = currentClientId,
                 redirectUri = REDIRECT_URI,
                 codeVerifier = codeVerifier,
-                code = code
+                code = code,
             )
 
             // Save tokens
             authDataStore.saveTokens(
                 accessToken = tokenResponse.accessToken,
-                refreshToken = tokenResponse.refreshToken
+                refreshToken = tokenResponse.refreshToken,
             )
 
             // Clear PKCE data
@@ -136,80 +137,70 @@ class AuthRepository @Inject constructor(
     /**
      * Get the current authenticated user
      */
-    suspend fun getCurrentUser(): Result<User> {
-        return try {
-            val endpoint = authDataStore.getEndpoint()
-            val api = apiClientFactory.createApi(endpoint)
-            val response = api.getCurrentUser()
-            Result.success(response.data)
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to get current user")
-            Result.failure(e)
-        }
+    suspend fun getCurrentUser(): Result<User> = try {
+        val endpoint = authDataStore.getEndpoint()
+        val api = apiClientFactory.createApi(endpoint)
+        val response = api.getCurrentUser()
+        Result.success(response.data)
+    } catch (e: Exception) {
+        Timber.e(e, "Failed to get current user")
+        Result.failure(e)
     }
 
     /**
      * Get all memberships (organizations) for the current user
      */
-    suspend fun getMyMemberships(): Result<List<Membership>> {
-        return try {
-            val endpoint = authDataStore.getEndpoint()
-            val api = apiClientFactory.createApi(endpoint)
-            val response = api.getMyMemberships()
-            Result.success(response.data)
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to get memberships")
-            Result.failure(e)
-        }
+    suspend fun getMyMemberships(): Result<List<Membership>> = try {
+        val endpoint = authDataStore.getEndpoint()
+        val api = apiClientFactory.createApi(endpoint)
+        val response = api.getMyMemberships()
+        Result.success(response.data)
+    } catch (e: Exception) {
+        Timber.e(e, "Failed to get memberships")
+        Result.failure(e)
     }
 
     /**
      * Get the active time entry for the current user
      */
-    suspend fun getActiveTimeEntry(): Result<TimeEntry?> {
-        return try {
-            val endpoint = authDataStore.getEndpoint()
-            val api = apiClientFactory.createApi(endpoint)
-            val response = api.getActiveTimeEntry()
-            Result.success(response.data)
-        } catch (e: Exception) {
-            // 404 with "No active time entry" is expected when not tracking
-            if (e is retrofit2.HttpException && e.code() == 404) {
-                Timber.d("No active time entry")
-                Result.success(null)
-            } else {
-                Timber.e(e, "Failed to get active time entry")
-                Result.failure(e)
-            }
+    suspend fun getActiveTimeEntry(): Result<TimeEntry?> = try {
+        val endpoint = authDataStore.getEndpoint()
+        val api = apiClientFactory.createApi(endpoint)
+        val response = api.getActiveTimeEntry()
+        Result.success(response.data)
+    } catch (e: Exception) {
+        // 404 with "No active time entry" is expected when not tracking
+        if (e is retrofit2.HttpException && e.code() == 404) {
+            Timber.d("No active time entry")
+            Result.success(null)
+        } else {
+            Timber.e(e, "Failed to get active time entry")
+            Result.failure(e)
         }
     }
 
     /**
      * Save OAuth configuration (endpoint and client ID)
      */
-    suspend fun saveOAuthConfig(endpoint: String, clientId: String): Result<Unit> {
-        return try {
-            authDataStore.saveOAuthConfig(endpoint, clientId)
-            Timber.d("OAuth config saved")
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to save OAuth config")
-            Result.failure(e)
-        }
+    suspend fun saveOAuthConfig(endpoint: String, clientId: String): Result<Unit> = try {
+        authDataStore.saveOAuthConfig(endpoint, clientId)
+        Timber.d("OAuth config saved")
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Timber.e(e, "Failed to save OAuth config")
+        Result.failure(e)
     }
 
     /**
      * Save current membership ID
      */
-    suspend fun saveCurrentMembershipId(membershipId: String): Result<Unit> {
-        return try {
-            authDataStore.saveCurrentMembershipId(membershipId)
-            Timber.d("Current membership ID saved")
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to save current membership ID")
-            Result.failure(e)
-        }
+    suspend fun saveCurrentMembershipId(membershipId: String): Result<Unit> = try {
+        authDataStore.saveCurrentMembershipId(membershipId)
+        Timber.d("Current membership ID saved")
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Timber.e(e, "Failed to save current membership ID")
+        Result.failure(e)
     }
 
     /**
@@ -221,33 +212,31 @@ class AuthRepository @Inject constructor(
         userId: String,
         projectId: String? = null,
         taskId: String? = null,
-        description: String = ""
-    ): Result<TimeEntry> {
-        return try {
-            val endpoint = authDataStore.getEndpoint()
-            val api = apiClientFactory.createApi(endpoint)
+        description: String = "",
+    ): Result<TimeEntry> = try {
+        val endpoint = authDataStore.getEndpoint()
+        val api = apiClientFactory.createApi(endpoint)
 
-            // Use current time in format: Y-m-d\TH:i:s\Z (e.g., 2025-12-01T21:32:10Z)
-            val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
-            val now = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC)
-                .format(formatter)
+        // Use current time in format: Y-m-d\TH:i:s\Z (e.g., 2025-12-01T21:32:10Z)
+        val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
+        val now = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC)
+            .format(formatter)
 
-            val request = dev.tricked.solidverdant.data.model.StartTimeEntryRequest(
-                memberId = memberId,
-                start = now,
-                description = description,
-                projectId = projectId,
-                taskId = taskId,
-                billable = false
-            )
+        val request = dev.tricked.solidverdant.data.model.StartTimeEntryRequest(
+            memberId = memberId,
+            start = now,
+            description = description,
+            projectId = projectId,
+            taskId = taskId,
+            billable = false,
+        )
 
-            val response = api.startTimeEntry(organizationId, request)
-            Timber.d("Time entry started: ${response.data?.id}")
-            Result.success(response.data!!)
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to start time entry")
-            Result.failure(e)
-        }
+        val response = api.startTimeEntry(organizationId, request)
+        Timber.d("Time entry started: ${response.data?.id}")
+        Result.success(response.data!!)
+    } catch (e: Exception) {
+        Timber.e(e, "Failed to start time entry")
+        Result.failure(e)
     }
 
     /**
@@ -264,81 +253,72 @@ class AuthRepository @Inject constructor(
         projectId: String? = null,
         taskId: String? = null,
         tags: List<String> = emptyList(),
-        billable: Boolean = false
-    ): Result<TimeEntry> {
-        return try {
-            val endpoint = authDataStore.getEndpoint()
-            val api = apiClientFactory.createApi(endpoint)
+        billable: Boolean = false,
+    ): Result<TimeEntry> = try {
+        val endpoint = authDataStore.getEndpoint()
+        val api = apiClientFactory.createApi(endpoint)
 
-            val request = dev.tricked.solidverdant.data.model.StartTimeEntryRequest(
-                memberId = memberId,
-                start = start,
-                end = end,
-                description = description,
-                projectId = projectId,
-                taskId = taskId,
-                billable = false
+        val request = dev.tricked.solidverdant.data.model.StartTimeEntryRequest(
+            memberId = memberId,
+            start = start,
+            end = end,
+            description = description,
+            projectId = projectId,
+            taskId = taskId,
+            billable = false,
+        )
+
+        val created = api.startTimeEntry(organizationId, request).data!!
+
+        // Mirror the start-tracking flow: billable and tags are applied via a
+        // follow-up update rather than on create.
+        val final = if (tags.isNotEmpty() || billable) {
+            val updateRequest = UpdateTimeEntryRequest(
+                userId = userId,
+                start = created.start,
+                end = created.end,
+                description = created.description,
+                projectId = created.projectId,
+                taskId = created.taskId,
+                billable = billable,
+                tags = tags,
             )
-
-            val created = api.startTimeEntry(organizationId, request).data!!
-
-            // Mirror the start-tracking flow: billable and tags are applied via a
-            // follow-up update rather than on create.
-            val final = if (tags.isNotEmpty() || billable) {
-                val updateRequest = UpdateTimeEntryRequest(
-                    userId = userId,
-                    start = created.start,
-                    end = created.end,
-                    description = created.description,
-                    projectId = created.projectId,
-                    taskId = created.taskId,
-                    billable = billable,
-                    tags = tags
-                )
-                api.updateTimeEntry(organizationId, created.id, updateRequest).data!!
-            } else {
-                created
-            }
-
-            Timber.d("Manual time entry created: ${final.id}")
-            Result.success(final)
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to create manual time entry")
-            Result.failure(e)
+            api.updateTimeEntry(organizationId, created.id, updateRequest).data!!
+        } else {
+            created
         }
+
+        Timber.d("Manual time entry created: ${final.id}")
+        Result.success(final)
+    } catch (e: Exception) {
+        Timber.e(e, "Failed to create manual time entry")
+        Result.failure(e)
     }
 
     /**
      * Stop the active time entry
      */
-    suspend fun stopTimeEntry(
-        organizationId: String,
-        timeEntryId: String,
-        userId: String,
-        startTime: String
-    ): Result<TimeEntry> {
-        return try {
-            val endpoint = authDataStore.getEndpoint()
-            val api = apiClientFactory.createApi(endpoint)
+    suspend fun stopTimeEntry(organizationId: String, timeEntryId: String, userId: String, startTime: String): Result<TimeEntry> = try {
+        val endpoint = authDataStore.getEndpoint()
+        val api = apiClientFactory.createApi(endpoint)
 
-            // Use current time in format: Y-m-d\TH:i:s\Z (e.g., 2025-12-01T21:32:10Z)
-            val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
-            val now = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC)
-                .format(formatter)
+        // Use current time in format: Y-m-d\TH:i:s\Z (e.g., 2025-12-01T21:32:10Z)
+        val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
+        val now = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC)
+            .format(formatter)
 
-            val request = dev.tricked.solidverdant.data.model.StopTimeEntryRequest(
-                userId = userId,
-                start = startTime,
-                end = now
-            )
+        val request = dev.tricked.solidverdant.data.model.StopTimeEntryRequest(
+            userId = userId,
+            start = startTime,
+            end = now,
+        )
 
-            val response = api.stopTimeEntry(organizationId, timeEntryId, request)
-            Timber.d("Time entry stopped: ${response.data?.id}")
-            Result.success(response.data!!)
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to stop time entry")
-            Result.failure(e)
-        }
+        val response = api.stopTimeEntry(organizationId, timeEntryId, request)
+        Timber.d("Time entry stopped: ${response.data?.id}")
+        Result.success(response.data!!)
+    } catch (e: Exception) {
+        Timber.e(e, "Failed to stop time entry")
+        Result.failure(e)
     }
 
     /**
@@ -352,15 +332,13 @@ class AuthRepository @Inject constructor(
     /**
      * Reset OAuth configuration to defaults
      */
-    suspend fun resetOAuthConfig(): Result<Unit> {
-        return try {
-            authDataStore.resetOAuthConfig()
-            Timber.d("OAuth config reset to defaults")
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to reset OAuth config")
-            Result.failure(e)
-        }
+    suspend fun resetOAuthConfig(): Result<Unit> = try {
+        authDataStore.resetOAuthConfig()
+        Timber.d("OAuth config reset to defaults")
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Timber.e(e, "Failed to reset OAuth config")
+        Result.failure(e)
     }
 
     /**
@@ -374,54 +352,48 @@ class AuthRepository @Inject constructor(
         onlyFullDates: Boolean = false,
         start: String? = null,
         end: String? = null,
-    ): Result<TimeEntriesResponse> {
-        return try {
-            val endpoint = authDataStore.getEndpoint()
-            val api = apiClientFactory.createApi(endpoint)
-            val response = api.getTimeEntries(
-                organizationId,
-                memberId,
-                onlyFullDates = onlyFullDates,
-                limit = limit,
-                offset = offset,
-                start = start,
-                end = end,
-            )
-            Result.success(response)
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to get time entries")
-            Result.failure(e)
-        }
+    ): Result<TimeEntriesResponse> = try {
+        val endpoint = authDataStore.getEndpoint()
+        val api = apiClientFactory.createApi(endpoint)
+        val response = api.getTimeEntries(
+            organizationId,
+            memberId,
+            onlyFullDates = onlyFullDates,
+            limit = limit,
+            offset = offset,
+            start = start,
+            end = end,
+        )
+        Result.success(response)
+    } catch (e: Exception) {
+        Timber.e(e, "Failed to get time entries")
+        Result.failure(e)
     }
 
     /**
      * Get all tags for an organization
      */
-    suspend fun getTags(organizationId: String): Result<List<Tag>> {
-        return try {
-            val endpoint = authDataStore.getEndpoint()
-            val api = apiClientFactory.createApi(endpoint)
-            val response = api.getTags(organizationId)
-            Result.success(response.data)
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to get tags")
-            Result.failure(e)
-        }
+    suspend fun getTags(organizationId: String): Result<List<Tag>> = try {
+        val endpoint = authDataStore.getEndpoint()
+        val api = apiClientFactory.createApi(endpoint)
+        val response = api.getTags(organizationId)
+        Result.success(response.data)
+    } catch (e: Exception) {
+        Timber.e(e, "Failed to get tags")
+        Result.failure(e)
     }
 
     /**
      * Get all projects for an organization
      */
-    suspend fun getProjects(organizationId: String): Result<List<Project>> {
-        return try {
-            val endpoint = authDataStore.getEndpoint()
-            val api = apiClientFactory.createApi(endpoint)
-            val response = api.getProjects(organizationId)
-            Result.success(response.data)
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to get projects")
-            Result.failure(e)
-        }
+    suspend fun getProjects(organizationId: String): Result<List<Project>> = try {
+        val endpoint = authDataStore.getEndpoint()
+        val api = apiClientFactory.createApi(endpoint)
+        val response = api.getProjects(organizationId)
+        Result.success(response.data)
+    } catch (e: Exception) {
+        Timber.e(e, "Failed to get projects")
+        Result.failure(e)
     }
 
     suspend fun getClients(organizationId: String): Result<List<Client>> = try {
@@ -433,63 +405,53 @@ class AuthRepository @Inject constructor(
     /**
      * Get all tasks for an organization
      */
-    suspend fun getTasks(organizationId: String): Result<List<Task>> {
-        return try {
-            val endpoint = authDataStore.getEndpoint()
-            val api = apiClientFactory.createApi(endpoint)
-            val response = api.getTasks(organizationId)
-            Result.success(response.data)
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to get tasks")
-            Result.failure(e)
-        }
+    suspend fun getTasks(organizationId: String): Result<List<Task>> = try {
+        val endpoint = authDataStore.getEndpoint()
+        val api = apiClientFactory.createApi(endpoint)
+        val response = api.getTasks(organizationId)
+        Result.success(response.data)
+    } catch (e: Exception) {
+        Timber.e(e, "Failed to get tasks")
+        Result.failure(e)
     }
 
     /**
      * Update an existing time entry
      */
-    suspend fun updateTimeEntry(
-        organizationId: String,
-        timeEntry: TimeEntry,
-        tags: List<String> = emptyList()
-    ): Result<TimeEntry> {
-        return try {
-            val endpoint = authDataStore.getEndpoint()
-            val api = apiClientFactory.createApi(endpoint)
+    suspend fun updateTimeEntry(organizationId: String, timeEntry: TimeEntry, tags: List<String> = emptyList()): Result<TimeEntry> = try {
+        val endpoint = authDataStore.getEndpoint()
+        val api = apiClientFactory.createApi(endpoint)
 
-            val request = UpdateTimeEntryRequest(
-                userId = timeEntry.userId,
-                start = timeEntry.start,
-                end = timeEntry.end,
-                description = timeEntry.description,
-                projectId = timeEntry.projectId,
-                taskId = timeEntry.taskId,
-                billable = timeEntry.billable,
-                tags = tags
-            )
+        val request = UpdateTimeEntryRequest(
+            userId = timeEntry.userId,
+            start = timeEntry.start,
+            end = timeEntry.end,
+            description = timeEntry.description,
+            projectId = timeEntry.projectId,
+            taskId = timeEntry.taskId,
+            billable = timeEntry.billable,
+            tags = tags,
+        )
 
-            val response = api.updateTimeEntry(organizationId, timeEntry.id, request)
-            Timber.d("Time entry updated: ${response.data?.id}")
-            Result.success(response.data!!)
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to update time entry")
-            Result.failure(e)
-        }
+        val response = api.updateTimeEntry(organizationId, timeEntry.id, request)
+        Timber.d("Time entry updated: ${response.data?.id}")
+        Result.success(response.data!!)
+    } catch (e: Exception) {
+        Timber.e(e, "Failed to update time entry")
+        Result.failure(e)
     }
 
     /**
      * Delete a time entry
      */
-    suspend fun deleteTimeEntry(organizationId: String, timeEntryId: String): Result<Unit> {
-        return try {
-            val endpoint = authDataStore.getEndpoint()
-            val api = apiClientFactory.createApi(endpoint)
-            api.deleteTimeEntry(organizationId, timeEntryId)
-            Timber.d("Time entry deleted: $timeEntryId")
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to delete time entry")
-            Result.failure(e)
-        }
+    suspend fun deleteTimeEntry(organizationId: String, timeEntryId: String): Result<Unit> = try {
+        val endpoint = authDataStore.getEndpoint()
+        val api = apiClientFactory.createApi(endpoint)
+        api.deleteTimeEntry(organizationId, timeEntryId)
+        Timber.d("Time entry deleted: $timeEntryId")
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Timber.e(e, "Failed to delete time entry")
+        Result.failure(e)
     }
 }

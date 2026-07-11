@@ -1,105 +1,49 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.components
 
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
-import dev.tricked.solidverdant.R
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 
+/**
+ * Observes validated-internet connectivity and returns the current online state.
+ *
+ * Network hand-offs and process thaw briefly report no active network, so a
+ * reported loss is re-confirmed after [OFFLINE_CONFIRMATION_DELAY_MS] before the
+ * device is treated as offline.
+ *
+ * The connectivity banner itself now lives in the single [AppStatusOverlay], so
+ * this only exposes the raw state and no longer draws a second stacked surface.
+ */
 @Composable
-fun NetworkAwareContent(content: @Composable () -> Unit) {
+fun rememberIsOnline(): Boolean {
     val context = LocalContext.current
     val isOnline by produceState(initialValue = context.hasValidatedInternet(), context) {
         context.connectivityFlow().collectLatest { reportedOnline ->
             if (reportedOnline) {
                 value = true
             } else {
-                // Network hand-offs and process thaw briefly report no active network.
-                // Confirm the outage before showing a persistent offline banner.
                 delay(OFFLINE_CONFIRMATION_DELAY_MS)
                 value = context.hasValidatedInternet()
             }
         }
     }
-    var hasBeenOffline by remember { mutableStateOf(!isOnline) }
-    var showRestored by remember { mutableStateOf(false) }
-
-    LaunchedEffect(isOnline) {
-        if (!isOnline) {
-            hasBeenOffline = true
-            showRestored = false
-        } else if (hasBeenOffline) {
-            showRestored = true
-            delay(RESTORED_MESSAGE_DURATION_MS)
-            showRestored = false
-            hasBeenOffline = false
-        }
-    }
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        content()
-        AnimatedVisibility(
-            visible = !isOnline || showRestored,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(16.dp),
-            enter = slideInVertically { it } + fadeIn(),
-            exit = slideOutVertically { it } + fadeOut()
-        ) {
-            Surface(
-                color = if (isOnline) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.errorContainer
-                },
-                contentColor = if (isOnline) {
-                    MaterialTheme.colorScheme.onPrimaryContainer
-                } else {
-                    MaterialTheme.colorScheme.onErrorContainer
-                },
-                shape = MaterialTheme.shapes.medium,
-                shadowElevation = 6.dp,
-                modifier = Modifier.wrapContentWidth()
-            ) {
-                Text(
-                    text = stringResource(
-                        if (isOnline) R.string.network_restored else R.string.network_unavailable
-                    ),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)
-                )
-            }
-        }
-    }
+    return isOnline
 }
 
 private fun Context.connectivityFlow() = callbackFlow {
@@ -132,9 +76,7 @@ private fun Context.hasValidatedInternet(): Boolean {
     return capabilities.hasValidatedInternet()
 }
 
-private fun NetworkCapabilities.hasValidatedInternet(): Boolean =
-    hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-        hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+private fun NetworkCapabilities.hasValidatedInternet(): Boolean = hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+    hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
 
-private const val RESTORED_MESSAGE_DURATION_MS = 3_000L
 private const val OFFLINE_CONFIRMATION_DELAY_MS = 1_500L

@@ -1,0 +1,7 @@
+# Baseline profile: AOT-compile all first-party code so cold start and first scrolls run
+# compiled instead of interpreted/JIT. AGP expands these wildcards against the actual dex
+# (see task expand<Variant>ArtProfileWildcards) and packages the result as assets/dexopt/.
+# The androidx libraries (Compose, Room, etc.) already ship their own baseline profiles,
+# which AGP merges in automatically.
+HSPLdev/tricked/solidverdant/**;->**(**)**
+Ldev/tricked/solidverdant/**;

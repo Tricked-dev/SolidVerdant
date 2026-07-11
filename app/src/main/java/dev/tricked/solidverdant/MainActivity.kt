@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant
 
 import android.content.Intent
@@ -19,28 +25,32 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
-import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.local.AppThemeMode
+import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.model.TimeEntry
-import dev.tricked.solidverdant.ui.auth.AuthViewModel
-import dev.tricked.solidverdant.ui.auth.AuthState
-import dev.tricked.solidverdant.ui.login.LoginScreen
-import dev.tricked.solidverdant.ui.components.NetworkAwareContent
-import dev.tricked.solidverdant.ui.components.SyncStatusOverlay
+import dev.tricked.solidverdant.reminder.ReminderWorker
 import dev.tricked.solidverdant.sync.SyncStatusReporter
+import dev.tricked.solidverdant.ui.auth.AuthState
+import dev.tricked.solidverdant.ui.auth.AuthViewModel
+import dev.tricked.solidverdant.ui.calendar.CalendarScreen
+import dev.tricked.solidverdant.ui.components.AppStatusOverlay
+import dev.tricked.solidverdant.ui.login.LoginScreen
+import dev.tricked.solidverdant.ui.navigation.MainNavHost
+import dev.tricked.solidverdant.ui.navigation.ReviewRoutes
+import dev.tricked.solidverdant.ui.review.ReviewBadgeViewModel
+import dev.tricked.solidverdant.ui.review.ReviewScreen
+import dev.tricked.solidverdant.ui.statistics.StatisticsScreen
 import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
 import dev.tricked.solidverdant.ui.tracking.TrackingScreen
 import dev.tricked.solidverdant.ui.tracking.TrackingViewModel
-import dev.tricked.solidverdant.ui.navigation.MainNavHost
-import dev.tricked.solidverdant.ui.calendar.CalendarScreen
-import dev.tricked.solidverdant.ui.statistics.StatisticsScreen
-import androidx.navigation.compose.rememberNavController
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
-import javax.inject.Inject
+import kotlinx.coroutines.launch
 import timber.log.Timber
+import javax.inject.Inject
 
 /**
  * Main activity for SolidVerdant app
@@ -57,6 +67,7 @@ open class MainActivity : ComponentActivity() {
     private var stoppedAtElapsedRealtime: Long? = null
     private var handoffOrganizationId by mutableStateOf<String?>(null)
     private var editActiveEntryRequested by mutableStateOf(false)
+    private var pendingReviewRoute by mutableStateOf<String?>(null)
     private val startupTheme = MutableStateFlow(AppThemeMode.SYSTEM)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -80,19 +91,22 @@ open class MainActivity : ComponentActivity() {
             SolidVerdantTheme(themeMode = resolvedTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+                    color = MaterialTheme.colorScheme.background,
                 ) {
-                    NetworkAwareContent {
-                        SyncStatusOverlay(syncStatus) {
-                            SolidVerdantApp(
-                                authViewModel = authViewModel,
-                                trackingViewModel = trackingViewModel,
-                                handoffOrganizationId = handoffOrganizationId,
-                                onHandoffConsumed = { handoffOrganizationId = null },
-                                editActiveEntryRequested = editActiveEntryRequested,
-                                onEditActiveEntryConsumed = { editActiveEntryRequested = false },
-                            )
-                        }
+                    AppStatusOverlay(
+                        syncStatus = syncStatus,
+                        onRetrySync = { trackingViewModel.retrySync() },
+                    ) {
+                        SolidVerdantApp(
+                            authViewModel = authViewModel,
+                            trackingViewModel = trackingViewModel,
+                            handoffOrganizationId = handoffOrganizationId,
+                            onHandoffConsumed = { handoffOrganizationId = null },
+                            editActiveEntryRequested = editActiveEntryRequested,
+                            onEditActiveEntryConsumed = { editActiveEntryRequested = false },
+                            pendingReviewRoute = pendingReviewRoute,
+                            onPendingReviewRouteConsumed = { pendingReviewRoute = null },
+                        )
                     }
                 }
             }
@@ -117,7 +131,7 @@ open class MainActivity : ComponentActivity() {
                 organizationId = membership.organizationId,
                 memberId = membership.id,
                 refreshAll = backgroundDuration != null &&
-                    backgroundDuration >= RESUME_REFRESH_THRESHOLD_MS
+                    backgroundDuration >= RESUME_REFRESH_THRESHOLD_MS,
             )
         }
         stoppedAtElapsedRealtime = null
@@ -137,6 +151,12 @@ open class MainActivity : ComponentActivity() {
         if (intent?.getBooleanExtra(EXTRA_EDIT_ACTIVE_ENTRY, false) == true) {
             editActiveEntryRequested = true
             intent.removeExtra(EXTRA_EDIT_ACTIVE_ENTRY)
+        }
+        intent?.getStringExtra(ReminderWorker.EXTRA_OPEN_REVIEW_ROUTE)?.let { route ->
+            if (route in setOf(ReviewRoutes.END_OF_DAY, ReviewRoutes.REMINDER_SETTINGS, ReviewRoutes.MANAGE_TEMPLATES)) {
+                pendingReviewRoute = route
+            }
+            intent.removeExtra(ReminderWorker.EXTRA_OPEN_REVIEW_ROUTE)
         }
         intent?.data?.let { uri ->
             handleDeepLink(uri)
@@ -177,6 +197,8 @@ fun SolidVerdantApp(
     onHandoffConsumed: () -> Unit = {},
     editActiveEntryRequested: Boolean = false,
     onEditActiveEntryConsumed: () -> Unit = {},
+    pendingReviewRoute: String? = null,
+    onPendingReviewRouteConsumed: () -> Unit = {},
 ) {
     val authUiState by authViewModel.uiState.collectAsState()
     val configState by authViewModel.configState.collectAsState()
@@ -213,15 +235,16 @@ fun SolidVerdantApp(
         authUiState.hasRevalidated,
         optimisticRefresh,
         hasSnapshot,
-        snapshotHydrated
+        snapshotHydrated,
     ) {
         val membership = authUiState.currentMembership
-        val mayRefresh = snapshotHydrated && membership != null &&
+        val mayRefresh = snapshotHydrated &&
+            membership != null &&
             (!hasSnapshot || optimisticRefresh || authUiState.hasRevalidated)
         if (membership != null && mayRefresh) {
             trackingViewModel.loadAllData(
                 organizationId = membership.organizationId,
-                memberId = membership.id
+                memberId = membership.id,
             )
         }
     }
@@ -230,158 +253,204 @@ fun SolidVerdantApp(
         authState == AuthState.LoggedIn -> {
             val navController = rememberNavController()
             val currentMembership = authUiState.currentMembership
+            val reviewBadgeViewModel: ReviewBadgeViewModel = hiltViewModel()
+            LaunchedEffect(currentMembership?.organizationId) {
+                reviewBadgeViewModel.setOrganization(currentMembership?.organizationId)
+            }
+            val inboxBadgeCount by reviewBadgeViewModel.openIssueCount.collectAsState()
+            LaunchedEffect(pendingReviewRoute, currentMembership?.organizationId) {
+                val route = pendingReviewRoute
+                if (route != null && currentMembership != null) {
+                    navController.navigate(route) {
+                        launchSingleTop = true
+                    }
+                    onPendingReviewRouteConsumed()
+                }
+            }
             MainNavHost(
                 navController = navController,
+                inboxBadgeCount = inboxBadgeCount,
+                reviewContent = {
+                    ReviewScreen(
+                        onOpenReminderSettings = {
+                            navController.navigate(ReviewRoutes.REMINDER_SETTINGS)
+                        },
+                        onOpenManageTemplates = {
+                            navController.navigate(ReviewRoutes.MANAGE_TEMPLATES)
+                        },
+                        onOpenEndOfDayReview = {
+                            navController.navigate(ReviewRoutes.END_OF_DAY)
+                        },
+                    )
+                },
                 trackContent = {
-            TrackingScreen(
-                user = authUiState.user,
-                memberships = authUiState.memberships,
-                currentMembership = authUiState.currentMembership,
-                serverEndpoint = configState.endpoint,
-                clientId = configState.clientId,
-                uiState = trackingUiState,
-                alwaysShowNotifications = alwaysShowNotifications,
-                appTheme = appTheme,
-                optimisticRefresh = optimisticRefresh,
-                longTimerHours = longTimerHours,
-                editActiveEntryRequested = editActiveEntryRequested,
-                onEditActiveEntryConsumed = onEditActiveEntryConsumed,
-                onAlwaysShowNotificationsChange = { enabled ->
-                    trackingViewModel.setAlwaysShowNotifications(enabled)
-                },
-                onAppThemeChange = trackingViewModel::setAppTheme,
-                onOptimisticRefreshChange = trackingViewModel::setOptimisticRefresh,
-                onLongTimerHoursChange = trackingViewModel::setLongTimerHours,
-                onRefresh = {
-                    authUiState.currentMembership?.let { membership ->
-                        trackingViewModel.loadAllData(
-                            organizationId = membership.organizationId,
-                            memberId = membership.id,
-                            userInitiated = true
-                        )
-                    }
-                },
-                onLogout = {
-                    authViewModel.logout()
-                },
-                onMembershipChange = authViewModel::selectMembership,
-                onStartTracking = {
-                    authUiState.currentMembership?.let { membership ->
-                        authUiState.user?.let { user ->
-                            trackingViewModel.startTimeEntry(
-                                organizationId = membership.organizationId,
-                                memberId = membership.id,
-                                userId = user.id
-                            )
-                        }
-                    }
-                },
-                onStopTracking = {
-                    authUiState.currentMembership?.let { membership ->
-                        authUiState.user?.let { user ->
-                            trackingViewModel.stopTimeEntry(
-                                organizationId = membership.organizationId,
-                                memberId = membership.id,
-                                userId = user.id
-                            )
-                        }
-                    }
-                },
-                onPauseTracking = {
-                    authUiState.currentMembership?.let { membership ->
-                        authUiState.user?.let { user ->
-                            trackingViewModel.pauseTimeEntry(
-                                organizationId = membership.organizationId,
-                                userId = user.id
-                            )
-                        }
-                    }
-                },
-                onResumeTracking = {
-                    authUiState.currentMembership?.let { membership ->
-                        authUiState.user?.let { user ->
-                            trackingViewModel.resumeTimeEntry(
-                                organizationId = membership.organizationId,
-                                memberId = membership.id,
-                                userId = user.id
-                            )
-                        }
-                    }
-                },
-                onDescriptionChange = { description ->
-                    trackingViewModel.updateDescription(description)
-                },
-                onProjectChange = { projectId ->
-                    trackingViewModel.updateProject(projectId)
-                },
-                onTaskChange = { taskId ->
-                    trackingViewModel.updateTask(taskId)
-                },
-                onTagsChange = { tags ->
-                    trackingViewModel.updateTags(tags)
-                },
-                onBillableChange = { billable ->
-                    trackingViewModel.updateBillable(billable)
-                },
-                onUpdateCurrentEntry = {
-                    authUiState.currentMembership?.let { membership ->
-                        trackingViewModel.updateCurrentTimeEntry(
-                            organizationId = membership.organizationId
-                        )
-                    }
-                },
-                onUpdatePastEntry = { entry: TimeEntry, description: String?, projectId: String?, taskId: String?, tags: List<String>, billable: Boolean, start: String, end: String ->
-                    authUiState.currentMembership?.let { membership ->
-                        trackingViewModel.updatePastTimeEntry(
-                            organizationId = membership.organizationId,
-                            timeEntry = entry,
-                            description = description,
-                            projectId = projectId,
-                            taskId = taskId,
-                            tags = tags,
-                            billable = billable,
-                            start = start,
-                            end = end
-                        )
-                    }
-                },
-                onCreateEntry = { description: String?, projectId: String?, taskId: String?, tags: List<String>, billable: Boolean, start: String, end: String ->
-                    authUiState.currentMembership?.let { membership ->
-                        authUiState.user?.let { user ->
-                            trackingViewModel.createManualTimeEntry(
-                                organizationId = membership.organizationId,
-                                memberId = membership.id,
-                                userId = user.id,
-                                description = description,
-                                projectId = projectId,
-                                taskId = taskId,
-                                tags = tags,
-                                billable = billable,
-                                start = start,
-                                end = end
-                            )
-                        }
-                    }
-                },
-                onDeleteEntry = { timeEntryId ->
-                    authUiState.currentMembership?.let { membership ->
-                        trackingViewModel.deleteTimeEntry(
-                            organizationId = membership.organizationId,
-                            timeEntryId = timeEntryId
-                        )
-                    }
-                },
-                onUndoDelete = trackingViewModel::undoDelete,
-                onRetrySync = trackingViewModel::retrySync,
-                onRetrySyncEntry = trackingViewModel::retrySync,
-                onLoadMoreEntries = trackingViewModel::loadMoreTimeEntries,
-                onLoadNewerEntries = trackingViewModel::loadNewerTimeEntries,
-                onJumpToDate = trackingViewModel::jumpToHistoryDate,
-                onHistoryJumpConsumed = trackingViewModel::consumeHistoryJump,
-                getGroupedEntries = {
-                    trackingViewModel.getGroupedTimeEntries()
-                }
-            )
+                    TrackingScreen(
+                        user = authUiState.user,
+                        memberships = authUiState.memberships,
+                        currentMembership = authUiState.currentMembership,
+                        serverEndpoint = configState.endpoint,
+                        clientId = configState.clientId,
+                        uiState = trackingUiState,
+                        elapsedSeconds = trackingViewModel.elapsedSeconds,
+                        alwaysShowNotifications = alwaysShowNotifications,
+                        appTheme = appTheme,
+                        optimisticRefresh = optimisticRefresh,
+                        longTimerHours = longTimerHours,
+                        editActiveEntryRequested = editActiveEntryRequested,
+                        onEditActiveEntryConsumed = onEditActiveEntryConsumed,
+                        onAlwaysShowNotificationsChange = { enabled ->
+                            trackingViewModel.setAlwaysShowNotifications(enabled)
+                        },
+                        onAppThemeChange = trackingViewModel::setAppTheme,
+                        onOptimisticRefreshChange = trackingViewModel::setOptimisticRefresh,
+                        onLongTimerHoursChange = trackingViewModel::setLongTimerHours,
+                        onRefresh = {
+                            authUiState.currentMembership?.let { membership ->
+                                trackingViewModel.loadAllData(
+                                    organizationId = membership.organizationId,
+                                    memberId = membership.id,
+                                    userInitiated = true,
+                                )
+                            }
+                        },
+                        onLogout = {
+                            authViewModel.logout()
+                        },
+                        onMembershipChange = authViewModel::selectMembership,
+                        onStartTracking = {
+                            authUiState.currentMembership?.let { membership ->
+                                authUiState.user?.let { user ->
+                                    trackingViewModel.startTimeEntry(
+                                        organizationId = membership.organizationId,
+                                        memberId = membership.id,
+                                        userId = user.id,
+                                    )
+                                }
+                            }
+                        },
+                        onStopTracking = {
+                            authUiState.currentMembership?.let { membership ->
+                                authUiState.user?.let { user ->
+                                    trackingViewModel.stopTimeEntry(
+                                        organizationId = membership.organizationId,
+                                        memberId = membership.id,
+                                        userId = user.id,
+                                    )
+                                }
+                            }
+                        },
+                        onPauseTracking = {
+                            authUiState.currentMembership?.let { membership ->
+                                authUiState.user?.let { user ->
+                                    trackingViewModel.pauseTimeEntry(
+                                        organizationId = membership.organizationId,
+                                        userId = user.id,
+                                    )
+                                }
+                            }
+                        },
+                        onResumeTracking = {
+                            authUiState.currentMembership?.let { membership ->
+                                authUiState.user?.let { user ->
+                                    trackingViewModel.resumeTimeEntry(
+                                        organizationId = membership.organizationId,
+                                        memberId = membership.id,
+                                        userId = user.id,
+                                    )
+                                }
+                            }
+                        },
+                        onDescriptionChange = { description ->
+                            trackingViewModel.updateDescription(description)
+                        },
+                        onProjectChange = { projectId ->
+                            trackingViewModel.updateProject(projectId)
+                        },
+                        onTaskChange = { taskId ->
+                            trackingViewModel.updateTask(taskId)
+                        },
+                        onTagsChange = { tags ->
+                            trackingViewModel.updateTags(tags)
+                        },
+                        onBillableChange = { billable ->
+                            trackingViewModel.updateBillable(billable)
+                        },
+                        onUpdateCurrentEntry = {
+                            authUiState.currentMembership?.let { membership ->
+                                trackingViewModel.updateCurrentTimeEntry(
+                                    organizationId = membership.organizationId,
+                                )
+                            }
+                        },
+                        onUpdatePastEntry = {
+                                entry: TimeEntry,
+                                description: String?,
+                                projectId: String?,
+                                taskId: String?,
+                                tags: List<String>,
+                                billable: Boolean,
+                                start: String,
+                                end: String,
+                            ->
+                            authUiState.currentMembership?.let { membership ->
+                                trackingViewModel.updatePastTimeEntry(
+                                    organizationId = membership.organizationId,
+                                    timeEntry = entry,
+                                    description = description,
+                                    projectId = projectId,
+                                    taskId = taskId,
+                                    tags = tags,
+                                    billable = billable,
+                                    start = start,
+                                    end = end,
+                                )
+                            }
+                        },
+                        onCreateEntry = {
+                                description: String?,
+                                projectId: String?,
+                                taskId: String?,
+                                tags: List<String>,
+                                billable: Boolean,
+                                start: String,
+                                end: String,
+                            ->
+                            authUiState.currentMembership?.let { membership ->
+                                authUiState.user?.let { user ->
+                                    trackingViewModel.createManualTimeEntry(
+                                        organizationId = membership.organizationId,
+                                        memberId = membership.id,
+                                        userId = user.id,
+                                        description = description,
+                                        projectId = projectId,
+                                        taskId = taskId,
+                                        tags = tags,
+                                        billable = billable,
+                                        start = start,
+                                        end = end,
+                                    )
+                                }
+                            }
+                        },
+                        onDeleteEntry = { timeEntryId ->
+                            authUiState.currentMembership?.let { membership ->
+                                trackingViewModel.deleteTimeEntry(
+                                    organizationId = membership.organizationId,
+                                    timeEntryId = timeEntryId,
+                                )
+                            }
+                        },
+                        onUndoDelete = trackingViewModel::undoDelete,
+                        onRetrySync = trackingViewModel::retrySync,
+                        onRetrySyncEntry = trackingViewModel::retrySync,
+                        onLoadMoreEntries = trackingViewModel::loadMoreTimeEntries,
+                        onLoadNewerEntries = trackingViewModel::loadNewerTimeEntries,
+                        onJumpToDate = trackingViewModel::jumpToHistoryDate,
+                        onHistoryJumpConsumed = trackingViewModel::consumeHistoryJump,
+                        getGroupedEntries = {
+                            trackingViewModel.getGroupedTimeEntries()
+                        },
+                    )
                 },
                 calendarContent = {
                     if (currentMembership != null) {
@@ -433,7 +502,7 @@ fun SolidVerdantApp(
                 },
                 onClearError = {
                     authViewModel.clearError()
-                }
+                },
             )
         }
 

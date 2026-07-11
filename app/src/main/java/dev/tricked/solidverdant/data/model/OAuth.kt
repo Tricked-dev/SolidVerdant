@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.model
 
 import kotlinx.serialization.SerialName
@@ -15,22 +21,15 @@ data class TokenResponse(
     @SerialName("token_type")
     val tokenType: String = "Bearer",
     @SerialName("expires_in")
-    val expiresIn: Int? = null
+    val expiresIn: Int? = null,
 )
 
 /**
  * OAuth2 configuration for the Solidtime instance
  */
-data class OAuthConfig(
-    val endpoint: String = "https://app.solidtime.io",
-    val clientId: String = "9c994748-c593-4a6d-951b-6849c829bc4e"
-)
+data class OAuthConfig(val endpoint: String = "https://app.solidtime.io", val clientId: String = "9c994748-c593-4a6d-951b-6849c829bc4e")
 
 /**
  * PKCE (Proof Key for Code Exchange) data for OAuth2 flow
  */
-data class PKCEData(
-    val codeVerifier: String,
-    val codeChallenge: String,
-    val state: String
-)
+data class PKCEData(val codeVerifier: String, val codeChallenge: String, val state: String)

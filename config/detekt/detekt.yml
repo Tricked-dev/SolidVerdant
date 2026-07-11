@@ -1,0 +1,54 @@
+# Detekt configuration for SolidVerdant.
+#
+# This file only defines the rules we care about for design-drift prevention; everything
+# else falls back to detekt's shipped defaults because `buildUponDefaultConfig = true` is
+# set in app/build.gradle.kts.
+#
+# Detekt is a standalone, opt-in task and is NOT part of the default build/check/assemble
+# graph. Run it with `./gradlew detekt`. The baseline (config/detekt/baseline.xml) is
+# generated with `./gradlew detektBaseline` and is intentionally not hand-written.
+
+style:
+  # Discourage unexplained numeric literals in feature code. Dimensions, font sizes, and
+  # durations belong in Dimens / MaterialTheme tokens, not magic numbers scattered in UI.
+  MagicNumber:
+    active: true
+    # ui/theme is where the design tokens themselves are declared, so raw numbers are
+    # expected there. Tests routinely use literal fixtures, so they are exempt too.
+    excludes:
+      - '**/test/**'
+      - '**/androidTest/**'
+      - '**/ui/theme/**'
+    # detekt's default ignoreNumbers set.
+    ignoreNumbers:
+      - '-1'
+      - '0'
+      - '1'
+      - '2'
+    ignoreHashCodeFunction: true
+    ignorePropertyDeclaration: false
+    ignoreLocalVariableDeclaration: false
+    ignoreConstantDeclaration: true
+    ignoreCompanionObjectPropertyDeclaration: true
+    ignoreAnnotation: false
+    ignoreNamedArgument: true
+    ignoreEnums: false
+    ignoreRanges: false
+    ignoreExtensionFunction: true
+
+  # Discourage hardcoded ARGB colors in feature code. Colors must come from the shared kit
+  # (MaterialTheme.colorScheme / SemanticColors in ui/theme), never a raw Color(0x..) literal.
+  #
+  # NOTE (best-effort): ForbiddenMethodCall requires type resolution to match. It fires under
+  # detekt's type-resolution run (the `detektMain`/classpath-aware tasks) and will NOT match on
+  # a plain `detekt` invocation without a compile classpath. The exact signature used for the
+  # Compose top-level `Color(...)` constructor factory is `androidx.compose.ui.graphics.Color`.
+  ForbiddenMethodCall:
+    active: true
+    excludes:
+      - '**/test/**'
+      - '**/androidTest/**'
+      - '**/ui/theme/**'
+    methods:
+      - reason: 'Do not hardcode ARGB colors in feature code. Use MaterialTheme.colorScheme or SemanticColors from ui/theme.'
+        value: 'androidx.compose.ui.graphics.Color'

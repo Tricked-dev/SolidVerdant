@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.local
 
 import android.content.Context
@@ -13,19 +19,22 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
+
+// Keep the delegate at file scope so every AuthDataStore instance (including instances from
+// successive Hilt test components in the same instrumentation process) shares one DataStore.
+// Declaring this inside AuthDataStore creates a new delegate for each component and DataStore
+// rejects the second active instance for the same auth_prefs file.
+private val Context.authDataStore: DataStore<Preferences> by preferencesDataStore(name = "auth_prefs")
 
 /**
  * DataStore for authentication-related data
  * Provides encrypted storage for tokens, OAuth config, and PKCE data
  */
 @Singleton
-class AuthDataStore @Inject constructor(
-    @ApplicationContext private val context: Context
-) {
-    private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "auth_prefs")
-
+class AuthDataStore @Inject constructor(@ApplicationContext private val context: Context) {
     private object PreferencesKeys {
         val ACCESS_TOKEN = stringPreferencesKey("access_token")
         val REFRESH_TOKEN = stringPreferencesKey("refresh_token")
@@ -38,31 +47,60 @@ class AuthDataStore @Inject constructor(
 
     private val secretCipher = AuthSecretCipher()
     private val migrationMutex = Mutex()
+
     @Volatile private var migrationComplete = false
 
     private val secretKeys = listOf(
         PreferencesKeys.ACCESS_TOKEN,
         PreferencesKeys.REFRESH_TOKEN,
         PreferencesKeys.CODE_VERIFIER,
-        PreferencesKeys.STATE
+        PreferencesKeys.STATE,
     )
 
-    private fun secretFlow(key: Preferences.Key<String>): Flow<String?> = context.dataStore.data
+    private fun secretFlow(key: Preferences.Key<String>): Flow<String?> = context.authDataStore.data
         .onStart { migratePlaintextSecrets() }
-        .map { preferences -> preferences[key]?.let(secretCipher::decrypt) }
+        // decryptOrNull never throws: a secret that can no longer be decrypted (Keystore key lost or
+        // invalidated) is treated as absent so the flow emits "logged out" instead of crashing every
+        // collector (isLoggedIn/accessToken and the interceptor's runBlocking read path).
+        .map { preferences -> preferences[key]?.let(secretCipher::decryptOrNull) }
 
     private suspend fun migratePlaintextSecrets() {
         if (migrationComplete) return
         migrationMutex.withLock {
             if (migrationComplete) return@withLock
-            context.dataStore.edit { preferences ->
+            context.authDataStore.edit { preferences ->
                 secretKeys.forEach { key ->
-                    preferences[key]?.let { storedValue ->
-                        preferences[key] = secretCipher.encryptIfNeeded(storedValue)
+                    val storedValue = preferences[key] ?: return@forEach
+                    when (val sanitized = sanitizeSecret(storedValue)) {
+                        // Undecryptable secret (e.g. after data restore to a new device): discard it so
+                        // the app starts cleanly at the login screen instead of crash-looping.
+                        null -> preferences.remove(key)
+                        else -> preferences[key] = sanitized
                     }
                 }
             }
             migrationComplete = true
+        }
+    }
+
+    /**
+     * Returns the encrypted envelope to persist, or null when the stored secret cannot be recovered
+     * and must be discarded. Legacy plaintext is encrypted in place; an already-encrypted value is
+     * verified to still be decryptable with the current Keystore key.
+     */
+    private fun sanitizeSecret(storedValue: String): String? = if (secretCipher.isEncrypted(storedValue)) {
+        if (secretCipher.decryptOrNull(storedValue) != null) {
+            storedValue
+        } else {
+            Timber.w("Discarding an undecryptable authentication secret; treating session as logged out")
+            null
+        }
+    } else {
+        try {
+            secretCipher.encrypt(storedValue)
+        } catch (e: Exception) {
+            Timber.w("Discarding an authentication secret that could not be encrypted")
+            null
         }
     }
 
@@ -76,15 +114,19 @@ class AuthDataStore @Inject constructor(
 
     val refreshToken: Flow<String?> = secretFlow(PreferencesKeys.REFRESH_TOKEN)
 
+    // NOTE: this intentionally derives from the decrypt-validating accessToken flow. The splash
+    // screen holds the first frame until this emits, which is part of the "first frame shows the
+    // full cached UI, no layout shifts" product behavior — a faster presence-only check was tried
+    // (2026-07-07) and regressed app load behavior; don't reintroduce it.
     val isLoggedIn: Flow<Boolean> = accessToken.map { !it.isNullOrEmpty() }
 
     // OAuth config flows
-    val endpoint: Flow<String> = context.dataStore.data
+    val endpoint: Flow<String> = context.authDataStore.data
         .map { preferences ->
             preferences[PreferencesKeys.ENDPOINT] ?: DEFAULT_ENDPOINT
         }
 
-    val clientId: Flow<String> = context.dataStore.data
+    val clientId: Flow<String> = context.authDataStore.data
         .map { preferences ->
             preferences[PreferencesKeys.CLIENT_ID] ?: DEFAULT_CLIENT_ID
         }
@@ -95,43 +137,46 @@ class AuthDataStore @Inject constructor(
     val state: Flow<String?> = secretFlow(PreferencesKeys.STATE)
 
     // Membership flow
-    val currentMembershipId: Flow<String?> = context.dataStore.data
+    val currentMembershipId: Flow<String?> = context.authDataStore.data
         .map { preferences -> preferences[PreferencesKeys.CURRENT_MEMBERSHIP_ID] }
 
     /**
      * Save access and refresh tokens
      */
     suspend fun saveTokens(accessToken: String, refreshToken: String) {
-        context.dataStore.edit { preferences ->
+        context.authDataStore.edit { preferences ->
             preferences[PreferencesKeys.ACCESS_TOKEN] = secretCipher.encrypt(accessToken)
             preferences[PreferencesKeys.REFRESH_TOKEN] = secretCipher.encrypt(refreshToken)
         }
+        cacheAccessToken(accessToken)
     }
 
     /**
      * Save only the access token (used during token refresh)
      */
     suspend fun saveAccessToken(accessToken: String) {
-        context.dataStore.edit { preferences ->
+        context.authDataStore.edit { preferences ->
             preferences[PreferencesKeys.ACCESS_TOKEN] = secretCipher.encrypt(accessToken)
         }
+        cacheAccessToken(accessToken)
     }
 
     /**
      * Clear all authentication tokens
      */
     suspend fun clearTokens() {
-        context.dataStore.edit { preferences ->
+        context.authDataStore.edit { preferences ->
             preferences.remove(PreferencesKeys.ACCESS_TOKEN)
             preferences.remove(PreferencesKeys.REFRESH_TOKEN)
         }
+        cacheAccessToken(null)
     }
 
     /**
      * Save OAuth configuration (endpoint and client ID)
      */
     suspend fun saveOAuthConfig(endpoint: String, clientId: String) {
-        context.dataStore.edit { preferences ->
+        context.authDataStore.edit { preferences ->
             preferences[PreferencesKeys.ENDPOINT] = endpoint.removeSuffix("/")
             preferences[PreferencesKeys.CLIENT_ID] = clientId
         }
@@ -141,7 +186,7 @@ class AuthDataStore @Inject constructor(
      * Save PKCE data for OAuth flow
      */
     suspend fun savePKCEData(codeVerifier: String, state: String) {
-        context.dataStore.edit { preferences ->
+        context.authDataStore.edit { preferences ->
             preferences[PreferencesKeys.CODE_VERIFIER] = secretCipher.encrypt(codeVerifier)
             preferences[PreferencesKeys.STATE] = secretCipher.encrypt(state)
         }
@@ -151,7 +196,7 @@ class AuthDataStore @Inject constructor(
      * Clear PKCE data after successful OAuth flow
      */
     suspend fun clearPKCEData() {
-        context.dataStore.edit { preferences ->
+        context.authDataStore.edit { preferences ->
             preferences.remove(PreferencesKeys.CODE_VERIFIER)
             preferences.remove(PreferencesKeys.STATE)
         }
@@ -161,7 +206,7 @@ class AuthDataStore @Inject constructor(
      * Save current membership ID
      */
     suspend fun saveCurrentMembershipId(membershipId: String) {
-        context.dataStore.edit { preferences ->
+        context.authDataStore.edit { preferences ->
             preferences[PreferencesKeys.CURRENT_MEMBERSHIP_ID] = membershipId
         }
     }
@@ -171,7 +216,7 @@ class AuthDataStore @Inject constructor(
      * Preserves endpoint and client ID settings
      */
     suspend fun clearAll() {
-        context.dataStore.edit { preferences ->
+        context.authDataStore.edit { preferences ->
             // Save OAuth config before clearing
             val savedEndpoint = preferences[PreferencesKeys.ENDPOINT]
             val savedClientId = preferences[PreferencesKeys.CLIENT_ID]
@@ -183,13 +228,14 @@ class AuthDataStore @Inject constructor(
             savedEndpoint?.let { preferences[PreferencesKeys.ENDPOINT] = it }
             savedClientId?.let { preferences[PreferencesKeys.CLIENT_ID] = it }
         }
+        cacheAccessToken(null)
     }
 
     /**
      * Reset OAuth configuration to defaults
      */
     suspend fun resetOAuthConfig() {
-        context.dataStore.edit { preferences ->
+        context.authDataStore.edit { preferences ->
             preferences.remove(PreferencesKeys.ENDPOINT)
             preferences.remove(PreferencesKeys.CLIENT_ID)
         }
@@ -198,42 +244,48 @@ class AuthDataStore @Inject constructor(
     /**
      * Get code verifier synchronously (for use in interceptors)
      */
-    suspend fun getCodeVerifier(): String? {
-        return codeVerifier.first()
-    }
+    suspend fun getCodeVerifier(): String? = codeVerifier.first()
 
     /**
      * Get state synchronously (for use in OAuth callback verification)
      */
-    suspend fun getState(): String? {
-        return state.first()
-    }
+    suspend fun getState(): String? = state.first()
 
     /**
-     * Get access token synchronously (for use in interceptors)
+     * Get access token synchronously (for use in interceptors).
+     *
+     * Served from an in-memory cache after the first read: the auth interceptor calls this on
+     * every API request, and without the cache each request pays a DataStore disk read plus a
+     * Keystore decrypt IPC. Writes ([saveTokens]/[saveAccessToken]/[clearTokens]/[clearAll])
+     * update or invalidate the cache.
      */
     suspend fun getAccessToken(): String? {
-        return accessToken.first()
+        cachedAccessToken?.let { return it.token }
+        return accessToken.first().also { cacheAccessToken(it) }
+    }
+
+    /** Wrapper so a cached "no token" (null) is distinguishable from "nothing cached yet". */
+    private class CachedToken(val token: String?)
+
+    @Volatile
+    private var cachedAccessToken: CachedToken? = null
+
+    private fun cacheAccessToken(token: String?) {
+        cachedAccessToken = CachedToken(token)
     }
 
     /**
      * Get refresh token synchronously (for use in token refresh)
      */
-    suspend fun getRefreshToken(): String? {
-        return refreshToken.first()
-    }
+    suspend fun getRefreshToken(): String? = refreshToken.first()
 
     /**
      * Get endpoint synchronously
      */
-    suspend fun getEndpoint(): String {
-        return endpoint.first()
-    }
+    suspend fun getEndpoint(): String = endpoint.first()
 
     /**
      * Get client ID synchronously
      */
-    suspend fun getClientId(): String {
-        return clientId.first()
-    }
+    suspend fun getClientId(): String = clientId.first()
 }

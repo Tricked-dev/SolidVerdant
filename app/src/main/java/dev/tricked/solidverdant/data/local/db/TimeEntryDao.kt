@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.local.db
 
 import androidx.room.Dao
@@ -46,6 +52,18 @@ interface TimeEntryDao {
     @Query("SELECT tagId FROM time_entry_tag_cross_ref WHERE timeEntryId = :entryId")
     suspend fun tagIdsFor(entryId: String): List<String>
 
+    /**
+     * All tag refs for an organization's entries in one reactive query. The per-entry
+     * [tagIdsFor] inside observeTimeEntries was an N+1: with 250 cached entries every Room
+     * invalidation re-ran 250 point queries (simpleperf showed tagIdsFor alone at ~9% of total
+     * CPU during history scrolling).
+     */
+    @Query(
+        "SELECT r.timeEntryId AS timeEntryId, r.tagId AS tagId FROM time_entry_tag_cross_ref r " +
+            "INNER JOIN time_entries e ON e.id = r.timeEntryId WHERE e.organizationId = :orgId",
+    )
+    fun observeTagRefs(orgId: String): Flow<List<TimeEntryTagRef>>
+
     @Query("DELETE FROM time_entry_tag_cross_ref WHERE timeEntryId = :entryId")
     suspend fun clearTagRefs(entryId: String)
 
@@ -59,5 +77,25 @@ interface TimeEntryDao {
     suspend fun replaceTagRefs(entryId: String, tagIds: List<String>) {
         clearTagRefs(entryId)
         insertTagRefs(tagIds.map { TimeEntryTagCrossRef(entryId, it) })
+    }
+
+    /**
+     * Apply a page of server entries in ONE transaction. Per-entry upsert+replaceTagRefs used to
+     * produce 2-3 transactions per entry (500+ for a 250-entry refresh), and every transaction
+     * fires Room's invalidation tracker — re-running every observer (full entry list, tag refs,
+     * catalog) and the whole downstream UI pipeline per write. One transaction = one invalidation.
+     *
+     * Never lets a server pull clobber an unsynced local edit or a pending soft-delete.
+     */
+    @Transaction
+    suspend fun applyServerEntries(entries: List<TimeEntryEntity>, tagIdsByEntry: Map<String, List<String>>) {
+        entries.forEach { entity ->
+            val local = getById(entity.id)
+            if (local != null && (local.syncState == SyncState.PENDING || local.pendingDelete)) {
+                return@forEach
+            }
+            upsert(entity)
+            replaceTagRefs(entity.id, tagIdsByEntry[entity.id].orEmpty())
+        }
     }
 }

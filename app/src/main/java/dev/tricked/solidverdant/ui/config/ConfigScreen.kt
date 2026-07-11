@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.config
 
 import android.content.ClipboardManager
@@ -6,12 +12,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -26,10 +36,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.ui.auth.OAuthConfigState
 
@@ -43,7 +53,11 @@ fun ConfigScreen(
     onSave: (String, String) -> Unit,
     onReset: () -> Unit,
     onTestConnection: (String, String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    // Optional review-loop entry points. Rendered only when provided so the pre-login OAuth sheet
+    // stays unchanged while an in-app settings caller can surface reminder/template configuration.
+    onOpenReminderSettings: (() -> Unit)? = null,
+    onOpenManageTemplates: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -79,27 +93,28 @@ fun ConfigScreen(
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .imePadding()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Text(
                 text = stringResource(R.string.oauth_configuration),
-                style = MaterialTheme.typography.headlineSmall
+                style = MaterialTheme.typography.headlineSmall,
             )
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     text = stringResource(R.string.server_endpoint),
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 OutlinedTextField(
                     value = endpoint,
                     onValueChange = { endpoint = it.trim() },
                     placeholder = { Text(stringResource(R.string.server_endpoint_placeholder)) },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
 
@@ -107,28 +122,31 @@ fun ConfigScreen(
                 Text(
                     text = stringResource(R.string.client_id),
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 OutlinedTextField(
                     value = clientId,
                     onValueChange = { clientId = it.trim() },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
 
+            // Test is the primary action → full width so its (long, localized) label never
+            // gets clipped; the two secondary actions split a second row. Avoids the previous
+            // three-across layout where long labels overflowed horizontally.
+            FilledTonalButton(
+                onClick = { onTestConnection(endpoint, clientId) },
+                enabled = endpoint.isNotBlank() && clientId.isNotBlank() && !configState.isTesting,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(stringResource(if (configState.isTesting) R.string.testing_connection else R.string.test_connection)) }
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 FilledTonalButton(
-                    onClick = { onTestConnection(endpoint, clientId) },
-                    enabled = endpoint.isNotBlank() && clientId.isNotBlank() && !configState.isTesting,
-                    modifier = Modifier.weight(1f),
-                ) { Text(stringResource(if (configState.isTesting) R.string.testing_connection else R.string.test_connection)) }
-                FilledTonalButton(
                     onClick = ::pasteConfig,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 ) {
                     Text(stringResource(R.string.paste_from_clipboard))
                 }
@@ -137,7 +155,7 @@ fun ConfigScreen(
                         onReset()
                         onDismiss()
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 ) {
                     Text(stringResource(R.string.reset_to_defaults))
                 }
@@ -151,13 +169,43 @@ fun ConfigScreen(
                 )
             }
 
+            if (onOpenReminderSettings != null || onOpenManageTemplates != null) {
+                HorizontalDivider()
+                onOpenReminderSettings?.let { open ->
+                    TextButton(
+                        onClick = open,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.review_menu_reminder_settings),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+                onOpenManageTemplates?.let { open ->
+                    TextButton(
+                        onClick = open,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.review_menu_manage_templates),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 TextButton(
                     onClick = onDismiss,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 ) {
                     Text(stringResource(R.string.cancel))
                 }
@@ -167,7 +215,7 @@ fun ConfigScreen(
                         onDismiss()
                     },
                     enabled = endpoint.isNotBlank() && clientId.isNotBlank(),
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 ) {
                     Text(stringResource(R.string.save))
                 }

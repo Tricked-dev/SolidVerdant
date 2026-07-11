@@ -8,8 +8,10 @@ package dev.tricked.solidverdant.data.local
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
-import dev.tricked.solidverdant.util.ShortcutManager
 import dev.tricked.solidverdant.data.local.db.AppDatabase
+import dev.tricked.solidverdant.util.ShortcutManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -20,7 +22,7 @@ class UserCacheCleaner @Inject constructor(
     private val settingsDataStore: SettingsDataStore,
     private val database: AppDatabase,
 ) {
-    suspend fun clear() {
+    suspend fun clear() = withContext(Dispatchers.IO) {
         settingsDataStore.clearCachedData()
         database.clearAllTables()
         context.getSharedPreferences(TILE_STATE_PREFERENCES, Context.MODE_PRIVATE)

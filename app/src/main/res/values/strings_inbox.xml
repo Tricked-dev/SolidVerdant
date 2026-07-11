@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Time Inbox feature strings (gap analysis #16/#17). Feature-scoped file; do not merge into strings.xml. -->
+
+    <!-- Header / summary -->
+    <string name="inbox_summary_none">All caught up</string>
+    <plurals name="inbox_summary_count">
+        <item quantity="one">%1$d item to review</item>
+        <item quantity="other">%1$d items to review</item>
+    </plurals>
+    <string name="inbox_refresh_action">Refresh</string>
+    <string name="inbox_settings_action">Inbox settings</string>
+
+    <!-- Offline / stale banner -->
+    <string name="inbox_stale_banner">Showing saved data — couldn\'t refresh.</string>
+    <string name="inbox_retry">Retry</string>
+    <string name="inbox_dismiss">Dismiss</string>
+
+    <!-- Empty states -->
+    <string name="inbox_caught_up_title">All caught up</string>
+    <string name="inbox_caught_up_body">Every tracked entry looks good. Nothing to review right now.</string>
+    <string name="inbox_empty_title">Nothing to review yet</string>
+    <string name="inbox_empty_body">Track some time and the inbox will highlight anything worth a second look.</string>
+
+    <!-- Dismiss / undo -->
+    <string name="inbox_dismissed_snackbar">Item dismissed</string>
+    <string name="inbox_undo">Undo</string>
+    <string name="inbox_swipe_dismiss_cd">Dismiss this item</string>
+
+    <!-- Action errors -->
+    <string name="inbox_error_refresh">Couldn\'t refresh. Check your connection and try again.</string>
+    <string name="inbox_error_create">Couldn\'t add the entry. Check your connection and try again.</string>
+    <string name="inbox_error_resolve">Couldn\'t save your change. Please try again.</string>
+
+    <!-- Issue cards -->
+    <string name="inbox_issue_overlap_title">Overlapping entries</string>
+    <string name="inbox_issue_overlap_body">Two entries cover the same time. Adjust one if that wasn\'t intended, or dismiss to keep it.</string>
+    <string name="inbox_issue_overlap_body_policy">Your organization doesn\'t allow overlapping entries. Adjust one of these.</string>
+    <string name="inbox_action_adjust">Adjust</string>
+
+    <string name="inbox_issue_gap_title">Untracked time</string>
+    <string name="inbox_issue_gap_body">No entry covers this part of your working hours.</string>
+    <string name="inbox_action_add_entry">Add entry</string>
+
+    <string name="inbox_issue_missing_title">Add details</string>
+    <string name="inbox_issue_missing_body">Missing %1$s.</string>
+    <string name="inbox_action_add_details">Add details</string>
+
+    <string name="inbox_issue_long_title">Unusually long entry</string>
+    <string name="inbox_issue_long_body">This entry is %1$s long. Check that it ended when you expected.</string>
+    <string name="inbox_action_review">Review</string>
+
+    <string name="inbox_action_dismiss">Dismiss</string>
+    <string name="inbox_entry_untitled">Untitled entry</string>
+
+    <!-- Missing field names -->
+    <string name="inbox_field_project">project</string>
+    <string name="inbox_field_task">task</string>
+    <string name="inbox_field_description">description</string>
+    <string name="inbox_field_tags">tags</string>
+
+    <!-- Durations -->
+    <string name="inbox_duration_hm">%1$dh %2$dm</string>
+    <string name="inbox_duration_h">%1$dh</string>
+    <string name="inbox_duration_m">%1$dm</string>
+
+    <!-- Settings sheet -->
+    <string name="inbox_settings_title">Inbox settings</string>
+    <string name="inbox_settings_work_days">Working days</string>
+    <string name="inbox_settings_working_hours">Working hours</string>
+    <string name="inbox_settings_work_start">Start</string>
+    <string name="inbox_settings_work_end">End</string>
+    <string name="inbox_settings_min_gap">Minimum gap to flag</string>
+    <string name="inbox_settings_max_duration">Long-entry threshold</string>
+    <string name="inbox_settings_checks">Checks</string>
+    <string name="inbox_settings_check_gaps">Untracked gaps</string>
+    <string name="inbox_settings_check_overlaps">Overlapping entries</string>
+    <string name="inbox_settings_check_missing_project">Missing project</string>
+    <string name="inbox_settings_check_missing_task">Missing task</string>
+    <string name="inbox_settings_check_missing_description">Missing description</string>
+    <string name="inbox_settings_check_missing_tags">Missing tags</string>
+    <string name="inbox_settings_check_long">Long entries</string>
+    <string name="inbox_settings_done">Done</string>
+    <string name="inbox_settings_decrease">Decrease</string>
+    <string name="inbox_settings_increase">Increase</string>
+    <string name="inbox_minutes_value">%1$d min</string>
+    <string name="inbox_hours_value">%1$d h</string>
+</resources>

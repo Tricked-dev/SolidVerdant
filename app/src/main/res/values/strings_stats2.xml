@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Phase 2 statistics: filters, previous-period comparison, drill-down and CSV export. -->
+
+    <!-- CSV export column headers (also carried in the exported file). -->
+    <string name="stats2_csv_col_entry_id">Entry ID</string>
+    <string name="stats2_csv_col_start">Start</string>
+    <string name="stats2_csv_col_end">End</string>
+    <string name="stats2_csv_col_timezone">Time zone</string>
+    <string name="stats2_csv_col_duration_seconds">Duration (seconds)</string>
+    <string name="stats2_csv_col_duration">Duration</string>
+    <string name="stats2_csv_col_organization">Organization</string>
+    <string name="stats2_csv_col_project">Project</string>
+    <string name="stats2_csv_col_client">Client</string>
+    <string name="stats2_csv_col_task">Task</string>
+    <string name="stats2_csv_col_tags">Tags</string>
+    <string name="stats2_csv_col_description">Description</string>
+    <string name="stats2_csv_col_billable">Billable</string>
+    <string name="stats2_yes">Yes</string>
+    <string name="stats2_no">No</string>
+
+    <!-- Export action and feedback. -->
+    <string name="stats2_export">Export CSV</string>
+    <string name="stats2_export_content_description">Export the current filtered range as CSV</string>
+    <string name="stats2_exporting">Preparing export…</string>
+    <string name="stats2_export_empty">Nothing to export for this range</string>
+    <string name="stats2_export_error">Couldn\'t create the export. Please try again.</string>
+    <string name="stats2_export_chooser_title">Share time entries (CSV)</string>
+
+    <!-- Filter bar and filter sheet. -->
+    <string name="stats2_filters">Filters</string>
+    <string name="stats2_filters_content_description">Edit statistics filters</string>
+    <string name="stats2_filter_sheet_title">Filter statistics</string>
+    <string name="stats2_active_scope_none">Showing all tracked time</string>
+    <string name="stats2_clear_filters">Clear</string>
+    <string name="stats2_clear_filters_content_description">Clear all statistics filters</string>
+    <string name="stats2_reset">Reset</string>
+    <string name="stats2_apply">Apply</string>
+    <string name="stats2_filter_projects">Projects</string>
+    <string name="stats2_filter_clients">Clients</string>
+    <string name="stats2_filter_tasks">Tasks</string>
+    <string name="stats2_filter_tags">Tags</string>
+    <string name="stats2_filter_billable">Billable status</string>
+    <string name="stats2_billable_all">All</string>
+    <string name="stats2_billable_billable">Billable</string>
+    <string name="stats2_billable_nonbillable">Non-billable</string>
+    <string name="stats2_filter_empty_projects">No projects available</string>
+    <string name="stats2_filter_empty_clients">No clients available</string>
+    <string name="stats2_filter_empty_tasks">No tasks available</string>
+    <string name="stats2_filter_empty_tags">No tags available</string>
+    <string name="stats2_no_project">No project</string>
+    <plurals name="stats2_active_filters">
+        <item quantity="one">%1$d filter active</item>
+        <item quantity="other">%1$d filters active</item>
+    </plurals>
+
+    <!-- Previous-period comparison. -->
+    <string name="stats2_comparison_title">vs previous period</string>
+    <string name="stats2_comparison_range">%1$s – %2$s</string>
+    <string name="stats2_comparison_no_data">No tracked time in the previous period</string>
+    <string name="stats2_metric_total">Total</string>
+    <string name="stats2_metric_billable">Billable</string>
+    <string name="stats2_metric_avg_per_day">Avg / day</string>
+    <string name="stats2_top_changes">Biggest project changes</string>
+    <string name="stats2_delta_percent">%1$s%%</string>
+    <string name="stats2_delta_new">new</string>
+    <string name="stats2_delta_flat">no change</string>
+    <string name="stats2_delta_increase_content_description">up %1$s</string>
+    <string name="stats2_delta_decrease_content_description">down %1$s</string>
+    <string name="stats2_delta_flat_content_description">no change from previous period</string>
+
+    <!-- Drill-down sheet. -->
+    <string name="stats2_drilldown_close">Close</string>
+    <string name="stats2_drilldown_empty">No entries in this selection</string>
+    <string name="stats2_drilldown_total">Total %1$s</string>
+    <string name="stats2_drilldown_no_description">(no description)</string>
+    <string name="stats2_drilldown_project_content_description">Show entries for %1$s</string>
+    <string name="stats2_drilldown_bucket_content_description">Show entries for %1$s</string>
+    <plurals name="stats2_drilldown_entries">
+        <item quantity="one">%1$d entry</item>
+        <item quantity="other">%1$d entries</item>
+    </plurals>
+</resources>

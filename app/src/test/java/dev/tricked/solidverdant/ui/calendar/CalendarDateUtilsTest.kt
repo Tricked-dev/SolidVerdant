@@ -1,7 +1,14 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.calendar
 
 import dev.tricked.solidverdant.data.model.TimeEntry
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 import java.time.DayOfWeek
 import java.time.Instant
@@ -25,8 +32,12 @@ class CalendarDateUtilsTest {
     @Test
     fun entryDurationSeconds_usesExplicitDuration() {
         val e = TimeEntry(
-            id = "1", userId = "u", start = "2026-07-06T09:00:00Z",
-            end = "2026-07-06T10:00:00Z", duration = 3600, organizationId = "o",
+            id = "1",
+            userId = "u",
+            start = "2026-07-06T09:00:00Z",
+            end = "2026-07-06T10:00:00Z",
+            duration = 3600,
+            organizationId = "o",
         )
         assertEquals(3600L, entryDurationSeconds(e, Instant.parse("2026-07-06T12:00:00Z")))
     }
@@ -34,10 +45,41 @@ class CalendarDateUtilsTest {
     @Test
     fun entryDurationSeconds_computesActiveEntryFromNow() {
         val e = TimeEntry(
-            id = "1", userId = "u", start = "2026-07-06T09:00:00Z",
-            end = null, duration = null, organizationId = "o",
+            id = "1",
+            userId = "u",
+            start = "2026-07-06T09:00:00Z",
+            end = null,
+            duration = null,
+            organizationId = "o",
         )
         assertEquals(3600L, entryDurationSeconds(e, Instant.parse("2026-07-06T10:00:00Z")))
+    }
+
+    @Test
+    fun entryLocalDate_parsesValidStart() {
+        val e = TimeEntry(
+            id = "1",
+            userId = "u",
+            start = "2026-07-06T09:00:00Z",
+            end = null,
+            duration = null,
+            organizationId = "o",
+        )
+        assertEquals(LocalDate.of(2026, 7, 6), entryLocalDate(e))
+    }
+
+    @Test
+    fun entryLocalDate_returnsNullOnUnparseableStart() {
+        // Malformed start must NOT fall back to today (which would pollute today's totals).
+        val e = TimeEntry(
+            id = "1",
+            userId = "u",
+            start = "not-a-timestamp",
+            end = null,
+            duration = null,
+            organizationId = "o",
+        )
+        assertNull(entryLocalDate(e))
     }
 
     @Test

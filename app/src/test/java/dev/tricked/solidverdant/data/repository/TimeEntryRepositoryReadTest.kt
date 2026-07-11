@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.repository
 
 import androidx.room.Room
@@ -23,23 +29,36 @@ class TimeEntryRepositoryReadTest {
     private lateinit var db: AppDatabase
     private lateinit var remote: FakeRemoteDataSource
     private lateinit var repo: TimeEntryRepository
-    private val clock = object : Clock { var t = 1000L; override fun nowMs() = t }
+    private val clock = object : Clock {
+        var t = 1000L
+        override fun nowMs() = t
+    }
 
     @Before fun setup() {
         db = Room.inMemoryDatabaseBuilder(
-            ApplicationProvider.getApplicationContext(), AppDatabase::class.java
+            ApplicationProvider.getApplicationContext(),
+            AppDatabase::class.java,
         ).allowMainThreadQueries().build()
         remote = FakeRemoteDataSource()
         repo = TimeEntryRepository(
-            db.timeEntryDao(), db.catalogDao(), db.outboxDao(), db.syncMetaDao(),
-            remote, clock, Json { encodeDefaults = true }
+            db.timeEntryDao(),
+            db.catalogDao(),
+            db.outboxDao(),
+            db.syncMetaDao(),
+            remote,
+            clock,
+            Json { encodeDefaults = true },
         )
     }
+
     @After fun teardown() = db.close()
 
     private fun srv(id: String) = TimeEntry(
-        id = id, userId = "u", start = "2026-01-01T09:00:00Z",
-        end = "2026-01-01T10:00:00Z", organizationId = "org1"
+        id = id,
+        userId = "u",
+        start = "2026-01-01T09:00:00Z",
+        end = "2026-01-01T10:00:00Z",
+        organizationId = "org1",
     )
 
     @Test fun refresh_upserts_remote_entries_into_room() = runTest {

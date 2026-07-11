@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.components
 
 import androidx.compose.foundation.background
@@ -15,13 +21,12 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,10 +34,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -50,7 +53,7 @@ fun ProjectTaskDropdown(
     onSelectionChanged: (projectId: String?, taskId: String?) -> Unit,
     enabled: Boolean = true,
     showProjectColors: Boolean = false,
-    rounded: Boolean = false
+    rounded: Boolean = false,
 ) {
     var expanded by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
@@ -66,7 +69,7 @@ fun ProjectTaskDropdown(
                 expanded = it
                 if (!it) searchQuery = ""
             }
-        }
+        },
     ) {
         OutlinedTextField(
             value = displayText,
@@ -76,11 +79,11 @@ fun ProjectTaskDropdown(
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             modifier = Modifier
                 .fillMaxWidth()
+                .testTag("project_task_selector")
                 .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled),
             enabled = enabled,
-            shape = if (rounded) RoundedCornerShape(8.dp) else OutlinedTextFieldDefaultsShape
+            shape = if (rounded) RoundedCornerShape(8.dp) else OutlinedTextFieldDefaultsShape,
         )
-
     }
 
     if (expanded) {
@@ -91,7 +94,7 @@ fun ProjectTaskDropdown(
             onSearchQueryChange = { searchQuery = it },
             onSelectionChanged = onSelectionChanged,
             onClose = close,
-            showProjectColors = showProjectColors
+            showProjectColors = showProjectColors,
         )
     }
 }
@@ -106,7 +109,7 @@ private fun ProjectTaskPickerDialog(
     onSearchQueryChange: (String) -> Unit,
     onSelectionChanged: (projectId: String?, taskId: String?) -> Unit,
     onClose: () -> Unit,
-    showProjectColors: Boolean
+    showProjectColors: Boolean,
 ) {
     val normalizedQuery = searchQuery.trim()
     val filteredTasks = remember(normalizedQuery, tasks) {
@@ -122,30 +125,23 @@ private fun ProjectTaskPickerDialog(
                 it.id in matchingTaskProjectIds
         }
     }
-    val focusRequester = remember { FocusRequester() }
-    val keyboardController = LocalSoftwareKeyboardController.current
-
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-        keyboardController?.show()
-    }
-
+    val filteredTasksByProject = remember(filteredTasks) { filteredTasks.groupBy { it.projectId } }
     Dialog(onDismissRequest = onClose) {
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 640.dp),
             shape = RoundedCornerShape(24.dp),
-            tonalElevation = 6.dp
+            tonalElevation = 6.dp,
         ) {
             androidx.compose.foundation.lazy.LazyColumn(
-                modifier = Modifier.padding(vertical = 12.dp)
+                modifier = Modifier.padding(vertical = 12.dp).testTag("project_task_list"),
             ) {
                 item {
                     Text(
                         text = stringResource(R.string.project_task),
                         style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     )
                 }
                 item {
@@ -155,10 +151,9 @@ private fun ProjectTaskPickerDialog(
                         placeholder = { Text(stringResource(R.string.search_placeholder)) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .focusRequester(focusRequester)
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
                     )
                 }
                 item {
@@ -167,7 +162,7 @@ private fun ProjectTaskPickerDialog(
                         onClick = {
                             onSelectionChanged(null, null)
                             onClose()
-                        }
+                        },
                     )
                 }
                 filteredProjects.forEach { project ->
@@ -180,7 +175,7 @@ private fun ProjectTaskPickerDialog(
                                             modifier = Modifier
                                                 .size(12.dp)
                                                 .clip(CircleShape)
-                                                .background(Color(android.graphics.Color.parseColor(project.color)))
+                                                .background(Color(android.graphics.Color.parseColor(project.color))),
                                         )
                                         Spacer(Modifier.width(8.dp))
                                     }
@@ -190,31 +185,31 @@ private fun ProjectTaskPickerDialog(
                             onClick = {
                                 onSelectionChanged(project.id, null)
                                 onClose()
-                            }
+                            },
                         )
                     }
 
-                    filteredTasks.filter { it.projectId == project.id }.forEach { task ->
+                    filteredTasksByProject[project.id].orEmpty().forEach { task ->
                         item(key = "task_${task.id}") {
-            DropdownMenuItem(
-                text = {
-                    Row {
-                        Spacer(Modifier.width(24.dp))
-                        Text(
-                            task.name,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                onClick = {
-                    onSelectionChanged(project.id, task.id)
-                    onClose()
-                }
-            )
+                            DropdownMenuItem(
+                                text = {
+                                    Row {
+                                        Spacer(Modifier.width(24.dp))
+                                        Text(
+                                            task.name,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    onSelectionChanged(project.id, task.id)
+                                    onClose()
+                                },
+                            )
                         }
                     }
-        }
+                }
                 if (searchQuery.isNotBlank() && filteredProjects.isEmpty()) {
                     item {
                         DropdownMenuItem(
@@ -222,10 +217,10 @@ private fun ProjectTaskPickerDialog(
                                 Text(
                                     stringResource(R.string.no_results_found),
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             },
-                            onClick = {}
+                            onClick = {},
                         )
                     }
                 }

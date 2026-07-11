@@ -1,33 +1,46 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.tracking
 
-import dev.tricked.solidverdant.R
-
 import android.content.Context
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import dev.tricked.solidverdant.data.local.SettingsDataStore
+import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.local.AppThemeMode
-import dev.tricked.solidverdant.data.repository.TimeEntryRepository
-import dev.tricked.solidverdant.data.model.Project
+import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.model.Client
+import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.AuthRepository
+import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.service.TimeTrackingNotificationService
 import dev.tricked.solidverdant.sync.SyncTrigger
+import dev.tricked.solidverdant.util.IsoTimes
 import dev.tricked.solidverdant.widget.TimeTrackingWidget
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.time.Instant
 import java.time.LocalDate
@@ -35,9 +48,33 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
+/** Which slice of history the user is currently looking at. */
+internal enum class HistoryWindowMode { RECENT, PAGINATED }
+
+/**
+ * Single source of truth for how a Room emission from the recent-window collector combines with
+ * the list currently on screen.
+ *
+ * In [HistoryWindowMode.RECENT] the collector owns the list and replaces it wholesale, so live
+ * edits and the active-entry poll stay fresh. Once the user pages or jumps to an off-window slice
+ * ([HistoryWindowMode.PAGINATED]) the network-fetched window is authoritative: its order and
+ * membership are preserved (so scroll position survives a poll emission) while any fresher copy of
+ * a still-visible entry carried by the recent collector is overlaid in place.
+ */
+internal object HistoryWindow {
+    fun merge(mode: HistoryWindowMode, displayed: List<TimeEntry>, collected: List<TimeEntry>): List<TimeEntry> = when (mode) {
+        HistoryWindowMode.RECENT -> collected
+        HistoryWindowMode.PAGINATED -> {
+            val collectedById = collected.associateBy { it.id }
+            displayed.map { collectedById[it.id] ?: it }
+        }
+    }
+}
+
 /**
  * UI state for tracking screen
  */
+@Stable
 data class TrackingUiState(
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
@@ -46,6 +83,7 @@ data class TrackingUiState(
     val isPaused: Boolean = false,
     val currentTimeEntry: TimeEntry? = null,
     val timeEntries: List<TimeEntry> = emptyList(),
+    val overlapCount: Int = 0,
     val hasLoadedTimeEntries: Boolean = false,
     val isLoadingMoreTimeEntries: Boolean = false,
     val hasMoreTimeEntries: Boolean = false,
@@ -68,7 +106,7 @@ data class TrackingUiState(
     val editingTaskId: String? = null,
     val editingTags: List<String> = emptyList(),
     val editingBillable: Boolean = false,
-    val syncOperations: List<TimeEntryRepository.SyncOperation> = emptyList()
+    val syncOperations: List<TimeEntryRepository.SyncOperation> = emptyList(),
 ) {
     /** Mutations retain the legacy internal flag; refresh/sync have independent flags. */
     val isMutating: Boolean get() = isLoading
@@ -83,7 +121,7 @@ class TrackingViewModel @Inject constructor(
     private val settingsDataStore: SettingsDataStore,
     private val timeEntryRepository: TimeEntryRepository,
     private val syncTrigger: SyncTrigger,
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     private val cachedTrackingState = settingsDataStore.getCachedTrackingState()
@@ -93,6 +131,7 @@ class TrackingViewModel @Inject constructor(
                 isTracking = cached.activeEntry != null,
                 currentTimeEntry = cached.activeEntry,
                 timeEntries = cached.timeEntries,
+                overlapCount = cached.overlapCount,
                 hasLoadedTimeEntries = true,
                 cachedContinueEntry = cached.timeEntries
                     .firstOrNull { it.end != null && !it.description.isNullOrBlank() }
@@ -107,7 +146,7 @@ class TrackingViewModel @Inject constructor(
                 editingTags = cached.activeEntry?.tags?.map { it.id }.orEmpty(),
                 editingBillable = cached.activeEntry?.billable ?: false,
             )
-        } ?: TrackingUiState(cachedContinueEntry = settingsDataStore.getCachedContinueEntry())
+        } ?: TrackingUiState(cachedContinueEntry = settingsDataStore.getCachedContinueEntry()),
     )
     val uiState: StateFlow<TrackingUiState> = _uiState.asStateFlow()
 
@@ -121,6 +160,8 @@ class TrackingViewModel @Inject constructor(
     val hasSnapshot: StateFlow<Boolean> = _hasSnapshot.asStateFlow()
 
     private var timerJob: Job? = null
+    private val _elapsedSeconds = MutableStateFlow(0L)
+    val elapsedSeconds: StateFlow<Long> = _elapsedSeconds.asStateFlow()
     private var loadDataJob: Job? = null
     private var loadingOrganizationId: String? = null
     private var activeEntryMonitorJob: Job? = null
@@ -128,6 +169,8 @@ class TrackingViewModel @Inject constructor(
     private var dataCollectorJob: Job? = null
     private var syncCollectorJob: Job? = null
     private var firstFrameCacheJob: Job? = null
+    private var hasCachedContinueEntry = false
+    private var lastCachedContinueEntry: TimeEntry? = null
     private var collectingOrganizationId: String? = null
     private var lastCollectedActiveId: String? = null
     private var historyOrganizationId: String? = null
@@ -135,6 +178,7 @@ class TrackingViewModel @Inject constructor(
     private var historyLoadStage = 0
     private var historyOffset = 0
     private var historyWindowStartOffset = 0
+    private var historyWindowMode = HistoryWindowMode.RECENT
     private var isInitialized = false
 
     init {
@@ -199,11 +243,7 @@ class TrackingViewModel @Inject constructor(
     /**
      * Load all data needed for the tracking screen
      */
-    fun loadAllData(
-        organizationId: String,
-        memberId: String,
-        userInitiated: Boolean = false
-    ) {
+    fun loadAllData(organizationId: String, memberId: String, userInitiated: Boolean = false) {
         historyOrganizationId = organizationId
         historyMemberId = memberId
 
@@ -220,7 +260,7 @@ class TrackingViewModel @Inject constructor(
         loadDataJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isRefreshing = userInitiated,
-                error = null
+                error = null,
             )
             timeEntryRepository.refreshAll(organizationId, memberId)
                 .onFailure { error ->
@@ -242,12 +282,13 @@ class TrackingViewModel @Inject constructor(
         }
         dataCollectorJob?.cancel()
         syncCollectorJob?.cancel()
-        syncCollectorJob?.cancel()
         firstFrameCacheJob?.cancel()
         collectingOrganizationId = organizationId
         lastCollectedActiveId = null
         historyLoadStage = 1
         historyWindowStartOffset = 0
+        historyOffset = 0
+        historyWindowMode = HistoryWindowMode.RECENT
         dataCollectorJob = viewModelScope.launch {
             combine(
                 timeEntryRepository.observeTimeEntries(organizationId),
@@ -257,7 +298,7 @@ class TrackingViewModel @Inject constructor(
                     timeEntryRepository.observeTags(organizationId),
                     timeEntryRepository.observeClients(organizationId),
                 ) { tags, clients -> tags to clients },
-                timeEntryRepository.observeActiveEntry(organizationId)
+                timeEntryRepository.observeActiveEntry(organizationId),
             ) { entries, projects, tasks, catalog, active ->
                 TrackingData(
                     entries = entries,
@@ -265,16 +306,35 @@ class TrackingViewModel @Inject constructor(
                     tasks = tasks.filterNot { it.isDone },
                     tags = catalog.first,
                     clients = catalog.second,
-                    active = active
+                    active = active,
                 )
-            }.collect { data ->
-                val continueEntry = data.entries
-                    .filter { it.end != null && !it.description.isNullOrBlank() }
-                    .maxByOrNull { it.start }
+            }.distinctUntilChanged().map { data ->
+                // Per-emission analysis is O(n) over the full entry window; flowOn(Default) below
+                // keeps it (plus combine's TrackingData construction and the equality checks of
+                // distinctUntilChanged) off the main thread so a Room emission burst cannot
+                // produce a long frame mid-scroll.
+                CollectedTracking(
+                    data = data,
+                    overlapCount = EntryTrustRules.overlapCount(data.entries),
+                    continueEntry = data.entries
+                        .filter { it.end != null && !it.description.isNullOrBlank() }
+                        .maxByOrNull { it.start },
+                )
+            }.flowOn(Dispatchers.Default).conflate().collect { (data, overlapCount, continueEntry) ->
                 val activeChanged = data.active?.id != lastCollectedActiveId
-                historyOffset = data.entries.size
-                _uiState.value = _uiState.value.copy(
-                    timeEntries = data.entries,
+                val currentState = _uiState.value
+                val mode = historyWindowMode
+                // Single source of truth: the collector only owns the displayed list (and the
+                // paging offset) while the recent slice is on screen. Once the user has paged or
+                // jumped, loadMore/jump own the window and offset; here we merely refresh visible
+                // entries in place so a poll emission cannot wipe the window or reset scroll.
+                val displayedEntries = HistoryWindow.merge(mode, currentState.timeEntries, data.entries)
+                if (mode == HistoryWindowMode.RECENT) {
+                    historyOffset = data.entries.size
+                }
+                _uiState.value = currentState.copy(
+                    timeEntries = displayedEntries,
+                    overlapCount = overlapCount,
                     projects = data.projects,
                     tasks = data.tasks,
                     tags = data.tags,
@@ -283,21 +343,34 @@ class TrackingViewModel @Inject constructor(
                     isTracking = data.active != null,
                     hasLoadedTimeEntries = true,
                     // Heuristic: if we filled the refresh window there may be older history
-                    // to page in from the network (see loadMoreTimeEntries).
-                    hasMoreTimeEntries = data.entries.size >= HISTORY_REFRESH_LIMIT,
+                    // to page in from the network (see loadMoreTimeEntries). Preserve the flag
+                    // maintained by loadMore/jump once the user is viewing a paginated window.
+                    hasMoreTimeEntries = if (mode == HistoryWindowMode.RECENT) {
+                        data.entries.size >= HISTORY_REFRESH_LIMIT
+                    } else {
+                        currentState.hasMoreTimeEntries
+                    },
                     cachedContinueEntry = continueEntry,
                     isLoading = false,
                     // Only reset in-progress edits when the active entry itself changes,
                     // so a user's typing is not clobbered by a background emission.
-                    editingDescription = if (activeChanged) data.active?.description.orEmpty() else _uiState.value.editingDescription,
-                    editingProjectId = if (activeChanged) data.active?.projectId else _uiState.value.editingProjectId,
-                    editingTaskId = if (activeChanged) data.active?.taskId else _uiState.value.editingTaskId,
-                    editingTags = if (activeChanged) data.active?.tags?.map { it.id }.orEmpty() else _uiState.value.editingTags,
-                    editingBillable = if (activeChanged) (data.active?.billable ?: false) else _uiState.value.editingBillable
+                    editingDescription = if (activeChanged) data.active?.description.orEmpty() else currentState.editingDescription,
+                    editingProjectId = if (activeChanged) data.active?.projectId else currentState.editingProjectId,
+                    editingTaskId = if (activeChanged) data.active?.taskId else currentState.editingTaskId,
+                    editingTags = if (activeChanged) data.active?.tags?.map { it.id }.orEmpty() else currentState.editingTags,
+                    editingBillable = if (activeChanged) (data.active?.billable ?: false) else currentState.editingBillable,
                 )
-                settingsDataStore.cacheContinueEntry(continueEntry)
+                // Both caches JSON-encode sizable object graphs; keep that (and the
+                // SharedPreferences write) off the main thread, and skip no-op continue writes.
+                if (!hasCachedContinueEntry || continueEntry != lastCachedContinueEntry) {
+                    hasCachedContinueEntry = true
+                    lastCachedContinueEntry = continueEntry
+                    viewModelScope.launch(Dispatchers.IO) {
+                        settingsDataStore.cacheContinueEntry(continueEntry)
+                    }
+                }
                 firstFrameCacheJob?.cancel()
-                firstFrameCacheJob = viewModelScope.launch {
+                firstFrameCacheJob = viewModelScope.launch(Dispatchers.IO) {
                     delay(FIRST_FRAME_CACHE_DEBOUNCE_MS)
                     settingsDataStore.cacheTrackingState(
                         SettingsDataStore.CachedTrackingState(
@@ -308,7 +381,8 @@ class TrackingViewModel @Inject constructor(
                             tasks = data.tasks,
                             tags = data.tags,
                             activeEntry = data.active,
-                        )
+                            overlapCount = overlapCount,
+                        ),
                     )
                     _hasSnapshot.value = true
                 }
@@ -319,9 +393,11 @@ class TrackingViewModel @Inject constructor(
             }
         }
         syncCollectorJob = viewModelScope.launch {
-            timeEntryRepository.observeSyncOperations(organizationId).collect { operations ->
-                _uiState.value = _uiState.value.copy(syncOperations = operations)
-            }
+            timeEntryRepository.observeSyncOperations(organizationId)
+                .distinctUntilChanged()
+                .collect { operations ->
+                    _uiState.value = _uiState.value.copy(syncOperations = operations)
+                }
         }
     }
 
@@ -331,13 +407,21 @@ class TrackingViewModel @Inject constructor(
         val clients: List<Client>,
         val tasks: List<Task>,
         val tags: List<Tag>,
-        val active: TimeEntry?
+        val active: TimeEntry?,
     )
+
+    /** [TrackingData] plus the derived values computed off the main thread. */
+    private data class CollectedTracking(val data: TrackingData, val overlapCount: Int, val continueEntry: TimeEntry?)
 
     /**
      * Keep notification state in sync with timers started or stopped on another device while
      * this ViewModel is alive. Changing organizations replaces the old monitor immediately.
      */
+    /** True while [entryId] still has a queued/retrying/failed outbox operation. */
+    private fun hasUnsyncedOp(entryId: String): Boolean = _uiState.value.syncOperations.any {
+        it.entryId == entryId && it.status != TimeEntryRepository.EntrySyncStatus.SYNCED
+    }
+
     private fun startActiveEntryMonitoring(organizationId: String) {
         if (monitoredOrganizationId == organizationId && activeEntryMonitorJob?.isActive == true) {
             return
@@ -360,11 +444,7 @@ class TrackingViewModel @Inject constructor(
     }
 
     /** Resume polling, refreshing all visible data after a longer background pause. */
-    fun onAppForegrounded(
-        organizationId: String,
-        memberId: String,
-        refreshAll: Boolean
-    ) {
+    fun onAppForegrounded(organizationId: String, memberId: String, refreshAll: Boolean) {
         if (refreshAll) {
             loadAllData(organizationId, memberId)
         } else {
@@ -380,122 +460,102 @@ class TrackingViewModel @Inject constructor(
     /**
      * Load the active time entry for the current user
      */
-    private suspend fun loadActiveTimeEntry(
-        organizationId: String,
-        onlyIfChanged: Boolean = false
-    ) {
-            authRepository.getActiveTimeEntry()
-                .onSuccess { timeEntry ->
-                    // The active-entry endpoint is account-wide. Only surface an entry for the
-                    // organization currently selected in the app.
-                    val currentTimeEntry = timeEntry?.takeIf {
-                        it.organizationId == organizationId
-                    }
-                    if (onlyIfChanged &&
-                        currentTimeEntry?.id == _uiState.value.currentTimeEntry?.id
-                    ) {
-                        if (currentTimeEntry != null) {
-                            TimeTrackingNotificationService.startTracking(
-                                context = context,
-                                startTime = Instant.parse(currentTimeEntry.start),
-                                projectName = _uiState.value.projects
-                                    .find { it.id == currentTimeEntry.projectId }?.name,
-                                taskName = _uiState.value.tasks
-                                    .find { it.id == currentTimeEntry.taskId }?.name,
-                                description = currentTimeEntry.description
-                            )
-                        } else {
-                            updateNotificationState()
-                        }
-                        return@onSuccess
-                    }
-                    val isTracking = currentTimeEntry != null
-                    _uiState.value = _uiState.value.copy(
-                        isTracking = isTracking,
-                        currentTimeEntry = currentTimeEntry,
-                        editingDescription = currentTimeEntry?.description ?: "",
-                        editingProjectId = currentTimeEntry?.projectId,
-                        editingTaskId = currentTimeEntry?.taskId,
-                        editingTags = currentTimeEntry?.tags?.map { it.id } ?: emptyList(),
-                        editingBillable = currentTimeEntry?.billable ?: false
-                    )
-
-                    // Update notification state based on tracking status and settings
+    private suspend fun loadActiveTimeEntry(organizationId: String, onlyIfChanged: Boolean = false) {
+        authRepository.getActiveTimeEntry()
+            .onSuccess { timeEntry ->
+                // The active-entry endpoint is account-wide. Only surface an entry for the
+                // organization currently selected in the app.
+                val currentTimeEntry = timeEntry?.takeIf {
+                    it.organizationId == organizationId
+                }
+                // A locally started timer whose START/CREATE is still in the outbox does not
+                // exist on the server yet. A poll or foreground refresh answering "no active
+                // entry" must not clear it, or the user's running timer silently disappears
+                // until the next sync (found by TrackingLifecycleE2eTest recreation flow).
+                val local = _uiState.value.currentTimeEntry
+                if (currentTimeEntry == null && local != null && hasUnsyncedOp(local.id)) {
+                    return@onSuccess
+                }
+                if (onlyIfChanged &&
+                    currentTimeEntry?.id == _uiState.value.currentTimeEntry?.id
+                ) {
                     if (currentTimeEntry != null) {
-                        val projectName = _uiState.value.projects
-                            .find { it.id == currentTimeEntry.projectId }?.name
-                        val taskName = _uiState.value.tasks
-                            .find { it.id == currentTimeEntry.taskId }?.name
                         TimeTrackingNotificationService.startTracking(
                             context = context,
                             startTime = Instant.parse(currentTimeEntry.start),
-                            projectName = projectName,
-                            taskName = taskName,
-                            description = currentTimeEntry.description
-                        )
-                        settingsDataStore.setWidgetTrackingState(
-                            isTracking = true,
-                            startTimeEpochMillis = Instant.parse(currentTimeEntry.start).toEpochMilli(),
-                            projectName = projectName,
-                            taskName = taskName,
-                            description = currentTimeEntry.description
+                            projectName = _uiState.value.projects
+                                .find { it.id == currentTimeEntry.projectId }?.name,
+                            taskName = _uiState.value.tasks
+                                .find { it.id == currentTimeEntry.taskId }?.name,
+                            description = currentTimeEntry.description,
                         )
                     } else {
-                        // Update notification and widget state for non-tracking cases
                         updateNotificationState()
-                        settingsDataStore.setWidgetTrackingState(
-                            isTracking = false
-                        )
                     }
-                    // Request widget update
-                    TimeTrackingWidget.requestUpdate(context)
-
-                    // Start timer if tracking
-                    if (isTracking) {
-                        startTimer(currentTimeEntry.start)
-                    } else {
-                        stopTimer()
-                    }
-
-                    // Mark as initialized after first load
-                    isInitialized = true
+                    return@onSuccess
                 }
-                .onFailure { error ->
-                    Timber.e(error, "Failed to load active time entry")
-                    _uiState.value = _uiState.value.copy(
+                val isTracking = currentTimeEntry != null
+                _uiState.value = _uiState.value.copy(
+                    isTracking = isTracking,
+                    currentTimeEntry = currentTimeEntry,
+                    editingDescription = currentTimeEntry?.description ?: "",
+                    editingProjectId = currentTimeEntry?.projectId,
+                    editingTaskId = currentTimeEntry?.taskId,
+                    editingTags = currentTimeEntry?.tags?.map { it.id } ?: emptyList(),
+                    editingBillable = currentTimeEntry?.billable ?: false,
+                )
+
+                // Update notification state based on tracking status and settings
+                if (currentTimeEntry != null) {
+                    val projectName = _uiState.value.projects
+                        .find { it.id == currentTimeEntry.projectId }?.name
+                    val taskName = _uiState.value.tasks
+                        .find { it.id == currentTimeEntry.taskId }?.name
+                    TimeTrackingNotificationService.startTracking(
+                        context = context,
+                        startTime = Instant.parse(currentTimeEntry.start),
+                        projectName = projectName,
+                        taskName = taskName,
+                        description = currentTimeEntry.description,
+                    )
+                    settingsDataStore.setWidgetTrackingState(
+                        isTracking = true,
+                        startTimeEpochMillis = Instant.parse(currentTimeEntry.start).toEpochMilli(),
+                        projectName = projectName,
+                        taskName = taskName,
+                        description = currentTimeEntry.description,
+                    )
+                } else {
+                    // Update notification and widget state for non-tracking cases
+                    updateNotificationState()
+                    settingsDataStore.setWidgetTrackingState(
                         isTracking = false,
-                        error = error.message ?: "Failed to load tracking state"
                     )
+                }
+                // Request widget update
+                TimeTrackingWidget.requestUpdate(context)
+
+                // Start timer if tracking
+                if (isTracking) {
+                    startTimer(currentTimeEntry.start)
+                } else {
                     stopTimer()
+                }
 
-                    // Mark as initialized even on failure
-                    isInitialized = true
-                }
-    }
+                // Mark as initialized after first load
+                isInitialized = true
+            }
+            .onFailure { error ->
+                Timber.e(error, "Failed to load active time entry")
+                _uiState.value = _uiState.value.copy(
+                    isTracking = false,
+                    error = error.message ?: "Failed to load tracking state",
+                )
+                stopTimer()
 
-    /**
-     * Load time entries
-     */
-    private suspend fun loadTimeEntries(organizationId: String, memberId: String) {
-            authRepository.getTimeEntries(organizationId, memberId)
-                .onSuccess { response ->
-                    val entries = response.data
-                    val continueEntry = entries
-                        .filter { it.end != null && !it.description.isNullOrBlank() }
-                        .maxByOrNull { it.start }
-                    _uiState.value = _uiState.value.copy(
-                        timeEntries = entries,
-                        hasLoadedTimeEntries = true,
-                        hasMoreTimeEntries = entries.size < (response.meta?.total ?: entries.size),
-                        totalTimeEntries = response.meta?.total,
-                        cachedContinueEntry = continueEntry
-                    )
-                    settingsDataStore.cacheContinueEntry(continueEntry)
-                }
-                .onFailure { error ->
-                    Timber.e(error, "Failed to load time entries")
-                    _uiState.value = _uiState.value.copy(hasLoadedTimeEntries = true)
-                }
+                // Mark as initialized even on failure
+                isInitialized = true
+            }
     }
 
     /** Load history progressively while retaining fetched entries for this app session. */
@@ -514,13 +574,20 @@ class TrackingViewModel @Inject constructor(
             }
             authRepository.getTimeEntries(organizationId, memberId, limit, offset)
                 .onSuccess { response ->
-                    val tagsById = _uiState.value.tags.associateBy { it.id }
-                    val incoming = response.data.map { entry ->
-                        entry.copy(tags = entry.tags.map { tagsById[it.id] ?: it })
+                    val currentEntries = _uiState.value.timeEntries
+                    val currentTags = _uiState.value.tags
+                    // Tag resolution plus the dedupe/sort of a growing window is O(n log n);
+                    // keep it off the main thread so paging in more history cannot jank a
+                    // scroll that is still settling.
+                    val (incoming, merged) = withContext(Dispatchers.Default) {
+                        val tagsById = currentTags.associateBy { it.id }
+                        val resolved = response.data.map { entry ->
+                            entry.copy(tags = entry.tags.map { tagsById[it.id] ?: it })
+                        }
+                        resolved to (currentEntries + resolved)
+                            .distinctBy { it.id }
+                            .sortedByDescending { it.start }
                     }
-                    val merged = (_uiState.value.timeEntries + incoming)
-                        .distinctBy { it.id }
-                        .sortedByDescending { it.start }
                     val total = response.meta?.total ?: _uiState.value.totalTimeEntries
                     historyOffset = if (historyLoadStage <= 1) {
                         incoming.size
@@ -528,12 +595,15 @@ class TrackingViewModel @Inject constructor(
                         historyOffset + incoming.size
                     }
                     historyLoadStage++
+                    // The user has explicitly asked for more than the recent slice; the collector
+                    // must now preserve this grown window instead of replacing it on every poll.
+                    historyWindowMode = HistoryWindowMode.PAGINATED
                     _uiState.value = _uiState.value.copy(
                         timeEntries = merged,
                         isLoadingMoreTimeEntries = false,
                         hasMoreTimeEntries = incoming.isNotEmpty() &&
                             (total?.let { merged.size < it } ?: true),
-                        totalTimeEntries = total
+                        totalTimeEntries = total,
                     )
                     // Once the user asks for more history, quickly fill the first maximum-sized
                     // buffer so continued scrolling does not catch the network boundary.
@@ -545,7 +615,7 @@ class TrackingViewModel @Inject constructor(
                     Timber.e(error, "Failed to load more time entries")
                     _uiState.value = _uiState.value.copy(
                         isLoadingMoreTimeEntries = false,
-                        error = error.message ?: "Failed to load more entries"
+                        error = error.message ?: "Failed to load more entries",
                     )
                 }
         }
@@ -556,13 +626,12 @@ class TrackingViewModel @Inject constructor(
         val memberId = historyMemberId ?: return
         if (_uiState.value.isLoadingMoreTimeEntries) return
         val loadedDates = _uiState.value.timeEntries.mapNotNull { entry ->
-            runCatching {
-                ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME).toLocalDate()
-            }.getOrNull()
+            IsoTimes.localDate(entry.start)
         }
         val newestLoadedDate = loadedDates.maxOrNull()
         val oldestLoadedDate = loadedDates.minOrNull()
-        if (newestLoadedDate != null && oldestLoadedDate != null &&
+        if (newestLoadedDate != null &&
+            oldestLoadedDate != null &&
             date in oldestLoadedDate..newestLoadedDate
         ) {
             // The screen resolves an empty selected day to the nearest loaded date header.
@@ -573,17 +642,20 @@ class TrackingViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(
                 isLoadingMoreTimeEntries = true,
                 historyJumpTarget = date,
-                historyJumpProgress = 0f
+                historyJumpProgress = 0f,
             )
             val total = _uiState.value.totalTimeEntries ?: getHistoryPageWithRateLimit(
-                organizationId, memberId, limit = 1, offset = 0
+                organizationId,
+                memberId,
+                limit = 1,
+                offset = 0,
             ).getOrElse { error ->
                 _uiState.value = _uiState.value.copy(
                     isLoadingMoreTimeEntries = false,
                     historyJumpTarget = null,
                     historyJumpProgress = null,
                     historyRateLimitWaitSeconds = null,
-                    error = error.message
+                    error = error.message,
                 )
                 return@launch
             }.meta?.total ?: 0
@@ -593,31 +665,34 @@ class TrackingViewModel @Inject constructor(
             var exactMatch = false
             val expectedProbes = if (total > 1) {
                 kotlin.math.ceil(kotlin.math.log2(total.toDouble())).toInt()
-            } else 1
+            } else {
+                1
+            }
             var completedProbes = 0
             while (low <= high) {
                 val middle = (low + high) ushr 1
                 val probe = getHistoryPageWithRateLimit(
-                    organizationId, memberId, limit = 1, offset = middle
+                    organizationId,
+                    memberId,
+                    limit = 1,
+                    offset = middle,
                 ).getOrElse { error ->
                     _uiState.value = _uiState.value.copy(
                         isLoadingMoreTimeEntries = false,
                         historyJumpTarget = null,
                         historyJumpProgress = null,
                         historyRateLimitWaitSeconds = null,
-                        error = error.message ?: "Failed to load date"
+                        error = error.message ?: "Failed to load date",
                     )
                     return@launch
                 }
                 val probeDate = probe.data.firstOrNull()?.let { entry ->
-                    runCatching {
-                        ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME).toLocalDate()
-                    }.getOrNull()
+                    IsoTimes.localDate(entry.start)
                 } ?: break
                 completedProbes++
                 _uiState.value = _uiState.value.copy(
                     historyJumpProgress = (completedProbes.toFloat() / (expectedProbes + 1))
-                        .coerceAtMost(0.9f)
+                        .coerceAtMost(0.9f),
                 )
                 matchOffset = middle
                 when {
@@ -633,14 +708,17 @@ class TrackingViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(historyJumpProgress = 0.92f)
             val windowStart = (matchOffset - MAX_PAGE_SIZE / 2).coerceAtLeast(0)
             val response = getHistoryPageWithRateLimit(
-                organizationId, memberId, limit = MAX_PAGE_SIZE, offset = windowStart
+                organizationId,
+                memberId,
+                limit = MAX_PAGE_SIZE,
+                offset = windowStart,
             ).getOrElse { error ->
                 _uiState.value = _uiState.value.copy(
                     isLoadingMoreTimeEntries = false,
                     historyJumpTarget = null,
                     historyJumpProgress = null,
                     historyRateLimitWaitSeconds = null,
-                    error = error.message
+                    error = error.message,
                 )
                 return@launch
             }
@@ -651,6 +729,8 @@ class TrackingViewModel @Inject constructor(
             historyWindowStartOffset = windowStart
             historyOffset = windowStart + window.size
             historyLoadStage = 2
+            // The jumped-to window is authoritative; keep the collector from replacing it.
+            historyWindowMode = HistoryWindowMode.PAGINATED
             _uiState.value = _uiState.value.copy(
                 timeEntries = window,
                 totalTimeEntries = response.meta?.total ?: total,
@@ -660,7 +740,7 @@ class TrackingViewModel @Inject constructor(
                 historyJumpTarget = null,
                 historyJumpProgress = null,
                 historyRateLimitWaitSeconds = null,
-                historyJumpDate = date
+                historyJumpDate = date,
             )
         }
     }
@@ -673,20 +753,22 @@ class TrackingViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoadingMoreTimeEntries = true)
             val newStart = (historyWindowStartOffset - MAX_PAGE_SIZE).coerceAtLeast(0)
             authRepository.getTimeEntries(
-                organizationId, memberId,
+                organizationId,
+                memberId,
                 limit = historyWindowStartOffset - newStart,
-                offset = newStart
+                offset = newStart,
             ).onSuccess { response ->
                 val tagsById = _uiState.value.tags.associateBy { it.id }
                 val incoming = response.data.map { entry ->
                     entry.copy(tags = entry.tags.map { tagsById[it.id] ?: it })
                 }
                 historyWindowStartOffset = newStart
+                historyWindowMode = HistoryWindowMode.PAGINATED
                 _uiState.value = _uiState.value.copy(
                     timeEntries = (incoming + _uiState.value.timeEntries)
                         .distinctBy { it.id }.sortedByDescending { it.start },
                     isLoadingMoreTimeEntries = false,
-                    canLoadNewerHistory = newStart > 0
+                    canLoadNewerHistory = newStart > 0,
                 )
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(isLoadingMoreTimeEntries = false, error = error.message)
@@ -702,7 +784,7 @@ class TrackingViewModel @Inject constructor(
         organizationId: String,
         memberId: String,
         limit: Int,
-        offset: Int
+        offset: Int,
     ): Result<dev.tricked.solidverdant.data.model.TimeEntriesResponse> {
         repeat(3) {
             val result = authRepository.getTimeEntries(organizationId, memberId, limit, offset)
@@ -715,46 +797,6 @@ class TrackingViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(historyRateLimitWaitSeconds = null)
         }
         return Result.failure(IllegalStateException("Rate limit retry exhausted"))
-    }
-
-    /**
-     * Load projects
-     */
-    private suspend fun loadProjects(organizationId: String) {
-            authRepository.getProjects(organizationId)
-                .onSuccess { projects ->
-                    _uiState.value =
-                        _uiState.value.copy(projects = projects.filter { !it.isArchived })
-                }
-                .onFailure { error ->
-                    Timber.e(error, "Failed to load projects")
-                }
-    }
-
-    /**
-     * Load tasks
-     */
-    private suspend fun loadTasks(organizationId: String) {
-            authRepository.getTasks(organizationId)
-                .onSuccess { tasks ->
-                    _uiState.value = _uiState.value.copy(tasks = tasks.filter { !it.isDone })
-                }
-                .onFailure { error ->
-                    Timber.e(error, "Failed to load tasks")
-                }
-    }
-
-    /**
-     * Load tags
-     */
-    private suspend fun loadTags(organizationId: String) {
-            authRepository.getTags(organizationId)
-                .onSuccess { tags ->
-                    _uiState.value = _uiState.value.copy(tags = tags)
-                }
-                .onFailure { error ->
-                    Timber.e(error, "Failed to load tags")
-                }
     }
 
     /**
@@ -772,8 +814,10 @@ class TrackingViewModel @Inject constructor(
 
                 while (true) {
                     val now = Instant.now()
-                    val elapsed = now.epochSecond - startInstant.epochSecond
-                    _uiState.value = _uiState.value.copy(elapsedSeconds = elapsed)
+                    // Clamp: a device clock behind the entry's start would otherwise yield a
+                    // negative elapsed value and render as garbage (e.g. "-1:-5:-3").
+                    val elapsed = (now.epochSecond - startInstant.epochSecond).coerceAtLeast(0)
+                    _elapsedSeconds.value = elapsed
                     delay(1000) // Update every second
                 }
             } catch (e: CancellationException) {
@@ -791,7 +835,7 @@ class TrackingViewModel @Inject constructor(
     private fun stopTimer() {
         timerJob?.cancel()
         timerJob = null
-        _uiState.value = _uiState.value.copy(elapsedSeconds = 0)
+        _elapsedSeconds.value = 0
     }
 
     /**
@@ -808,7 +852,7 @@ class TrackingViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(
             editingProjectId = projectId,
             // Clear task if project changed
-            editingTaskId = if (projectId != _uiState.value.editingProjectId) null else _uiState.value.editingTaskId
+            editingTaskId = if (projectId != _uiState.value.editingProjectId) null else _uiState.value.editingTaskId,
         )
     }
 
@@ -849,7 +893,7 @@ class TrackingViewModel @Inject constructor(
                 projectId = _uiState.value.editingProjectId,
                 taskId = _uiState.value.editingTaskId,
                 description = _uiState.value.editingDescription,
-                tagIds = _uiState.value.editingTags
+                tagIds = _uiState.value.editingTags,
             )
             syncTrigger.requestSync()
 
@@ -862,7 +906,7 @@ class TrackingViewModel @Inject constructor(
                 startTime = Instant.parse(timeEntry.start),
                 projectName = projectName,
                 taskName = taskName,
-                description = timeEntry.description
+                description = timeEntry.description,
             )
 
             settingsDataStore.setWidgetTrackingState(
@@ -870,7 +914,7 @@ class TrackingViewModel @Inject constructor(
                 startTimeEpochMillis = Instant.parse(timeEntry.start).toEpochMilli(),
                 projectName = projectName,
                 taskName = taskName,
-                description = timeEntry.description
+                description = timeEntry.description,
             )
             TimeTrackingWidget.requestUpdate(context)
 
@@ -882,11 +926,7 @@ class TrackingViewModel @Inject constructor(
     /**
      * Update the current active time entry
      */
-    fun updateCurrentTimeEntry(
-        organizationId: String,
-        timeEntry: TimeEntry? = null,
-        tags: List<String>? = null
-    ) {
+    fun updateCurrentTimeEntry(organizationId: String, timeEntry: TimeEntry? = null, tags: List<String>? = null) {
         val entryToUpdate = timeEntry ?: _uiState.value.currentTimeEntry
         if (entryToUpdate == null) {
             Timber.w("No active time entry to update")
@@ -902,7 +942,7 @@ class TrackingViewModel @Inject constructor(
                 projectId = _uiState.value.editingProjectId,
                 taskId = _uiState.value.editingTaskId,
                 billable = _uiState.value.editingBillable,
-                tags = editingTags.map { Tag(it) }
+                tags = editingTags.map { Tag(it) },
             )
 
             timeEntryRepository.updateEntry(updatedEntry, editingTags)
@@ -917,21 +957,21 @@ class TrackingViewModel @Inject constructor(
                     startTime = Instant.parse(updatedEntry.start),
                     projectName = projectName,
                     taskName = taskName,
-                    description = updatedEntry.description
+                    description = updatedEntry.description,
                 )
                 settingsDataStore.setWidgetTrackingState(
                     isTracking = true,
                     startTimeEpochMillis = Instant.parse(updatedEntry.start).toEpochMilli(),
                     projectName = projectName,
                     taskName = taskName,
-                    description = updatedEntry.description
+                    description = updatedEntry.description,
                 )
                 TimeTrackingWidget.requestUpdate(context)
             }
 
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
-                editingTags = editingTags
+                editingTags = editingTags,
             )
             Timber.d("Time entry updated successfully (optimistic)")
         }
@@ -951,7 +991,7 @@ class TrackingViewModel @Inject constructor(
                 editingProjectId = null,
                 editingTaskId = null,
                 editingTags = emptyList(),
-                editingBillable = false
+                editingBillable = false,
             )
             viewModelScope.launch {
                 updateNotificationState()
@@ -982,7 +1022,7 @@ class TrackingViewModel @Inject constructor(
                 editingProjectId = null,
                 editingTaskId = null,
                 editingTags = emptyList(),
-                editingBillable = false
+                editingBillable = false,
             )
             stopTimer()
             lastCollectedActiveId = null
@@ -1021,7 +1061,7 @@ class TrackingViewModel @Inject constructor(
                 isLoading = false,
                 isTracking = false,
                 isPaused = true,
-                currentTimeEntry = null
+                currentTimeEntry = null,
             )
             stopTimer()
             lastCollectedActiveId = null
@@ -1050,7 +1090,7 @@ class TrackingViewModel @Inject constructor(
                 projectId = _uiState.value.editingProjectId,
                 taskId = _uiState.value.editingTaskId,
                 description = _uiState.value.editingDescription,
-                tagIds = _uiState.value.editingTags
+                tagIds = _uiState.value.editingTags,
             )
             syncTrigger.requestSync()
 
@@ -1063,7 +1103,7 @@ class TrackingViewModel @Inject constructor(
                 startTime = Instant.parse(timeEntry.start),
                 projectName = projectName,
                 taskName = taskName,
-                description = timeEntry.description
+                description = timeEntry.description,
             )
 
             settingsDataStore.setWidgetTrackingState(
@@ -1071,7 +1111,7 @@ class TrackingViewModel @Inject constructor(
                 startTimeEpochMillis = Instant.parse(timeEntry.start).toEpochMilli(),
                 projectName = projectName,
                 taskName = taskName,
-                description = timeEntry.description
+                description = timeEntry.description,
             )
             TimeTrackingWidget.requestUpdate(context)
 
@@ -1093,7 +1133,7 @@ class TrackingViewModel @Inject constructor(
         tags: List<String>,
         billable: Boolean,
         start: String,
-        end: String
+        end: String,
     ) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
@@ -1108,7 +1148,7 @@ class TrackingViewModel @Inject constructor(
                 projectId = projectId,
                 taskId = taskId,
                 tags = tags,
-                billable = billable
+                billable = billable,
             )
                 .onSuccess { created ->
                     // Insert into the loaded history, keeping newest-first order.
@@ -1117,7 +1157,7 @@ class TrackingViewModel @Inject constructor(
                         .sortedByDescending { java.time.OffsetDateTime.parse(it.start) }
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        timeEntries = updatedList
+                        timeEntries = updatedList,
                     )
                     timeEntryRepository.refreshAll(organizationId, memberId)
                     Timber.d("Manual time entry created successfully")
@@ -1126,7 +1166,7 @@ class TrackingViewModel @Inject constructor(
                     Timber.e(error, "Failed to create manual time entry")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = error.message ?: "Failed to create entry"
+                        error = error.message ?: "Failed to create entry",
                     )
                 }
         }
@@ -1144,7 +1184,7 @@ class TrackingViewModel @Inject constructor(
         tags: List<String>,
         billable: Boolean,
         start: String,
-        end: String
+        end: String,
     ) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
@@ -1156,7 +1196,7 @@ class TrackingViewModel @Inject constructor(
                 billable = billable,
                 start = start,
                 end = end,
-                tags = tags.map { Tag(it) }
+                tags = tags.map { Tag(it) },
             )
 
             // Optimistic local update + outbox enqueue; the collector refreshes the list.
@@ -1189,7 +1229,8 @@ class TrackingViewModel @Inject constructor(
             delay(DELETE_UNDO_WINDOW_MS)
             if (_uiState.value.syncOperations.any {
                     it.entryId == timeEntryId && it.type == dev.tricked.solidverdant.data.local.db.OutboxOpType.DELETE
-                }) {
+                }
+            ) {
                 syncTrigger.requestSync()
             }
 
@@ -1226,19 +1267,9 @@ class TrackingViewModel @Inject constructor(
     /**
      * Get grouped time entries by date
      */
-    fun getGroupedTimeEntries(): Map<LocalDate, List<TimeEntry>> {
-        return _uiState.value.timeEntries
-            .groupBy { entry ->
-                try {
-                    val zonedDateTime =
-                        ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME)
-                    zonedDateTime.toLocalDate()
-                } catch (e: Exception) {
-                    LocalDate.now()
-                }
-            }
-            .toSortedMap(compareByDescending { it })
-    }
+    fun getGroupedTimeEntries(): Map<LocalDate, List<TimeEntry>> = _uiState.value.timeEntries
+        .groupBy { entry -> IsoTimes.localDate(entry.start) ?: LocalDate.now() }
+        .toSortedMap(compareByDescending { it })
 
     override fun onCleared() {
         super.onCleared()

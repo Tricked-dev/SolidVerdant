@@ -1,15 +1,21 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.tracking
 
-import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Client
+import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.PriorityQueue
-import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 
 data class HistoryFilter(
     val query: String = "",
@@ -94,11 +100,11 @@ object EntryTrustRules {
                 (filter.tagId == null || entry.tags.any { it.id == filter.tagId }) &&
                 (!filter.runningOnly || entry.end == null) &&
                 (!filter.missingProjectOnly || entry.projectId == null) &&
-                (!filter.missingDescriptionOnly || entry.description.isNullOrBlank())
-                && (!filter.needsCategorization || entry.projectId == null || entry.description.isNullOrBlank())
-                && (filter.startDate == null || (entryDate != null && !entryDate.isBefore(filter.startDate)))
-                && (filter.endDate == null || (entryDate != null && !entryDate.isAfter(filter.endDate)))
-                && (filter.syncStatus == null || status == filter.syncStatus)
+                (!filter.missingDescriptionOnly || entry.description.isNullOrBlank()) &&
+                (!filter.needsCategorization || entry.projectId == null || entry.description.isNullOrBlank()) &&
+                (filter.startDate == null || (entryDate != null && !entryDate.isBefore(filter.startDate))) &&
+                (filter.endDate == null || (entryDate != null && !entryDate.isAfter(filter.endDate))) &&
+                (filter.syncStatus == null || status == filter.syncStatus)
         }
     }
 

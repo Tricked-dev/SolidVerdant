@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Phase 2 review-loop shell strings. Feature agents add their own feature-scoped files. -->
+    <string name="nav_review">Review</string>
+    <string name="review_title">Review</string>
+    <string name="review_more_actions">More review options</string>
+    <string name="review_menu_end_of_day">End-of-day review</string>
+    <string name="review_menu_reminder_settings">Reminder settings</string>
+    <string name="review_menu_manage_templates">Manage templates</string>
+    <string name="review_segment_inbox">Inbox</string>
+    <string name="review_segment_review_day">Review day</string>
+    <string name="review_end_of_day_title">End-of-day review</string>
+    <string name="reminder_settings_title">Reminder settings</string>
+    <string name="manage_templates_title">Manage templates</string>
+    <string name="review_navigate_back">Back</string>
+    <string name="review_badge_overflow">99+</string>
+    <string name="review_inbox_placeholder">Items to review will appear here.</string>
+    <string name="review_day_placeholder">Your end-of-day review will appear here.</string>
+    <string name="reminder_settings_placeholder">Reminder settings will appear here.</string>
+    <string name="manage_templates_placeholder">Your templates will appear here.</string>
+    <plurals name="review_pending_badge_description">
+        <item quantity="one">Review, %1$d item to review</item>
+        <item quantity="other">Review, %1$d items to review</item>
+    </plurals>
+</resources>

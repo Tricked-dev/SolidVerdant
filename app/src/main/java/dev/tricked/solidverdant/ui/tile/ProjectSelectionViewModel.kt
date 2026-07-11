@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.tile
 
 import androidx.lifecycle.ViewModel
@@ -21,7 +27,7 @@ data class ProjectSelectionUiState(
     val isLoading: Boolean = false,
     val projects: List<Project> = emptyList(),
     val tasks: List<Task> = emptyList(),
-    val error: String? = null
+    val error: String? = null,
 )
 
 /**
@@ -33,7 +39,7 @@ class ProjectSelectionViewModel @Inject constructor(
     private val apiClientFactory: ApiClientFactory,
     private val authRepository: AuthRepository,
     private val timeEntryRepository: TimeEntryRepository,
-    settingsDataStore: SettingsDataStore
+    settingsDataStore: SettingsDataStore,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProjectSelectionUiState())
@@ -50,7 +56,7 @@ class ProjectSelectionViewModel @Inject constructor(
                 if (organizationId == null) {
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = "No organization found"
+                        error = "No organization found",
                     )
                     return@launch
                 }
@@ -65,7 +71,7 @@ class ProjectSelectionViewModel @Inject constructor(
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             projects = cachedProjects,
-                            tasks = cachedTasks
+                            tasks = cachedTasks,
                         )
                         // Refresh in background
                         loadProjectsInBackground(organizationId)
@@ -82,13 +88,13 @@ class ProjectSelectionViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     projects = projectsResponse.data,
-                    tasks = tasksResponse.data
+                    tasks = tasksResponse.data,
                 )
             } catch (e: Exception) {
                 Timber.e(e, "Failed to load projects and tasks")
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = e.message ?: "Failed to load projects"
+                    error = e.message ?: "Failed to load projects",
                 )
             }
         }
@@ -104,7 +110,7 @@ class ProjectSelectionViewModel @Inject constructor(
 
                 _uiState.value = _uiState.value.copy(
                     projects = projectsResponse.data,
-                    tasks = tasksResponse.data
+                    tasks = tasksResponse.data,
                 )
                 Timber.d("Background refresh completed")
             } catch (e: Exception) {

@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.tile
 
 import android.os.Bundle
@@ -13,17 +19,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -31,16 +34,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dagger.hilt.android.AndroidEntryPoint
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.data.local.AppThemeMode
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
-import dev.tricked.solidverdant.data.local.AppThemeMode
 import dev.tricked.solidverdant.service.TimeTrackingNotificationService
 import dev.tricked.solidverdant.ui.components.ProjectTaskDropdown
 import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
@@ -72,7 +74,7 @@ class ProjectSelectionActivity : ComponentActivity() {
                             taskId = taskId,
                             description = description,
                             projectName = projectName,
-                            taskName = taskName
+                            taskName = taskName,
                         )
 
                         // Close immediately - TileService handles the rest
@@ -80,7 +82,7 @@ class ProjectSelectionActivity : ComponentActivity() {
                     },
                     onCancel = {
                         finish()
-                    }
+                    },
                 )
             }
         }
@@ -92,7 +94,7 @@ class ProjectSelectionActivity : ComponentActivity() {
 fun ProjectSelectionContent(
     viewModel: ProjectSelectionViewModel,
     onStartTracking: (projectId: String?, taskId: String?, description: String, projectName: String?, taskName: String?) -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -102,20 +104,20 @@ fun ProjectSelectionContent(
 
     PullToRefreshBox(
         isRefreshing = uiState.isLoading,
-        onRefresh = { viewModel.loadProjects(forceRefresh = true) }
+        onRefresh = { viewModel.loadProjects(forceRefresh = true) },
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surface)
-                .padding(24.dp)
+                .padding(24.dp),
         ) {
             when {
                 uiState.isLoading && uiState.projects.isEmpty() -> {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+                        verticalArrangement = Arrangement.Center,
                     ) {
                         CircularProgressIndicator()
                         Spacer(modifier = Modifier.height(16.dp))
@@ -127,19 +129,19 @@ fun ProjectSelectionContent(
                     Text(
                         text = stringResource(R.string.error_format, uiState.error ?: ""),
                         color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
                         onClick = { viewModel.loadProjects(forceRefresh = true) },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(stringResource(R.string.retry))
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedButton(
                         onClick = onCancel,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(stringResource(R.string.close))
                     }
@@ -150,7 +152,7 @@ fun ProjectSelectionContent(
                         projects = uiState.projects.filter { !it.isArchived },
                         tasks = uiState.tasks.filter { !it.isDone },
                         onStartTracking = onStartTracking,
-                        onCancel = onCancel
+                        onCancel = onCancel,
                     )
                 }
             }
@@ -170,7 +172,7 @@ fun StartTrackingForm(
     projects: List<Project>,
     tasks: List<Task>,
     onStartTracking: (projectId: String?, taskId: String?, description: String, projectName: String?, taskName: String?) -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
 ) {
     var selection by remember { mutableStateOf<ProjectTaskSelection>(ProjectTaskSelection.NoProject) }
     var description by remember { mutableStateOf("") }
@@ -188,7 +190,7 @@ fun StartTrackingForm(
         text = stringResource(R.string.start_time_tracking),
         style = MaterialTheme.typography.titleLarge,
         color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(bottom = 16.dp)
+        modifier = Modifier.padding(bottom = 16.dp),
     )
 
     ProjectTaskDropdown(
@@ -203,7 +205,7 @@ fun StartTrackingForm(
                 task == null -> ProjectTaskSelection.ProjectOnly(project)
                 else -> ProjectTaskSelection.ProjectWithTask(project, task)
             }
-        }
+        },
     )
 
     Spacer(modifier = Modifier.height(12.dp))
@@ -213,18 +215,18 @@ fun StartTrackingForm(
         onValueChange = { description = it },
         label = { Text(stringResource(R.string.description_optional)) },
         modifier = Modifier.fillMaxWidth(),
-        singleLine = true
+        singleLine = true,
     )
 
     Spacer(modifier = Modifier.height(20.dp))
 
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         OutlinedButton(
             onClick = onCancel,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
         ) {
             Text(stringResource(R.string.cancel))
         }
@@ -249,10 +251,10 @@ fun StartTrackingForm(
                     taskId as String?,
                     description,
                     projectName as String?,
-                    taskName as String?
+                    taskName as String?,
                 )
             },
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
         ) {
             Text(stringResource(R.string.start))
         }

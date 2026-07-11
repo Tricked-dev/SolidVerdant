@@ -48,10 +48,7 @@ object ShortcutManager {
     /**
      * Create a shortcut for a specific project
      */
-    private fun createProjectShortcut(
-        context: Context,
-        project: Project
-    ): ShortcutInfoCompat {
+    private fun createProjectShortcut(context: Context, project: Project): ShortcutInfoCompat {
         val intent = Intent(context, ProjectSelectionActivity::class.java).apply {
             action = Intent.ACTION_VIEW
             putExtra(EXTRA_PROJECT_ID, project.id)

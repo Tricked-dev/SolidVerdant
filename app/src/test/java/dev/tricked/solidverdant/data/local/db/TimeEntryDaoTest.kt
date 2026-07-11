@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.data.local.db
 
 import androidx.room.Room
@@ -19,20 +25,20 @@ class TimeEntryDaoTest {
 
     @Before fun setup() {
         db = Room.inMemoryDatabaseBuilder(
-            ApplicationProvider.getApplicationContext(), AppDatabase::class.java
+            ApplicationProvider.getApplicationContext(),
+            AppDatabase::class.java,
         ).allowMainThreadQueries().build()
         dao = db.timeEntryDao()
     }
 
     @After fun teardown() = db.close()
 
-    private fun entry(id: String, org: String = "org1", end: String? = "2026-01-01T10:00:00Z") =
-        TimeEntryEntity(
-            id = id, description = "d", userId = "u", start = "2026-01-01T09:00:00Z",
-            end = end, duration = 3600, taskId = null, projectId = null,
-            billable = false, organizationId = org, updatedAt = 1L,
-            syncState = SyncState.SYNCED, pendingDelete = false
-        )
+    private fun entry(id: String, org: String = "org1", end: String? = "2026-01-01T10:00:00Z") = TimeEntryEntity(
+        id = id, description = "d", userId = "u", start = "2026-01-01T09:00:00Z",
+        end = end, duration = 3600, taskId = null, projectId = null,
+        billable = false, organizationId = org, updatedAt = 1L,
+        syncState = SyncState.SYNCED, pendingDelete = false,
+    )
 
     @Test fun upsert_and_observe_visible_excludes_pending_delete() = runTest {
         dao.upsert(entry("a"))

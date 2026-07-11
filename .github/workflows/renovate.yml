@@ -1,0 +1,41 @@
+name: renovate
+
+on:
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        description: Renovate log level
+        default: info
+        required: false
+  schedule:
+    # Daily, offset from the top of the hour to dodge GitHub's cron congestion.
+    - cron: "23 4 * * *"
+
+concurrency:
+  group: renovate
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  renovate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      # The built-in token can create Renovate branches, dependency-dashboard issues, and PRs with
+      # the permissions above. GitHub may require a maintainer to approve CI runs created by it.
+      - name: Run Renovate
+        uses: renovatebot/github-action@v43.0.5
+        with:
+          token: ${{ github.token }}
+        env:
+          LOG_LEVEL: ${{ inputs.logLevel || 'info' }}
+          RENOVATE_REPOSITORIES: ${{ github.repository }}
+          # The repo config (renovate.json) drives everything else.
+          RENOVATE_ONBOARDING: "false"
+          RENOVATE_REQUIRE_CONFIG: required

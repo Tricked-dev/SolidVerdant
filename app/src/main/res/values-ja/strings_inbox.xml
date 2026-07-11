@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Time Inbox feature strings (gap analysis #16/#17). ja plurals only have 'other'. -->
+
+    <string name="inbox_summary_none">すべて完了</string>
+    <plurals name="inbox_summary_count">
+        <item quantity="other">レビュー対象 %1$d 件</item>
+    </plurals>
+    <string name="inbox_refresh_action">更新</string>
+    <string name="inbox_settings_action">受信トレイの設定</string>
+
+    <string name="inbox_stale_banner">保存済みのデータを表示しています。更新できませんでした。</string>
+    <string name="inbox_retry">再試行</string>
+    <string name="inbox_dismiss">閉じる</string>
+
+    <string name="inbox_caught_up_title">すべて完了</string>
+    <string name="inbox_caught_up_body">記録したすべての項目に問題はありません。今レビューする項目はありません。</string>
+    <string name="inbox_empty_title">レビューする項目はまだありません</string>
+    <string name="inbox_empty_body">時間を記録すると、確認すべき項目が受信トレイに表示されます。</string>
+
+    <string name="inbox_dismissed_snackbar">項目を閉じました</string>
+    <string name="inbox_undo">元に戻す</string>
+    <string name="inbox_swipe_dismiss_cd">この項目を閉じる</string>
+
+    <string name="inbox_error_refresh">更新できませんでした。接続を確認して再試行してください。</string>
+    <string name="inbox_error_create">項目を追加できませんでした。接続を確認して再試行してください。</string>
+    <string name="inbox_error_resolve">変更を保存できませんでした。もう一度お試しください。</string>
+
+    <string name="inbox_issue_overlap_title">重複した項目</string>
+    <string name="inbox_issue_overlap_body">2 つの項目が同じ時間帯にあります。意図しない場合は一方を調整するか、閉じてください。</string>
+    <string name="inbox_issue_overlap_body_policy">この組織では項目の重複が許可されていません。どちらかを調整してください。</string>
+    <string name="inbox_action_adjust">調整</string>
+
+    <string name="inbox_issue_gap_title">未記録の時間</string>
+    <string name="inbox_issue_gap_body">勤務時間のこの部分に対応する項目がありません。</string>
+    <string name="inbox_action_add_entry">項目を追加</string>
+
+    <string name="inbox_issue_missing_title">詳細を追加</string>
+    <string name="inbox_issue_missing_body">%1$s が未設定です。</string>
+    <string name="inbox_action_add_details">詳細を追加</string>
+
+    <string name="inbox_issue_long_title">異常に長い項目</string>
+    <string name="inbox_issue_long_body">この項目は %1$s です。想定どおりに終了したか確認してください。</string>
+    <string name="inbox_action_review">レビュー</string>
+
+    <string name="inbox_action_dismiss">閉じる</string>
+    <string name="inbox_entry_untitled">無題の項目</string>
+
+    <string name="inbox_field_project">プロジェクト</string>
+    <string name="inbox_field_task">タスク</string>
+    <string name="inbox_field_description">説明</string>
+    <string name="inbox_field_tags">タグ</string>
+
+    <string name="inbox_duration_hm">%1$d時間%2$d分</string>
+    <string name="inbox_duration_h">%1$d時間</string>
+    <string name="inbox_duration_m">%1$d分</string>
+
+    <string name="inbox_settings_title">受信トレイの設定</string>
+    <string name="inbox_settings_work_days">勤務日</string>
+    <string name="inbox_settings_working_hours">勤務時間</string>
+    <string name="inbox_settings_work_start">開始</string>
+    <string name="inbox_settings_work_end">終了</string>
+    <string name="inbox_settings_min_gap">検出する最小の空き時間</string>
+    <string name="inbox_settings_max_duration">長い項目のしきい値</string>
+    <string name="inbox_settings_checks">チェック</string>
+    <string name="inbox_settings_check_gaps">未記録の空き時間</string>
+    <string name="inbox_settings_check_overlaps">重複した項目</string>
+    <string name="inbox_settings_check_missing_project">プロジェクト未設定</string>
+    <string name="inbox_settings_check_missing_task">タスク未設定</string>
+    <string name="inbox_settings_check_missing_description">説明未設定</string>
+    <string name="inbox_settings_check_missing_tags">タグ未設定</string>
+    <string name="inbox_settings_check_long">長い項目</string>
+    <string name="inbox_settings_done">完了</string>
+    <string name="inbox_settings_decrease">減らす</string>
+    <string name="inbox_settings_increase">増やす</string>
+    <string name="inbox_minutes_value">%1$d 分</string>
+    <string name="inbox_hours_value">%1$d 時間</string>
+</resources>

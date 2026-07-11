@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.calendar
 
 import dev.tricked.solidverdant.data.model.TimeEntry
@@ -10,8 +16,14 @@ import java.time.ZoneOffset
 class TimelineLayoutTest {
     @Test
     fun entrySpanningNineToTenAmMapsToExpectedFractions() {
-        val e = TimeEntry(id = "1", userId = "u", start = "2026-07-06T09:00:00Z",
-            end = "2026-07-06T10:00:00Z", duration = 3600, organizationId = "o")
+        val e = TimeEntry(
+            id = "1",
+            userId = "u",
+            start = "2026-07-06T09:00:00Z",
+            end = "2026-07-06T10:00:00Z",
+            duration = 3600,
+            organizationId = "o",
+        )
         val (top, height) = timelineOffsets(
             e,
             LocalDate.of(2026, 7, 6),

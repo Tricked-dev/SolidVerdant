@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package dev.tricked.solidverdant.ui.calendar
 
 import androidx.compose.ui.test.assertIsDisplayed
@@ -17,8 +23,14 @@ class MonthCalendarViewTest {
     @Test
     fun tappingEntryInvokesCallback() {
         val date = LocalDate.of(2026, 7, 6)
-        val e = TimeEntry(id = "e1", userId = "u", start = "2026-07-06T09:00:00Z",
-            end = "2026-07-06T10:00:00Z", duration = 3600, organizationId = "o")
+        val e = TimeEntry(
+            id = "e1",
+            userId = "u",
+            start = "2026-07-06T09:00:00Z",
+            end = "2026-07-06T10:00:00Z",
+            duration = 3600,
+            organizationId = "o",
+        )
         val state = CalendarUiState(
             visibleMonth = YearMonth.of(2026, 7),
             selectedDate = date,
@@ -27,8 +39,13 @@ class MonthCalendarViewTest {
         )
         var clicked: String? = null
         composeRule.setContent {
-            MonthCalendarView(state, onSelectDate = {}, onPreviousMonth = {},
-                onNextMonth = {}, onEntryClick = { clicked = it.id })
+            MonthCalendarView(
+                state,
+                onSelectDate = {},
+                onPreviousMonth = {},
+                onNextMonth = {},
+                onEntryClick = { clicked = it.id },
+            )
         }
         composeRule.onNodeWithTag("day-cell-2026-07-06").assertIsDisplayed()
         composeRule.onNodeWithTag("entry-row-e1").performClick()

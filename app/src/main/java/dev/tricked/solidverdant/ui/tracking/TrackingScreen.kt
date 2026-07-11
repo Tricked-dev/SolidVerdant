@@ -1,4 +1,10 @@
-﻿package dev.tricked.solidverdant.ui.tracking
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+package dev.tricked.solidverdant.ui.tracking
 
 import android.Manifest
 import android.content.ClipData
@@ -38,11 +44,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -122,10 +134,12 @@ import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -139,6 +153,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -160,12 +175,26 @@ import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
+import dev.tricked.solidverdant.data.repository.EntryTemplate
 import dev.tricked.solidverdant.data.model.User
+import dev.tricked.solidverdant.ui.templates.FavoriteTemplatesRow
+import dev.tricked.solidverdant.ui.templates.ManageTemplatesViewModel
+import dev.tricked.solidverdant.ui.templates.TemplateDraft
+import dev.tricked.solidverdant.ui.templates.TemplateResolver
+import dev.tricked.solidverdant.ui.templates.templateDisplayLabel
+import androidx.compose.runtime.collectAsState
+import androidx.hilt.navigation.compose.hiltViewModel
 import dev.tricked.solidverdant.data.local.AppThemeMode
 import dev.tricked.solidverdant.ui.components.ProjectTaskDropdown as SharedProjectTaskDropdown
+import dev.tricked.solidverdant.ui.components.SectionCard
+import dev.tricked.solidverdant.ui.components.SyncChip
+import dev.tricked.solidverdant.ui.theme.Dimens
+import dev.tricked.solidverdant.util.IsoTimes
 import dev.tricked.solidverdant.util.NotificationPermissionHelper
 import dev.tricked.solidverdant.service.TimeTrackingNotificationService
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.ZonedDateTime
 import java.time.ZoneId
@@ -174,6 +203,8 @@ import java.time.ZoneOffset
 import java.time.DayOfWeek
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.format.FormatStyle
 import java.time.format.TextStyle
 import java.util.Locale
@@ -199,6 +230,7 @@ fun TrackingScreen(
     serverEndpoint: String,
     clientId: String,
     uiState: TrackingUiState,
+    elapsedSeconds: StateFlow<Long> = MutableStateFlow(uiState.elapsedSeconds),
     alwaysShowNotifications: Boolean,
     appTheme: AppThemeMode,
     optimisticRefresh: Boolean,
@@ -249,6 +281,15 @@ fun TrackingScreen(
     val wideHistoryListState = rememberLazyListState()
     val compactListState = rememberLazyListState()
 
+    // Favorites & templates (gap analysis #1, #9). The template ViewModel resolves the current
+    // organization itself; its catalogue includes archived/done items so availability can be shown.
+    val templateViewModel: ManageTemplatesViewModel = hiltViewModel()
+    val templateState by templateViewModel.uiState.collectAsState()
+    val onSaveTemplateFromForm: (TemplateDraft) -> Unit = { draft ->
+        templateViewModel.saveNewTemplate(draft)
+        scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.templates_saved)) }
+    }
+
     LaunchedEffect(editActiveEntryRequested, uiState.currentTimeEntry) {
         if (editActiveEntryRequested) {
             uiState.currentTimeEntry?.let { showEditDialog = it }
@@ -296,6 +337,19 @@ fun TrackingScreen(
                 (info.visibleItemsInfo.lastOrNull()?.index ?: -1) >=
                 info.totalItemsCount - HISTORY_PREFETCH_ITEMS
         }.filter { it }.collect { onLoadMoreEntries() }
+    }
+    LaunchedEffect(
+        currentMembership?.organizationId,
+        uiState.hasLoadedTimeEntries,
+        uiState.hasMoreTimeEntries,
+        uiState.timeEntries.size,
+    ) {
+        if (uiState.hasLoadedTimeEntries &&
+            uiState.hasMoreTimeEntries &&
+            uiState.timeEntries.size <= HISTORY_INITIAL_PREFETCH_MAX_ENTRIES
+        ) {
+            onLoadMoreEntries()
+        }
     }
     LaunchedEffect(
         wideHistoryListState,
@@ -596,6 +650,7 @@ fun TrackingScreen(
                         },
                         modifier = Modifier
                             .align(Alignment.End)
+                            .testTag(TrackingTestTags.LOGOUT_BUTTON)
                             .padding(horizontal = 12.dp, vertical = 4.dp),
                         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                     ) {
@@ -615,6 +670,9 @@ fun TrackingScreen(
         }
     ) {
         Scaffold(
+            contentWindowInsets = WindowInsets.safeDrawing.only(
+                WindowInsetsSides.Top + WindowInsetsSides.Horizontal
+            ),
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
@@ -672,7 +730,10 @@ fun TrackingScreen(
                         }
                     },
                     navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                        IconButton(
+                            onClick = { scope.launch { drawerState.open() } },
+                            modifier = Modifier.testTag(TrackingTestTags.SETTINGS_BUTTON),
+                        ) {
                             Icon(
                                 imageVector = Icons.Default.Menu,
                                 contentDescription = stringResource(R.string.settings_menu)
@@ -708,7 +769,10 @@ fun TrackingScreen(
                             animationSpec = infiniteRepeatable(tween(900), RepeatMode.Restart),
                             label = "sync rotation"
                         )
-                        IconButton(onClick = onRefresh) {
+                        IconButton(
+                            onClick = onRefresh,
+                            modifier = Modifier.testTag(TrackingTestTags.REFRESH_BUTTON),
+                        ) {
                             Icon(
                                 imageVector = Icons.Default.Refresh,
                                 contentDescription = stringResource(R.string.refresh),
@@ -725,30 +789,66 @@ fun TrackingScreen(
                 onRefresh = onRefresh,
                 modifier = Modifier.padding(paddingValues)
             ) {
-                val serverLastEntry = uiState.timeEntries
-                    .filter { it.end != null && !it.description.isNullOrBlank() }
-                    .maxByOrNull { it.start }
-                val lastEntry = serverLastEntry ?: uiState.cachedContinueEntry?.takeIf {
-                    it.organizationId == currentMembership?.organizationId
+                val serverLastEntry = remember(uiState.timeEntries) {
+                    uiState.timeEntries
+                        .filter { it.end != null && !it.description.isNullOrBlank() }
+                        .maxByOrNull { it.start }
                 }
-                val groupedEntries = remember(
-                    uiState.timeEntries, uiState.projects, uiState.tasks, uiState.clients,
-                    uiState.syncOperations, historyFilter,
-                ) {
-                    EntryTrustRules.filter(
-                        entries = uiState.timeEntries,
-                        filter = historyFilter,
-                        projects = uiState.projects,
-                        tasks = uiState.tasks,
-                        clients = uiState.clients,
-                        syncOperations = uiState.syncOperations,
-                    ).groupBy { entry ->
-                        runCatching { ZonedDateTime.parse(entry.start).toLocalDate() }.getOrDefault(LocalDate.MIN)
+                val lastEntry = remember(serverLastEntry, uiState.cachedContinueEntry, currentMembership) {
+                    serverLastEntry ?: uiState.cachedContinueEntry?.takeIf {
+                        it.organizationId == currentMembership?.organizationId
                     }
                 }
-                val overlapCount = remember(uiState.timeEntries) {
-                    EntryTrustRules.overlapCount(uiState.timeEntries)
+                val preparedHistory by produceState(
+                    initialValue = PreparedHistory.Empty,
+                    uiState.timeEntries, uiState.projects, uiState.tasks, uiState.clients,
+                    historyFilter,
+                ) {
+                    value = withContext(Dispatchers.Default) {
+                        val grouped = EntryTrustRules.filter(
+                            entries = uiState.timeEntries,
+                            filter = historyFilter,
+                            projects = uiState.projects,
+                            tasks = uiState.tasks,
+                            clients = uiState.clients,
+                            syncOperations = uiState.syncOperations,
+                        ).groupBy { entry ->
+                            IsoTimes.localDate(entry.start) ?: LocalDate.MIN
+                        }
+                        val days = grouped.mapNotNull { (date, entries) ->
+                            val completed = entries.filter { (it.duration ?: 0) > 0 }
+                            if (completed.isEmpty()) null else HistoryDay(
+                                date = date,
+                                entries = completed,
+                                groups = completed.groupBy {
+                                    "${it.projectId}_${it.taskId}_${it.description.orEmpty()}"
+                                }.values.toList(),
+                            )
+                        }
+                        PreparedHistory(
+                            groupedEntries = grouped,
+                            listItems = buildList {
+                                days.forEach { day ->
+                                    add(HistoryListItem.Header(day))
+                                    day.groups.forEach { add(HistoryListItem.Group(it)) }
+                                }
+                            },
+                        )
+                    }
                 }
+                val groupedEntries = preparedHistory.groupedEntries
+                val historyListItems = preparedHistory.listItems
+                val historyProjectsById = remember(uiState.projects) { uiState.projects.associateBy { it.id } }
+                val historyTasksById = remember(uiState.tasks) { uiState.tasks.associateBy { it.id } }
+                val syncStatusByEntryId = remember(uiState.syncOperations) {
+                    uiState.syncOperations.groupBy { it.entryId }.mapValues { (_, operations) ->
+                        operations.last().status
+                    }
+                }
+                val overlapCount = uiState.overlapCount
+                val onHistoryEdit = remember<(TimeEntry) -> Unit> { { entry -> showEditDialog = entry } }
+                val onHistoryDelete = remember<(TimeEntry) -> Unit> { { entry -> deletedEntry = entry; onDeleteEntry(entry.id) } }
+                val onHistoryDateClick = remember<(LocalDate) -> Unit> { { date -> calendarInitialDate = date } }
 
                 LaunchedEffect(uiState.historyJumpDate, groupedEntries) {
                     val target = uiState.historyJumpDate ?: return@LaunchedEffect
@@ -767,10 +867,11 @@ fun TrackingScreen(
                     val wideLayout = maxWidth >= 840.dp
                     val primaryContent: LazyListScope.() -> Unit = {
                         item { Spacer(Modifier.height(8.dp)) }
-                        uiState.error?.let { error -> item { ErrorCard(error) } }
                         item {
+                            val elapsed by elapsedSeconds.collectAsState()
                             TrackingControls(
                                 uiState = uiState,
+                                elapsedSeconds = elapsed,
                                 onDescriptionChange = onDescriptionChange,
                                 onProjectChange = onProjectChange,
                                 onTaskChange = onTaskChange,
@@ -783,14 +884,15 @@ fun TrackingScreen(
                                 onUpdate = onUpdateCurrentEntry
                             )
                         }
-                        if (uiState.isTracking && uiState.elapsedSeconds >= longTimerHours * 3600L &&
-                            uiState.elapsedSeconds >= longTimerSnoozedUntil) {
-                            item {
+                        item(key = "long_timer_warning") {
+                            val elapsed by elapsedSeconds.collectAsState()
+                            if (uiState.isTracking && elapsed >= longTimerHours * 3600L &&
+                                elapsed >= longTimerSnoozedUntil) {
                                 LongTimerWarning(
                                     hours = longTimerHours,
                                     onStop = onStopTracking,
                                     onKeepRunning = {
-                                        longTimerSnoozedUntil = uiState.elapsedSeconds + 3600L
+                                        longTimerSnoozedUntil = elapsed + 3600L
                                         TimeTrackingNotificationService.snoozeLongTimerWarning(context)
                                     },
                                     onAdjust = { uiState.currentTimeEntry?.let { showEditDialog = it } },
@@ -799,6 +901,26 @@ fun TrackingScreen(
                         }
                         if (overlapCount > 0) {
                             item { OverlapWarning(overlapCount, currentMembership?.organization?.preventOverlappingTimeEntries == true) }
+                        }
+                        if (!uiState.isTracking && !uiState.isPaused &&
+                            templateState.quickStart.isNotEmpty()
+                        ) {
+                            item(key = "favorites_quick_start") {
+                                FavoriteTemplatesRow(
+                                    templates = templateState.quickStart,
+                                    projects = templateState.projects,
+                                    tasks = templateState.tasks,
+                                    tags = templateState.tags,
+                                    onStart = { start ->
+                                        onDescriptionChange(start.description ?: "")
+                                        onProjectChange(start.projectId)
+                                        onTaskChange(start.taskId)
+                                        onTagsChange(start.tagIds)
+                                        onBillableChange(start.billable)
+                                        onStartTracking()
+                                    },
+                                )
+                            }
                         }
                         if (!uiState.isTracking && !uiState.isPaused && lastEntry != null) {
                             item(key = "continue_last") {
@@ -838,6 +960,7 @@ fun TrackingScreen(
                                 modifier = Modifier
                                     .weight(1.1f)
                                     .fillMaxSize()
+                                    .testTag(TrackingTestTags.HISTORY_LIST)
                                     .nestedScroll(historyScrollConnection)
                                     .padding(horizontal = 24.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -849,10 +972,13 @@ fun TrackingScreen(
                                 }
                                 trackingHistoryItems(
                                     uiState = uiState,
-                                    groupedEntries = groupedEntries,
-                                    onEdit = { showEditDialog = it },
-                                    onDelete = { deletedEntry = it; onDeleteEntry(it.id) },
-                                    onDateClick = { calendarInitialDate = it }
+                                    historyItems = historyListItems,
+                                    projectsById = historyProjectsById,
+                                    tasksById = historyTasksById,
+                                    syncStatusByEntryId = syncStatusByEntryId,
+                                    onEdit = onHistoryEdit,
+                                    onDelete = onHistoryDelete,
+                                    onDateClick = onHistoryDateClick
                                 )
                                 item { Spacer(Modifier.height(16.dp)) }
                             }
@@ -862,6 +988,7 @@ fun TrackingScreen(
                             state = compactListState,
                             modifier = Modifier
                                 .fillMaxSize()
+                                .testTag(TrackingTestTags.HISTORY_LIST)
                                 .nestedScroll(historyScrollConnection)
                                 .padding(horizontal = 16.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -874,10 +1001,13 @@ fun TrackingScreen(
                             }
                             trackingHistoryItems(
                                 uiState = uiState,
-                                groupedEntries = groupedEntries,
-                                onEdit = { showEditDialog = it },
-                                onDelete = { deletedEntry = it; onDeleteEntry(it.id) },
-                                onDateClick = { calendarInitialDate = it }
+                                historyItems = historyListItems,
+                                projectsById = historyProjectsById,
+                                tasksById = historyTasksById,
+                                syncStatusByEntryId = syncStatusByEntryId,
+                                onEdit = onHistoryEdit,
+                                onDelete = onHistoryDelete,
+                                onDateClick = onHistoryDateClick
                             )
                             item { Spacer(Modifier.height(16.dp)) }
                         }
@@ -899,7 +1029,11 @@ fun TrackingScreen(
             onSave = { description, projectId, taskId, tagIds, billable, start, end ->
                 onUpdatePastEntry(entry, description, projectId, taskId, tagIds, billable, start, end)
                 showEditDialog = null
-            }
+            },
+            existingEntries = uiState.timeEntries,
+            preventOverlap = currentMembership?.organization?.preventOverlappingTimeEntries == true,
+            templates = templateState.templates,
+            onSaveAsTemplate = onSaveTemplateFromForm,
         )
     }
 
@@ -921,11 +1055,15 @@ fun TrackingScreen(
             projects = uiState.projects,
             tasks = uiState.tasks,
             tags = uiState.tags,
+            existingEntries = uiState.timeEntries,
+            preventOverlap = currentMembership?.organization?.preventOverlappingTimeEntries == true,
             onDismiss = { showAddDialog = false },
             onSave = { description, projectId, taskId, tagIds, billable, start, end ->
                 onCreateEntry(description, projectId, taskId, tagIds, billable, start, end)
                 showAddDialog = false
-            }
+            },
+            templates = templateState.templates,
+            onSaveAsTemplate = onSaveTemplateFromForm,
         )
     }
 
@@ -1007,7 +1145,11 @@ private fun HistoryFilters(filter: HistoryFilter, uiState: TrackingUiState, onCh
                         else stringResource(R.string.active_filters_count, activeCount),
                     )
                 },
-                trailingIcon = if (expanded) {{ Icon(Icons.Default.Close, stringResource(R.string.close), Modifier.size(18.dp)) }} else null,
+                trailingIcon = if (expanded) {
+                    { Icon(Icons.Default.Close, stringResource(R.string.close), Modifier.size(18.dp)) }
+                } else {
+                    null
+                },
             )
             if (!expanded && filter.query.isNotBlank()) {
                 Text(filter.query, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
@@ -1045,7 +1187,14 @@ private fun HistoryFilters(filter: HistoryFilter, uiState: TrackingUiState, onCh
             )
             FilterChip(
                 selected = filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED,
-                onClick = { onChange(filter.copy(syncStatus = if (filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED) null else TimeEntryRepository.EntrySyncStatus.FAILED)) },
+                onClick = {
+                    val toggled = if (filter.syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED) {
+                        null
+                    } else {
+                        TimeEntryRepository.EntrySyncStatus.FAILED
+                    }
+                    onChange(filter.copy(syncStatus = toggled))
+                },
                 label = { Text(stringResource(R.string.sync_failed)) },
             )
             val today = LocalDate.now()
@@ -1125,8 +1274,8 @@ private fun HistoryFilters(filter: HistoryFilter, uiState: TrackingUiState, onCh
                 TextButton(
                     enabled = pickerState.selectedStartDateMillis != null && pickerState.selectedEndDateMillis != null,
                     onClick = {
-                        val start = pickerState.selectedStartDateMillis?.let { Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }
-                        val end = pickerState.selectedEndDateMillis?.let { Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }
+                        val start = pickerState.selectedStartDateMillis?.let(::utcDateOf)
+                        val end = pickerState.selectedEndDateMillis?.let(::utcDateOf)
                         if (start != null && end != null) onChange(filter.copy(startDate = start, endDate = end))
                         showDateRangePicker = false
                     },
@@ -1174,14 +1323,23 @@ private fun SyncCenter(
 ) {
     val failed = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.FAILED }
     val retrying = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.RETRYING }
-    Card(Modifier.fillMaxWidth()) {
+    val summaryStatus = when {
+        failed > 0 -> TimeEntryRepository.EntrySyncStatus.FAILED
+        retrying > 0 -> TimeEntryRepository.EntrySyncStatus.RETRYING
+        else -> TimeEntryRepository.EntrySyncStatus.PENDING
+    }
+    SectionCard(title = stringResource(R.string.sync_center)) {
         Row(
-            Modifier.fillMaxWidth().padding(12.dp),
+            Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(Dimens.Space12),
         ) {
-            Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.sync_center), style = MaterialTheme.typography.titleSmall)
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
+            ) {
+                SyncChip(status = summaryStatus, showLabel = false)
                 Text(
                     when {
                         failed > 0 -> stringResource(R.string.sync_failed_count, failed)
@@ -1192,13 +1350,16 @@ private fun SyncCenter(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (failed > 0 || retrying > 0) TextButton(onClick = onRetry) { Text(stringResource(R.string.retry)) }
+            if (failed > 0 || retrying > 0) {
+                TextButton(onClick = onRetry) { Text(stringResource(R.string.retry)) }
+            }
         }
         operations.filter { it.status == TimeEntryRepository.EntrySyncStatus.FAILED }.forEach { operation ->
             HorizontalDivider()
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
             ) {
                 Text(
                     stringResource(R.string.sync_entry_failed),
@@ -1243,6 +1404,7 @@ private fun OverlapWarning(count: Int, prohibitedByOrganization: Boolean) {
 }
 
 private const val HISTORY_PREFETCH_ITEMS = 75
+private const val HISTORY_INITIAL_PREFETCH_MAX_ENTRIES = 250
 
 private fun historyHeaderIndex(
     requestedDate: LocalDate,
@@ -1263,9 +1425,12 @@ private fun historyHeaderIndex(
     return -1
 }
 
-private fun LazyListScope.trackingHistoryItems(
+internal fun LazyListScope.trackingHistoryItems(
     uiState: TrackingUiState,
-    groupedEntries: Map<LocalDate, List<TimeEntry>>,
+    historyItems: List<HistoryListItem>,
+    projectsById: Map<String, Project>,
+    tasksById: Map<String, Task>,
+    syncStatusByEntryId: Map<String, TimeEntryRepository.EntrySyncStatus>,
     onEdit: (TimeEntry) -> Unit,
     onDelete: (TimeEntry) -> Unit,
     onDateClick: (LocalDate) -> Unit
@@ -1278,32 +1443,40 @@ private fun LazyListScope.trackingHistoryItems(
         return
     }
 
-    val filteredGroups = groupedEntries.mapValues { (_, entries) ->
-        entries.filter { (it.duration ?: 0) > 0 }
-    }.filterValues { it.isNotEmpty() }
-
-    filteredGroups.forEach { (date, entries) ->
-        item(key = "header_$date") {
-            DateHeader(
-                date = date,
-                entries = entries,
-                projects = uiState.projects,
-                onClick = { onDateClick(date) }
+    items(
+        items = historyItems,
+        key = {
+            when (it) {
+                is HistoryListItem.Header -> "header_${it.day.date}"
+                is HistoryListItem.Group -> "group_${it.entries.first().id}"
+            }
+        },
+        contentType = {
+            when (it) {
+                is HistoryListItem.Header -> "history_header"
+                is HistoryListItem.Group -> "history_group"
+            }
+        },
+    ) { historyItem ->
+        when (historyItem) {
+            is HistoryListItem.Header -> DateHeader(
+                date = historyItem.day.date,
+                entries = historyItem.day.entries,
+                projectsById = projectsById,
+                onClick = { onDateClick(historyItem.day.date) },
             )
-        }
-        entries.groupBy { "${it.projectId}_${it.taskId}_${it.description ?: ""}" }
-            .forEach { (_, entriesForProject) ->
-                item(key = "group_${entriesForProject.first().id}") {
+            is HistoryListItem.Group -> {
+                val entriesForProject = historyItem.entries
                     CollapsibleTimeEntryGroup(
                         entries = entriesForProject,
-                        projects = uiState.projects,
-                        tasks = uiState.tasks,
-                        syncOperations = uiState.syncOperations,
+                        projectsById = projectsById,
+                        tasksById = tasksById,
+                        syncStatusByEntryId = syncStatusByEntryId,
                         onEdit = onEdit,
                         onDelete = onDelete
                     )
-                }
             }
+        }
     }
 
     if (uiState.hasMoreTimeEntries || uiState.isLoadingMoreTimeEntries) {
@@ -1336,6 +1509,69 @@ private fun LazyListScope.trackingHistoryItems(
         }
     }
 }
+
+/** Compatibility entry point for previews and screenshot tests that provide grouped history. */
+internal fun LazyListScope.trackingHistoryItems(
+    uiState: TrackingUiState,
+    groupedEntries: Map<LocalDate, List<TimeEntry>>,
+    onEdit: (TimeEntry) -> Unit,
+    onDelete: (TimeEntry) -> Unit,
+    onDateClick: (LocalDate) -> Unit,
+) {
+    val historyItems = buildList {
+        groupedEntries.forEach { (date, entries) ->
+            val completed = entries.filter { (it.duration ?: 0) > 0 }
+            if (completed.isNotEmpty()) {
+                val day = HistoryDay(
+                    date = date,
+                    entries = completed,
+                    groups = completed.groupBy {
+                        "${it.projectId}_${it.taskId}_${it.description.orEmpty()}"
+                    }.values.toList(),
+                )
+                add(HistoryListItem.Header(day))
+                day.groups.forEach { add(HistoryListItem.Group(it)) }
+            }
+        }
+    }
+    trackingHistoryItems(
+        uiState = uiState,
+        historyItems = historyItems,
+        projectsById = uiState.projects.associateBy { it.id },
+        tasksById = uiState.tasks.associateBy { it.id },
+        syncStatusByEntryId = uiState.syncOperations.groupBy { it.entryId }.mapValues { (_, operations) ->
+            operations.last().status
+        },
+        onEdit = onEdit,
+        onDelete = onDelete,
+        onDateClick = onDateClick,
+    )
+}
+
+@Immutable
+ internal data class HistoryDay(
+     val date: LocalDate,
+     val entries: List<TimeEntry>,
+     val groups: List<List<TimeEntry>>,
+ )
+
+@Immutable
+ internal sealed interface HistoryListItem {
+    @Immutable
+     data class Header(val day: HistoryDay) : HistoryListItem
+    @Immutable
+     data class Group(val entries: List<TimeEntry>) : HistoryListItem
+ }
+
+@Immutable
+ private data class PreparedHistory(
+     val groupedEntries: Map<LocalDate, List<TimeEntry>>,
+     val listItems: List<HistoryListItem>,
+ ) {
+     companion object {
+         val Empty = PreparedHistory(emptyMap(), emptyList())
+     }
+ }
 
 @Composable
 private fun rememberGhostAlpha(): Float {
@@ -1418,8 +1654,9 @@ private fun HistoryLoadingEntry(index: Int) {
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun TrackingControls(
+internal fun TrackingControls(
     uiState: TrackingUiState,
+    elapsedSeconds: Long = 0L,
     onDescriptionChange: (String) -> Unit,
     onProjectChange: (String?) -> Unit,
     onTaskChange: (String?) -> Unit,
@@ -1450,12 +1687,14 @@ private fun TrackingControls(
             // Timer display
             if (uiState.isTracking) {
                 Text(
-                    text = formatElapsedTime(uiState.elapsedSeconds),
+                    text = formatElapsedTime(elapsedSeconds),
                     style = MaterialTheme.typography.displayMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
                     fontSize = 48.sp,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .testTag(TrackingTestTags.ELAPSED_TIMER)
                 )
                 HorizontalDivider(
                     color = MaterialTheme.colorScheme.outline,
@@ -1572,7 +1811,7 @@ private fun TrackingControls(
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             onStop()
                         },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).testTag(TrackingTestTags.STOP_BUTTON),
                         enabled = !uiState.isMutating,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error,
@@ -1611,7 +1850,7 @@ private fun TrackingControls(
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             onStop()
                         },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).testTag(TrackingTestTags.STOP_BUTTON),
                         enabled = !uiState.isMutating,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error,
@@ -1633,7 +1872,7 @@ private fun TrackingControls(
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             onStart()
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.START_BUTTON),
                         enabled = !uiState.isMutating,
                         shape = RoundedCornerShape(8.dp)
                     ) {
@@ -1669,7 +1908,7 @@ private fun ContinueLastEntryButton(
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             onContinue()
         },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.CONTINUE_BUTTON),
         shape = RoundedCornerShape(8.dp)
     ) {
         Icon(
@@ -1966,11 +2205,11 @@ internal fun TagsSelector(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 8.dp)
         )
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            availableTags.forEach { tag ->
+            items(availableTags, key = { it.id }) { tag ->
                 FilterChip(
                     selected = tag.id in selectedTagIds,
                     onClick = {
@@ -2000,23 +2239,25 @@ internal fun TagsSelector(
 private fun DateHeader(
     date: LocalDate,
     entries: List<TimeEntry>,
-    projects: List<Project>,
+    projectsById: Map<String, Project>,
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
-    val projectIds = entries.mapNotNull { it.projectId }.toSet()
-    val projectById = projects.associateBy { it.id }
-    val customerCount = projectIds.mapNotNull { projectById[it]?.clientId }.toSet().size
-    val totalDuration = entries.sumOf { it.duration ?: 0 }
-    val summary = buildList {
-        add(formatCompactDuration(totalDuration))
-        if (customerCount > 0) {
-            add(context.resources.getQuantityString(R.plurals.customer_count, customerCount, customerCount))
-        }
-        if (projectIds.isNotEmpty()) {
-            add(context.resources.getQuantityString(R.plurals.project_count, projectIds.size, projectIds.size))
-        }
-    }.joinToString(" · ")
+    val headerStats = remember(entries, projectsById) {
+        val projectIds = entries.mapNotNull { it.projectId }.toSet()
+        val customerCount = projectIds.mapNotNull { projectsById[it]?.clientId }.toSet().size
+        val totalDuration = entries.sumOf { it.duration ?: 0 }
+        val summary = buildList {
+            add(formatCompactDuration(totalDuration))
+            if (customerCount > 0) {
+                add(context.resources.getQuantityString(R.plurals.customer_count, customerCount, customerCount))
+            }
+            if (projectIds.isNotEmpty()) {
+                add(context.resources.getQuantityString(R.plurals.project_count, projectIds.size, projectIds.size))
+            }
+        }.joinToString(" · ")
+        summary
+    }
 
     Row(
         modifier = Modifier
@@ -2035,7 +2276,7 @@ private fun DateHeader(
             maxLines = 1
         )
         Text(
-            text = summary,
+            text = headerStats,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
             fontSize = 11.sp,
@@ -2052,23 +2293,29 @@ private fun DateHeader(
 @Composable
 private fun CollapsibleTimeEntryGroup(
     entries: List<TimeEntry>,
-    projects: List<Project>,
-    tasks: List<Task>,
-    syncOperations: List<TimeEntryRepository.SyncOperation>,
+    projectsById: Map<String, Project>,
+    tasksById: Map<String, Task>,
+    syncStatusByEntryId: Map<String, TimeEntryRepository.EntrySyncStatus>,
     onEdit: (TimeEntry) -> Unit,
     onDelete: (TimeEntry) -> Unit
 ) {
     var isExpanded by remember { mutableStateOf(false) }
+    val worstSyncStatus = remember(entries, syncStatusByEntryId) {
+        entries.mapNotNull { entry -> syncStatusByEntryId[entry.id] }
+            .maxByOrNull { it.ordinal }
+    }
+    val totalDuration = remember(entries) {
+        entries.sumOf { it.duration ?: 0 }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (entries.size == 1) {
             // Single entry, show normally
             CompactTimeEntryRow(
                 entry = entries.first(),
-                projects = projects,
-                tasks = tasks,
-                syncStatus = syncOperations.lastOrNull { it.entryId == entries.first().id }?.status
-                    ?: TimeEntryRepository.EntrySyncStatus.SYNCED,
+                project = projectsById[entries.first().projectId],
+                task = tasksById[entries.first().taskId],
+                syncStatus = syncStatusByEntryId[entries.first().id],
                 onEdit = { onEdit(entries.first()) },
                 onDelete = { onDelete(entries.first()) },
                 count = null
@@ -2079,24 +2326,22 @@ private fun CollapsibleTimeEntryGroup(
                 // Show grouped entry
                 CompactTimeEntryRow(
                     entry = entries.first(),
-                    projects = projects,
-                    tasks = tasks,
-                    syncStatus = entries.mapNotNull { entry -> syncOperations.lastOrNull { it.entryId == entry.id }?.status }
-                        .maxByOrNull { it.ordinal } ?: TimeEntryRepository.EntrySyncStatus.SYNCED,
+                    project = projectsById[entries.first().projectId],
+                    task = tasksById[entries.first().taskId],
+                    syncStatus = worstSyncStatus,
                     onEdit = { isExpanded = true },
                     onDelete = { /* Don't allow deleting grouped entries */ },
                     count = entries.size,
-                    totalDuration = entries.sumOf { it.duration ?: 0 }
+                    totalDuration = totalDuration
                 )
             } else {
                 // Show all entries
                 entries.forEach { entry ->
                     CompactTimeEntryRow(
                         entry = entry,
-                        projects = projects,
-                        tasks = tasks,
-                        syncStatus = syncOperations.lastOrNull { it.entryId == entry.id }?.status
-                            ?: TimeEntryRepository.EntrySyncStatus.SYNCED,
+                        project = projectsById[entry.projectId],
+                        task = tasksById[entry.taskId],
+                        syncStatus = syncStatusByEntryId[entry.id],
                         onEdit = { onEdit(entry) },
                         onDelete = { onDelete(entry) },
                         count = null,
@@ -2133,8 +2378,8 @@ private fun CollapsibleTimeEntryGroup(
 @Composable
 private fun CompactTimeEntryRow(
     entry: TimeEntry,
-    projects: List<Project>,
-    tasks: List<Task>,
+    project: Project?,
+    task: Task?,
     syncStatus: TimeEntryRepository.EntrySyncStatus?,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -2142,12 +2387,17 @@ private fun CompactTimeEntryRow(
     totalDuration: Int? = null,
     isIndented: Boolean = false
 ) {
-    val project = projects.find { it.id == entry.projectId }
-    val task = tasks.find { it.id == entry.taskId }
-
+    val timeRange = remember(entry.start, entry.end) { formatTimeRange(entry.start, entry.end) }
+    val durationText = remember(totalDuration, entry.duration) {
+        formatDuration(totalDuration ?: entry.duration ?: 0)
+    }
+    val projectColor = remember(project?.color) {
+        project?.let { runCatching { Color(android.graphics.Color.parseColor(it.color)) }.getOrNull() }
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .testTag(TrackingTestTags.ENTRY_ROW)
             .then(if (isIndented) Modifier.padding(start = 16.dp) else Modifier)
             .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
             .padding(horizontal = 12.dp, vertical = 10.dp)
@@ -2167,8 +2417,7 @@ private fun CompactTimeEntryRow(
                     text = count.toString(),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp
+                    fontWeight = FontWeight.Bold
                 )
             }
             Spacer(Modifier.width(8.dp))
@@ -2203,17 +2452,19 @@ private fun CompactTimeEntryRow(
                         modifier = Modifier
                             .size(6.dp)
                             .clip(CircleShape)
-                            .background(Color(android.graphics.Color.parseColor(project.color)))
+                            .background(projectColor ?: MaterialTheme.colorScheme.outline)
                     )
-                    Text(
-                        text = buildString {
+                    val projectTaskText = remember(project?.name, task?.name) {
+                        buildString {
                             append(project.name)
                             task?.let { append(" · ${it.name}") }
-                        },
+                        }
+                    }
+                    Text(
+                        text = projectTaskText,
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -2223,10 +2474,9 @@ private fun CompactTimeEntryRow(
 
                 // Time range
                 Text(
-                    text = formatTimeRange(entry.start, entry.end),
+                    text = timeRange,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp,
                     maxLines = 1
                 )
             }
@@ -2239,27 +2489,15 @@ private fun CompactTimeEntryRow(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (syncStatus != null) {
-                val label = when (syncStatus) {
-                    TimeEntryRepository.EntrySyncStatus.SYNCED -> stringResource(R.string.sync_synced)
-                    TimeEntryRepository.EntrySyncStatus.PENDING -> stringResource(R.string.sync_pending)
-                    TimeEntryRepository.EntrySyncStatus.RETRYING -> stringResource(R.string.sync_retrying)
-                    TimeEntryRepository.EntrySyncStatus.FAILED -> stringResource(R.string.sync_failed)
-                }
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED)
-                        MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                )
-            }
+            // Kit chip renders nothing for SYNCED (and null); only PENDING /
+            // RETRYING / FAILED surface, so a healthy row stays clutter-free.
+            syncStatus?.let { SyncChip(status = it) }
             // Duration (use totalDuration if grouped, otherwise entry duration)
             Text(
-                text = formatDuration(totalDuration ?: entry.duration ?: 0),
+                text = durationText,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 14.sp
+                color = MaterialTheme.colorScheme.onSurface
             )
 
             // Only show action buttons if not grouped or if expanded
@@ -2267,7 +2505,7 @@ private fun CompactTimeEntryRow(
                 // Edit button
                 IconButton(
                     onClick = onEdit,
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.size(48.dp).testTag(TrackingTestTags.ENTRY_EDIT_BUTTON)
                 ) {
                     Icon(
                         Icons.Default.Edit,
@@ -2280,7 +2518,7 @@ private fun CompactTimeEntryRow(
                 // Delete button
                 IconButton(
                     onClick = onDelete,
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.size(48.dp).testTag(TrackingTestTags.ENTRY_DELETE_BUTTON)
                 ) {
                     Icon(
                         Icons.Default.Delete,
@@ -2306,13 +2544,18 @@ private fun TimeEntryFormSheet(
     tasks: List<Task>,
     tags: List<Tag>,
     onDismiss: () -> Unit,
-    onSave: (String?, String?, String?, List<String>, Boolean, String, String) -> Unit
+    onSave: (String?, String?, String?, List<String>, Boolean, String, String) -> Unit,
+    existingEntries: List<TimeEntry> = emptyList(),
+    preventOverlap: Boolean = false,
+    templates: List<EntryTemplate> = emptyList(),
+    onSaveAsTemplate: ((TemplateDraft) -> Unit)? = null,
 ) {
     var description by remember { mutableStateOf(entry?.description ?: "") }
     var projectId by remember { mutableStateOf(entry?.projectId) }
     var taskId by remember { mutableStateOf(entry?.taskId) }
     var selectedTags by remember { mutableStateOf(entry?.tags?.map { it.id } ?: emptyList<String>()) }
     var billable by remember { mutableStateOf(entry?.billable ?: false) }
+    var templateMenuExpanded by remember { mutableStateOf(false) }
     val originalStart = remember(entry?.id) {
         entry?.let { ZonedDateTime.parse(it.start, DateTimeFormatter.ISO_DATE_TIME) }
             ?: (suggestedStart ?: ZonedDateTime.now(ZoneId.systemDefault()).minusHours(1))
@@ -2335,6 +2578,28 @@ private fun TimeEntryFormSheet(
     var showDatePicker by remember { mutableStateOf(false) }
     val durationIsValid = durationMinutes.toLongOrNull()?.let { it > 0 } == true
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    val overlaps = remember(startTime, endTime, existingEntries, entry) {
+        val org = entry?.organizationId ?: existingEntries.firstOrNull()?.organizationId
+        if (org == null || existingEntries.isEmpty()) {
+            false
+        } else {
+            val candidate = TimeEntry(
+                id = entry?.id ?: "",
+                userId = entry?.userId ?: "",
+                start = startTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                end = endTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                organizationId = org,
+            )
+            existingEntries.any { it.id != candidate.id && EntryTrustRules.overlaps(candidate, it) }
+        }
+    }
+    val validation = remember(startTime, endTime, overlaps, preventOverlap) {
+        EntryTimeValidator.evaluate(startTime, endTime, overlaps, preventOverlap)
+    }
+    val durationHours = remember(startTime, endTime) {
+        java.time.Duration.between(startTime, endTime).toHours().coerceAtLeast(0)
+    }
 
     fun setDuration(minutes: Long) {
         val safeMinutes = minutes.coerceAtLeast(1)
@@ -2363,6 +2628,65 @@ private fun TimeEntryFormSheet(
                     fontWeight = FontWeight.SemiBold
                 )
 
+                // Save-as-template / start-from-template affordance (gap analysis #1, #9).
+                if (templates.isNotEmpty() || onSaveAsTemplate != null) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (templates.isNotEmpty()) {
+                            Box {
+                                OutlinedButton(
+                                    onClick = { templateMenuExpanded = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                ) {
+                                    Text(stringResource(R.string.templates_use_template))
+                                }
+                                DropdownMenu(
+                                    expanded = templateMenuExpanded,
+                                    onDismissRequest = { templateMenuExpanded = false },
+                                ) {
+                                    templates.forEach { template ->
+                                        val label = templateDisplayLabel(template, projects)
+                                        DropdownMenuItem(
+                                            text = { Text(label) },
+                                            onClick = {
+                                                val resolution = TemplateResolver.resolve(
+                                                    template, projects, tasks, tags,
+                                                )
+                                                description = template.description ?: ""
+                                                projectId = resolution.projectId
+                                                taskId = resolution.taskId
+                                                selectedTags = resolution.tagIds
+                                                billable = resolution.billable
+                                                templateMenuExpanded = false
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        if (onSaveAsTemplate != null) {
+                            OutlinedButton(
+                                onClick = {
+                                    onSaveAsTemplate(
+                                        TemplateDraft(
+                                            name = null,
+                                            projectId = projectId,
+                                            taskId = taskId,
+                                            description = description.trim().takeIf { it.isNotEmpty() },
+                                            tagIds = selectedTags,
+                                            billable = billable,
+                                            isFavorite = false,
+                                        )
+                                    )
+                                },
+                                enabled = projectId != null || description.isNotBlank() || selectedTags.isNotEmpty(),
+                                shape = RoundedCornerShape(8.dp),
+                            ) {
+                                Text(stringResource(R.string.templates_save_as_template))
+                            }
+                        }
+                    }
+                }
+
                 Text(
                     text = stringResource(R.string.time_and_duration),
                     style = MaterialTheme.typography.titleSmall,
@@ -2381,7 +2705,7 @@ private fun TimeEntryFormSheet(
                         Column(horizontalAlignment = Alignment.Start, modifier = Modifier.weight(1f)) {
                             Text(stringResource(R.string.entry_date), style = MaterialTheme.typography.labelSmall)
                             Text(
-                                startTime.format(DateTimeFormatter.ofPattern("EEE, d MMM yyyy")),
+                                startTime.format(entryDateFormatter),
                                 style = MaterialTheme.typography.titleMedium
                             )
                         }
@@ -2479,7 +2803,7 @@ private fun TimeEntryFormSheet(
                     value = description,
                     onValueChange = { description = it },
                     label = { Text(stringResource(R.string.description)) },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.SHEET_DESCRIPTION_FIELD),
                     shape = RoundedCornerShape(8.dp)
                 )
 
@@ -2518,6 +2842,8 @@ private fun TimeEntryFormSheet(
                     )
                 }
 
+                EntryValidationBanner(result = validation, durationHours = durationHours)
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
@@ -2545,8 +2871,9 @@ private fun TimeEntryFormSheet(
                                 endTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
                             )
                         },
-                        enabled = durationIsValid,
-                        shape = RoundedCornerShape(8.dp)
+                        enabled = durationIsValid && validation.canSave,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.testTag(TrackingTestTags.SHEET_SAVE_BUTTON)
                     ) {
                         Text(stringResource(R.string.save), fontWeight = FontWeight.SemiBold)
                     }
@@ -2566,10 +2893,12 @@ private fun TimeEntryFormSheet(
                     startTime = startTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
                     endTime = startTime.plusMinutes(minutes)
                 } else {
-                    var selectedEnd = endTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
-                    if (!selectedEnd.isAfter(startTime)) selectedEnd = selectedEnd.plusDays(1)
-                    endTime = selectedEnd
-                    durationMinutes = java.time.Duration.between(startTime, endTime).toMinutes().coerceAtLeast(1).toString()
+                    val sameDayEnd = endTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
+                    // Do not silently roll an earlier clock-time into a ~24h entry: only a plausible
+                    // overnight span becomes cross-midnight, otherwise keep it same-day so the
+                    // validation banner surfaces the end-before-start error for the user to fix.
+                    endTime = EntryTimeValidator.resolveEnd(startTime, sameDayEnd) ?: sameDayEnd
+                    durationMinutes = java.time.Duration.between(startTime, endTime).toMinutes().toString()
                 }
                 editingTime = null
             }
@@ -2621,7 +2950,7 @@ private fun TimeFieldButton(
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.Start) {
             Text(label, style = MaterialTheme.typography.labelSmall)
-            Text(value.format(DateTimeFormatter.ofPattern("HH:mm")), style = MaterialTheme.typography.titleMedium)
+            Text(value.format(hourMinuteFormatter), style = MaterialTheme.typography.titleMedium)
         }
     }
 }
@@ -2867,11 +3196,111 @@ private fun copyToClipboard(context: Context, text: String) {
 /**
  * Format elapsed time as HH:MM:SS
  */
-private fun formatElapsedTime(seconds: Long): String {
-    val hours = seconds / 3600
-    val minutes = (seconds % 3600) / 60
-    val secs = seconds % 60
+internal fun formatElapsedTime(seconds: Long): String {
+    // Defensive floor: a device clock behind the entry's start must never render as "-1:-5:-3".
+    val safeSeconds = seconds.coerceAtLeast(0)
+    val hours = safeSeconds / 3600
+    val minutes = (safeSeconds % 3600) / 60
+    val secs = safeSeconds % 60
     return String.format("%02d:%02d:%02d", hours, minutes, secs)
+}
+
+/**
+ * Deterministic client-side validation for a manually edited or created time entry. Server policy
+ * stays authoritative (see [EntryTrustRules]); these are local guards so the user never silently
+ * creates a ~24h entry from a typo, and is warned before saving an unusually long or overlapping
+ * entry. Warnings do not block: an explicit Save is the user's confirmation.
+ */
+internal object EntryTimeValidator {
+    /** An end clock-time earlier than start rolls to the next day only within this span; beyond it
+     *  the inversion is treated as a mistake rather than an intended overnight shift. */
+    val MAX_CROSS_MIDNIGHT: java.time.Duration = java.time.Duration.ofHours(18)
+    /** Durations at or above this are plausible but worth confirming before saving. */
+    val LONG_DURATION_WARNING: java.time.Duration = java.time.Duration.ofHours(12)
+    /** Hard ceiling; a single entry longer than this is almost certainly an error. */
+    val MAX_DURATION: java.time.Duration = java.time.Duration.ofHours(24)
+
+    enum class Error { END_NOT_AFTER_START, TOO_LONG }
+    enum class Warning { LONG_DURATION, OVERLAP, OVERLAP_POLICY }
+
+    data class Result(val error: Error?, val warnings: List<Warning>) {
+        val canSave: Boolean get() = error == null
+    }
+
+    /**
+     * Resolve an end clock-time [sameDayEnd] that shares [start]'s date. Returns the same-day value
+     * when it is after start, the next-day value for a plausible overnight entry, or null when the
+     * only rollover interpretation would be implausibly long — signalling the caller to surface an
+     * end-before-start error instead of silently rolling over into a ~24h entry.
+     */
+    fun resolveEnd(start: ZonedDateTime, sameDayEnd: ZonedDateTime): ZonedDateTime? {
+        if (sameDayEnd.isAfter(start)) return sameDayEnd
+        val rolled = sameDayEnd.plusDays(1)
+        return rolled.takeIf { java.time.Duration.between(start, it) <= MAX_CROSS_MIDNIGHT }
+    }
+
+    fun evaluate(
+        start: ZonedDateTime,
+        end: ZonedDateTime,
+        overlaps: Boolean = false,
+        overlapProhibited: Boolean = false,
+    ): Result {
+        val duration = java.time.Duration.between(start, end)
+        val error = when {
+            !end.isAfter(start) -> Error.END_NOT_AFTER_START
+            duration > MAX_DURATION -> Error.TOO_LONG
+            else -> null
+        }
+        val warnings = buildList {
+            if (error == null && duration >= LONG_DURATION_WARNING) add(Warning.LONG_DURATION)
+            if (overlaps) add(if (overlapProhibited) Warning.OVERLAP_POLICY else Warning.OVERLAP)
+        }
+        return Result(error, warnings)
+    }
+}
+
+/** Inline error/warning banner for the create/edit time-entry sheets. */
+@Composable
+internal fun EntryValidationBanner(result: EntryTimeValidator.Result, durationHours: Long) {
+    if (result.canSave && result.warnings.isEmpty()) return
+    val isError = !result.canSave
+    Surface(
+        color = if (isError) MaterialTheme.colorScheme.errorContainer
+        else MaterialTheme.colorScheme.secondaryContainer,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        val contentColor = if (isError) MaterialTheme.colorScheme.onErrorContainer
+        else MaterialTheme.colorScheme.onSecondaryContainer
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            result.error?.let { error ->
+                Text(
+                    text = stringResource(
+                        when (error) {
+                            EntryTimeValidator.Error.END_NOT_AFTER_START -> R.string.entry_error_end_before_start
+                            EntryTimeValidator.Error.TOO_LONG -> R.string.entry_error_duration_too_long
+                        }
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = contentColor,
+                )
+            }
+            result.warnings.forEach { warning ->
+                Text(
+                    text = when (warning) {
+                        EntryTimeValidator.Warning.LONG_DURATION ->
+                            stringResource(R.string.entry_warning_long_duration, durationHours)
+                        EntryTimeValidator.Warning.OVERLAP ->
+                            stringResource(R.string.entry_warning_overlap)
+                        EntryTimeValidator.Warning.OVERLAP_POLICY ->
+                            stringResource(R.string.entry_warning_overlap_policy)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = contentColor,
+                )
+            }
+        }
+    }
 }
 
 /**
@@ -2886,23 +3315,21 @@ private fun formatDate(date: LocalDate, context: android.content.Context): Strin
     }
 }
 
+// Shared formatter instances: DateTimeFormatter.ofPattern() builds a new parser every call,
+// which is measurable when every visible history row formats its time range during a scroll.
+private val hourMinuteFormatter = DateTimeFormatter.ofPattern("HH:mm")
+private val entryDateFormatter = DateTimeFormatter.ofPattern("EEE, d MMM yyyy")
+
 /**
  * Format time range
  */
 private fun formatTimeRange(start: String, end: String?): String {
-    return try {
-        val startTime = ZonedDateTime.parse(start, DateTimeFormatter.ISO_DATE_TIME)
-        val startFormatted = startTime.format(DateTimeFormatter.ofPattern("HH:mm"))
-
-        if (end != null) {
-            val endTime = ZonedDateTime.parse(end, DateTimeFormatter.ISO_DATE_TIME)
-            val endFormatted = endTime.format(DateTimeFormatter.ofPattern("HH:mm"))
-            "$startFormatted - $endFormatted"
-        } else {
-            "$startFormatted - now"
-        }
-    } catch (e: Exception) {
-        "Invalid time"
+    val startFormatted = IsoTimes.hourMinute(start) ?: return "Invalid time"
+    return if (end != null) {
+        val endFormatted = IsoTimes.hourMinute(end) ?: return "Invalid time"
+        "$startFormatted - $endFormatted"
+    } else {
+        "$startFormatted - now"
     }
 }
 
@@ -2915,6 +3342,9 @@ private fun formatDuration(seconds: Int): String {
     val secs = seconds % 60
     return String.format("%02d:%02d:%02d", hours, minutes, secs)
 }
+
+/** Date-picker millis are UTC-midnight instants; resolve them back to the picked date. */
+private fun utcDateOf(epochMillis: Long): LocalDate = Instant.ofEpochMilli(epochMillis).atZone(ZoneOffset.UTC).toLocalDate()
 
 /** Format a day total without seconds to keep history headers compact. */
 private fun formatCompactDuration(seconds: Int): String {
