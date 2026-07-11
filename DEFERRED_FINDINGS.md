@@ -4,9 +4,13 @@ These came out of the continuous engineering review (full detail + evidence in `
 
 Priority order (my opinion): **SV-027 → SV-012 → SV-011 → SV-005 → SV-006 → SV-004**.
 
+> **Status (2026-07-12):** SV-027, SV-012, SV-011, SV-005, SV-006 are **implemented** on `fix/review-findings` (per-finding commit hashes below; each finding boundary passes the full local gate `spotlessCheck testDebugUnitTest lintDebug assembleDebug`). SV-004 is **blocked** — see its section. On-device emulator E2E was **deferred** (test host unavailable); all verification was local unit/Robolectric.
+
 ---
 
 ## SV-027 — Local↔remote edit conflicts resolved silently by last-write-wins (P0 per roadmap #34)
+
+**✅ Implemented** — content-based optimistic concurrency, `CONFLICT` sync state + recovery copy, Review conflict card with keep-mine/keep-theirs, both push and pull directions. Commits `312d67b` (room v5), `3db1c85` (base snapshots), `ebcb94b` (conflict recovery workflow), `12b77b8`.
 
 **Problem.** There is no conflict handling in either direction.
 - Pull: `TimeEntryDao.applyServerEntries` (`:90-100`) silently *skips* the server version for any row currently `PENDING` — a concurrent server edit is dropped with no signal.
@@ -29,6 +33,8 @@ Gap-analysis #34 classifies this P0, #79 asks for a CONFLICT state, and #80 asks
 
 ## SV-012 — Day/week boundaries use device settings instead of authoritative account rules (P2, reporting correctness)
 
+**✅ Implemented** — account-scoped `TemporalPolicy` (profile `timezone` + `week_start`) via a DI provider; all reporting surfaces (statistics, calendar, review, tracking display/edit) use it; reminders stay device-local by decision. Commits `cee2c9d` (provider), `93ad119` (statistics), `43f00c5` (calendar/review/tracking).
+
 **Problem.** Temporal logic is scattered and inconsistent:
 - `ZoneId.systemDefault()` is used directly in `InboxRepository:66`, `StatisticsViewModel:101`, `ReviewDayViewModel:55`, `InboxViewModel:80`, `CalendarViewModel:354`, `ReminderWorker:77`, `WeekCalendarLayout:47`, …
 - Week start is split: statistics use `WeekFields.ISO` (Monday) (`StatRange:30,37`, `StatisticsAggregator:244`) while Calendar uses the device locale's first-day-of-week (`CalendarViewModel:83`).
@@ -47,6 +53,8 @@ A user traveling, on a device tz ≠ their Solidtime profile tz, or with a non-M
 
 ## SV-011 — Template retention contradicts its contract; templates wiped on every logout (P2)
 
+**✅ Implemented** — Room v6 owner columns (`ownerEndpoint`+`ownerUserId`), owner-scoped queries, claim-at-login for legacy NULL-owner rows, and a selective logout sweep that clears every table except `entry_templates`. Account A's favorites survive logout invisibly and reappear; account B never sees them. Commits `40a009f` (v6 schema), `4cd2892` (ownership+claim), `d408d74` (selective clear).
+
 **Problem.** `TemplateRepository:83-84` documents that `entry_templates` is retained across logout per-account (roadmap #787, "Keep for the same account"), but `AuthViewModel.logout` → `UserCacheCleaner.clear()` → `database.clearAllTables()` deletes every template. So favorites are lost on every logout. **Naively keeping them is also unsafe:** templates are scoped only by `organizationId`, with no server-profile/user ownership, so retaining rows could expose account A's templates to account B on the same device.
 
 **Why deferred.** The safe fix requires a **Room schema migration** (adding ownership identity) — a data-layer change that deserves its own careful PR + migration test, not a mechanical edit.
@@ -63,6 +71,8 @@ A user traveling, on a device tz ≠ their Solidtime profile tz, or with a non-M
 
 ## SV-005 — Fresh Review inbox dumps a large undifferentiated historical backlog (P2, adoption)
 
+**✅ Implemented** — configurable review horizon (defaults to today until the user picks, so the backlog never shows pre-choice), first-run picker (Today / This week / Last 30 days / Everything) + horizon chip, day-grouped issues with per-day "Dismiss all", and a durable "dismiss everything before this date" (horizon move, survives the 45-day dismissal pruning). No bulk entry creation; conflicts stay pinned. Commits `9c10239` (horizon clamp+badge), `47c04df` (picker+chip), `d8daa58` (grouping+bulk dismiss).
+
 **Problem.** First Review visit showed **88** items going back weeks (e.g. "Untracked time" cards from 23–24 June when the date is 11 July), each repeating the same copy, to be processed one card at a time. There's no grouping, bulk action, age scope, or onboarding — this trains users to ignore the badge before they ever reach the intended "caught up" state.
 
 **Why deferred.** This is a product/UX decision (what's the right default horizon? what bulk actions are safe?), not a bug fix.
@@ -76,6 +86,8 @@ A user traveling, on a device tz ≠ their Solidtime profile tz, or with a non-M
 ---
 
 ## SV-006 — Track app bar shows indistinguishable user + org names (P3, clarity)
+
+**✅ Implemented** — collapses duplicate user/org name lines (trimmed, case-sensitive); the org line shows a real `ArrowDropDown` affordance with `Role.Button` + "Switch organization" semantics only when switching is possible, otherwise inert plain text (no longer `primary`-colored when inert). Commit `5607371`.
 
 **Problem.** The Track title renders the user name and organization name on adjacent unlabeled lines ("Tricked" / "Tricked"), so when they match — or are similar — it reads like duplicated text or a rendering defect. The org line's clickability is signaled only by color, and it's disabled when the user has a single membership.
 
