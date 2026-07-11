@@ -72,6 +72,7 @@
 
     <!-- Tracking Screen -->
     <string name="time_tracking">時間追跡</string>
+    <string name="switch_organization">組織を切り替える</string>
     <string name="refresh">更新</string>
     <string name="logout">ログアウト</string>
     <string name="currently_tracking">追跡中</string>

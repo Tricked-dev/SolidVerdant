@@ -74,6 +74,7 @@
 
     <!-- Tracking Screen -->
     <string name="time_tracking">Time Tracking</string>
+    <string name="switch_organization">Switch organization</string>
     <string name="organization">Organization</string>
     <string name="refresh">Refresh</string>
     <string name="logout">Logout</string>

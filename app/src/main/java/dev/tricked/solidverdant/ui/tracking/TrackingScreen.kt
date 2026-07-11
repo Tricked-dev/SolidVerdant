@@ -68,6 +68,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
@@ -83,6 +84,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
@@ -270,7 +272,6 @@ fun TrackingScreen(
 ) {
     var showEditDialog by remember { mutableStateOf<TimeEntry?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
-    var organizationMenuExpanded by remember { mutableStateOf(false) }
     var hasUserScrolledHistory by remember { mutableStateOf(false) }
     var calendarInitialDate by remember { mutableStateOf<LocalDate?>(null) }
     var historyFilter by remember { mutableStateOf(HistoryFilter()) }
@@ -682,57 +683,15 @@ fun TrackingScreen(
             topBar = {
                 TopAppBar(
                     title = {
-                        Column {
-                            Text(
-                                stringResource(R.string.time_tracking),
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            user?.name?.let {
-                                Text(
-                                    text = it,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            if (currentMembership != null) {
-                                Box {
-                                    Text(
-                                        text = currentMembership.organization.name,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.clickable(
-                                            enabled = memberships.size > 1 && !uiState.isTracking && !uiState.isPaused
-                                        ) { organizationMenuExpanded = true }
-                                    )
-                                    androidx.compose.material3.DropdownMenu(
-                                        expanded = organizationMenuExpanded,
-                                        onDismissRequest = { organizationMenuExpanded = false }
-                                    ) {
-                                        memberships.forEach { membership ->
-                                            DropdownMenuItem(
-                                                text = { Text(membership.organization.name) },
-                                                onClick = {
-                                                    organizationMenuExpanded = false
-                                                    onMembershipChange(membership)
-                                                },
-                                                trailingIcon = if (membership.id == currentMembership.id) {
-                                                    {
-                                                        Icon(
-                                                            imageVector = Icons.Default.Done,
-                                                            contentDescription = null
-                                                        )
-                                                    }
-                                                } else null
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        TrackingAppBarTitle(
+                            userName = user?.name,
+                            organizationName = currentMembership?.organization?.name,
+                            canSwitchOrganization = memberships.size > 1 &&
+                                !uiState.isTracking && !uiState.isPaused,
+                            memberships = memberships,
+                            currentMembershipId = currentMembership?.id,
+                            onMembershipChange = onMembershipChange,
+                        )
                     },
                     navigationIcon = {
                         IconButton(
@@ -2394,6 +2353,111 @@ private fun CollapsibleTimeEntryGroup(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.clickable { isExpanded = false }
                     )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Track top-app-bar title: the "Time tracking" heading plus, on subordinate lines, the signed-in
+ * user's name and their active organization.
+ *
+ * When [userName] and [organizationName] are identical (trimmed, case-sensitive) the two would read
+ * as duplicated text / a rendering glitch, so we collapse them into a single line.
+ *
+ * The organization line only signals its interactivity when a real switch is possible
+ * ([canSwitchOrganization]): it then gains a dropdown arrow plus [Role.Button] semantics with a
+ * "Switch organization" content description and opens the membership picker on click. Otherwise it
+ * is inert, plain [onSurfaceVariant] text with no click target and no affordance icon.
+ */
+@Composable
+internal fun TrackingAppBarTitle(
+    userName: String?,
+    organizationName: String?,
+    canSwitchOrganization: Boolean,
+    memberships: List<Membership>,
+    currentMembershipId: String?,
+    onMembershipChange: (Membership) -> Unit,
+) {
+    var organizationMenuExpanded by remember { mutableStateOf(false) }
+    val collapsed = userName != null && organizationName != null &&
+        userName.trim() == organizationName.trim()
+
+    Column {
+        Text(
+            stringResource(R.string.time_tracking),
+            fontWeight = FontWeight.SemiBold
+        )
+
+        // When collapsed, the org line represents both user and org, so skip the separate user line.
+        if (userName != null && !collapsed) {
+            Text(
+                text = userName,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        if (organizationName != null) {
+            Box {
+                if (canSwitchOrganization) {
+                    val switchDescription = stringResource(R.string.switch_organization)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clickable { organizationMenuExpanded = true }
+                            .semantics {
+                                role = Role.Button
+                                contentDescription = switchDescription
+                            }
+                    ) {
+                        Text(
+                            text = organizationName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                } else {
+                    Text(
+                        text = organizationName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                androidx.compose.material3.DropdownMenu(
+                    expanded = organizationMenuExpanded,
+                    onDismissRequest = { organizationMenuExpanded = false }
+                ) {
+                    memberships.forEach { membership ->
+                        DropdownMenuItem(
+                            text = { Text(membership.organization.name) },
+                            onClick = {
+                                organizationMenuExpanded = false
+                                onMembershipChange(membership)
+                            },
+                            trailingIcon = if (membership.id == currentMembershipId) {
+                                {
+                                    Icon(
+                                        imageVector = Icons.Default.Done,
+                                        contentDescription = null
+                                    )
+                                }
+                            } else null
+                        )
+                    }
                 }
             }
         }

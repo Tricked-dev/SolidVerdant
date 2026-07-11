@@ -72,6 +72,7 @@
 
     <!-- Tracking Screen -->
     <string name="time_tracking">Tijdregistratie</string>
+    <string name="switch_organization">Organisatie wisselen</string>
     <string name="refresh">Vernieuwen</string>
     <string name="logout">Uitloggen</string>
     <string name="currently_tracking">Momenteel Aan Het Registreren</string>
