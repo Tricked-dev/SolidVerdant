@@ -246,6 +246,38 @@ class InboxViewModel @Inject constructor(
         }
     }
 
+    /**
+     * SV-005 T4.3: batch-dismiss every dismissible issue in [issues] (a day group) in one write.
+     * CONFLICT issues are skipped — they are pinned and never dismissed. No single [pendingUndoKey]
+     * is set for a batch; bulk undo is out of scope (individual undo still applies per card).
+     */
+    fun dismissDay(issues: List<InboxIssue>) {
+        val ctx = context ?: return
+        val now = clock.nowMs()
+        val dismissals = issues
+            .filterNot { it.type == dev.tricked.solidverdant.domain.inbox.InboxIssueType.CONFLICT }
+            .map { issue ->
+                InboxDismissalEntity(
+                    issueKey = issue.key,
+                    organizationId = ctx.organizationId,
+                    dismissedAtMs = now,
+                )
+            }
+        if (dismissals.isEmpty()) return
+        viewModelScope.launch { dismissalDao.upsertAll(dismissals) }
+    }
+
+    /**
+     * SV-005 T4.3: durable "clear everything before this day" — moves the horizon forward to
+     * [dayStartMs] (start-of-day in the account zone, computed by the pane). Unlike dismissals this
+     * does not create per-issue rows and is not subject to the 45-day dismissal-retention pruning, so
+     * the older issues stay gone; it is reversible from the settings horizon picker.
+     */
+    fun dismissBefore(dayStartMs: Long) {
+        context ?: return
+        viewModelScope.launch { inboxSettingsDataStore.setHorizonStart(dayStartMs) }
+    }
+
     /** Undo the most recent dismissal (before its retention silently expires). */
     fun undoDismiss(key: String) {
         viewModelScope.launch {

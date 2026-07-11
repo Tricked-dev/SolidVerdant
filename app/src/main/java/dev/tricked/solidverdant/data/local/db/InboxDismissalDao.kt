@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.Flow
 interface InboxDismissalDao {
     @Upsert suspend fun upsert(dismissal: InboxDismissalEntity)
 
+    @Upsert suspend fun upsertAll(dismissals: List<InboxDismissalEntity>)
+
     @Query("SELECT * FROM inbox_dismissals WHERE organizationId = :orgId")
     fun observeDismissals(orgId: String): Flow<List<InboxDismissalEntity>>
 

@@ -6,6 +6,7 @@
 
 package dev.tricked.solidverdant.ui.review
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,12 +26,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -40,6 +44,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
@@ -70,6 +75,7 @@ import dev.tricked.solidverdant.domain.inbox.InboxIssueType
 import dev.tricked.solidverdant.domain.inbox.MissingField
 import dev.tricked.solidverdant.ui.components.EditTimeEntryDialog
 import java.time.Instant
+import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -147,48 +153,13 @@ fun InboxPane() {
                 !state.horizonChosen -> HorizonPicker(onChoose = viewModel::chooseHorizon)
                 state.isCaughtUp && state.hasEntries -> CaughtUpState()
                 state.isCaughtUp -> NoDataState()
-                else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    items(items = state.issues, key = { it.key }) { issue ->
-                        val card = @Composable {
-                            InboxIssueCard(
-                                issue = issue,
-                                preventOverlap = state.preventOverlap,
-                                projectsById = projectsById,
-                                zone = zone,
-                                actions = InboxIssueCardActions(
-                                    onQuickFix = {
-                                        editTarget = when (issue.type) {
-                                            InboxIssueType.CONFLICT -> null
-                                            InboxIssueType.GAP -> {
-                                                val entry = viewModel.blankEntryFor(
-                                                    startIso = isoOf(issue.startMs, zone),
-                                                    endIso = isoOf(issue.endMs, zone),
-                                                )
-                                                entry?.let { InboxEditTarget(it, isGap = true) }
-                                            }
-                                            else -> issue.primaryEntry?.let { InboxEditTarget(it, isGap = false) }
-                                        }
-                                    },
-                                    onDismiss = { viewModel.dismiss(issue) },
-                                    onKeepMine = { viewModel.keepMine(issue) },
-                                    onKeepTheirs = { viewModel.keepTheirs(issue) },
-                                ),
-                            )
-                        }
-                        if (issue.type == InboxIssueType.CONFLICT) {
-                            card()
-                        } else {
-                            DismissibleIssue(
-                                onDismiss = { viewModel.dismiss(issue) },
-                                content = card,
-                            )
-                        }
-                    }
-                }
+                else -> InboxIssueList(
+                    state = state,
+                    projectsById = projectsById,
+                    zone = zone,
+                    viewModel = viewModel,
+                    onEdit = { editTarget = it },
+                )
             }
         }
 
@@ -223,6 +194,132 @@ fun InboxPane() {
             viewModel = viewModel,
             onDismiss = { showSettings = false },
         )
+    }
+}
+
+/**
+ * The triage list (SV-005 T4.3). CONFLICT issues stay pinned at the top as their own non-dismissible
+ * cards; every other issue is grouped by day (in the account [zone]), newest day first, under a
+ * sticky day header carrying the per-day "Dismiss all" and durable "Dismiss everything before this"
+ * actions. Individual per-card swipe/button dismiss still works within each day group.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun InboxIssueList(
+    state: InboxUiState,
+    projectsById: Map<String, Project>,
+    zone: ZoneId,
+    viewModel: InboxViewModel,
+    onEdit: (InboxEditTarget?) -> Unit,
+) {
+    val conflicts = state.issues.filter { it.type == InboxIssueType.CONFLICT }
+    val dayGroups = remember(state.issues, zone) {
+        state.issues
+            .filterNot { it.type == InboxIssueType.CONFLICT }
+            .groupBy { Instant.ofEpochMilli(it.startMs).atZone(zone).toLocalDate() }
+            .toSortedMap(compareByDescending { it }) // newest day first
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        items(items = conflicts, key = { it.key }) { issue ->
+            IssueCard(issue, state, projectsById, zone, viewModel, onEdit)
+        }
+        dayGroups.forEach { (date, issues) ->
+            stickyHeader(key = "header:$date") {
+                InboxDayHeader(
+                    date = date,
+                    zone = zone,
+                    onDismissAll = { viewModel.dismissDay(issues) },
+                    onDismissBefore = {
+                        viewModel.dismissBefore(date.atStartOfDay(zone).toInstant().toEpochMilli())
+                    },
+                )
+            }
+            items(items = issues, key = { it.key }) { issue ->
+                DismissibleIssue(
+                    onDismiss = { viewModel.dismiss(issue) },
+                    content = { IssueCard(issue, state, projectsById, zone, viewModel, onEdit) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun IssueCard(
+    issue: InboxIssue,
+    state: InboxUiState,
+    projectsById: Map<String, Project>,
+    zone: ZoneId,
+    viewModel: InboxViewModel,
+    onEdit: (InboxEditTarget?) -> Unit,
+) {
+    InboxIssueCard(
+        issue = issue,
+        preventOverlap = state.preventOverlap,
+        projectsById = projectsById,
+        zone = zone,
+        actions = InboxIssueCardActions(
+            onQuickFix = {
+                onEdit(
+                    when (issue.type) {
+                        InboxIssueType.CONFLICT -> null
+                        InboxIssueType.GAP -> {
+                            val entry = viewModel.blankEntryFor(
+                                startIso = isoOf(issue.startMs, zone),
+                                endIso = isoOf(issue.endMs, zone),
+                            )
+                            entry?.let { InboxEditTarget(it, isGap = true) }
+                        }
+                        else -> issue.primaryEntry?.let { InboxEditTarget(it, isGap = false) }
+                    },
+                )
+            },
+            onDismiss = { viewModel.dismiss(issue) },
+            onKeepMine = { viewModel.keepMine(issue) },
+            onKeepTheirs = { viewModel.keepTheirs(issue) },
+        ),
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun InboxDayHeader(date: LocalDate, zone: ZoneId, onDismissAll: () -> Unit, onDismissBefore: () -> Unit) {
+    var menuOpen by remember { mutableStateOf(false) }
+    val moreCd = stringResource(R.string.inbox_day_more_cd)
+    Surface(color = MaterialTheme.colorScheme.surface) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = date.format(DAY_HEADER_FORMAT),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onDismissAll) { Text(stringResource(R.string.inbox_day_dismiss_all)) }
+            Box {
+                IconButton(onClick = { menuOpen = true }) {
+                    Icon(Icons.Outlined.MoreVert, contentDescription = moreCd)
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.inbox_day_dismiss_before)) },
+                        onClick = {
+                            menuOpen = false
+                            onDismissBefore()
+                        },
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -604,6 +701,7 @@ private fun entrySubject(entry: TimeEntry, projectsById: Map<String, Project>): 
 private val TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 private val DATE_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM, HH:mm")
 private val HORIZON_DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM")
+private val DAY_HEADER_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM yyyy")
 
 /** Chip text for the current horizon: "Everything" when unbounded, else "Since <short date>". */
 @Composable

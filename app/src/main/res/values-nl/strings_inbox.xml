@@ -98,4 +98,9 @@
     <string name="inbox_horizon_chip_since">Sinds %1$s</string>
     <string name="inbox_horizon_chip_cd">Wijzig hoe ver terug Review kijkt</string>
     <string name="inbox_settings_horizon">Hoe ver terug te reviewen</string>
+
+    <!-- Day grouping / bulk dismiss (SV-005 T4.3) -->
+    <string name="inbox_day_dismiss_all">Alles negeren</string>
+    <string name="inbox_day_dismiss_before">Alles voor deze dag negeren</string>
+    <string name="inbox_day_more_cd">Meer acties voor deze dag</string>
 </resources>

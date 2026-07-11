@@ -107,4 +107,9 @@
     <string name="inbox_horizon_chip_since">Since %1$s</string>
     <string name="inbox_horizon_chip_cd">Change how far back Review looks</string>
     <string name="inbox_settings_horizon">How far back to review</string>
+
+    <!-- Day grouping / bulk dismiss (SV-005 T4.3) -->
+    <string name="inbox_day_dismiss_all">Dismiss all</string>
+    <string name="inbox_day_dismiss_before">Dismiss everything before this</string>
+    <string name="inbox_day_more_cd">More actions for this day</string>
 </resources>
