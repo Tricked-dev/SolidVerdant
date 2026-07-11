@@ -169,4 +169,68 @@ class MigrationTest {
         }
         helper.close()
     }
+
+    @Test fun migration_5_6_adds_template_ownership() {
+        val helper = openHelper(5) { db ->
+            db.execSQL(
+                "CREATE TABLE `entry_templates` (" +
+                    "`id` TEXT NOT NULL, `organizationId` TEXT NOT NULL, `name` TEXT, " +
+                    "`projectId` TEXT, `taskId` TEXT, `description` TEXT, " +
+                    "`tagIds` TEXT NOT NULL, `billable` INTEGER NOT NULL, " +
+                    "`isFavorite` INTEGER NOT NULL, `sortOrder` INTEGER NOT NULL, " +
+                    "`createdAtMs` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_entry_templates_organizationId` " +
+                    "ON `entry_templates` (`organizationId`)",
+            )
+            // Legacy row inserted without the owner columns (they don't exist pre-migration).
+            db.execSQL(
+                "INSERT INTO entry_templates " +
+                    "(id, organizationId, name, projectId, taskId, description, tagIds, billable, " +
+                    "isFavorite, sortOrder, createdAtMs) " +
+                    "VALUES ('t1', 'org1', 'Standup', NULL, NULL, NULL, '', 0, 1, 3, 42)",
+            )
+        }
+        val db = helper.writableDatabase
+
+        AppDatabase.MIGRATION_5_6.migrate(db)
+
+        // Pre-existing row reads the new nullable owner columns back as NULL, other data survives.
+        db.query(
+            "SELECT ownerEndpoint, ownerUserId, name, isFavorite, sortOrder, createdAtMs " +
+                "FROM entry_templates WHERE id = 't1'",
+        ).use { c ->
+            c.moveToFirst()
+            assertEquals(null, c.getString(0))
+            assertEquals(null, c.getString(1))
+            assertEquals("Standup", c.getString(2))
+            assertEquals(1, c.getInt(3))
+            assertEquals(3, c.getInt(4))
+            assertEquals(42L, c.getLong(5))
+        }
+
+        // The composite owner index exists after migration.
+        db.query(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'entry_templates' " +
+                "AND name = 'index_entry_templates_ownerUserId_organizationId'",
+        ).use { c ->
+            assertEquals(true, c.moveToFirst())
+            assertEquals("index_entry_templates_ownerUserId_organizationId", c.getString(0))
+        }
+
+        // A row can be written with owner columns populated and read back.
+        db.execSQL(
+            "INSERT INTO entry_templates " +
+                "(id, organizationId, name, projectId, taskId, description, tagIds, billable, " +
+                "isFavorite, sortOrder, createdAtMs, ownerEndpoint, ownerUserId) " +
+                "VALUES ('t2', 'org1', NULL, NULL, NULL, NULL, '', 0, 0, 0, 7, 'https://api', 'user-9')",
+        )
+        db.query("SELECT ownerEndpoint, ownerUserId FROM entry_templates WHERE id = 't2'").use { c ->
+            c.moveToFirst()
+            assertEquals("https://api", c.getString(0))
+            assertEquals("user-9", c.getString(1))
+        }
+        helper.close()
+    }
 }

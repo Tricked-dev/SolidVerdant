@@ -93,7 +93,10 @@ data class SyncMetaEntity(@PrimaryKey val organizationId: String, val lastFullSy
  * user-facing label; [description] is optional local work content and receives the same protection
  * as cached entries.
  */
-@Entity(tableName = "entry_templates", indices = [Index("organizationId")])
+@Entity(
+    tableName = "entry_templates",
+    indices = [Index("organizationId"), Index("ownerUserId", "organizationId")],
+)
 data class TemplateEntity(
     @PrimaryKey val id: String,
     val organizationId: String,
@@ -106,6 +109,12 @@ data class TemplateEntity(
     val isFavorite: Boolean,
     val sortOrder: Int,
     val createdAtMs: Long,
+    /**
+     * Account that owns this template, identified by API endpoint and user ID (Task 3.1). Both are
+     * NULL for legacy templates created before ownership tracking; later tasks claim/scope them.
+     */
+    val ownerEndpoint: String? = null,
+    val ownerUserId: String? = null,
 )
 
 /**

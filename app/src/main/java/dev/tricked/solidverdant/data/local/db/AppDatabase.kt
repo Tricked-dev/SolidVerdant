@@ -17,6 +17,7 @@ private const val DATABASE_VERSION_2 = 2
 private const val DATABASE_VERSION_3 = 3
 private const val DATABASE_VERSION_4 = 4
 private const val DATABASE_VERSION_5 = 5
+private const val DATABASE_VERSION_6 = 6
 
 @Database(
     entities = [
@@ -33,7 +34,7 @@ private const val DATABASE_VERSION_5 = 5
         TemplateEntity::class,
         InboxDismissalEntity::class,
     ],
-    version = DATABASE_VERSION_5,
+    version = DATABASE_VERSION_6,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -126,7 +127,25 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v5 -> v6 adds account-ownership columns to `entry_templates` (Task 3.1):
+         *  - `ownerEndpoint` / `ownerUserId`: the account (API endpoint + user) that owns a
+         *    template. Both are nullable; legacy rows keep NULL owners until a later task claims
+         *    them. A composite index on (`ownerUserId`, `organizationId`) backs owner-scoped
+         *    queries. All changes are additive; no existing data is rewritten.
+         */
+        val MIGRATION_5_6 = object : Migration(DATABASE_VERSION_5, DATABASE_VERSION_6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `entry_templates` ADD COLUMN `ownerEndpoint` TEXT")
+                db.execSQL("ALTER TABLE `entry_templates` ADD COLUMN `ownerUserId` TEXT")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_entry_templates_ownerUserId_organizationId` " +
+                        "ON `entry_templates` (`ownerUserId`, `organizationId`)",
+                )
+            }
+        }
+
         val MIGRATIONS: Array<Migration> =
-            arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+            arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
     }
 }
