@@ -18,6 +18,7 @@ import dev.tricked.solidverdant.data.local.db.TimeEntryEntity
 import dev.tricked.solidverdant.data.remote.FakeRemoteDataSource
 import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
+import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import dev.tricked.solidverdant.util.Clock
 import io.mockk.coEvery
 import io.mockk.mockk
@@ -56,6 +57,10 @@ class StatisticsMembershipTest {
     private lateinit var authRepository: AuthRepository
     private lateinit var timeEntryRepository: TimeEntryRepository
     private lateinit var csvExporter: CsvExporter
+
+    // No cached auth is seeded, so the provider yields its device-zone + Monday fallback — matching
+    // the pre-policy ZoneId.systemDefault() behaviour these SV-009 assertions were written against.
+    private lateinit var temporalPolicyProvider: TemporalPolicyProvider
     private val dispatcher = StandardTestDispatcher()
 
     @Before
@@ -66,6 +71,9 @@ class StatisticsMembershipTest {
             .allowMainThreadQueries()
             .build()
         authDataStore = AuthDataStore(context)
+        temporalPolicyProvider = TemporalPolicyProvider(
+            dev.tricked.solidverdant.data.local.SettingsDataStore(context),
+        )
 
         // AuthRepository is only used by StatisticsViewModel for the best-effort CSV org-name
         // lookup and the bounded server refresh of the selected range. Both are stubbed to fail,
@@ -103,6 +111,7 @@ class StatisticsMembershipTest {
         csvExporter = csvExporter,
         authDataStore = authDataStore,
         catalogDao = db.catalogDao(),
+        temporalPolicyProvider = temporalPolicyProvider,
     )
 
     /** Seeds a cached membership plus one cached, already-synced time entry today (within [StatRange.ThisWeek]). */

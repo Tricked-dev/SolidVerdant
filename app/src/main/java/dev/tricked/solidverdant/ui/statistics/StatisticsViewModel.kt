@@ -17,6 +17,8 @@ import dev.tricked.solidverdant.data.local.db.MembershipEntity
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
+import dev.tricked.solidverdant.domain.time.TemporalPolicy
+import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -33,6 +35,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.time.LocalDate
@@ -105,9 +108,27 @@ class StatisticsViewModel @Inject constructor(
     private val csvExporter: CsvExporter,
     private val authDataStore: AuthDataStore,
     private val catalogDao: CatalogDao,
+    private val temporalPolicyProvider: TemporalPolicyProvider,
 ) : ViewModel() {
 
-    private val zone: ZoneId = ZoneId.systemDefault()
+    // Latest account temporal policy (zone + first-day-of-week), kept for the non-reactive callers
+    // (remote fetch bounds, drill-down/export clipping, zone()). The reactive uiState pipeline reads
+    // the policy directly from the combined flow so it recomputes when the account changes; this
+    // volatile mirror only serves calls that fire outside that pipeline. Seeded synchronously from
+    // the provider's cached-auth read (a SharedPreferences lookup, no real I/O — see
+    // SettingsDataStore.observeCachedAuth) so zone()/remote-fetch have the real policy on first use,
+    // then kept current by the collector in init. No ZoneId.systemDefault() here: the provider owns
+    // the device-zone fallback.
+    @Volatile
+    private var currentPolicy: TemporalPolicy = runBlocking { temporalPolicyProvider.current() }
+    private val zone: ZoneId get() = currentPolicy.zone
+
+    init {
+        viewModelScope.launch {
+            temporalPolicyProvider.policy.collect { currentPolicy = it }
+        }
+    }
+
     private val rangeFlow = MutableStateFlow<StatRange>(StatRange.ThisWeek)
     private val filtersFlow = MutableStateFlow(StatFilters())
     private val refreshTrigger = MutableStateFlow(0)
@@ -132,7 +153,12 @@ class StatisticsViewModel @Inject constructor(
 
     private data class RemoteEntries(val entries: List<TimeEntry>? = null, val isLoading: Boolean = false, val failed: Boolean = false)
 
-    private fun loadRemoteEntries(organizationId: String, memberId: String, range: ClosedRange<LocalDate>): Flow<RemoteEntries> = flow {
+    private fun loadRemoteEntries(
+        organizationId: String,
+        memberId: String,
+        range: ClosedRange<LocalDate>,
+        zone: ZoneId,
+    ): Flow<RemoteEntries> = flow {
         emit(RemoteEntries(isLoading = true))
         val entries = mutableListOf<TimeEntry>()
         val start = range.start.atStartOfDay(zone).toInstant().toString()
@@ -206,18 +232,22 @@ class StatisticsViewModel @Inject constructor(
                     timeEntryRepository.observeTags(orgId),
                 ) { projects, clients, tasks, tags -> StatCatalog(projects, clients, tasks, tags) }
 
-                // Only the range and an explicit refresh trigger a server fetch; filters are applied
-                // locally to the already-fetched entries, so toggling a filter never re-downloads the
-                // range. combine memoizes on exactly these inputs.
-                combine(rangeFlow, refreshTrigger) { range, _ -> range }
-                    .flatMapLatest { range ->
-                        val resolved = range.resolve(LocalDate.now(zone))
+                // Only the range, the account temporal policy and an explicit refresh trigger a
+                // server fetch; filters are applied locally to the already-fetched entries, so
+                // toggling a filter never re-downloads the range. combine memoizes on exactly these
+                // inputs, and a policy change (zone / week-start) re-resolves and re-fetches.
+                combine(rangeFlow, temporalPolicyProvider.policy, refreshTrigger) { range, policy, _ ->
+                    range to policy
+                }
+                    .flatMapLatest { (range, policy) ->
+                        val zone = policy.zone
+                        val resolved = range.resolve(LocalDate.now(zone), policy.firstDayOfWeek)
                         val previous = previousPeriod(resolved)
                         val fetchRange = previous.start..resolved.endInclusive
                         combine(
                             timeEntryRepository.observeTimeEntries(orgId),
                             catalogFlow,
-                            loadRemoteEntries(orgId, memberId, fetchRange),
+                            loadRemoteEntries(orgId, memberId, fetchRange, zone),
                             filtersFlow,
                         ) { cachedEntries, catalog, remote, filters ->
                             val entries = remote.entries ?: cachedEntries
@@ -231,6 +261,7 @@ class StatisticsViewModel @Inject constructor(
                                     rangeEnd = resolved.endInclusive,
                                     zone = zone,
                                     granularity = granularityFor(resolved),
+                                    firstDayOfWeek = policy.firstDayOfWeek,
                                 )
                                 val prior = StatisticsAggregator.compute(
                                     entries = filtered,
@@ -239,6 +270,7 @@ class StatisticsViewModel @Inject constructor(
                                     rangeEnd = previous.endInclusive,
                                     zone = zone,
                                     granularity = granularityFor(previous),
+                                    firstDayOfWeek = policy.firstDayOfWeek,
                                 )
                                 Triple(current, computeComparison(current, prior, previous), filtered)
                             }

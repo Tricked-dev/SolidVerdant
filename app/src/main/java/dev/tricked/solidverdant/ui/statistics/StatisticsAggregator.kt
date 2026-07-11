@@ -9,6 +9,7 @@ package dev.tricked.solidverdant.ui.statistics
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -125,6 +126,7 @@ object StatisticsAggregator {
         rangeEnd: LocalDate,
         zone: ZoneId,
         granularity: TrendGranularity,
+        firstDayOfWeek: DayOfWeek,
     ): StatisticsSummary {
         val projectById = projects.associateBy { it.id }
 
@@ -158,7 +160,7 @@ object StatisticsAggregator {
         val days = ChronoUnit.DAYS.between(rangeStart, rangeEnd) + 1
         val avgPerDay = if (days > 0) totalSeconds / days else totalSeconds
 
-        val trend = buildTrend(counted.flatMap { it.daily }, rangeStart, rangeEnd, granularity)
+        val trend = buildTrend(counted.flatMap { it.daily }, rangeStart, rangeEnd, granularity, firstDayOfWeek)
 
         return StatisticsSummary(
             totalSeconds = totalSeconds,
@@ -234,6 +236,7 @@ object StatisticsAggregator {
         rangeStart: LocalDate,
         rangeEnd: LocalDate,
         granularity: TrendGranularity,
+        firstDayOfWeek: DayOfWeek,
     ): List<TrendBucket> = when (granularity) {
         TrendGranularity.DAY -> {
             val byDay = rows.groupBy({ it.first }, { it.second }).mapValues { it.value.sum() }
@@ -242,7 +245,10 @@ object StatisticsAggregator {
                 .toList()
         }
         TrendGranularity.WEEK -> {
-            val wf = WeekFields.ISO
+            // Minimal-days pinned to ISO's 4 so a Monday firstDayOfWeek reproduces WeekFields.ISO
+            // byte-for-byte (same week-start grouping AND same W## week numbers); only the
+            // first-day-of-week shifts bucket boundaries for e.g. a Sunday-start account.
+            val wf = WeekFields.of(firstDayOfWeek, WEEK_MIN_DAYS)
             val byWeekStart = rows.groupBy(
                 { it.first.with(wf.dayOfWeek(), 1) },
                 { it.second },
@@ -263,3 +269,7 @@ object StatisticsAggregator {
 }
 
 private const val PERCENT_YEAR_BASE = 100
+
+// Matches WeekFields.ISO.minimalDaysInFirstWeek so a Monday firstDayOfWeek reproduces ISO week
+// numbering exactly; see the WEEK branch of buildTrend.
+private const val WEEK_MIN_DAYS = 4
