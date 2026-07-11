@@ -10,6 +10,7 @@ import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.local.db.InboxDismissalDao
 import dev.tricked.solidverdant.domain.inbox.InboxAnalyzer
 import dev.tricked.solidverdant.domain.inbox.InboxSettingsDataStore
+import dev.tricked.solidverdant.domain.inbox.resolveHorizonStartMs
 import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.flow.Flow
@@ -66,6 +67,7 @@ class InboxRepositoryImpl @Inject constructor(
             dismissedKeys = activeDismissedKeys,
             nowMs = now,
             zone = policy.zone,
+            horizonStartMs = resolveHorizonStartMs(settings.horizonChosen, settings.horizonStartMs, now, policy.zone),
         )
     }.distinctUntilChanged()
 }

@@ -72,8 +72,9 @@ class InboxAnalyzerTest {
         checkLongDuration = checkLongDuration,
     )
 
+    // Existing tests use a permissive (very old) horizon so the clamp is a no-op for them.
     private fun analyze(entries: List<TimeEntry>, config: InboxCheckConfig, dismissed: Set<String> = emptySet()) =
-        InboxAnalyzer.analyze(entries, config, dismissed, nowMs, utc)
+        InboxAnalyzer.analyze(entries, config, dismissed, nowMs, utc, horizonStartMs = 0L)
 
     // ---- Overlaps -------------------------------------------------------------------------------
 
@@ -159,6 +160,7 @@ class InboxAnalyzerTest {
             emptySet(),
             todayNow,
             utc,
+            horizonStartMs = 0L,
         ).filter { it.type == InboxIssueType.GAP }
         assertEquals(0, issues.size)
     }
@@ -172,6 +174,7 @@ class InboxAnalyzerTest {
             emptySet(),
             nowMs,
             plusTwo,
+            horizonStartMs = 0L,
         ).filter { it.type == InboxIssueType.GAP }
         assertEquals(0, covered.size)
 
@@ -182,6 +185,7 @@ class InboxAnalyzerTest {
             emptySet(),
             nowMs,
             utc,
+            horizonStartMs = 0L,
         ).filter { it.type == InboxIssueType.GAP }
         assertEquals(1, utcGaps.size)
     }
@@ -268,5 +272,83 @@ class InboxAnalyzerTest {
             ),
         )
         assertEquals(0, issues.size)
+    }
+
+    // ---- Horizon resolver (SV-005) --------------------------------------------------------------
+
+    @Test fun `resolver not chosen returns start of today in zone`() {
+        val midday = Instant.parse("2026-07-20T13:45:00Z").toEpochMilli()
+        val expected = Instant.parse("2026-07-20T00:00:00Z").toEpochMilli()
+        assertEquals(expected, resolveHorizonStartMs(horizonChosen = false, horizonStartMs = null, nowMs = midday, zone = utc))
+        // A stored start is ignored while the choice is not yet made.
+        assertEquals(expected, resolveHorizonStartMs(horizonChosen = false, horizonStartMs = 123L, nowMs = midday, zone = utc))
+    }
+
+    @Test fun `resolver chosen with null returns now minus 370 days`() {
+        val expected = nowMs - java.time.Duration.ofDays(370).toMillis()
+        assertEquals(expected, resolveHorizonStartMs(horizonChosen = true, horizonStartMs = null, nowMs = nowMs, zone = utc))
+    }
+
+    @Test fun `resolver chosen with value returns that value`() {
+        val chosen = Instant.parse("2026-07-01T00:00:00Z").toEpochMilli()
+        assertEquals(chosen, resolveHorizonStartMs(horizonChosen = true, horizonStartMs = chosen, nowMs = nowMs, zone = utc))
+    }
+
+    // ---- Horizon clamp (SV-005) -----------------------------------------------------------------
+
+    @Test fun `horizon of today's start hides older issues of every type but keeps today's`() {
+        // "now" is midday today; entries span an old day and today. Enable every analyzer check.
+        val today = Instant.parse("2026-07-20T12:00:00Z").toEpochMilli()
+        val todayStart = Instant.parse("2026-07-20T00:00:00Z").toEpochMilli()
+        val entries = listOf(
+            // Old day (2026-07-06): overlap pair, long entry, missing project.
+            entry("oldA", "2026-07-06T09:00:00Z", "2026-07-06T11:00:00Z", projectId = null, taskId = null),
+            entry("oldB", "2026-07-06T10:00:00Z", "2026-07-06T16:00:00Z"),
+            // Today (2026-07-20): overlap pair, long entry, missing project.
+            entry("newA", "2026-07-20T00:30:00Z", "2026-07-20T02:00:00Z", projectId = null, taskId = null),
+            entry("newB", "2026-07-20T01:00:00Z", "2026-07-20T07:00:00Z"),
+        )
+        val cfg = config(
+            checkGaps = false,
+            checkOverlaps = true,
+            checkMissingProject = true,
+            checkLongDuration = true,
+            maxDurationHours = 4,
+        )
+
+        val clamped = InboxAnalyzer.analyze(entries, cfg, emptySet(), today, utc, horizonStartMs = todayStart)
+        assertTrue("only today's issues survive the clamp", clamped.all { it.endMs >= todayStart })
+        assertTrue("clamped must still contain today's issues", clamped.isNotEmpty())
+        assertTrue(clamped.any { it.type == InboxIssueType.OVERLAP })
+        assertTrue(clamped.any { it.type == InboxIssueType.MISSING_METADATA })
+        assertTrue(clamped.any { it.type == InboxIssueType.LONG_DURATION })
+
+        // An earlier horizon brings the old-day issues back.
+        val wide = InboxAnalyzer.analyze(entries, cfg, emptySet(), today, utc, horizonStartMs = 0L)
+        assertTrue("earlier horizon surfaces more issues", wide.size > clamped.size)
+        assertTrue("older-day issues reappear", wide.any { it.endMs < todayStart })
+    }
+
+    @Test fun `count equals clamped analyze size`() {
+        val today = Instant.parse("2026-07-20T12:00:00Z").toEpochMilli()
+        val todayStart = Instant.parse("2026-07-20T00:00:00Z").toEpochMilli()
+        val entries = listOf(
+            entry("oldA", "2026-07-06T09:00:00Z", "2026-07-06T14:00:00Z"),
+            entry("newA", "2026-07-20T00:30:00Z", "2026-07-20T06:00:00Z"),
+        )
+        val cfg = config(checkGaps = false, checkOverlaps = false, checkLongDuration = true, maxDurationHours = 4)
+        val clamped = InboxAnalyzer.analyze(entries, cfg, emptySet(), today, utc, horizonStartMs = todayStart)
+        val count = InboxAnalyzer.count(entries, cfg, emptySet(), today, utc, horizonStartMs = todayStart)
+        assertEquals(clamped.size, count)
+    }
+
+    @Test fun `issue straddling the horizon is kept`() {
+        // An entry that starts before today's start but ends after it must survive a today-clamp.
+        val today = Instant.parse("2026-07-20T12:00:00Z").toEpochMilli()
+        val todayStart = Instant.parse("2026-07-20T00:00:00Z").toEpochMilli()
+        val straddling = entry("s", "2026-07-19T22:00:00Z", "2026-07-20T04:00:00Z") // 6h, crosses midnight
+        val cfg = config(checkGaps = false, checkOverlaps = false, checkLongDuration = true, maxDurationHours = 4)
+        val clamped = InboxAnalyzer.analyze(listOf(straddling), cfg, emptySet(), today, utc, horizonStartMs = todayStart)
+        assertEquals(1, clamped.count { it.type == InboxIssueType.LONG_DURATION })
     }
 }

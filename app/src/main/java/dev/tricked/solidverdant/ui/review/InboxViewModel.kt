@@ -22,6 +22,7 @@ import dev.tricked.solidverdant.domain.inbox.InboxAnalyzer
 import dev.tricked.solidverdant.domain.inbox.InboxIssue
 import dev.tricked.solidverdant.domain.inbox.InboxSettings
 import dev.tricked.solidverdant.domain.inbox.InboxSettingsDataStore
+import dev.tricked.solidverdant.domain.inbox.resolveHorizonStartMs
 import dev.tricked.solidverdant.domain.time.TemporalPolicy
 import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import dev.tricked.solidverdant.sync.SyncTrigger
@@ -170,7 +171,10 @@ class InboxViewModel @Inject constructor(
                     .filter { now - it.dismissedAtMs <= retentionMs }
                     .map { it.issueKey }
                     .toSet()
-                val analyzerIssues = InboxAnalyzer.analyze(data.entries, config, activeDismissed, now, zone)
+                val horizonStartMs =
+                    resolveHorizonStartMs(data.settings.horizonChosen, data.settings.horizonStartMs, now, zone)
+                // Conflicts below are DB-derived and always surfaced (not subject to the horizon).
+                val analyzerIssues = InboxAnalyzer.analyze(data.entries, config, activeDismissed, now, zone, horizonStartMs)
                 val conflictIssues = data.conflicts.map { conflict ->
                     val startMs = parseEpochMillis(conflict.local.start) ?: now
                     val endMs = conflict.local.end?.let(::parseEpochMillis) ?: now

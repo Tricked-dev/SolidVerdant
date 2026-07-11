@@ -22,6 +22,25 @@ private const val DEFAULT_WORK_END_MINUTE = 17 * MINUTES_PER_HOUR
 private const val DEFAULT_MIN_GAP_MINUTES = 30
 private const val DEFAULT_MAX_DURATION_HOURS = 4
 
+/** Kept in sync with [InboxAnalyzer.MAX_GAP_LOOKBACK_DAYS] so "Everything" == the analyzer's cap. */
+private const val HORIZON_LOOKBACK_DAYS = 370L
+
+/**
+ * Resolve the inbox horizon choice (SV-005) into an inclusive lower bound in epoch millis. Pure so
+ * callers (badge repository + inbox view-model) can compute it and hand it to [InboxAnalyzer.analyze]
+ * without the analyzer doing any I/O.
+ *
+ * - not chosen → start of today in [zone] (backlog stays hidden until the user picks a horizon).
+ * - chosen, [horizonStartMs] null → `nowMs - 370 days`, matching the gap-lookback cap ("Everything").
+ * - chosen, [horizonStartMs] set → that instant verbatim.
+ */
+fun resolveHorizonStartMs(horizonChosen: Boolean, horizonStartMs: Long?, nowMs: Long, zone: ZoneId): Long = when {
+    !horizonChosen ->
+        Instant.ofEpochMilli(nowMs).atZone(zone).toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
+    horizonStartMs == null -> nowMs - java.time.Duration.ofDays(HORIZON_LOOKBACK_DAYS).toMillis()
+    else -> horizonStartMs
+}
+
 /**
  * A single, deterministic "check" surfaced by the Time Inbox (gap analysis #16/#17).
  *
@@ -113,6 +132,7 @@ object InboxAnalyzer {
         dismissedKeys: Set<String>,
         nowMs: Long,
         zone: ZoneId,
+        horizonStartMs: Long,
     ): List<InboxIssue> {
         val now = Instant.ofEpochMilli(nowMs)
         val intervals = entries.mapNotNull { entry ->
@@ -123,12 +143,18 @@ object InboxAnalyzer {
 
         val issues = buildList {
             if (config.checkOverlaps) addAll(overlapIssues(intervals))
-            if (config.checkGaps) addAll(gapIssues(intervals, config, now, zone))
+            if (config.checkGaps) addAll(gapIssues(intervals, config, now, zone, horizonStartMs))
             if (config.anyMissingCheckEnabled) addAll(missingIssues(entries, config))
             if (config.checkLongDuration) addAll(longDurationIssues(entries, config))
         }
 
         return issues
+            // SV-005 horizon clamp: keep only issues whose window intersects [horizonStartMs, now].
+            // An issue fully before the horizon (endMs < horizonStartMs) is dropped; straddling
+            // windows are kept. Gaps are already generated no earlier than the horizon. CONFLICT
+            // issues are not produced here (they are DB-derived and added by the caller), so they
+            // are never clamped.
+            .filter { it.endMs >= horizonStartMs }
             .filterNot { it.key in dismissedKeys }
             .sortedWith(
                 compareByDescending<InboxIssue> { it.startMs }
@@ -138,8 +164,14 @@ object InboxAnalyzer {
     }
 
     /** Convenience for the badge: how many open checks there are for the given inputs. */
-    fun count(entries: List<TimeEntry>, config: InboxCheckConfig, dismissedKeys: Set<String>, nowMs: Long, zone: ZoneId): Int =
-        analyze(entries, config, dismissedKeys, nowMs, zone).size
+    fun count(
+        entries: List<TimeEntry>,
+        config: InboxCheckConfig,
+        dismissedKeys: Set<String>,
+        nowMs: Long,
+        zone: ZoneId,
+        horizonStartMs: Long,
+    ): Int = analyze(entries, config, dismissedKeys, nowMs, zone, horizonStartMs).size
 
     // ---- Overlaps -------------------------------------------------------------------------------
 
@@ -167,13 +199,21 @@ object InboxAnalyzer {
 
     // ---- Gaps -----------------------------------------------------------------------------------
 
-    private fun gapIssues(intervals: List<Interval>, config: InboxCheckConfig, now: Instant, zone: ZoneId): List<InboxIssue> {
+    private fun gapIssues(
+        intervals: List<Interval>,
+        config: InboxCheckConfig,
+        now: Instant,
+        zone: ZoneId,
+        horizonStartMs: Long,
+    ): List<InboxIssue> {
         if (intervals.isEmpty() || config.workDays.isEmpty()) return emptyList()
         if (config.workEndMinute <= config.workStartMinute) return emptyList()
         if (config.minGapMinutes <= 0) return emptyList()
 
         val today = now.atZone(zone).toLocalDate()
-        val earliestAllowed = today.minusDays(MAX_GAP_LOOKBACK_DAYS)
+        // The horizon may narrow gap lookback but never widen it past the 370-day cap.
+        val horizonDate = Instant.ofEpochMilli(horizonStartMs).atZone(zone).toLocalDate()
+        val earliestAllowed = maxOf(today.minusDays(MAX_GAP_LOOKBACK_DAYS), horizonDate)
 
         // Days the user actually tracked something (so fully-empty days are not flagged).
         val candidateDates = sortedSetOf<LocalDate>()
