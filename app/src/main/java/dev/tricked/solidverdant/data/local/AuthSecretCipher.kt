@@ -33,7 +33,7 @@ internal class AndroidKeystoreKeyProvider : SecretKeyProvider {
                 )
                     .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                     .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                    .setKeySize(256)
+                    .setKeySize(AES_KEY_SIZE_BITS)
                     .build(),
             )
             generateKey()
@@ -43,6 +43,7 @@ internal class AndroidKeystoreKeyProvider : SecretKeyProvider {
     private companion object {
         const val KEYSTORE = "AndroidKeyStore"
         const val KEY_ALIAS = "solidverdant_auth_secrets_v1"
+        const val AES_KEY_SIZE_BITS = 256
     }
 }
 

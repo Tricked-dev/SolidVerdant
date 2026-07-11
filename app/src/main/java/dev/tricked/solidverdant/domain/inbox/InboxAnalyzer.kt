@@ -14,6 +14,14 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
+private const val MINUTES_PER_HOUR = 60
+private const val SECONDS_PER_MINUTE = 60L
+private const val SECONDS_PER_HOUR = 3600L
+private const val DEFAULT_WORK_START_MINUTE = 9 * MINUTES_PER_HOUR
+private const val DEFAULT_WORK_END_MINUTE = 17 * MINUTES_PER_HOUR
+private const val DEFAULT_MIN_GAP_MINUTES = 30
+private const val DEFAULT_MAX_DURATION_HOURS = 4
+
 /**
  * A single, deterministic "check" surfaced by the Time Inbox (gap analysis #16/#17).
  *
@@ -61,13 +69,13 @@ data class InboxCheckConfig(
         DayOfWeek.FRIDAY,
     ),
     /** Minutes since local midnight the working window opens (0..1440). */
-    val workStartMinute: Int = 9 * 60,
+    val workStartMinute: Int = DEFAULT_WORK_START_MINUTE,
     /** Minutes since local midnight the working window closes (0..1440). */
-    val workEndMinute: Int = 17 * 60,
+    val workEndMinute: Int = DEFAULT_WORK_END_MINUTE,
     /** Gaps shorter than this are ignored so harmless transitions do not fill the inbox. */
-    val minGapMinutes: Int = 30,
+    val minGapMinutes: Int = DEFAULT_MIN_GAP_MINUTES,
     /** Completed entries at or above this many hours are flagged. */
-    val maxDurationHours: Int = 4,
+    val maxDurationHours: Int = DEFAULT_MAX_DURATION_HOURS,
     val checkGaps: Boolean = true,
     val checkOverlaps: Boolean = true,
     val checkMissingProject: Boolean = true,
@@ -178,7 +186,7 @@ object InboxAnalyzer {
             }
         }
 
-        val minGapSeconds = config.minGapMinutes * 60L
+        val minGapSeconds = config.minGapMinutes * SECONDS_PER_MINUTE
         val issues = mutableListOf<InboxIssue>()
         candidateDates.forEach { date ->
             if (date.dayOfWeek !in config.workDays) return@forEach
@@ -258,7 +266,7 @@ object InboxAnalyzer {
 
     private fun longDurationIssues(entries: List<TimeEntry>, config: InboxCheckConfig): List<InboxIssue> {
         if (config.maxDurationHours <= 0) return emptyList()
-        val thresholdSeconds = config.maxDurationHours * 3600L
+        val thresholdSeconds = config.maxDurationHours * SECONDS_PER_HOUR
         return entries.mapNotNull { entry ->
             val endRaw = entry.end ?: return@mapNotNull null
             val start = parseInstant(entry.start) ?: return@mapNotNull null

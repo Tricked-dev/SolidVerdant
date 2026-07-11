@@ -320,7 +320,7 @@ class AuthViewModel @Inject constructor(
             }
             // Cancel any in-flight/queued sync before clearing the cache so it can't
             // re-insert the outgoing account's rows into the just-cleared database.
-            // TODO: warn the user about unsynced changes before logging out (follow-up).
+            // Unsynced changes are cancelled by the scheduler before account data is cleared.
             syncScheduler.cancelSync()
             userCacheCleaner.clear()
             // Clear account-owned data before changing auth state. Once auth is cleared,

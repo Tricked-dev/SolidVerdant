@@ -168,21 +168,11 @@ ksp {
 //
 //     ./gradlew detekt
 //
-// The baseline (config/detekt/baseline.xml) is generated separately and is NOT hand-written:
-//
-//     ./gradlew detektBaseline
-//
-// It is referenced only when present so a fresh checkout without a baseline still configures.
 detekt {
     // Layer our overrides on top of detekt's shipped defaults instead of replacing the ruleset.
     buildUponDefaultConfig = true
     config.setFrom(files("$rootDir/config/detekt/detekt.yml"))
 
-    // Guard the baseline: a missing baseline file would otherwise fail configuration.
-    val detektBaseline = file("$rootDir/config/detekt/baseline.xml")
-    if (detektBaseline.exists()) {
-        baseline = detektBaseline
-    }
 }
 
 // Keep detekt off the default verification path: remove the `detekt` dependency that the

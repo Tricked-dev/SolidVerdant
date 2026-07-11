@@ -94,7 +94,7 @@ data class ReviewDayUiState(
     /** Billable share of tracked time, 0..100, or null when nothing is tracked. */
     val billablePercent: Int?
         get() = if (totalTrackedSeconds > 0) {
-            ((billableSeconds * 100) / totalTrackedSeconds).toInt().coerceIn(0, 100)
+            ((billableSeconds * PERCENT_SCALE) / totalTrackedSeconds).toInt().coerceIn(0, PERCENT_SCALE.toInt())
         } else {
             null
         }
@@ -108,6 +108,8 @@ data class ReviewDayUiState(
     /** True when there is simply nothing to review yet (no entries and no items). */
     val nothingTracked: Boolean get() = entryCount == 0 && items.isEmpty()
 }
+
+private const val PERCENT_SCALE = 100L
 
 /** Minimal project projection for the "assign project" picker (id, display name, color hex). */
 data class ReviewProject(val id: String, val name: String, val color: String)

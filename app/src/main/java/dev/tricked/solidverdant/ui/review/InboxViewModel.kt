@@ -17,7 +17,6 @@ import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
-import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.domain.inbox.InboxAnalyzer
 import dev.tricked.solidverdant.domain.inbox.InboxIssue
@@ -56,7 +55,6 @@ import javax.inject.Inject
 @HiltViewModel
 class InboxViewModel @Inject constructor(
     private val timeEntryRepository: TimeEntryRepository,
-    private val authRepository: AuthRepository,
     private val authDataStore: AuthDataStore,
     private val settingsDataStore: SettingsDataStore,
     private val inboxSettingsDataStore: InboxSettingsDataStore,
@@ -248,21 +246,23 @@ class InboxViewModel @Inject constructor(
 
     fun keepMine(issue: InboxIssue) {
         if (issue.type != dev.tricked.solidverdant.domain.inbox.InboxIssueType.CONFLICT) return
-        val ctx = context ?: return
-        val entryId = issue.primaryEntry?.id ?: return
-        viewModelScope.launch {
-            runCatching { timeEntryRepository.resolveKeepMine(entryId, ctx.memberId) }
-                .onSuccess { resolved ->
-                    if (resolved) {
-                        syncTrigger.requestSync()
-                    } else {
-                        _uiState.update { it.copy(actionError = InboxActionError.RESOLVE_FAILED) }
-                    }
+        context?.let { ctx ->
+            issue.primaryEntry?.id?.let { entryId ->
+                viewModelScope.launch {
+                    runCatching { timeEntryRepository.resolveKeepMine(entryId, ctx.memberId) }
+                        .onSuccess { resolved ->
+                            if (resolved) {
+                                syncTrigger.requestSync()
+                            } else {
+                                _uiState.update { it.copy(actionError = InboxActionError.RESOLVE_FAILED) }
+                            }
+                        }
+                        .onFailure {
+                            Timber.w(it, "Failed to keep local conflict version")
+                            _uiState.update { it.copy(actionError = InboxActionError.RESOLVE_FAILED) }
+                        }
                 }
-                .onFailure {
-                    Timber.w(it, "Failed to keep local conflict version")
-                    _uiState.update { it.copy(actionError = InboxActionError.RESOLVE_FAILED) }
-                }
+            }
         }
     }
 
@@ -380,7 +380,10 @@ class InboxViewModel @Inject constructor(
 
     fun setWorkWindow(startMinute: Int, endMinute: Int) {
         viewModelScope.launch {
-            if (startMinute in 0..1440 && endMinute in 0..1440 && endMinute > startMinute) {
+            if (startMinute in MINUTE_OF_DAY_START..MINUTE_OF_DAY_END &&
+                endMinute in MINUTE_OF_DAY_START..MINUTE_OF_DAY_END &&
+                endMinute > startMinute
+            ) {
                 inboxSettingsDataStore.setWorkWindow(startMinute, endMinute)
             }
         }
@@ -388,13 +391,13 @@ class InboxViewModel @Inject constructor(
 
     fun setMinGapMinutes(minutes: Int) {
         viewModelScope.launch {
-            if (minutes in 1..24 * 60) inboxSettingsDataStore.setMinGapMinutes(minutes)
+            if (minutes in MIN_GAP_MINUTES..MAX_GAP_MINUTES) inboxSettingsDataStore.setMinGapMinutes(minutes)
         }
     }
 
     fun setMaxDurationHours(hours: Int) {
         viewModelScope.launch {
-            if (hours in 1..24) settingsDataStore.setLongTimerHours(hours)
+            if (hours in MIN_DURATION_HOURS..MAX_DURATION_HOURS) settingsDataStore.setLongTimerHours(hours)
         }
     }
 
@@ -410,3 +413,10 @@ class InboxViewModel @Inject constructor(
         java.time.OffsetDateTime.parse(value).toInstant().toEpochMilli()
     }.getOrNull()
 }
+
+private const val MINUTE_OF_DAY_START = 0
+private const val MINUTE_OF_DAY_END = 1440
+private const val MIN_GAP_MINUTES = 1
+private const val MAX_GAP_MINUTES = 24 * 60
+private const val MIN_DURATION_HOURS = 1
+private const val MAX_DURATION_HOURS = 24

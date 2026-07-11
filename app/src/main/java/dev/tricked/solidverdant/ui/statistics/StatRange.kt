@@ -10,6 +10,9 @@ import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import java.time.temporal.WeekFields
 
+private const val LAST_7_DAYS_OFFSET = 6L
+private const val MONTHLY_GRANULARITY_DAYS = 31L
+
 sealed interface StatRange {
     fun resolve(today: LocalDate): ClosedRange<LocalDate>
 
@@ -22,7 +25,7 @@ sealed interface StatRange {
     }
 
     data object Last7Days : StatRange {
-        override fun resolve(today: LocalDate) = today.minusDays(6)..today
+        override fun resolve(today: LocalDate) = today.minusDays(LAST_7_DAYS_OFFSET)..today
     }
 
     data object LastWeek : StatRange {
@@ -60,5 +63,5 @@ sealed interface StatRange {
 
 fun granularityFor(range: ClosedRange<LocalDate>): TrendGranularity {
     val days = ChronoUnit.DAYS.between(range.start, range.endInclusive) + 1
-    return if (days <= 31) TrendGranularity.DAY else TrendGranularity.WEEK
+    return if (days <= MONTHLY_GRANULARITY_DAYS) TrendGranularity.DAY else TrendGranularity.WEEK
 }

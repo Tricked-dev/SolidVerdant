@@ -36,12 +36,6 @@ import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
 
 /**
- * Segments of the Review tab. [Inbox] surfaces entries needing attention (Time Inbox); [ReviewDay]
- * surfaces the compact end-of-day review for a single day.
- */
-enum class ReviewSegment { Inbox, ReviewDay }
-
-/**
  * Container for the review-loop home (the "Review" bottom-nav tab). Hosts a segmented control that
  * switches between [InboxPane] and [ReviewDayPane], and an overflow menu with entry points to the
  * reminder settings and template management screens.

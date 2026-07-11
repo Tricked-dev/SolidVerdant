@@ -33,6 +33,7 @@ import javax.inject.Singleton
 class AuthRepository @Inject constructor(private val authDataStore: AuthDataStore, private val apiClientFactory: ApiClientFactory) {
     companion object {
         private const val REDIRECT_URI = "solidtime://oauth/callback"
+        private const val HTTP_NOT_FOUND = 404
     }
 
     val isLoggedIn: Flow<Boolean> = authDataStore.isLoggedIn
@@ -169,15 +170,17 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
         val api = apiClientFactory.createApi(endpoint)
         val response = api.getActiveTimeEntry()
         Result.success(response.data)
-    } catch (e: Exception) {
-        // 404 with "No active time entry" is expected when not tracking
-        if (e is retrofit2.HttpException && e.code() == 404) {
+    } catch (e: retrofit2.HttpException) {
+        if (e.code() == HTTP_NOT_FOUND) {
             Timber.d("No active time entry")
             Result.success(null)
         } else {
             Timber.e(e, "Failed to get active time entry")
             Result.failure(e)
         }
+    } catch (e: Exception) {
+        Timber.e(e, "Failed to get active time entry")
+        Result.failure(e)
     }
 
     /**
@@ -207,6 +210,7 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
     /**
      * Start a new time entry
      */
+    @Suppress("UnusedParameter")
     suspend fun startTimeEntry(
         organizationId: String,
         memberId: String,

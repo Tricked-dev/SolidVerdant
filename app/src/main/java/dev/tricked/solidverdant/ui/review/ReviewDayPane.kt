@@ -78,7 +78,7 @@ fun ReviewDayPane() {
 
     LaunchedEffect(message) {
         if (message != null) {
-            delay(3500)
+            delay(MESSAGE_DISMISS_DELAY_MS)
             viewModel.consumeMessage()
         }
     }
@@ -164,7 +164,6 @@ internal fun ReviewContent(
                 ProgressHeader(state)
                 ReviewItemCard(
                     item = current,
-                    state = state,
                     onStop = onStop,
                     onKeepRunning = onKeepRunning,
                     onAdjustEnd = onAdjustEnd,
@@ -277,7 +276,6 @@ private fun ProgressHeader(state: ReviewDayUiState) {
 @Composable
 private fun ReviewItemCard(
     item: ReviewItem,
-    state: ReviewDayUiState,
     onStop: () -> Unit,
     onKeepRunning: () -> Unit,
     onAdjustEnd: () -> Unit,
@@ -463,14 +461,18 @@ private fun MessageBanner(text: String, modifier: Modifier = Modifier) {
 
 @Composable
 private fun formatDuration(seconds: Long): String {
-    val hours = seconds / 3600
-    val minutes = (seconds % 3600) / 60
+    val hours = seconds / SECONDS_PER_HOUR
+    val minutes = (seconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE
     return if (hours > 0) {
         stringResource(R.string.review_duration_hours_minutes, hours, minutes)
     } else {
         stringResource(R.string.review_duration_minutes, minutes)
     }
 }
+
+private const val MESSAGE_DISMISS_DELAY_MS = 3500L
+private const val SECONDS_PER_HOUR = 3600
+private const val SECONDS_PER_MINUTE = 60
 
 private val CLOCK_FORMAT: DateTimeFormatter = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
 

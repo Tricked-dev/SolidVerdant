@@ -19,6 +19,8 @@ import okhttp3.logging.HttpLoggingInterceptor
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
+private const val HTTP_TIMEOUT_SECONDS = 30L
+
 /**
  * Hilt module for providing network dependencies
  */
@@ -54,9 +56,9 @@ object NetworkModule {
         .addInterceptor(loggingInterceptor)
         .addInterceptor(authInterceptor)
         .authenticator(tokenAuthenticator)
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(HTTP_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .readTimeout(HTTP_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .writeTimeout(HTTP_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .build()
 }
 

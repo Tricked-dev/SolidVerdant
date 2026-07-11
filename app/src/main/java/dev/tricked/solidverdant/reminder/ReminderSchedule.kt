@@ -25,10 +25,12 @@ object ReminderSchedule {
     const val MAX_MINUTE_OF_DAY: Int = 1439
 
     /** Wall-clock hour (0..23) for a minute-of-day value. */
-    fun hourOf(minuteOfDay: Int): Int = minuteOfDay.coerceIn(0, MAX_MINUTE_OF_DAY) / 60
+    fun hourOf(minuteOfDay: Int): Int = minuteOfDay.coerceIn(0, MAX_MINUTE_OF_DAY) / MINUTES_PER_HOUR
 
     /** Wall-clock minute (0..59) for a minute-of-day value. */
-    fun minuteOf(minuteOfDay: Int): Int = minuteOfDay.coerceIn(0, MAX_MINUTE_OF_DAY) % 60
+    fun minuteOf(minuteOfDay: Int): Int = minuteOfDay.coerceIn(0, MAX_MINUTE_OF_DAY) % MINUTES_PER_HOUR
+
+    private const val MINUTES_PER_HOUR = 60
 
     /**
      * Epoch-millis of the next occurrence of [minuteOfDay] local time strictly after [nowMillis] in

@@ -81,7 +81,7 @@ private val DonutSize = 140.dp
  * pass a theme token instead (see [hexToColor]); this literal only backs the default for non-Compose
  * callers (the calendar) that cannot resolve a theme colour.
  */
-private val UnknownProjectColor = Color(0xFF9E9E9E)
+private val UnknownProjectColor = Color.Gray
 
 /**
  * Parses a project colour hex into a [Color], falling back to [fallback] when the value is blank or
@@ -97,8 +97,8 @@ fun hexToColor(hex: String, fallback: Color = UnknownProjectColor): Color = try 
 
 fun formatDuration(seconds: Long): String {
     if (seconds <= 0) return "0m"
-    val h = seconds / 3600
-    val m = (seconds % 3600) / 60
+    val h = seconds / SECONDS_PER_HOUR
+    val m = (seconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE
     return when {
         h > 0 -> "${h}h ${m.toString().padStart(2, '0')}m"
         else -> "${m}m"
@@ -214,7 +214,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
                         }
                         Column(Modifier.fillMaxWidth()) {
                             s.perProject.forEach { p ->
-                                val pct = if (s.totalSeconds > 0) p.seconds * 100 / s.totalSeconds else 0
+                                val pct = if (s.totalSeconds > 0) p.seconds * PERCENT_SCALE_INT / s.totalSeconds else 0
                                 ProjectLegendRow(
                                     projectName = p.projectName,
                                     colorHex = p.colorHex,
@@ -234,7 +234,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
                             onBarClick = { bucket ->
                                 val end = when (state.granularity) {
                                     TrendGranularity.DAY -> bucket.startDate
-                                    TrendGranularity.WEEK -> bucket.startDate.plusDays(6)
+                                    TrendGranularity.WEEK -> bucket.startDate.plusDays(WEEK_DAYS_MINUS_ONE)
                                 }
                                 viewModel.openTrendDrillDown(bucket.label, bucket.startDate, end)
                             },
@@ -255,6 +255,11 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
         StatDrillDownSheet(state = dd, onDismiss = viewModel::closeDrillDown)
     }
 }
+
+private const val SECONDS_PER_HOUR = 3600
+private const val SECONDS_PER_MINUTE = 60
+private const val PERCENT_SCALE_INT = 100
+private const val WEEK_DAYS_MINUS_ONE = 6L
 
 @Composable
 private fun ExportAction(exporting: Boolean, onExport: () -> Unit) {

@@ -95,7 +95,7 @@ class ReviewDayViewModel @Inject constructor(
                 }
             }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), ReviewDayUiState(loading = true))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STATE_STOP_TIMEOUT_MS), ReviewDayUiState(loading = true))
 
     private fun buildState(
         entries: List<TimeEntry>,
@@ -315,3 +315,5 @@ class ReviewDayViewModel @Inject constructor(
         }
     }
 }
+
+private const val STATE_STOP_TIMEOUT_MS = 5_000L

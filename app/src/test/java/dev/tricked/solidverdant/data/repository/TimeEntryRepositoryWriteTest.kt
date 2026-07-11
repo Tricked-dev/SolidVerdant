@@ -447,8 +447,12 @@ class TimeEntryRepositoryWriteTest {
         repo.updateEntry(stopped.copy(description = "edited offline"), tagIds = emptyList())
 
         val ops = db.outboxDao().peekAll()
-        val stopBase = Json.decodeFromString<ConflictSnapshot>(ops.single { it.opType == OutboxOpType.STOP }.baseSnapshotJson!!)
-        val updateBase = Json.decodeFromString<ConflictSnapshot>(ops.single { it.opType == OutboxOpType.UPDATE }.baseSnapshotJson!!)
+        val stopBase = Json.decodeFromString<ConflictSnapshot>(
+            ops.single { it.opType == OutboxOpType.STOP }.baseSnapshotJson!!,
+        )
+        val updateBase = Json.decodeFromString<ConflictSnapshot>(
+            ops.single { it.opType == OutboxOpType.UPDATE }.baseSnapshotJson!!,
+        )
         assertEquals(stopBase, updateBase)
         assertEquals("pre-stop text", updateBase.description)
         assertNull(updateBase.endMs)
@@ -499,7 +503,15 @@ class TimeEntryRepositoryWriteTest {
                 createdAtMs = 2L,
                 payloadJson = "{}",
                 baseSnapshotJson = testJson.encodeToString(
-                    ConflictSnapshot.of(base.start, base.end, base.description, base.projectId, base.taskId, base.billable, emptyList()),
+                    ConflictSnapshot.of(
+                        base.start,
+                        base.end,
+                        base.description,
+                        base.projectId,
+                        base.taskId,
+                        base.billable,
+                        emptyList(),
+                    ),
                 ),
             ),
         )
@@ -603,7 +615,9 @@ class TimeEntryRepositoryWriteTest {
         )
         val server = local.copy(description = "server")
         val json = Json { encodeDefaults = true }
-        db.timeEntryDao().upsert(local.toEntity(2L, SyncState.CONFLICT).copy(conflictServerJson = json.encodeToString(server)))
+        db.timeEntryDao().upsert(
+            local.toEntity(2L, SyncState.CONFLICT).copy(conflictServerJson = json.encodeToString(server)),
+        )
 
         assertTrue(repo.resolveKeepTheirs(local.id))
 

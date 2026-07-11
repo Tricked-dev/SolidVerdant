@@ -182,6 +182,7 @@ object StatisticsAggregator {
      * still counts and attributes to the correct project/day. The returned per-day seconds sum to
      * the entry's total in-range contribution.
      */
+    @Suppress("ReturnCount")
     private fun clippedDailyBreakdown(
         e: TimeEntry,
         zone: ZoneId,
@@ -253,10 +254,12 @@ object StatisticsAggregator {
                     val week = ws.get(wf.weekOfWeekBasedYear())
                     // Include the (week-based) year so labels don't collide across year
                     // boundaries, e.g. W52 of 2025 vs W52 of 2026 in a multi-year range.
-                    val yy = ws.get(wf.weekBasedYear()) % 100
+                    val yy = ws.get(wf.weekBasedYear()) % PERCENT_YEAR_BASE
                     TrendBucket("W$week '%02d".format(yy), ws, byWeekStart[ws] ?: 0L)
                 }
                 .toList()
         }
     }
 }
+
+private const val PERCENT_YEAR_BASE = 100

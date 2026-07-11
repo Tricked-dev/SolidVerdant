@@ -16,16 +16,18 @@ import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.AuthRepository
 import javax.inject.Inject
 
+data class TimeEntriesQuery(
+    val organizationId: String,
+    val memberId: String,
+    val limit: Int,
+    val offset: Int,
+    val onlyFullDates: Boolean,
+    val start: String? = null,
+    val end: String? = null,
+)
+
 interface RemoteDataSource {
-    suspend fun getTimeEntries(
-        organizationId: String,
-        memberId: String,
-        limit: Int,
-        offset: Int,
-        onlyFullDates: Boolean,
-        start: String? = null,
-        end: String? = null,
-    ): Result<TimeEntriesResponse>
+    suspend fun getTimeEntries(query: TimeEntriesQuery): Result<TimeEntriesResponse>
     suspend fun getProjects(organizationId: String): Result<List<Project>>
     suspend fun getClients(organizationId: String): Result<List<Client>>
     suspend fun getTasks(organizationId: String): Result<List<Task>>
@@ -63,15 +65,15 @@ interface RemoteDataSource {
 }
 
 class AuthRemoteDataSource @Inject constructor(private val authRepository: AuthRepository) : RemoteDataSource {
-    override suspend fun getTimeEntries(
-        organizationId: String,
-        memberId: String,
-        limit: Int,
-        offset: Int,
-        onlyFullDates: Boolean,
-        start: String?,
-        end: String?,
-    ) = authRepository.getTimeEntries(organizationId, memberId, limit, offset, onlyFullDates, start, end)
+    override suspend fun getTimeEntries(query: TimeEntriesQuery) = authRepository.getTimeEntries(
+        query.organizationId,
+        query.memberId,
+        query.limit,
+        query.offset,
+        query.onlyFullDates,
+        query.start,
+        query.end,
+    )
     override suspend fun getProjects(organizationId: String) = authRepository.getProjects(organizationId)
     override suspend fun getClients(organizationId: String) = authRepository.getClients(organizationId)
     override suspend fun getTasks(organizationId: String) = authRepository.getTasks(organizationId)

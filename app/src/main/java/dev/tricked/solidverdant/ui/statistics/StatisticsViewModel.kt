@@ -40,6 +40,9 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
+private const val REMOTE_PAGE_SIZE = 500
+private const val UI_STATE_STOP_TIMEOUT_MS = 5_000L
+
 data class StatisticsUiState(
     val isLoading: Boolean = true,
     val range: StatRange = StatRange.ThisWeek,
@@ -134,7 +137,7 @@ class StatisticsViewModel @Inject constructor(
         val entries = mutableListOf<TimeEntry>()
         val start = range.start.atStartOfDay(zone).toInstant().toString()
         val end = range.endInclusive.plusDays(1).atStartOfDay(zone).toInstant().toString()
-        val pageSize = 500
+        val pageSize = REMOTE_PAGE_SIZE
         var offset = 0
         while (true) {
             val page = authRepository.getTimeEntries(
@@ -277,7 +280,7 @@ class StatisticsViewModel @Inject constructor(
             }
         }.stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
+            started = SharingStarted.WhileSubscribed(UI_STATE_STOP_TIMEOUT_MS),
             initialValue = StatisticsUiState(),
         )
 

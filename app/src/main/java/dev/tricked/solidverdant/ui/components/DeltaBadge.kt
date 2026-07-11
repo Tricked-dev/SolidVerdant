@@ -27,9 +27,6 @@ import dev.tricked.solidverdant.ui.theme.negative
 import dev.tricked.solidverdant.ui.theme.neutral
 import dev.tricked.solidverdant.ui.theme.positive
 
-/** Direction of a delta, driving the [DeltaBadge] colour and arrow. */
-enum class DeltaDirection { UP, DOWN, NEUTRAL }
-
 /**
  * Up/down/neutral delta indicator. Renders an arrow icon plus a preformatted
  * [text] (e.g. "+2h 05m . +25%"), coloured via the semantic
@@ -79,7 +76,7 @@ fun DeltaBadge(sign: Int, text: String, modifier: Modifier = Modifier) {
 
 @Preview
 @Composable
-private fun DeltaBadgePreview() {
+fun DeltaBadgePreview() {
     SolidVerdantTheme {
         DeltaBadge(direction = DeltaDirection.UP, text = "+2h 05m · +25%")
     }

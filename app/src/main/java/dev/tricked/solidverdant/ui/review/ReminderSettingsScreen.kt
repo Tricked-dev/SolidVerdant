@@ -70,7 +70,7 @@ fun ReminderSettingsScreen(onBack: () -> Unit = {}) {
     var showTimePicker by remember { mutableStateOf(false) }
 
     val timeLabel = remember(state.minuteOfDay) {
-        LocalTime.of(state.minuteOfDay / 60, state.minuteOfDay % 60)
+        LocalTime.of(state.minuteOfDay / MINUTES_PER_HOUR, state.minuteOfDay % MINUTES_PER_HOUR)
             .format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))
     }
 
@@ -169,6 +169,8 @@ fun ReminderSettingsScreen(onBack: () -> Unit = {}) {
         )
     }
 }
+
+private const val MINUTES_PER_HOUR = 60
 
 @Composable
 private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {

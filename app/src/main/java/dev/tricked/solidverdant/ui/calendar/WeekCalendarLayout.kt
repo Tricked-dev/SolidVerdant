@@ -19,6 +19,9 @@ import java.time.format.DateTimeFormatter
 
 /** Seconds in a 24h day. All timed layout fractions are expressed relative to this. */
 const val SECONDS_PER_DAY: Long = 86_400L
+private const val HOURS_PER_DAY = 24
+private const val DAYS_PER_WEEK = 7
+private const val MILLIS_PER_SECOND = 1000L
 
 /** Minimum visible height for a timed block so a very short event stays perceivable. */
 const val MIN_BLOCK_HEIGHT_FRACTION: Float = 0.012f
@@ -37,7 +40,7 @@ val CalendarHourHeight = 48.dp
 val CalendarGutterWidth = 48.dp
 
 /** Full height of a 24h day column. */
-val CalendarTotalHeight = CalendarHourHeight * 24
+val CalendarTotalHeight = CalendarHourHeight * HOURS_PER_DAY
 
 /**
  * Vertical placement of a tracked [entry] within [day], as `topFraction to heightFraction` of a
@@ -97,7 +100,7 @@ data class TrackedEntryBlock(
  * Mirrors the lead-day math used by the month grid so both views agree on week boundaries.
  */
 fun weekStartDate(reference: LocalDate, weekStart: DayOfWeek): LocalDate {
-    val diff = ((reference.dayOfWeek.value - weekStart.value) + 7) % 7
+    val diff = ((reference.dayOfWeek.value - weekStart.value) + DAYS_PER_WEEK) % DAYS_PER_WEEK
     return reference.minusDays(diff.toLong())
 }
 
@@ -110,7 +113,7 @@ fun weekStartDate(reference: LocalDate, weekStart: DayOfWeek): LocalDate {
  */
 fun visibleCalendarDays(anchor: LocalDate, weekStart: DayOfWeek, dayCount: Int): List<LocalDate> {
     val safeCount = dayCount.coerceAtLeast(1)
-    val start = if (safeCount >= 7) weekStartDate(anchor, weekStart) else anchor
+    val start = if (safeCount >= DAYS_PER_WEEK) weekStartDate(anchor, weekStart) else anchor
     return (0 until safeCount).map { start.plusDays(it.toLong()) }
 }
 
@@ -121,8 +124,8 @@ fun visibleCalendarDays(anchor: LocalDate, weekStart: DayOfWeek, dayCount: Int):
  */
 fun pageAnchor(anchor: LocalDate, weekStart: DayOfWeek, dayCount: Int, direction: Int): LocalDate {
     val safeCount = dayCount.coerceAtLeast(1)
-    val step = if (safeCount >= 7) 7 else safeCount
-    val base = if (safeCount >= 7) weekStartDate(anchor, weekStart) else anchor
+    val step = if (safeCount >= DAYS_PER_WEEK) DAYS_PER_WEEK else safeCount
+    val base = if (safeCount >= DAYS_PER_WEEK) weekStartDate(anchor, weekStart) else anchor
     return base.plusDays((step.toLong() * direction))
 }
 
@@ -136,8 +139,8 @@ fun clampToDaySeconds(startMs: Long, endMs: Long, day: LocalDate, zone: ZoneId):
     val s = maxOf(startMs, dayStartMs)
     val e = minOf(endMs, dayEndMs)
     if (e <= s) return null
-    val startSec = ((s - dayStartMs) / 1000L).coerceIn(0L, SECONDS_PER_DAY)
-    val endSec = ((e - dayStartMs) / 1000L).coerceIn(0L, SECONDS_PER_DAY)
+    val startSec = ((s - dayStartMs) / MILLIS_PER_SECOND).coerceIn(0L, SECONDS_PER_DAY)
+    val endSec = ((e - dayStartMs) / MILLIS_PER_SECOND).coerceIn(0L, SECONDS_PER_DAY)
     if (endSec <= startSec) return null
     return startSec to endSec
 }

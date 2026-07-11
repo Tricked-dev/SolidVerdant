@@ -27,6 +27,7 @@ import javax.inject.Singleton
 object DatabaseModule {
     @Provides
     @Singleton
+    @Suppress("SpreadOperator")
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, "solidverdant.db")
             // No destructive fallback: unsynced outbox operations and pending local edits must

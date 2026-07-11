@@ -53,6 +53,8 @@ data class ConflictSnapshot(
          */
         const val DELETED_MARKER = "DELETED"
 
+        // These fields are intentionally independent: they are the canonical conflict contract.
+        @Suppress("LongParameterList")
         fun of(
             start: String?,
             end: String?,
@@ -78,7 +80,9 @@ data class ConflictSnapshot(
         }
 
         // The Instant.parse fallback is belt-and-suspenders; realistic inputs all parse as OffsetDateTime.
-        private fun parseToEpochMs(raw: String): Long? = runCatching { OffsetDateTime.parse(raw).toInstant().toEpochMilli() }
+        private fun parseToEpochMs(raw: String): Long? = runCatching {
+            OffsetDateTime.parse(raw).toInstant().toEpochMilli()
+        }
             .recoverCatching { Instant.parse(raw).toEpochMilli() }
             .getOrNull()
     }

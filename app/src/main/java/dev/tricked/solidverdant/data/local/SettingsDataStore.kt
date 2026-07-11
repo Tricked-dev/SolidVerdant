@@ -94,6 +94,11 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
 
         /** Default reminder time: 17:00 local, expressed as minutes since midnight. */
         const val DEFAULT_REMINDER_MINUTE_OF_DAY: Int = 17 * 60
+        const val DEFAULT_LONG_TIMER_HOURS = 4
+        const val MIN_LONG_TIMER_HOURS = 1
+        const val MAX_LONG_TIMER_HOURS = 24
+        const val MINUTE_OF_DAY_START = 0
+        const val MAX_MINUTE_OF_DAY = 1439
 
         @Volatile
         private var instance: SettingsDataStore? = null
@@ -214,7 +219,7 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         preferences[OPTIMISTIC_REFRESH] ?: true
     }.distinctUntilChanged()
 
-    val longTimerHours: Flow<Int> = dataStore.data.map { it[LONG_TIMER_HOURS] ?: 4 }.distinctUntilChanged()
+    val longTimerHours: Flow<Int> = dataStore.data.map { it[LONG_TIMER_HOURS] ?: DEFAULT_LONG_TIMER_HOURS }.distinctUntilChanged()
 
     /**
      * Deadline (epoch millis) at which the forgotten-timer warning should next fire, plus the
@@ -267,7 +272,7 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     }
 
     suspend fun setLongTimerHours(hours: Int) {
-        require(hours in 1..24)
+        require(hours in MIN_LONG_TIMER_HOURS..MAX_LONG_TIMER_HOURS)
         dataStore.edit { it[LONG_TIMER_HOURS] = hours }
     }
 
@@ -303,7 +308,7 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     }
 
     suspend fun setReminderMinuteOfDay(minuteOfDay: Int) {
-        require(minuteOfDay in 0..1439)
+        require(minuteOfDay in MINUTE_OF_DAY_START..MAX_MINUTE_OF_DAY)
         dataStore.edit { it[REMINDER_MINUTE_OF_DAY] = minuteOfDay }
     }
 

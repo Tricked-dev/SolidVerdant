@@ -202,7 +202,7 @@ fun EditTimeEntryDialog(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         FilledTonalIconButton(
-                            onClick = { setDuration((durationMinutes.toLongOrNull() ?: 1) - 15) },
+                            onClick = { setDuration((durationMinutes.toLongOrNull() ?: MINIMUM_DURATION_MINUTES) - DURATION_STEP_MINUTES) },
                             modifier = Modifier.size(48.dp),
                         ) {
                             Icon(
@@ -215,7 +215,9 @@ fun EditTimeEntryDialog(
                             onValueChange = { value ->
                                 if (value.all(Char::isDigit)) {
                                     durationMinutes = value
-                                    value.toLongOrNull()?.takeIf { it > 0 }?.let { endTime = startTime.plusMinutes(it) }
+                                    value.toLongOrNull()
+                                        ?.takeIf { it >= MINIMUM_DURATION_MINUTES }
+                                        ?.let { endTime = startTime.plusMinutes(it) }
                                 }
                             },
                             label = { Text(stringResource(R.string.minutes)) },
@@ -227,7 +229,7 @@ fun EditTimeEntryDialog(
                             shape = RoundedCornerShape(12.dp),
                         )
                         FilledTonalIconButton(
-                            onClick = { setDuration((durationMinutes.toLongOrNull() ?: 0) + 15) },
+                            onClick = { setDuration((durationMinutes.toLongOrNull() ?: 0) + DURATION_STEP_MINUTES) },
                             modifier = Modifier.size(48.dp),
                         ) {
                             Icon(
@@ -336,7 +338,7 @@ fun EditTimeEntryDialog(
             contentAlignment = Alignment.BottomCenter,
         ) {
             Surface(
-                modifier = Modifier.fillMaxWidth().fillMaxHeight(0.9f),
+                modifier = Modifier.fillMaxWidth().fillMaxHeight(SHEET_HEIGHT_FRACTION),
                 shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
                 color = MaterialTheme.colorScheme.surface,
             ) {
@@ -411,11 +413,16 @@ private fun EntryTimePickerDialog(title: String, initial: ZonedDateTime, onDismi
 }
 
 private fun formatEditableDuration(minutes: Long): String {
-    val hours = minutes / 60
-    val remainingMinutes = minutes % 60
+    val hours = minutes / MINUTES_PER_HOUR
+    val remainingMinutes = minutes % MINUTES_PER_HOUR
     return when {
         hours > 0 && remainingMinutes > 0 -> "${hours}h ${remainingMinutes}m"
         hours > 0 -> "${hours}h"
         else -> "${remainingMinutes}m"
     }
 }
+
+private const val DURATION_STEP_MINUTES = 15L
+private const val MINIMUM_DURATION_MINUTES = 1L
+private const val MINUTES_PER_HOUR = 60L
+private const val SHEET_HEIGHT_FRACTION = 0.9f

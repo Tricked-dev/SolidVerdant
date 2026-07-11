@@ -48,7 +48,7 @@ class ReminderSettingsViewModel @Inject constructor(private val settings: Settin
             endOfDayReviewEnabled = review,
             minuteOfDay = minute,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), State())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STATE_STOP_TIMEOUT_MS), State())
 
     fun setReminderEnabled(enabled: Boolean) = viewModelScope.launch {
         settings.setReminderEnabled(enabled)
@@ -61,8 +61,13 @@ class ReminderSettingsViewModel @Inject constructor(private val settings: Settin
     }
 
     fun setReminderTime(hour: Int, minute: Int) = viewModelScope.launch {
-        val minuteOfDay = (hour * 60 + minute).coerceIn(0, 1439)
+        val minuteOfDay = (hour * MINUTES_PER_HOUR + minute).coerceIn(MINUTE_OF_DAY_START, MAX_MINUTE_OF_DAY)
         settings.setReminderMinuteOfDay(minuteOfDay)
         scheduler.reschedule()
     }
 }
+
+private const val STATE_STOP_TIMEOUT_MS = 5_000L
+private const val MINUTES_PER_HOUR = 60
+private const val MINUTE_OF_DAY_START = 0
+private const val MAX_MINUTE_OF_DAY = 1439

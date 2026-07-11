@@ -85,7 +85,7 @@ fun SyncChip(status: EntrySyncStatus, modifier: Modifier = Modifier, showLabel: 
 
 @Preview
 @Composable
-private fun SyncChipPreview() {
+fun SyncChipPreview() {
     SolidVerdantTheme {
         SyncChip(status = EntrySyncStatus.FAILED)
     }

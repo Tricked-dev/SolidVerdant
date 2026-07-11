@@ -12,6 +12,12 @@ import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
+private const val DATABASE_VERSION_1 = 1
+private const val DATABASE_VERSION_2 = 2
+private const val DATABASE_VERSION_3 = 3
+private const val DATABASE_VERSION_4 = 4
+private const val DATABASE_VERSION_5 = 5
+
 @Database(
     entities = [
         TimeEntryEntity::class,
@@ -27,7 +33,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TemplateEntity::class,
         InboxDismissalEntity::class,
     ],
-    version = 5,
+    version = DATABASE_VERSION_5,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -45,7 +51,7 @@ abstract class AppDatabase : RoomDatabase() {
          * between these versions, so the migration is a single CREATE TABLE + its index, matching
          * the Room-generated schema for [ClientEntity].
          */
-        val MIGRATION_1_2 = object : Migration(1, 2) {
+        val MIGRATION_1_2 = object : Migration(DATABASE_VERSION_1, DATABASE_VERSION_2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `clients` (" +
@@ -66,7 +72,7 @@ abstract class AppDatabase : RoomDatabase() {
          *  - `deadLettered`: terminal dead-letter flag for permanently failed operations.
          * Existing rows keep an empty key and a non-dead-lettered state.
          */
-        val MIGRATION_2_3 = object : Migration(2, 3) {
+        val MIGRATION_2_3 = object : Migration(DATABASE_VERSION_2, DATABASE_VERSION_3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `outbox` ADD COLUMN `clientId` TEXT NOT NULL DEFAULT ''")
                 db.execSQL("ALTER TABLE `outbox` ADD COLUMN `deadLettered` INTEGER NOT NULL DEFAULT 0")
@@ -78,7 +84,7 @@ abstract class AppDatabase : RoomDatabase() {
          * `organizationId` indices, matching the Room-generated schema for [TemplateEntity] and
          * [InboxDismissalEntity]. No existing table changes, so no data migration is required.
          */
-        val MIGRATION_3_4 = object : Migration(3, 4) {
+        val MIGRATION_3_4 = object : Migration(DATABASE_VERSION_3, DATABASE_VERSION_4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `entry_templates` (" +
@@ -113,7 +119,7 @@ abstract class AppDatabase : RoomDatabase() {
          * stored as its name via [Converters], same as the existing enum values, so no column-type
          * change is needed for `syncState` itself.
          */
-        val MIGRATION_4_5 = object : Migration(4, 5) {
+        val MIGRATION_4_5 = object : Migration(DATABASE_VERSION_4, DATABASE_VERSION_5) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `outbox` ADD COLUMN `baseSnapshotJson` TEXT")
                 db.execSQL("ALTER TABLE `time_entries` ADD COLUMN `conflictServerJson` TEXT")

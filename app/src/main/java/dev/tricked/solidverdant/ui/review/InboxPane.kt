@@ -77,6 +77,13 @@ import java.time.format.DateTimeFormatter
  */
 private data class InboxEditTarget(val entry: TimeEntry, val isGap: Boolean)
 
+internal data class InboxIssueCardActions(
+    val onQuickFix: () -> Unit,
+    val onDismiss: () -> Unit,
+    val onKeepMine: () -> Unit = {},
+    val onKeepTheirs: () -> Unit = {},
+)
+
 @Composable
 fun InboxPane() {
     val viewModel: InboxViewModel = hiltViewModel()
@@ -142,29 +149,30 @@ fun InboxPane() {
                                 preventOverlap = state.preventOverlap,
                                 projectsById = projectsById,
                                 zone = zone,
-                                onQuickFix = {
-                                    editTarget = when (issue.type) {
-                                        InboxIssueType.CONFLICT -> null
-                                        InboxIssueType.GAP -> {
-                                            val entry = viewModel.blankEntryFor(
-                                                startIso = isoOf(issue.startMs, zone),
-                                                endIso = isoOf(issue.endMs, zone),
-                                            )
-                                            entry?.let { InboxEditTarget(it, isGap = true) }
+                                actions = InboxIssueCardActions(
+                                    onQuickFix = {
+                                        editTarget = when (issue.type) {
+                                            InboxIssueType.CONFLICT -> null
+                                            InboxIssueType.GAP -> {
+                                                val entry = viewModel.blankEntryFor(
+                                                    startIso = isoOf(issue.startMs, zone),
+                                                    endIso = isoOf(issue.endMs, zone),
+                                                )
+                                                entry?.let { InboxEditTarget(it, isGap = true) }
+                                            }
+                                            else -> issue.primaryEntry?.let { InboxEditTarget(it, isGap = false) }
                                         }
-                                        else -> issue.primaryEntry?.let { InboxEditTarget(it, isGap = false) }
-                                    }
-                                },
-                                onDismiss = { viewModel.dismiss(issue) },
-                                onKeepMine = { viewModel.keepMine(issue) },
-                                onKeepTheirs = { viewModel.keepTheirs(issue) },
+                                    },
+                                    onDismiss = { viewModel.dismiss(issue) },
+                                    onKeepMine = { viewModel.keepMine(issue) },
+                                    onKeepTheirs = { viewModel.keepTheirs(issue) },
+                                ),
                             )
                         }
                         if (issue.type == InboxIssueType.CONFLICT) {
                             card()
                         } else {
                             DismissibleIssue(
-                                issue = issue,
                                 onDismiss = { viewModel.dismiss(issue) },
                                 content = card,
                             )
@@ -314,7 +322,7 @@ private fun CenteredMessage(icon: ImageVector, title: String, body: String, tint
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DismissibleIssue(issue: InboxIssue, onDismiss: () -> Unit, content: @Composable () -> Unit) {
+private fun DismissibleIssue(onDismiss: () -> Unit, content: @Composable () -> Unit) {
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             if (value != SwipeToDismissBoxValue.Settled) {
@@ -348,25 +356,42 @@ internal fun InboxIssueCard(
     preventOverlap: Boolean,
     projectsById: Map<String, Project>,
     zone: ZoneId,
-    onQuickFix: () -> Unit,
-    onDismiss: () -> Unit,
-    onKeepMine: () -> Unit = {},
-    onKeepTheirs: () -> Unit = {},
+    actions: InboxIssueCardActions,
 ) {
     if (issue.type == InboxIssueType.CONFLICT) {
         ConflictIssueCard(
             issue = issue,
             projectsById = projectsById,
-            onKeepMine = onKeepMine,
-            onKeepTheirs = onKeepTheirs,
+            onKeepMine = actions.onKeepMine,
+            onKeepTheirs = actions.onKeepTheirs,
         )
-        return
+    } else {
+        InboxIssueContent(
+            issue = issue,
+            preventOverlap = preventOverlap,
+            projectsById = projectsById,
+            zone = zone,
+            onQuickFix = actions.onQuickFix,
+            onDismiss = actions.onDismiss,
+        )
     }
+}
+
+@Composable
+@Suppress("LongMethod")
+private fun InboxIssueContent(
+    issue: InboxIssue,
+    preventOverlap: Boolean,
+    projectsById: Map<String, Project>,
+    zone: ZoneId,
+    onQuickFix: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     val title: String
     val body: String
     val actionLabel: String
     when (issue.type) {
-        InboxIssueType.CONFLICT -> return
+        InboxIssueType.CONFLICT -> error("Conflict issues are rendered by ConflictIssueCard")
         InboxIssueType.OVERLAP -> {
             title = stringResource(R.string.inbox_issue_overlap_title)
             body = if (preventOverlap) {
@@ -393,12 +418,7 @@ internal fun InboxIssueCard(
         }
     }
 
-    val subject = when (issue.type) {
-        InboxIssueType.CONFLICT -> null
-        InboxIssueType.GAP -> null
-        InboxIssueType.OVERLAP -> issue.primaryEntry?.let { entrySubject(it, projectsById) }
-        else -> issue.primaryEntry?.let { entrySubject(it, projectsById) }
-    }
+    val subject = issue.primaryEntry?.let { entrySubject(it, projectsById) }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -524,15 +544,18 @@ private fun timeRangeText(startMs: Long, endMs: Long, zone: ZoneId): String {
 
 @Composable
 private fun durationText(durationMs: Long): String {
-    val totalMinutes = (durationMs / 60000L).coerceAtLeast(0)
-    val hours = totalMinutes / 60
-    val minutes = totalMinutes % 60
+    val totalMinutes = (durationMs / MILLIS_PER_MINUTE).coerceAtLeast(0)
+    val hours = totalMinutes / MINUTES_PER_HOUR
+    val minutes = totalMinutes % MINUTES_PER_HOUR
     return when {
         hours > 0 && minutes > 0 -> stringResource(R.string.inbox_duration_hm, hours, minutes)
         hours > 0 -> stringResource(R.string.inbox_duration_h, hours)
         else -> stringResource(R.string.inbox_duration_m, minutes)
     }
 }
+
+private const val MILLIS_PER_MINUTE = 60_000L
+private const val MINUTES_PER_HOUR = 60
 
 private fun isoOf(epochMs: Long, zone: ZoneId): String =
     OffsetDateTime.ofInstant(Instant.ofEpochMilli(epochMs), zone).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)

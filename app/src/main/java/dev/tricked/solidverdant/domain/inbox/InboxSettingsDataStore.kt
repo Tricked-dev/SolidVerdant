@@ -22,6 +22,11 @@ import java.time.DayOfWeek
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private const val MINUTE_OF_DAY_START = 0
+private const val MINUTE_OF_DAY_END = 1440
+private const val MIN_GAP_MINUTES = 1
+private const val MAX_GAP_MINUTES = 24 * 60
+
 private val Context.inboxDataStore: DataStore<Preferences> by preferencesDataStore(name = "inbox_settings")
 
 /**
@@ -43,9 +48,9 @@ class InboxSettingsDataStore @Inject constructor(@ApplicationContext private val
                 ?.mapNotNull { it.toIntOrNull()?.let(::dayOrNull) }
                 ?.toSet()
                 ?: DEFAULT.workDays,
-            workStartMinute = (prefs[WORK_START] ?: DEFAULT.workStartMinute).coerceIn(0, 1440),
-            workEndMinute = (prefs[WORK_END] ?: DEFAULT.workEndMinute).coerceIn(0, 1440),
-            minGapMinutes = (prefs[MIN_GAP] ?: DEFAULT.minGapMinutes).coerceIn(1, 24 * 60),
+            workStartMinute = (prefs[WORK_START] ?: DEFAULT.workStartMinute).coerceIn(MINUTE_OF_DAY_START, MINUTE_OF_DAY_END),
+            workEndMinute = (prefs[WORK_END] ?: DEFAULT.workEndMinute).coerceIn(MINUTE_OF_DAY_START, MINUTE_OF_DAY_END),
+            minGapMinutes = (prefs[MIN_GAP] ?: DEFAULT.minGapMinutes).coerceIn(MIN_GAP_MINUTES, MAX_GAP_MINUTES),
             checkGaps = prefs[CHECK_GAPS] ?: DEFAULT.checkGaps,
             checkOverlaps = prefs[CHECK_OVERLAPS] ?: DEFAULT.checkOverlaps,
             checkMissingProject = prefs[CHECK_MISSING_PROJECT] ?: DEFAULT.checkMissingProject,
@@ -61,7 +66,7 @@ class InboxSettingsDataStore @Inject constructor(@ApplicationContext private val
     }
 
     suspend fun setWorkWindow(startMinute: Int, endMinute: Int) {
-        require(startMinute in 0..1440 && endMinute in 0..1440)
+        require(startMinute in MINUTE_OF_DAY_START..MINUTE_OF_DAY_END && endMinute in MINUTE_OF_DAY_START..MINUTE_OF_DAY_END)
         dataStore.edit {
             it[WORK_START] = startMinute
             it[WORK_END] = endMinute
@@ -69,7 +74,7 @@ class InboxSettingsDataStore @Inject constructor(@ApplicationContext private val
     }
 
     suspend fun setMinGapMinutes(minutes: Int) {
-        require(minutes in 1..24 * 60)
+        require(minutes in MIN_GAP_MINUTES..MAX_GAP_MINUTES)
         dataStore.edit { it[MIN_GAP] = minutes }
     }
 

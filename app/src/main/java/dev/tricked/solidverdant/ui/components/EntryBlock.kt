@@ -108,10 +108,10 @@ fun EntryBlock(
 
 @Preview
 @Composable
-private fun EntryBlockPreview() {
+fun EntryBlockPreview() {
     SolidVerdantTheme {
         EntryBlock(
-            color = Color(0xFF386A20),
+            color = MaterialTheme.colorScheme.primary,
             title = "Design review",
             subtitle = "Acme - UI kit",
             time = "1h 05m",

@@ -156,28 +156,29 @@ interface TimeEntryDao {
     )
 
     private fun sameServerSnapshot(existingJson: String?, entity: TimeEntryEntity, tagIds: List<String>): Boolean {
-        val existing = existingJson ?: return false
-        val previous = runCatching { conflictJson.decodeFromString<TimeEntry>(existing) }.getOrNull()
-            ?: return false
-        return ConflictSnapshot.of(
-            previous.start,
-            previous.end,
-            previous.description,
-            previous.projectId,
-            previous.taskId,
-            previous.billable,
-            previous.tags.map { it.id },
-        ).matches(
+        val previous = existingJson
+            ?.let { runCatching { conflictJson.decodeFromString<TimeEntry>(it) }.getOrNull() }
+        return previous?.let {
             ConflictSnapshot.of(
-                entity.start,
-                entity.end,
-                entity.description,
-                entity.projectId,
-                entity.taskId,
-                entity.billable,
-                tagIds,
-            ),
-        )
+                it.start,
+                it.end,
+                it.description,
+                it.projectId,
+                it.taskId,
+                it.billable,
+                it.tags.map { tag -> tag.id },
+            ).matches(
+                ConflictSnapshot.of(
+                    entity.start,
+                    entity.end,
+                    entity.description,
+                    entity.projectId,
+                    entity.taskId,
+                    entity.billable,
+                    tagIds,
+                ),
+            )
+        } ?: false
     }
 
     /**

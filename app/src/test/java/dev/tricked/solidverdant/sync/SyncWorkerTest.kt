@@ -261,7 +261,15 @@ class SyncWorkerTest {
                     ),
                 ),
                 baseSnapshotJson = json.encodeToString(
-                    ConflictSnapshot.of(base.start, base.end, base.description, base.projectId, base.taskId, base.billable, emptyList()),
+                    ConflictSnapshot.of(
+                        base.start,
+                        base.end,
+                        base.description,
+                        base.projectId,
+                        base.taskId,
+                        base.billable,
+                        emptyList(),
+                    ),
                 ),
             ),
         )
@@ -306,7 +314,15 @@ class SyncWorkerTest {
                     ),
                 ),
                 baseSnapshotJson = json.encodeToString(
-                    ConflictSnapshot.of(base.start, base.end, base.description, base.projectId, base.taskId, base.billable, emptyList()),
+                    ConflictSnapshot.of(
+                        base.start,
+                        base.end,
+                        base.description,
+                        base.projectId,
+                        base.taskId,
+                        base.billable,
+                        emptyList(),
+                    ),
                 ),
             ),
         )

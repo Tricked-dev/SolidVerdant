@@ -48,6 +48,15 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
+private const val RATE_LIMIT_RETRY_ATTEMPTS = 3
+private const val HTTP_TOO_MANY_REQUESTS = 429
+private const val MIN_RETRY_AFTER_SECONDS = 1
+private const val MAX_RETRY_AFTER_SECONDS = 60
+private const val DEFAULT_RETRY_AFTER_SECONDS = 5
+private const val MILLIS_PER_SECOND = 1_000L
+private const val TIMER_TICK_INTERVAL_MS = 1_000L
+private const val HISTORY_PROGRESS_CAP = 0.9f
+
 /** Which slice of history the user is currently looking at. */
 internal enum class HistoryWindowMode { RECENT, PAGINATED }
 
@@ -117,6 +126,7 @@ data class TrackingUiState(
  * ViewModel for time tracking operations
  */
 @HiltViewModel
+@Suppress("LargeClass")
 class TrackingViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val settingsDataStore: SettingsDataStore,
@@ -637,6 +647,7 @@ class TrackingViewModel @Inject constructor(
         }
     }
 
+    @Suppress("LongMethod", "LoopWithTooManyJumpStatements")
     fun jumpToHistoryDate(date: LocalDate) {
         val organizationId = historyOrganizationId ?: return
         val memberId = historyMemberId ?: return
@@ -708,7 +719,7 @@ class TrackingViewModel @Inject constructor(
                 completedProbes++
                 _uiState.value = _uiState.value.copy(
                     historyJumpProgress = (completedProbes.toFloat() / (expectedProbes + 1))
-                        .coerceAtMost(0.9f),
+                        .coerceAtMost(HISTORY_PROGRESS_CAP),
                 )
                 matchOffset = middle
                 when {
@@ -802,14 +813,15 @@ class TrackingViewModel @Inject constructor(
         limit: Int,
         offset: Int,
     ): Result<dev.tricked.solidverdant.data.model.TimeEntriesResponse> {
-        repeat(3) {
+        repeat(RATE_LIMIT_RETRY_ATTEMPTS) {
             val result = authRepository.getTimeEntries(organizationId, memberId, limit, offset)
             val error = result.exceptionOrNull()
-            if (error !is retrofit2.HttpException || error.code() != 429) return result
+            if (error !is retrofit2.HttpException || error.code() != HTTP_TOO_MANY_REQUESTS) return result
             val waitSeconds = error.response()?.headers()?.get("Retry-After")
-                ?.toIntOrNull()?.coerceIn(1, 60) ?: 5
+                ?.toIntOrNull()?.coerceIn(MIN_RETRY_AFTER_SECONDS, MAX_RETRY_AFTER_SECONDS)
+                ?: DEFAULT_RETRY_AFTER_SECONDS
             _uiState.value = _uiState.value.copy(historyRateLimitWaitSeconds = waitSeconds)
-            delay(waitSeconds * 1_000L)
+            delay(waitSeconds * MILLIS_PER_SECOND)
             _uiState.value = _uiState.value.copy(historyRateLimitWaitSeconds = null)
         }
         return Result.failure(IllegalStateException("Rate limit retry exhausted"))
@@ -834,7 +846,7 @@ class TrackingViewModel @Inject constructor(
                     // negative elapsed value and render as garbage (e.g. "-1:-5:-3").
                     val elapsed = (now.epochSecond - startInstant.epochSecond).coerceAtLeast(0)
                     _elapsedSeconds.value = elapsed
-                    delay(1000) // Update every second
+                    delay(TIMER_TICK_INTERVAL_MS) // Update every second
                 }
             } catch (e: CancellationException) {
                 // Expected when timer is stopped, don't log as error
@@ -942,7 +954,7 @@ class TrackingViewModel @Inject constructor(
     /**
      * Update the current active time entry
      */
-    fun updateCurrentTimeEntry(organizationId: String, timeEntry: TimeEntry? = null, tags: List<String>? = null) {
+    fun updateCurrentTimeEntry(timeEntry: TimeEntry? = null, tags: List<String>? = null) {
         val entryToUpdate = timeEntry ?: _uiState.value.currentTimeEntry
         if (entryToUpdate == null) {
             Timber.w("No active time entry to update")
@@ -996,7 +1008,7 @@ class TrackingViewModel @Inject constructor(
     /**
      * Stop the active time entry
      */
-    fun stopTimeEntry(organizationId: String, memberId: String, userId: String) {
+    fun stopTimeEntry(userId: String) {
         val currentEntry = _uiState.value.currentTimeEntry
 
         // If paused, the entry is already stopped - just clear the paused state
@@ -1059,7 +1071,7 @@ class TrackingViewModel @Inject constructor(
      * Pause the active time entry - stops it via API but keeps notification in paused state
      * preserving the project/task/description for easy resume
      */
-    fun pauseTimeEntry(organizationId: String, userId: String) {
+    fun pauseTimeEntry(userId: String) {
         val currentEntry = _uiState.value.currentTimeEntry
         if (currentEntry == null) {
             Timber.w("No active time entry to pause")
@@ -1192,7 +1204,6 @@ class TrackingViewModel @Inject constructor(
      * Update a past time entry
      */
     fun updatePastTimeEntry(
-        organizationId: String,
         timeEntry: TimeEntry,
         description: String?,
         projectId: String?,
@@ -1233,7 +1244,7 @@ class TrackingViewModel @Inject constructor(
      * deferred behind the undo window in [pendingDeleteCommitJobs] and only runs if [undoDelete]
      * doesn't cancel it first.
      */
-    fun deleteTimeEntry(organizationId: String, timeEntryId: String) {
+    fun deleteTimeEntry(timeEntryId: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 

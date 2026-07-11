@@ -19,8 +19,10 @@ import androidx.lifecycle.repeatOnLifecycle
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
+private const val HANDOFF_API_LEVEL = 37
+
 /** API 37 activity kept separate so older Android releases never link handoff classes. */
-@RequiresApi(37)
+@RequiresApi(HANDOFF_API_LEVEL)
 @AndroidEntryPoint
 class HandoffMainActivity : MainActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

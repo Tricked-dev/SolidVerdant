@@ -26,6 +26,7 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.time.Duration
 import java.time.Instant
+import java.util.Locale
 
 /**
  * Home screen widget for time tracking
@@ -49,7 +50,8 @@ class TimeTrackingWidget : AppWidgetProvider() {
                 val widgetState = settingsDataStore.widgetState.first()
 
                 Timber.d(
-                    "Widget state: isTracking=${widgetState.isTracking}, startTime=${widgetState.startTimeEpochMillis}, project=${widgetState.projectName}",
+                    "Widget state: isTracking=${widgetState.isTracking}, " +
+                        "startTime=${widgetState.startTimeEpochMillis}, project=${widgetState.projectName}",
                 )
 
                 // Update all widgets with current tracking state
@@ -218,7 +220,10 @@ class TimeTrackingWidget : AppWidgetProvider() {
         val pendingIntent = updatePendingIntent(context)
 
         val elapsedMs = System.currentTimeMillis() - startTimeMillis
-        val msUntilNextMinute = (60_000 - (elapsedMs % 60_000)).coerceIn(1_000L, 60_000L)
+        val msUntilNextMinute = (MILLIS_PER_MINUTE - (elapsedMs % MILLIS_PER_MINUTE)).coerceIn(
+            MIN_SCHEDULE_DELAY_MS,
+            MILLIS_PER_MINUTE,
+        )
         val triggerAt = SystemClock.elapsedRealtime() + msUntilNextMinute
 
         alarmManager.setAndAllowWhileIdle(
@@ -264,6 +269,9 @@ class TimeTrackingWidget : AppWidgetProvider() {
 
     companion object {
         private const val ALARM_ID = 12345
+        private const val MILLIS_PER_MINUTE = 60_000L
+        private const val MIN_SCHEDULE_DELAY_MS = 1_000L
+        private const val SECONDS_PER_MINUTE = 60L
 
         /**
          * Format elapsed tracking time as HH:MM (minute resolution).
@@ -277,7 +285,7 @@ class TimeTrackingWidget : AppWidgetProvider() {
                 Instant.ofEpochMilli(nowMillis),
             )
             val safe = if (duration.isNegative) Duration.ZERO else duration
-            return String.format("%02d:%02d", safe.toHours(), safe.toMinutes() % 60)
+            return String.format(Locale.ROOT, "%02d:%02d", safe.toHours(), safe.toMinutes() % SECONDS_PER_MINUTE)
         }
 
         /**

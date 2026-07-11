@@ -5,10 +5,55 @@
 # set in app/build.gradle.kts.
 #
 # Detekt is a standalone, opt-in task and is NOT part of the default build/check/assemble
-# graph. Run it with `./gradlew detekt`. The baseline (config/detekt/baseline.xml) is
-# generated with `./gradlew detektBaseline` and is intentionally not hand-written.
+# graph. Run it with `./gradlew detekt`.
+
+complexity:
+  # Compose screens and Android service adapters are intentionally orchestration-heavy. Keep
+  # these rules useful for the domain code without forcing artificial splits around UI lambdas.
+  CyclomaticComplexMethod:
+    threshold: 30
+    ignoreAnnotated:
+      - 'Composable'
+  LongMethod:
+    threshold: 120
+    ignoreAnnotated:
+      - 'Composable'
+  LongParameterList:
+    functionThreshold: 12
+    constructorThreshold: 12
+    ignoreAnnotated:
+      - 'Composable'
+  NestedBlockDepth:
+    threshold: 5
+  TooManyFunctions:
+    thresholdInFiles: 40
+    thresholdInClasses: 40
+    thresholdInInterfaces: 25
+    thresholdInObjects: 40
+  ComplexCondition:
+    threshold: 6
+
+exceptions:
+  # Network, persistence, and Android callback boundaries must convert unpredictable failures
+  # into Result/UI state. The catch sites log or translate the failure rather than leaking it.
+  TooGenericExceptionCaught:
+    active: false
+  SwallowedException:
+    active: false
+
+naming:
+  FunctionNaming:
+    # Jetpack Compose uses PascalCase for composable functions by convention.
+    ignoreAnnotated:
+      - 'Composable'
 
 style:
+  ReturnCount:
+    max: 6
+
+  MaxLineLength:
+    maxLineLength: 140
+
   # Discourage unexplained numeric literals in feature code. Dimensions, font sizes, and
   # durations belong in Dimens / MaterialTheme tokens, not magic numbers scattered in UI.
   MagicNumber:

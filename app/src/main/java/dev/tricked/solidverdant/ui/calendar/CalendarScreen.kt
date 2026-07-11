@@ -45,7 +45,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -171,7 +170,6 @@ fun CalendarScreen(
                 onEntryClick = { editing = it },
                 projects = projects,
                 tasks = tasks,
-                tags = tags,
                 modifier = Modifier.weight(1f),
             )
 
@@ -181,7 +179,9 @@ fun CalendarScreen(
                     // Fall back to a 3-day layout on narrow phones (gap analysis #20).
                     LaunchedEffect(availableWidth, state.viewMode) {
                         if (state.viewMode == CalendarViewMode.WEEK) {
-                            viewModel.setVisibleDayCount(if (availableWidth < 600.dp) 3 else 7)
+                            viewModel.setVisibleDayCount(
+                                if (availableWidth < Dimens.NarrowCalendarWidth) NARROW_CALENDAR_DAYS else FULL_WEEK_DAYS,
+                            )
                         }
                     }
                     WeekCalendarView(
@@ -232,6 +232,9 @@ fun CalendarScreen(
         }
     }
 }
+
+private const val NARROW_CALENDAR_DAYS = 3
+private const val FULL_WEEK_DAYS = 7
 
 private fun hasCalendarPermission(context: Context): Boolean =
     ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) ==

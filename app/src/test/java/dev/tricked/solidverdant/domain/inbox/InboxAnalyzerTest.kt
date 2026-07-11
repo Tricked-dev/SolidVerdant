@@ -43,6 +43,7 @@ class InboxAnalyzerTest {
         organizationId = "org",
     )
 
+    @Suppress("LongParameterList")
     private fun config(
         workDays: Set<DayOfWeek> = DayOfWeek.values().toSet(),
         workStartMinute: Int = 9 * 60,

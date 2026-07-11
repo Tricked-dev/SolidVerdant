@@ -88,6 +88,8 @@ class CsvExporter @Inject constructor(@ApplicationContext private val context: C
 
     companion object {
         private val isoInstant: DateTimeFormatter = DateTimeFormatter.ISO_INSTANT
+        private const val SECONDS_PER_HOUR = 3600
+        private const val SECONDS_PER_MINUTE = 60
 
         /** RFC 4180 field escaping: quote when the value holds a comma, quote, CR or LF. */
         fun escapeField(value: String): String {
@@ -109,9 +111,9 @@ class CsvExporter @Inject constructor(@ApplicationContext private val context: C
         /** Formats seconds as H:MM:SS (locale-neutral, no thousands separators). */
         fun formatHms(totalSeconds: Long): String {
             val s = totalSeconds.coerceAtLeast(0)
-            val h = s / 3600
-            val m = (s % 3600) / 60
-            val sec = s % 60
+            val h = s / SECONDS_PER_HOUR
+            val m = (s % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE
+            val sec = s % SECONDS_PER_MINUTE
             return "%d:%02d:%02d".format(h, m, sec)
         }
 

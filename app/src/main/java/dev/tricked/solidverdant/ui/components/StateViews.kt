@@ -124,7 +124,7 @@ fun ErrorState(text: String, modifier: Modifier = Modifier, onRetry: (() -> Unit
 
 @Preview
 @Composable
-private fun StateViewsPreview() {
+fun StateViewsPreview() {
     SolidVerdantTheme {
         Column(verticalArrangement = Arrangement.spacedBy(Dimens.Space16)) {
             EmptyState(text = "No entries")

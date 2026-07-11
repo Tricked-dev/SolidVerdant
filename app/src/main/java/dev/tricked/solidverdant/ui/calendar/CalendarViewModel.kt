@@ -88,7 +88,7 @@ class CalendarViewModel @Inject constructor(
     // Overlay query inputs kept as flows so event queries react without recollecting time entries.
     private val viewModeInput = MutableStateFlow(CalendarViewMode.WEEK)
     private val weekAnchorInput = MutableStateFlow(LocalDate.now())
-    private val dayCountInput = MutableStateFlow(7)
+    private val dayCountInput = MutableStateFlow(FULL_WEEK_DAYS)
     private val hasPermissionInput = MutableStateFlow(false)
     private val retryCounter = MutableStateFlow(0)
 
@@ -178,7 +178,7 @@ class CalendarViewModel @Inject constructor(
 
     /** Called by the UI as the available width changes so WEEK mode can drop to a 3-day layout. */
     fun setVisibleDayCount(count: Int) {
-        val safe = count.coerceIn(1, 7)
+        val safe = count.coerceIn(MIN_VISIBLE_DAYS, FULL_WEEK_DAYS)
         if (dayCountInput.value == safe) return
         dayCountInput.value = safe
         _uiState.update { it.copy(dayCount = safe) }
@@ -382,3 +382,6 @@ class CalendarViewModel @Inject constructor(
 
     fun entriesForSelectedDay(): List<TimeEntry> = _uiState.value.bucketsByDate[_uiState.value.selectedDate]?.entries ?: emptyList()
 }
+
+private const val FULL_WEEK_DAYS = 7
+private const val MIN_VISIBLE_DAYS = 1

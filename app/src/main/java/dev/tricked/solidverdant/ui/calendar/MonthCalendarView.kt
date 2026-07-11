@@ -50,7 +50,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.Project
-import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.ui.components.EmptyState
@@ -74,11 +73,10 @@ fun MonthCalendarView(
     onEntryClick: (TimeEntry) -> Unit,
     projects: List<Project> = emptyList(),
     tasks: List<Task> = emptyList(),
-    tags: List<Tag> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
     var monthExpanded by remember { mutableStateOf(true) }
-    val timelineInitialScroll = with(LocalDensity.current) { (CalendarHourHeight * 8).roundToPx() }
+    val timelineInitialScroll = with(LocalDensity.current) { (CalendarHourHeight * INITIAL_SCROLL_HOURS).roundToPx() }
     val timelineScrollState = rememberScrollState(initial = timelineInitialScroll)
     Column(modifier = modifier.fillMaxWidth().padding(Dimens.Space12)) {
         if (!monthExpanded) {
@@ -237,6 +235,8 @@ fun MonthCalendarView(
     }
 }
 
+private const val INITIAL_SCROLL_HOURS = 8
+
 /**
  * Single-day vertical timeline for the selected day. Shares the week grid's hour gutter/gridlines
  * ([HourGridlines]), entry treatment ([EntryBlock]) and current-time marker ([CurrentTimeMarker])
@@ -257,7 +257,7 @@ fun DayTimeline(
     val zone = remember { ZoneId.systemDefault() }
     val today = remember { LocalDate.now() }
     val noDescription = stringResource(R.string.calendar_entry_untitled)
-    val initialScroll = with(LocalDensity.current) { (CalendarHourHeight * 8).roundToPx() }
+    val initialScroll = with(LocalDensity.current) { (CalendarHourHeight * INITIAL_SCROLL_HOURS).roundToPx() }
     val effectiveScrollState = scrollState ?: rememberScrollState(initial = initialScroll)
     Box(
         modifier = modifier

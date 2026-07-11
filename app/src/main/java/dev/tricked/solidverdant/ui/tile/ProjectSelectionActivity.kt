@@ -166,6 +166,8 @@ sealed class ProjectTaskSelection {
     data class ProjectWithTask(val project: Project, val task: Task) : ProjectTaskSelection()
 }
 
+private data class SelectedProjectTask(val projectId: String?, val taskId: String?, val projectName: String?, val taskName: String?)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StartTrackingForm(
@@ -232,26 +234,26 @@ fun StartTrackingForm(
         }
         Button(
             onClick = {
-                val (projectId, taskId, projectName, taskName) = when (selection) {
+                val selected = when (selection) {
                     is ProjectTaskSelection.NoProject ->
-                        listOf(null, null, null, null)
+                        SelectedProjectTask(null, null, null, null)
 
                     is ProjectTaskSelection.ProjectOnly -> {
                         val proj = (selection as ProjectTaskSelection.ProjectOnly).project
-                        listOf(proj.id, null, proj.name, null)
+                        SelectedProjectTask(proj.id, null, proj.name, null)
                     }
 
                     is ProjectTaskSelection.ProjectWithTask -> {
                         val sel = selection as ProjectTaskSelection.ProjectWithTask
-                        listOf(sel.project.id, sel.task.id, sel.project.name, sel.task.name)
+                        SelectedProjectTask(sel.project.id, sel.task.id, sel.project.name, sel.task.name)
                     }
                 }
                 onStartTracking(
-                    projectId as String?,
-                    taskId as String?,
+                    selected.projectId,
+                    selected.taskId,
                     description,
-                    projectName as String?,
-                    taskName as String?,
+                    selected.projectName,
+                    selected.taskName,
                 )
             },
             modifier = Modifier.weight(1f),

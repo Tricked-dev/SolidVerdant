@@ -79,7 +79,7 @@ private class HttpTokenRefresher(private val json: Json, private val client: OkH
                             ?: RefreshResult.Transient
                     // 401, or 400 invalid_grant/invalid_client, means the refresh token is no longer
                     // usable: force logout. Other codes (e.g. 429, 5xx) are transient.
-                    response.code == 401 || isDefinitiveRejection(response.code, body) -> {
+                    response.code == HTTP_UNAUTHORIZED || isDefinitiveRejection(response.code, body) -> {
                         Timber.w("Token refresh rejected with code: ${response.code}")
                         RefreshResult.Invalid
                     }
@@ -96,9 +96,14 @@ private class HttpTokenRefresher(private val json: Json, private val client: OkH
         }
     }
 
-    private fun isDefinitiveRejection(code: Int, body: String?): Boolean = code == 400 &&
+    private fun isDefinitiveRejection(code: Int, body: String?): Boolean = code == HTTP_BAD_REQUEST &&
         body != null &&
         (body.contains("invalid_grant") || body.contains("invalid_client"))
+
+    private companion object {
+        const val HTTP_BAD_REQUEST = 400
+        const val HTTP_UNAUTHORIZED = 401
+    }
 }
 
 /** Refreshes an expired access token, allowing at most one refresh at a time. */
