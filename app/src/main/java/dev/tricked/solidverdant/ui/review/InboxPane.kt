@@ -19,12 +19,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -33,6 +36,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -51,6 +55,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -125,6 +131,9 @@ fun InboxPane() {
             InboxHeader(
                 issueCount = state.issues.size,
                 isRefreshing = state.isRefreshing,
+                showHorizonChip = state.horizonChosen,
+                horizonLabel = horizonChipLabel(state.horizonStartMs, zone),
+                onHorizonChipClick = { showSettings = true },
                 onRefresh = viewModel::refresh,
                 onOpenSettings = { showSettings = true },
             )
@@ -135,6 +144,7 @@ fun InboxPane() {
 
             when {
                 state.isLoading -> LoadingState()
+                !state.horizonChosen -> HorizonPicker(onChoose = viewModel::chooseHorizon)
                 state.isCaughtUp && state.hasEntries -> CaughtUpState()
                 state.isCaughtUp -> NoDataState()
                 else -> LazyColumn(
@@ -216,23 +226,42 @@ fun InboxPane() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun InboxHeader(issueCount: Int, isRefreshing: Boolean, onRefresh: () -> Unit, onOpenSettings: () -> Unit) {
+internal fun InboxHeader(
+    issueCount: Int,
+    isRefreshing: Boolean,
+    showHorizonChip: Boolean,
+    horizonLabel: String,
+    onHorizonChipClick: () -> Unit,
+    onRefresh: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    val horizonChipCd = stringResource(R.string.inbox_horizon_chip_cd)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = if (issueCount == 0) {
-                stringResource(R.string.inbox_summary_none)
-            } else {
-                pluralStringResource(R.plurals.inbox_summary_count, issueCount, issueCount)
-            },
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.weight(1f),
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = if (issueCount == 0) {
+                    stringResource(R.string.inbox_summary_none)
+                } else {
+                    pluralStringResource(R.plurals.inbox_summary_count, issueCount, issueCount)
+                },
+                style = MaterialTheme.typography.titleMedium,
+            )
+            if (showHorizonChip) {
+                Spacer(Modifier.height(4.dp))
+                AssistChip(
+                    onClick = onHorizonChipClick,
+                    label = { Text(horizonLabel) },
+                    modifier = Modifier.semantics { contentDescription = horizonChipCd },
+                )
+            }
+        }
         if (isRefreshing) {
             CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
             Spacer(Modifier.width(8.dp))
@@ -296,6 +325,47 @@ private fun NoDataState() {
         body = stringResource(R.string.inbox_empty_body),
         tint = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+}
+
+/**
+ * First-run horizon onboarding (SV-005). Shown instead of the list until the user picks how far back
+ * Review should look; each choice calls back into [InboxViewModel.chooseHorizon] and unlocks the list.
+ */
+@Composable
+private fun HorizonPicker(onChoose: (HorizonOption) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.inbox_horizon_picker_title),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = stringResource(R.string.inbox_horizon_picker_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(4.dp))
+        HorizonOptionButton(stringResource(R.string.inbox_horizon_today)) { onChoose(HorizonOption.TODAY) }
+        HorizonOptionButton(stringResource(R.string.inbox_horizon_this_week)) { onChoose(HorizonOption.THIS_WEEK) }
+        HorizonOptionButton(stringResource(R.string.inbox_horizon_last_30_days)) { onChoose(HorizonOption.LAST_30_DAYS) }
+        HorizonOptionButton(stringResource(R.string.inbox_horizon_everything)) { onChoose(HorizonOption.EVERYTHING) }
+    }
+}
+
+@Composable
+private fun HorizonOptionButton(label: String, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(label, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
+    }
 }
 
 @Composable
@@ -533,6 +603,16 @@ private fun entrySubject(entry: TimeEntry, projectsById: Map<String, Project>): 
 
 private val TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 private val DATE_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM, HH:mm")
+private val HORIZON_DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM")
+
+/** Chip text for the current horizon: "Everything" when unbounded, else "Since <short date>". */
+@Composable
+private fun horizonChipLabel(horizonStartMs: Long?, zone: ZoneId): String = if (horizonStartMs == null) {
+    stringResource(R.string.inbox_horizon_everything)
+} else {
+    val date = OffsetDateTime.ofInstant(Instant.ofEpochMilli(horizonStartMs), zone).format(HORIZON_DATE_FORMAT)
+    stringResource(R.string.inbox_horizon_chip_since, date)
+}
 
 private fun timeRangeText(startMs: Long, endMs: Long, zone: ZoneId): String {
     val start = OffsetDateTime.ofInstant(Instant.ofEpochMilli(startMs), zone)

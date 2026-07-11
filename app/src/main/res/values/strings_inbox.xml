@@ -96,4 +96,15 @@
     <string name="inbox_settings_increase">Increase</string>
     <string name="inbox_minutes_value">%1$d min</string>
     <string name="inbox_hours_value">%1$d h</string>
+
+    <!-- Horizon picker (SV-005) -->
+    <string name="inbox_horizon_picker_title">How far back should Review look?</string>
+    <string name="inbox_horizon_picker_body">Pick a starting point. You can widen or narrow it later from Inbox settings.</string>
+    <string name="inbox_horizon_today">Today</string>
+    <string name="inbox_horizon_this_week">This week</string>
+    <string name="inbox_horizon_last_30_days">Last 30 days</string>
+    <string name="inbox_horizon_everything">Everything</string>
+    <string name="inbox_horizon_chip_since">Since %1$s</string>
+    <string name="inbox_horizon_chip_cd">Change how far back Review looks</string>
+    <string name="inbox_settings_horizon">How far back to review</string>
 </resources>

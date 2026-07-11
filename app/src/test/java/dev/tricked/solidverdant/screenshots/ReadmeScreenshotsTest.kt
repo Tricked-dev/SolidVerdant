@@ -460,7 +460,15 @@ class ReadmeScreenshotsTest {
                 modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                InboxHeader(issueCount = issues.size, isRefreshing = false, onRefresh = {}, onOpenSettings = {})
+                InboxHeader(
+                    issueCount = issues.size,
+                    isRefreshing = false,
+                    showHorizonChip = true,
+                    horizonLabel = "Everything",
+                    onHorizonChipClick = {},
+                    onRefresh = {},
+                    onOpenSettings = {},
+                )
                 issues.forEach { issue ->
                     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                         InboxIssueCard(

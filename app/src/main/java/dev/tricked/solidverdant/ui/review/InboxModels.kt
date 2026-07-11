@@ -17,6 +17,12 @@ import java.time.ZoneId
 enum class InboxActionError { REFRESH_FAILED, CREATE_FAILED, RESOLVE_FAILED }
 
 /**
+ * SV-005 first-run horizon choices ("how far back should Review look?"). The ViewModel maps each to
+ * an epoch-millis lower bound in the account zone / week-start, or null for [EVERYTHING].
+ */
+enum class HorizonOption { TODAY, THIS_WEEK, LAST_30_DAYS, EVERYTHING }
+
+/**
  * Everything the [InboxPane] renders. The list of [issues] is already filtered for dismissals and
  * ordered by [dev.tricked.solidverdant.domain.inbox.InboxAnalyzer]; the catalogue lists back the
  * reused edit dialog so a quick-fix can reassign project/task/tags.
@@ -41,6 +47,12 @@ data class InboxUiState(
     val tags: List<Tag> = emptyList(),
     /** Account temporal-policy zone for gap windows and shown-in-zone formatting. */
     val zone: ZoneId = ZoneId.systemDefault(),
+    /**
+     * SV-005 inbox horizon. Before the user picks ([horizonChosen] false) the pane shows the one-time
+     * picker instead of the list. Once chosen, [horizonStartMs] drives the chip: null = "Everything".
+     */
+    val horizonChosen: Boolean = false,
+    val horizonStartMs: Long? = null,
 ) {
     /** All issues resolved: show the reassuring "all caught up" state. */
     val isCaughtUp: Boolean get() = !isLoading && issues.isEmpty()

@@ -87,4 +87,15 @@
     <string name="inbox_settings_increase">Verhogen</string>
     <string name="inbox_minutes_value">%1$d min</string>
     <string name="inbox_hours_value">%1$d u</string>
+
+    <!-- Horizon picker (SV-005) -->
+    <string name="inbox_horizon_picker_title">Hoe ver terug moet Review kijken?</string>
+    <string name="inbox_horizon_picker_body">Kies een startpunt. Je kunt dit later aanpassen in de inbox-instellingen.</string>
+    <string name="inbox_horizon_today">Vandaag</string>
+    <string name="inbox_horizon_this_week">Deze week</string>
+    <string name="inbox_horizon_last_30_days">Afgelopen 30 dagen</string>
+    <string name="inbox_horizon_everything">Alles</string>
+    <string name="inbox_horizon_chip_since">Sinds %1$s</string>
+    <string name="inbox_horizon_chip_cd">Wijzig hoe ver terug Review kijkt</string>
+    <string name="inbox_settings_horizon">Hoe ver terug te reviewen</string>
 </resources>

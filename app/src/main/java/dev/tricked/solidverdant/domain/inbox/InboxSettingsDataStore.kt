@@ -98,6 +98,12 @@ class InboxSettingsDataStore @Inject constructor(@ApplicationContext private val
         }
     }
 
+    /** Test-only: wipe all persisted inbox preferences so a case can start from defaults. */
+    @androidx.annotation.VisibleForTesting
+    internal suspend fun clearForTest() {
+        dataStore.edit { it.clear() }
+    }
+
     private fun dayOrNull(value: Int): DayOfWeek? = DayOfWeek.values().firstOrNull { it.value == value }
 
     /** Identifies each toggleable check so the UI can flip it without a setter per boolean. */

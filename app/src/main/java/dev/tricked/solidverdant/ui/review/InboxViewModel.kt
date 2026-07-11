@@ -43,6 +43,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.time.DayOfWeek
+import java.time.LocalDate
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -203,6 +204,8 @@ class InboxViewModel @Inject constructor(
                     projects = data.projects,
                     tasks = data.tasks,
                     tags = data.tags,
+                    horizonChosen = data.settings.horizonChosen,
+                    horizonStartMs = data.settings.horizonStartMs,
                 )
             }
         }
@@ -389,6 +392,27 @@ class InboxViewModel @Inject constructor(
 
     // ---- Config editing ----
 
+    /**
+     * SV-005: record the user's horizon choice, computing the lower bound in the account zone and
+     * week-start. Called from the first-run picker and the settings sheet. Reuses the same [clock]
+     * "now" the analyze pipeline uses; EVERYTHING clears the bound (persisted null).
+     */
+    fun chooseHorizon(option: HorizonOption) {
+        val policy = currentPolicy
+        val startMs: Long? = when (option) {
+            HorizonOption.TODAY ->
+                LocalDate.now(policy.zone).atStartOfDay(policy.zone).toInstant().toEpochMilli()
+            HorizonOption.THIS_WEEK -> {
+                val today = LocalDate.now(policy.zone)
+                val daysBack = ((today.dayOfWeek.value - policy.firstDayOfWeek.value) + DAYS_PER_WEEK) % DAYS_PER_WEEK
+                today.minusDays(daysBack.toLong()).atStartOfDay(policy.zone).toInstant().toEpochMilli()
+            }
+            HorizonOption.LAST_30_DAYS -> clock.nowMs() - TimeUnit.DAYS.toMillis(LAST_N_DAYS.toLong())
+            HorizonOption.EVERYTHING -> null
+        }
+        viewModelScope.launch { inboxSettingsDataStore.setHorizonStart(startMs) }
+    }
+
     fun setCheckEnabled(check: InboxSettingsDataStore.InboxCheck, enabled: Boolean) {
         viewModelScope.launch { inboxSettingsDataStore.setCheckEnabled(check, enabled) }
     }
@@ -439,3 +463,5 @@ private const val MIN_GAP_MINUTES = 1
 private const val MAX_GAP_MINUTES = 24 * 60
 private const val MIN_DURATION_HOURS = 1
 private const val MAX_DURATION_HOURS = 24
+private const val DAYS_PER_WEEK = 7
+private const val LAST_N_DAYS = 30

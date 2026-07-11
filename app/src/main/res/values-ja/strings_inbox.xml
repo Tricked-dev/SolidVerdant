@@ -86,4 +86,15 @@
     <string name="inbox_settings_increase">増やす</string>
     <string name="inbox_minutes_value">%1$d 分</string>
     <string name="inbox_hours_value">%1$d 時間</string>
+
+    <!-- Horizon picker (SV-005) -->
+    <string name="inbox_horizon_picker_title">レビューはどこまで遡りますか？</string>
+    <string name="inbox_horizon_picker_body">開始時点を選んでください。あとで受信トレイ設定から変更できます。</string>
+    <string name="inbox_horizon_today">今日</string>
+    <string name="inbox_horizon_this_week">今週</string>
+    <string name="inbox_horizon_last_30_days">過去30日間</string>
+    <string name="inbox_horizon_everything">すべて</string>
+    <string name="inbox_horizon_chip_since">%1$s 以降</string>
+    <string name="inbox_horizon_chip_cd">レビューで遡る範囲を変更</string>
+    <string name="inbox_settings_horizon">レビューで遡る範囲</string>
 </resources>

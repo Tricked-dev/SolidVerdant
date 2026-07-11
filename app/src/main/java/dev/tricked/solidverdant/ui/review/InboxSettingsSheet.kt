@@ -30,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TimePicker
@@ -83,6 +84,17 @@ fun InboxSettingsSheet(state: InboxUiState, viewModel: InboxViewModel, onDismiss
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
             )
+
+            // Review horizon (SV-005)
+            SectionLabel(stringResource(R.string.inbox_settings_horizon))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                HorizonChoiceChip(stringResource(R.string.inbox_horizon_today)) { viewModel.chooseHorizon(HorizonOption.TODAY) }
+                HorizonChoiceChip(stringResource(R.string.inbox_horizon_this_week)) { viewModel.chooseHorizon(HorizonOption.THIS_WEEK) }
+                HorizonChoiceChip(stringResource(R.string.inbox_horizon_last_30_days)) {
+                    viewModel.chooseHorizon(HorizonOption.LAST_30_DAYS)
+                }
+                HorizonChoiceChip(stringResource(R.string.inbox_horizon_everything)) { viewModel.chooseHorizon(HorizonOption.EVERYTHING) }
+            }
 
             // Working days
             SectionLabel(stringResource(R.string.inbox_settings_work_days))
@@ -199,6 +211,11 @@ fun InboxSettingsSheet(state: InboxUiState, viewModel: InboxViewModel, onDismiss
 }
 
 private enum class WorkField { START, END }
+
+@Composable
+private fun HorizonChoiceChip(label: String, onClick: () -> Unit) {
+    SuggestionChip(onClick = onClick, label = { Text(label) })
+}
 
 @Composable
 private fun SectionLabel(text: String) {
