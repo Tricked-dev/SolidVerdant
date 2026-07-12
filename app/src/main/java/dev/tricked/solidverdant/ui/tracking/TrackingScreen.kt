@@ -2626,7 +2626,7 @@ private fun CompactTimeEntryRow(
         ) {
             // Kit chip renders nothing for SYNCED (and null); only PENDING /
             // RETRYING / FAILED surface, so a healthy row stays clutter-free.
-            syncStatus?.let { SyncChip(status = it) }
+            syncStatus?.let { SyncChip(status = it, showLabel = false) }
             // Duration (use totalDuration if grouped, otherwise entry duration)
             Text(
                 text = durationText,

@@ -6,7 +6,9 @@
 
 package dev.tricked.solidverdant.screenshots
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
@@ -32,6 +35,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -97,12 +104,48 @@ object ScreenshotHost {
                     color = MaterialTheme.colorScheme.onBackground,
                 )
                 Spacer(Modifier.weight(1f))
-                Text(
-                    text = "▮▮▮  Wi-Fi  87%",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Canvas(
+                        modifier = Modifier.size(16.dp),
+                    ) {
+                        val strokeWidth = 2.dp.toPx()
+                        val dotRadius = 1.25.dp.toPx()
+                        val inset = 1.dp.toPx()
+                        val centerX = size.width / 2f
+                        val bottom = size.height - 2.dp.toPx()
+                        drawArc(
+                            color = Color.White,
+                            startAngle = 225f,
+                            sweepAngle = 90f,
+                            useCenter = false,
+                            topLeft = Offset(inset, inset),
+                            size = androidx.compose.ui.geometry.Size(size.width - inset * 2, size.height - inset * 2),
+                            style = Stroke(strokeWidth, cap = StrokeCap.Round),
+                        )
+                        drawArc(
+                            color = Color.White,
+                            startAngle = 225f,
+                            sweepAngle = 90f,
+                            useCenter = false,
+                            topLeft = Offset(inset + 3.dp.toPx(), inset + 3.dp.toPx()),
+                            size = androidx.compose.ui.geometry.Size(
+                                size.width - (inset + 3.dp.toPx()) * 2,
+                                size.height - (inset + 3.dp.toPx()) * 2,
+                            ),
+                            style = Stroke(strokeWidth, cap = StrokeCap.Round),
+                        )
+                        drawCircle(Color.White, dotRadius, Offset(centerX, bottom))
+                    }
+                    Text(
+                        text = "87%",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                }
             }
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) { content() }
             Box(
