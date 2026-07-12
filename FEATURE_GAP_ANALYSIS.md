@@ -17,6 +17,38 @@ The numbered additions below are grouped by product area. Priorities use the fol
 - **P2:** Valuable expansion that can follow the main product loop.
 - **Defer:** Large platform features that would dilute the Android-first focus.
 
+---
+
+## Implementation status (2026-07-12)
+
+Grounded in a codebase audit + the work landed on `fix/review-findings`. This is a living roadmap; the priorities below still stand for what remains.
+
+**Implemented in this effort** (each committed, TDD, and passing the full local gate `spotlessCheck testDebugUnitTest lintDebug assembleDebug`):
+- **#28** Project estimate budgets & progress — `4fca9ab`
+- **#35** Per-source sync freshness (pull/push timestamps, Room v7) — `f998116`
+- **#33** Dedicated Sync Center screen — `60a6fd6`
+- **#40** Foreground + manual timer refresh (debounced) — `67013af`
+- **#49** Sanitized diagnostic export (redaction-by-construction) — `aa7f295`
+- **#48** Privacy & data-management page — `10a45bf`
+- **#13** Duplicate & split entries — `bc182c6`
+
+**Already implemented (pre-existing, verified in audit):** #1 favorites, #3 forgotten-timer, #4 reminders, #9 templates, #11 search/filters, #14 undo-delete, #15 per-entry sync chip, #16 Time Inbox, #17 overlap/gap, #18 end-of-day review, #20 week view, #22 calendar overlay, #24 custom ranges, #25 stat filters + drill-down, #26 comparisons, #30 CSV export, #34 conflict resolution, #45 connection test, #50 localization, #54 account timezone/week-start.
+
+**Highest-value remaining unbuilt/partial P0–P1 (prioritized backlog):**
+- **#12** Multi-select & bulk edit (P1, medium/large) — selection state + bulk repo ops + outbox fan-out + undo.
+- **#27** Switchable breakdowns by task/tag/customer + "Other" bucketing (P1, medium).
+- **#37** Project-specific widgets (P1, medium) — widget config activity + per-appWidgetId store; reuses favorites (#1).
+- **#39** Customizable notification actions (P1, small/medium).
+- **#43** Estimate consumption / client label in project selection (P1, small) — reuses #28's `EstimateProgress`.
+- **#41** Per-org MRU project + remembered filters (P1, small).
+- **#47** Server version/capability detection & gating (P1, medium).
+- **#23** Calendar reconciliation (P1, large) — builds on #22 overlay + #17 interval math.
+- **#51/#52/#53** Accessibility audits: TalkBack/keyboard, large-text reflow, reduced-motion (P0/P1, audit work).
+
+**Server-integration ceiling:** `SolidtimeApi` wires only users/memberships/entries/projects/tasks/tags/clients — no aggregate/report/export/client-create endpoints. #25/#27/#30/#32/#47 currently operate on the local cache; the server-authoritative paths need additional Retrofit integration. `#54` timezone/week_start are read-only (not writable back to the account).
+
+**Follow-ups:** native-speaker review of the nl/ja strings added across the new features; on-device/emulator E2E (deferred — test host unavailable this session).
+
 ## Timer and quick capture
 
 ### 1. Favorite and pinned timers — P0
