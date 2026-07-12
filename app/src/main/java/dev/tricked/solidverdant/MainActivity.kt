@@ -41,6 +41,7 @@ import dev.tricked.solidverdant.ui.components.AppStatusOverlay
 import dev.tricked.solidverdant.ui.login.LoginScreen
 import dev.tricked.solidverdant.ui.navigation.MainNavHost
 import dev.tricked.solidverdant.ui.navigation.ReviewRoutes
+import dev.tricked.solidverdant.ui.navigation.SettingsRoutes
 import dev.tricked.solidverdant.ui.navigation.SyncRoutes
 import dev.tricked.solidverdant.ui.review.ReviewBadgeViewModel
 import dev.tricked.solidverdant.ui.review.ReviewScreen
@@ -269,6 +270,7 @@ fun SolidVerdantApp(
             MainNavHost(
                 navController = navController,
                 inboxBadgeCount = inboxBadgeCount,
+                onPrivacyLogout = { authViewModel.logout() },
                 reviewContent = {
                     ReviewScreen(
                         onOpenReminderSettings = {
@@ -425,6 +427,9 @@ fun SolidVerdantApp(
                         onRetrySyncEntry = trackingViewModel::retrySync,
                         onOpenSyncCenter = {
                             navController.navigate(SyncRoutes.SYNC_CENTER)
+                        },
+                        onOpenPrivacy = {
+                            navController.navigate(SettingsRoutes.PRIVACY)
                         },
                         onLoadMoreEntries = trackingViewModel::loadMoreTimeEntries,
                         onLoadNewerEntries = trackingViewModel::loadNewerTimeEntries,

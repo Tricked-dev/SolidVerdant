@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ This Source Code Form is subject to the terms of the Mozilla Public
+  ~ License, v. 2.0. If a copy of the MPL was not distributed with this
+  ~ file, You can obtain one at https://mozilla.org/MPL/2.0/.
+  -->
+<resources>
+    <string name="privacy_title">Privacy en gegevens</string>
+    <string name="privacy_navigate_back">Terug</string>
+    <string name="privacy_menu_entry">Privacy en gegevens</string>
+
+    <string name="privacy_stored_title">Wat op dit apparaat staat</string>
+    <string name="privacy_stored_solidtime">Van Solidtime: je opgeslagen tijdregistraties, projecten, taken en labels, zodat de app offline werkt.</string>
+    <string name="privacy_stored_local">Alleen op dit apparaat: favorieten, herinneringsinstellingen, inbox-instellingen en negeringen. Deze verlaten je telefoon nooit.</string>
+    <string name="privacy_stored_tokens">Inlogtokens worden bewaard in door Android Keystore versleutelde opslag.</string>
+    <string name="privacy_source_legend">Labels in de app: Van Solidtime · Berekend op apparaat · Alleen op apparaat opgeslagen · Van Android met toestemming.</string>
+
+    <string name="privacy_sent_title">Wat naar de server wordt gestuurd</string>
+    <string name="privacy_sent_endpoint_label">Geselecteerde server</string>
+    <string name="privacy_sent_endpoint_unknown">Niet ingesteld</string>
+    <string name="privacy_sent_body">Alleen je tijdregistratiegegevens worden naar deze server gestuurd, en alleen bij wijzigingen of synchronisatie. Verder verlaat er niets automatisch het apparaat.</string>
+
+    <string name="privacy_tokens_title">Hoe je gegevens worden beschermd</string>
+    <string name="privacy_tokens_body">Toegangs- en vernieuwingstokens worden versleuteld met een Android Keystore-sleutel en gewist bij uitloggen.</string>
+
+    <string name="privacy_permissions_title">Optionele machtigingen</string>
+    <string name="privacy_permissions_notifications">Meldingen: voor registratieherinneringen en de dagafsluiting. Optioneel.</string>
+    <string name="privacy_permissions_calendar">Agenda: om agenda-items van je apparaat naast geregistreerde tijd te tonen. Optioneel en alleen-lezen.</string>
+    <string name="privacy_permissions_open_settings">App-machtigingen openen</string>
+
+    <string name="privacy_storage_title">Opslaggebruik</string>
+    <string name="privacy_storage_computing">Berekenen…</string>
+    <string name="privacy_storage_database">Database</string>
+    <string name="privacy_storage_cache">Cache</string>
+    <string name="privacy_storage_total">Totaal</string>
+    <string name="privacy_storage_note">Bij benadering. De cache kan altijd worden gewist en opnieuw gesynchroniseerd.</string>
+
+    <string name="privacy_actions_title">Gegevensbeheer</string>
+    <string name="privacy_action_export">Diagnostiek exporteren</string>
+    <string name="privacy_action_export_note">Deelt een technisch rapport voor ondersteuning. Bevat geen omschrijvingen, projectnamen, tokens of andere werkinhoud.</string>
+    <string name="privacy_action_clear_cache">Cachegegevens wissen</string>
+    <string name="privacy_action_clear_cache_note">Verwijdert lokaal opgeslagen tijdregistratiegegevens. Deze synchroniseren opnieuw; favorieten blijven en je blijft ingelogd.</string>
+    <string name="privacy_action_logout">Uitloggen / sessie intrekken</string>
+    <string name="privacy_action_logout_note">Wist je lokale sessie en alle opgeslagen accountgegevens en verwijdert opgeslagen tokens.</string>
+
+    <string name="privacy_dialog_cancel">Annuleren</string>
+    <string name="privacy_clear_dialog_title">Cachegegevens wissen?</string>
+    <string name="privacy_clear_dialog_message">Dit verwijdert lokaal opgeslagen tijdregistratiegegevens. Ze synchroniseren opnieuw vanaf de server. Favorieten blijven en je blijft ingelogd.</string>
+    <string name="privacy_clear_dialog_confirm">Wissen</string>
+    <string name="privacy_logout_dialog_title">Uitloggen?</string>
+    <string name="privacy_logout_dialog_message">Dit trekt je lokale sessie in, wist opgeslagen accountgegevens en verwijdert opgeslagen tokens. Je moet opnieuw inloggen.</string>
+    <string name="privacy_logout_dialog_confirm">Uitloggen</string>
+</resources>

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ This Source Code Form is subject to the terms of the Mozilla Public
+  ~ License, v. 2.0. If a copy of the MPL was not distributed with this
+  ~ file, You can obtain one at https://mozilla.org/MPL/2.0/.
+  -->
+<resources>
+    <string name="privacy_title">Privacy &amp; data</string>
+    <string name="privacy_navigate_back">Navigate back</string>
+    <string name="privacy_menu_entry">Privacy &amp; data</string>
+
+    <string name="privacy_stored_title">What\'s stored on this device</string>
+    <string name="privacy_stored_solidtime">From Solidtime: your cached time entries, projects, tasks and tags, so the app works offline.</string>
+    <string name="privacy_stored_local">Stored only on this device: favourites, reminder settings, inbox settings and dismissals. These never leave your phone.</string>
+    <string name="privacy_stored_tokens">Sign-in tokens are kept in Android Keystore-backed encrypted storage.</string>
+    <string name="privacy_source_legend">Labels used across the app: From Solidtime · Calculated on device · Stored only on device · From Android with permission.</string>
+
+    <string name="privacy_sent_title">What\'s sent to the server</string>
+    <string name="privacy_sent_endpoint_label">Selected server</string>
+    <string name="privacy_sent_endpoint_unknown">Not configured</string>
+    <string name="privacy_sent_body">Only your time-tracking data is sent to this server, and only when you make changes or sync. Nothing else leaves the device automatically.</string>
+
+    <string name="privacy_tokens_title">How your credentials are protected</string>
+    <string name="privacy_tokens_body">Access and refresh tokens are encrypted with an Android Keystore key and are cleared when you log out.</string>
+
+    <string name="privacy_permissions_title">Optional permissions</string>
+    <string name="privacy_permissions_notifications">Notifications: used for tracking reminders and the end-of-day review. Optional.</string>
+    <string name="privacy_permissions_calendar">Calendar: used to overlay your device calendar events next to tracked time. Optional and read-only.</string>
+    <string name="privacy_permissions_open_settings">Open app permissions</string>
+
+    <string name="privacy_storage_title">Storage usage</string>
+    <string name="privacy_storage_computing">Calculating…</string>
+    <string name="privacy_storage_database">Database</string>
+    <string name="privacy_storage_cache">Cache</string>
+    <string name="privacy_storage_total">Total</string>
+    <string name="privacy_storage_note">Approximate. The cache can be cleared and re-synced at any time.</string>
+
+    <string name="privacy_actions_title">Data controls</string>
+    <string name="privacy_action_export">Export diagnostics</string>
+    <string name="privacy_action_export_note">Shares a technical report for support. It contains no descriptions, project names, tokens or other work content.</string>
+    <string name="privacy_action_clear_cache">Clear cached data</string>
+    <string name="privacy_action_clear_cache_note">Removes locally cached time-tracking data. It re-syncs from the server; favourites are kept and you stay logged in.</string>
+    <string name="privacy_action_logout">Log out / revoke session</string>
+    <string name="privacy_action_logout_note">Clears your local session and all cached account data, and removes stored tokens.</string>
+
+    <string name="privacy_dialog_cancel">Cancel</string>
+    <string name="privacy_clear_dialog_title">Clear cached data?</string>
+    <string name="privacy_clear_dialog_message">This removes locally cached time-tracking data. It will re-sync from the server. Favourites are kept and you stay logged in.</string>
+    <string name="privacy_clear_dialog_confirm">Clear</string>
+    <string name="privacy_logout_dialog_title">Log out?</string>
+    <string name="privacy_logout_dialog_message">This revokes your local session, clears cached account data and removes stored tokens. You\'ll need to sign in again.</string>
+    <string name="privacy_logout_dialog_confirm">Log out</string>
+</resources>

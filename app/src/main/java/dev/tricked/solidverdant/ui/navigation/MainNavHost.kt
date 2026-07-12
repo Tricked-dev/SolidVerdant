@@ -35,6 +35,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.ui.privacy.PrivacyScreen
 import dev.tricked.solidverdant.ui.review.ReminderSettingsScreen
 import dev.tricked.solidverdant.ui.review.ReviewDayPane
 import dev.tricked.solidverdant.ui.sync.SyncCenterScreen
@@ -48,6 +49,7 @@ fun MainNavHost(
     statsContent: @Composable () -> Unit,
     reviewContent: @Composable () -> Unit = {},
     inboxBadgeCount: Int = 0,
+    onPrivacyLogout: () -> Unit = {},
 ) {
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -96,6 +98,15 @@ fun MainNavHost(
             }
             composable(SyncRoutes.SYNC_CENTER) {
                 SyncCenterScreen(onBack = { navController.popBackStack() })
+            }
+            composable(SettingsRoutes.PRIVACY) {
+                PrivacyScreen(
+                    onBack = { navController.popBackStack() },
+                    onLogout = {
+                        navController.popBackStack()
+                        onPrivacyLogout()
+                    },
+                )
             }
         }
     }

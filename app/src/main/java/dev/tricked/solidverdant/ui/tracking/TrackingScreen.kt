@@ -77,6 +77,7 @@ import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -266,6 +267,7 @@ fun TrackingScreen(
     onRetrySync: () -> Unit,
     onRetrySyncEntry: (String) -> Unit,
     onOpenSyncCenter: () -> Unit = {},
+    onOpenPrivacy: () -> Unit = {},
     onLoadMoreEntries: () -> Unit,
     onLoadNewerEntries: () -> Unit,
     onJumpToDate: (LocalDate) -> Unit,
@@ -486,6 +488,25 @@ fun TrackingScreen(
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(stringResource(R.string.choose_language))
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                onOpenPrivacy()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.privacy_menu_entry))
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))

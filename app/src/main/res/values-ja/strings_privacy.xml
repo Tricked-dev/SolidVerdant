@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ This Source Code Form is subject to the terms of the Mozilla Public
+  ~ License, v. 2.0. If a copy of the MPL was not distributed with this
+  ~ file, You can obtain one at https://mozilla.org/MPL/2.0/.
+  -->
+<resources>
+    <string name="privacy_title">プライバシーとデータ</string>
+    <string name="privacy_navigate_back">戻る</string>
+    <string name="privacy_menu_entry">プライバシーとデータ</string>
+
+    <string name="privacy_stored_title">この端末に保存されるもの</string>
+    <string name="privacy_stored_solidtime">Solidtime から: オフラインでも使えるように、時間エントリ・プロジェクト・タスク・タグをキャッシュします。</string>
+    <string name="privacy_stored_local">この端末にのみ保存: お気に入り、リマインダー設定、受信トレイ設定、非表示設定。これらは端末外に出ません。</string>
+    <string name="privacy_stored_tokens">サインイン用トークンは Android Keystore による暗号化ストレージに保存されます。</string>
+    <string name="privacy_source_legend">アプリ内のラベル: Solidtime から · 端末で計算 · 端末にのみ保存 · 権限付きで Android から。</string>
+
+    <string name="privacy_sent_title">サーバーに送信されるもの</string>
+    <string name="privacy_sent_endpoint_label">選択中のサーバー</string>
+    <string name="privacy_sent_endpoint_unknown">未設定</string>
+    <string name="privacy_sent_body">このサーバーには時間トラッキングのデータのみが、変更または同期時にのみ送信されます。それ以外が自動的に端末外へ出ることはありません。</string>
+
+    <string name="privacy_tokens_title">認証情報の保護方法</string>
+    <string name="privacy_tokens_body">アクセストークンと更新トークンは Android Keystore の鍵で暗号化され、ログアウト時に消去されます。</string>
+
+    <string name="privacy_permissions_title">任意の権限</string>
+    <string name="privacy_permissions_notifications">通知: トラッキングのリマインダーと一日の終わりのレビューに使用します。任意です。</string>
+    <string name="privacy_permissions_calendar">カレンダー: 端末のカレンダー予定を記録時間の横に重ねて表示します。任意で読み取り専用です。</string>
+    <string name="privacy_permissions_open_settings">アプリの権限を開く</string>
+
+    <string name="privacy_storage_title">ストレージ使用量</string>
+    <string name="privacy_storage_computing">計算中…</string>
+    <string name="privacy_storage_database">データベース</string>
+    <string name="privacy_storage_cache">キャッシュ</string>
+    <string name="privacy_storage_total">合計</string>
+    <string name="privacy_storage_note">概算です。キャッシュはいつでも消去して再同期できます。</string>
+
+    <string name="privacy_actions_title">データ管理</string>
+    <string name="privacy_action_export">診断情報をエクスポート</string>
+    <string name="privacy_action_export_note">サポート用の技術レポートを共有します。説明・プロジェクト名・トークンなどの作業内容は含まれません。</string>
+    <string name="privacy_action_clear_cache">キャッシュを消去</string>
+    <string name="privacy_action_clear_cache_note">ローカルにキャッシュされた時間トラッキングのデータを削除します。サーバーから再同期され、お気に入りは保持され、ログインは維持されます。</string>
+    <string name="privacy_action_logout">ログアウト / セッションを取り消す</string>
+    <string name="privacy_action_logout_note">ローカルセッションとキャッシュされたアカウントデータをすべて消去し、保存されたトークンを削除します。</string>
+
+    <string name="privacy_dialog_cancel">キャンセル</string>
+    <string name="privacy_clear_dialog_title">キャッシュを消去しますか？</string>
+    <string name="privacy_clear_dialog_message">ローカルにキャッシュされた時間トラッキングのデータを削除します。サーバーから再同期されます。お気に入りは保持され、ログインは維持されます。</string>
+    <string name="privacy_clear_dialog_confirm">消去</string>
+    <string name="privacy_logout_dialog_title">ログアウトしますか？</string>
+    <string name="privacy_logout_dialog_message">ローカルセッションを取り消し、キャッシュされたアカウントデータを消去し、保存されたトークンを削除します。再度サインインが必要になります。</string>
+    <string name="privacy_logout_dialog_confirm">ログアウト</string>
+</resources>
