@@ -265,6 +265,7 @@ fun TrackingScreen(
     onUndoDelete: (TimeEntry) -> Unit,
     onRetrySync: () -> Unit,
     onRetrySyncEntry: (String) -> Unit,
+    onOpenSyncCenter: () -> Unit = {},
     onLoadMoreEntries: () -> Unit,
     onLoadNewerEntries: () -> Unit,
     onJumpToDate: (LocalDate) -> Unit,
@@ -942,7 +943,7 @@ fun TrackingScreen(
                                 item { Spacer(Modifier.height(8.dp)) }
                                 item { HistoryFilters(historyFilter, uiState) { historyFilter = it } }
                                 if (uiState.syncOperations.isNotEmpty()) {
-                                    item { SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry) }
+                                    item { SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry, onOpenSyncCenter) }
                                 }
                                 trackingHistoryItems(
                                     uiState = uiState,
@@ -1297,6 +1298,7 @@ private fun SyncCenter(
     operations: List<TimeEntryRepository.SyncOperation>,
     onRetry: () -> Unit,
     onRetryEntry: (String) -> Unit,
+    onOpenSyncCenter: () -> Unit = {},
 ) {
     val failed = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.FAILED }
     val retrying = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.RETRYING }
@@ -1350,6 +1352,10 @@ private fun SyncCenter(
                     Text(stringResource(R.string.retry))
                 }
             }
+        }
+        HorizontalDivider()
+        TextButton(onClick = onOpenSyncCenter, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.sync_center_open))
         }
     }
 }

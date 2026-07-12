@@ -37,6 +37,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.ui.review.ReminderSettingsScreen
 import dev.tricked.solidverdant.ui.review.ReviewDayPane
+import dev.tricked.solidverdant.ui.sync.SyncCenterScreen
 import dev.tricked.solidverdant.ui.templates.ManageTemplatesScreen
 
 @Composable
@@ -92,6 +93,9 @@ fun MainNavHost(
             }
             composable(ReviewRoutes.MANAGE_TEMPLATES) {
                 ManageTemplatesScreen(onBack = { navController.popBackStack() })
+            }
+            composable(SyncRoutes.SYNC_CENTER) {
+                SyncCenterScreen(onBack = { navController.popBackStack() })
             }
         }
     }

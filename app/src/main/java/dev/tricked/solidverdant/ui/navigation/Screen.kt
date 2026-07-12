@@ -41,3 +41,12 @@ object ReviewRoutes {
     /** Manage reusable entry templates / favorites. */
     const val MANAGE_TEMPLATES: String = "templates/manage"
 }
+
+/**
+ * Routes for the sync surface (#33). The dedicated Sync Center is pushed full-screen on top of the
+ * tab graph with its own back navigation, reached from the Track screen's sync summary.
+ */
+object SyncRoutes {
+    /** Dedicated Sync Center: freshness, pending changes, failures + retry/discard. */
+    const val SYNC_CENTER: String = "sync/center"
+}

@@ -41,6 +41,7 @@ import dev.tricked.solidverdant.ui.components.AppStatusOverlay
 import dev.tricked.solidverdant.ui.login.LoginScreen
 import dev.tricked.solidverdant.ui.navigation.MainNavHost
 import dev.tricked.solidverdant.ui.navigation.ReviewRoutes
+import dev.tricked.solidverdant.ui.navigation.SyncRoutes
 import dev.tricked.solidverdant.ui.review.ReviewBadgeViewModel
 import dev.tricked.solidverdant.ui.review.ReviewScreen
 import dev.tricked.solidverdant.ui.statistics.StatisticsScreen
@@ -422,6 +423,9 @@ fun SolidVerdantApp(
                         onUndoDelete = trackingViewModel::undoDelete,
                         onRetrySync = trackingViewModel::retrySync,
                         onRetrySyncEntry = trackingViewModel::retrySync,
+                        onOpenSyncCenter = {
+                            navController.navigate(SyncRoutes.SYNC_CENTER)
+                        },
                         onLoadMoreEntries = trackingViewModel::loadMoreTimeEntries,
                         onLoadNewerEntries = trackingViewModel::loadNewerTimeEntries,
                         onJumpToDate = trackingViewModel::jumpToHistoryDate,

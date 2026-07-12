@@ -13,6 +13,7 @@ import dev.tricked.solidverdant.data.local.db.OutboxDao
 import dev.tricked.solidverdant.data.local.db.OutboxEntity
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
 import dev.tricked.solidverdant.data.local.db.SyncMetaDao
+import dev.tricked.solidverdant.data.local.db.SyncMetaEntity
 import dev.tricked.solidverdant.data.local.db.SyncState
 import dev.tricked.solidverdant.data.local.db.TimeEntryDao
 import dev.tricked.solidverdant.data.local.db.TimeEntryEntity
@@ -170,6 +171,13 @@ class TimeEntryRepository @Inject constructor(
     }
 
     fun observeOutboxCount(): Flow<Int> = outboxDao.observeCount()
+
+    /**
+     * Reactive sync freshness for an org (last full pull + last successful push), for the dedicated
+     * Sync Center screen (#33). Delegates to [SyncMetaDao.observe] so the UI never touches the DAO
+     * directly. Emits NULL until the first sync stamps a row.
+     */
+    fun observeSyncMeta(orgId: String): Flow<SyncMetaEntity?> = syncMetaDao.observe(orgId)
 
     fun observeSyncOperations(orgId: String): Flow<List<SyncOperation>> = combine(
         outboxDao.observeAll(),
