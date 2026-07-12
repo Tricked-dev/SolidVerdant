@@ -54,6 +54,7 @@ data class StatisticsUiState(
     val filters: StatFilters = StatFilters(),
     val catalog: StatCatalog = StatCatalog(),
     val summary: StatisticsSummary = EMPTY_SUMMARY,
+    val estimateProgress: List<EstimateProgress> = emptyList(),
     val comparison: PeriodComparison? = null,
     val filteredEntries: List<TimeEntry> = emptyList(),
     val rangeStart: LocalDate? = null,
@@ -171,6 +172,14 @@ class StatisticsViewModel @Inject constructor(
     )
 
     private data class RemoteEntries(val entries: List<TimeEntry>? = null, val isLoading: Boolean = false, val failed: Boolean = false)
+
+    /** Off-main-thread result bundle for one uiState emission; destructured back on the collector. */
+    private data class EstimateComputation(
+        val summary: StatisticsSummary,
+        val comparison: PeriodComparison?,
+        val filtered: List<TimeEntry>,
+        val estimates: List<EstimateProgress>,
+    )
 
     private fun loadRemoteEntries(
         organizationId: String,
@@ -291,9 +300,10 @@ class StatisticsViewModel @Inject constructor(
                                     granularity = granularityFor(previous),
                                     firstDayOfWeek = policy.firstDayOfWeek,
                                 )
-                                Triple(current, computeComparison(current, prior, previous), filtered)
+                                val estimates = StatisticsAggregator.projectEstimateProgress(catalog.projects, filters)
+                                EstimateComputation(current, computeComparison(current, prior, previous), filtered, estimates)
                             }
-                            val (summary, comparison, filtered) = computed
+                            val (summary, comparison, filtered, estimates) = computed
                             val exportEntries = withContext(Dispatchers.Default) {
                                 filtered.filter {
                                     StatisticsAggregator.clippedSeconds(
@@ -319,6 +329,7 @@ class StatisticsViewModel @Inject constructor(
                                 filters = filters,
                                 catalog = catalog,
                                 summary = summary,
+                                estimateProgress = estimates,
                                 comparison = comparison,
                                 filteredEntries = filtered,
                                 rangeStart = resolved.start,

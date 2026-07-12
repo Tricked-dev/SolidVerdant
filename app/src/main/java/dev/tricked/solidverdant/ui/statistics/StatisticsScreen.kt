@@ -227,6 +227,10 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
                         }
                     }
 
+                    if (state.estimateProgress.isNotEmpty()) {
+                        EstimatesCard(state.estimateProgress)
+                    }
+
                     SectionCard(title = stringResource(R.string.stats_trend)) {
                         InteractiveBarChart(
                             bars = s.trend,
@@ -302,6 +306,98 @@ private fun ProjectLegendRow(projectName: String, colorHex: String, valueText: S
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f),
         )
+    }
+}
+
+/**
+ * "Estimates & progress": server-authoritative spent vs estimated time per project, remaining or
+ * overflow, and a consumed-fraction bar. Over-budget and near-estimate items are flagged with BOTH
+ * a colour and a text label (never colour alone). Rendered only when [items] is non-empty.
+ */
+@Composable
+private fun EstimatesCard(items: List<EstimateProgress>) {
+    SectionCard(title = stringResource(R.string.stats2_estimates_title)) {
+        val barFallback = MaterialTheme.colorScheme.primary
+        items.forEach { item ->
+            EstimateRow(item, barFallback)
+        }
+    }
+}
+
+@Composable
+private fun EstimateRow(item: EstimateProgress, defaultBarColor: Color) {
+    val swatchFallback = MaterialTheme.colorScheme.outline
+    val errorColor = MaterialTheme.colorScheme.error
+    val spent = item.spentSeconds.toLong()
+    val estimated = item.estimatedSeconds.toLong()
+    val spentOfText = stringResource(R.string.stats2_estimates_spent_of, formatDuration(spent), formatDuration(estimated))
+    val statusText = if (item.isOverBudget) {
+        stringResource(R.string.stats2_estimates_over, formatDuration((-item.remainingSeconds).toLong()))
+    } else {
+        stringResource(R.string.stats2_estimates_remaining, formatDuration(item.remainingSeconds.toLong()))
+    }
+    val rowCd = if (item.isOverBudget) {
+        stringResource(
+            R.string.stats2_estimates_over_content_description,
+            item.name,
+            formatDuration((-item.remainingSeconds).toLong()),
+        )
+    } else {
+        stringResource(
+            R.string.stats2_estimates_progress_content_description,
+            item.name,
+            formatDuration(spent),
+            formatDuration(estimated),
+        )
+    }
+    val barColor = if (item.isOverBudget) errorColor else defaultBarColor
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) { contentDescription = rowCd }
+            .padding(vertical = Dimens.Space4),
+        verticalArrangement = Arrangement.spacedBy(Dimens.Space4),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
+        ) {
+            ProjectSwatch(hexToColor(item.colorHex.orEmpty(), swatchFallback))
+            Text(
+                item.name,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                statusText,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (item.isOverBudget) errorColor else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        LinearProgressIndicator(
+            progress = { item.fraction.coerceIn(0f, 1f) },
+            modifier = Modifier.fillMaxWidth(),
+            color = barColor,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
+        ) {
+            Text(
+                spentOfText,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            if (item.isNearEstimate) {
+                Text(
+                    stringResource(R.string.stats2_estimates_near),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
+            }
+        }
     }
 }
 

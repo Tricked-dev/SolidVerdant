@@ -80,4 +80,13 @@
         <item quantity="one">%1$d vermelding</item>
         <item quantity="other">%1$d vermeldingen</item>
     </plurals>
+
+    <!-- Schattingen, budgetten en voortgang. -->
+    <string name="stats2_estimates_title">Schattingen &amp; voortgang</string>
+    <string name="stats2_estimates_spent_of">%1$s / %2$s</string>
+    <string name="stats2_estimates_remaining">%1$s over</string>
+    <string name="stats2_estimates_over">%1$s te veel</string>
+    <string name="stats2_estimates_near">Schatting bijna bereikt</string>
+    <string name="stats2_estimates_progress_content_description">%1$s: %2$s van %3$s gebruikt</string>
+    <string name="stats2_estimates_over_content_description">%1$s: %2$s boven schatting</string>
 </resources>

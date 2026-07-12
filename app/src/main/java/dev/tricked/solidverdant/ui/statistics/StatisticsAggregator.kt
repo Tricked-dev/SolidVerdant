@@ -33,6 +33,28 @@ data class StatisticsSummary(
     val trend: List<TrendBucket>,
 )
 
+/** Fraction at/above which a project is flagged as approaching its estimate (but not yet over). */
+private const val NEAR_THRESHOLD = 0.9f
+
+/**
+ * Budget/progress for one project against its Solidtime estimate. [spentSeconds] and
+ * [estimatedSeconds] are the SERVER'S authoritative project-level totals (seconds) — not recomputed
+ * from local entries — so this is a reporting aid consistent across the whole organization. Derived,
+ * display-only: nothing here is persisted.
+ */
+data class EstimateProgress(val id: String, val name: String, val colorHex: String?, val estimatedSeconds: Int, val spentSeconds: Int) {
+    /** Seconds left against the estimate; negative when over budget. */
+    val remainingSeconds: Int get() = estimatedSeconds - spentSeconds
+
+    /** Spent as a fraction of the estimate; may exceed 1.0 when over budget. */
+    val fraction: Float get() = if (estimatedSeconds <= 0) 0f else spentSeconds.toFloat() / estimatedSeconds
+
+    val isOverBudget: Boolean get() = spentSeconds > estimatedSeconds
+
+    /** Approaching (but not past) the estimate — an early warning, distinct from [isOverBudget]. */
+    val isNearEstimate: Boolean get() = !isOverBudget && fraction >= NEAR_THRESHOLD
+}
+
 /** A single entry as surfaced in a drill-down list, clipped to the selected sub-range. */
 data class DrillDownRow(
     val entryId: String,
@@ -75,6 +97,47 @@ object StatisticsAggregator {
             projectOk && taskOk && clientOk && tagOk && billableOk
         }
     }
+
+    /**
+     * Budget/progress for every in-scope project that carries a positive Solidtime estimate.
+     *
+     * Uses the server's authoritative project-level [Project.spentTime] vs [Project.estimatedTime]
+     * (both seconds) rather than recomputing spent from local entries, so the numbers match the rest
+     * of the Solidtime org (roadmap #83/#84). Archived projects and any without a non-null, positive
+     * estimate are dropped. The active [filters] are honoured on the dimensions that apply to a whole
+     * project — the explicit project set, the project's client, and its billable flag — so the
+     * section's scope stays consistent with the by-project view above it; the entry-level task/tag
+     * dimensions have no project-level meaning here and are ignored. Sorted over-budget first (most
+     * urgent), then by consumed fraction descending, then by name for a stable order.
+     */
+    fun projectEstimateProgress(projects: List<Project>, filters: StatFilters): List<EstimateProgress> = projects.asSequence()
+        .filter { !it.isArchived }
+        .filter { (it.estimatedTime ?: 0) > 0 }
+        .filter { p ->
+            val projectOk = filters.projectIds.isEmpty() || p.id in filters.projectIds
+            val clientOk = filters.clientIds.isEmpty() || (p.clientId != null && p.clientId in filters.clientIds)
+            val billableOk = when (filters.billable) {
+                BillableFilter.All -> true
+                BillableFilter.Billable -> p.isBillable
+                BillableFilter.NonBillable -> !p.isBillable
+            }
+            projectOk && clientOk && billableOk
+        }
+        .map { p ->
+            EstimateProgress(
+                id = p.id,
+                name = p.name,
+                colorHex = p.color,
+                estimatedSeconds = p.estimatedTime ?: 0,
+                spentSeconds = p.spentTime,
+            )
+        }
+        .sortedWith(
+            compareByDescending<EstimateProgress> { it.isOverBudget }
+                .thenByDescending { it.fraction }
+                .thenBy { it.name },
+        )
+        .toList()
 
     /** In-range contribution (seconds) of [e], or null when it does not overlap the window. */
     fun clippedSeconds(e: TimeEntry, zone: ZoneId, rangeStart: LocalDate, rangeEnd: LocalDate): Long? =

@@ -78,4 +78,13 @@
     <plurals name="stats2_drilldown_entries">
         <item quantity="other">%1$d 件のエントリ</item>
     </plurals>
+
+    <!-- 見積もり、予算、進捗。 -->
+    <string name="stats2_estimates_title">見積もりと進捗</string>
+    <string name="stats2_estimates_spent_of">%1$s / %2$s</string>
+    <string name="stats2_estimates_remaining">残り %1$s</string>
+    <string name="stats2_estimates_over">%1$s 超過</string>
+    <string name="stats2_estimates_near">見積もりに接近中</string>
+    <string name="stats2_estimates_progress_content_description">%1$s: %3$s 中 %2$s 使用</string>
+    <string name="stats2_estimates_over_content_description">%1$s: 見積もりを %2$s 超過</string>
 </resources>
