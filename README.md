@@ -186,5 +186,5 @@ You can also view this information in-app via **Settings > About > Verification 
 ---
 
 <p align="center">
-  Made with ❤️ (and almost entirely Claude) for the Solidtime community
+  Made with ❤️ (and almost entirely Codex) for the Solidtime community
 </p>
