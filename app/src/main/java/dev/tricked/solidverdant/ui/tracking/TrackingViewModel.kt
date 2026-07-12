@@ -7,6 +7,7 @@
 package dev.tricked.solidverdant.ui.tracking
 
 import android.content.Context
+import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -26,6 +27,7 @@ import dev.tricked.solidverdant.domain.time.TemporalPolicy
 import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import dev.tricked.solidverdant.service.TimeTrackingNotificationService
 import dev.tricked.solidverdant.sync.SyncTrigger
+import dev.tricked.solidverdant.util.Clock
 import dev.tricked.solidverdant.util.IsoTimes
 import dev.tricked.solidverdant.widget.TimeTrackingWidget
 import kotlinx.coroutines.CancellationException
@@ -140,6 +142,7 @@ class TrackingViewModel @Inject constructor(
     private val syncTrigger: SyncTrigger,
     private val temporalPolicyProvider: TemporalPolicyProvider,
     @ApplicationContext private val context: Context,
+    private val clock: Clock,
 ) : ViewModel() {
 
     // Account temporal-policy zone. Seeded synchronously (first-frame correct) and kept current by
@@ -216,6 +219,13 @@ class TrackingViewModel @Inject constructor(
     private var historyWindowStartOffset = 0
     private var historyWindowMode = HistoryWindowMode.RECENT
     private var isInitialized = false
+
+    /**
+     * Wall-clock of the last foreground-triggered full refresh. Returning to the app (or a rapid
+     * start/stop) within [FOREGROUND_REFRESH_DEBOUNCE_MS] reuses the just-fetched data instead of
+     * re-hitting the network, while an explicit user refresh remains unthrottled.
+     */
+    private var lastForegroundRefreshMs: Long? = null
 
     /**
      * SV-019: one in-flight "commit the delete once the undo window closes" job per soft-deleted
@@ -494,9 +504,26 @@ class TrackingViewModel @Inject constructor(
         activeEntryMonitorJob = null
     }
 
-    /** Resume polling, refreshing all visible data after a longer background pause. */
+    /**
+     * Resume polling, refreshing all visible data after a longer background pause.
+     *
+     * The full-refresh path is debounced on wall-clock so that returning within a few seconds (or a
+     * rapid start/stop) does not spam the network; the in-screen poll and the collectors already
+     * keep an open screen fresh, so the foreground refresh only matters when the screen has gone
+     * stale. Pending local changes are flushed via [SyncTrigger.requestSync] on the same schedule.
+     */
     fun onAppForegrounded(organizationId: String, memberId: String, refreshAll: Boolean) {
         if (refreshAll) {
+            val now = clock.nowMs()
+            val last = lastForegroundRefreshMs
+            if (last != null && now - last < FOREGROUND_REFRESH_DEBOUNCE_MS) {
+                // Debounced: the data fetched moments ago is still fresh. Keep polling alive.
+                startActiveEntryMonitoring(organizationId)
+                return
+            }
+            lastForegroundRefreshMs = now
+            // Flush any queued local changes to the server before we re-read fresh state.
+            syncTrigger.requestSync()
             loadAllData(organizationId, memberId)
         } else {
             // Returning from the tile picker is usually too brief to trigger a full refresh,
@@ -506,6 +533,16 @@ class TrackingViewModel @Inject constructor(
             }
             startActiveEntryMonitoring(organizationId)
         }
+    }
+
+    /**
+     * Cancels [viewModelScope] for unit tests that install a test Main dispatcher; mirrors the
+     * sync-center VM teardown so no Main-bound collector straggles past `Dispatchers.resetMain()`.
+     * Not used in production.
+     */
+    @VisibleForTesting
+    internal fun cancelScopeForTest() {
+        viewModelScope.coroutineContext[Job]?.cancel()
     }
 
     /**
@@ -1345,6 +1382,7 @@ class TrackingViewModel @Inject constructor(
 
     private companion object {
         const val ACTIVE_ENTRY_REFRESH_INTERVAL_MS = 10_000L
+        const val FOREGROUND_REFRESH_DEBOUNCE_MS = 5_000L
         const val FIRST_SCROLL_TOTAL = 150
         const val MAX_PAGE_SIZE = 500
         const val HISTORY_REFRESH_LIMIT = 250
