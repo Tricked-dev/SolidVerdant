@@ -131,10 +131,12 @@ class PrivacyViewModelTest {
 
     @Test
     fun `exposes the selected server host`() = runTest(dispatcher.scheduler) {
+        // Set an explicit endpoint so this assertion is independent of whatever another test may
+        // have persisted into the shared on-disk AuthDataStore (the DataStore file is process-wide).
+        authDataStore.saveOAuthConfig("https://sync.privacytest.example", "test-client")
         val vm = viewModel()
-        // Default endpoint host.
-        val state = vm.state.first { it.serverHost.isNotBlank() }
-        assertEquals("app.solidtime.io", state.serverHost)
+        val state = vm.state.first { it.serverHost == "sync.privacytest.example" }
+        assertEquals("sync.privacytest.example", state.serverHost)
     }
 
     @Test
