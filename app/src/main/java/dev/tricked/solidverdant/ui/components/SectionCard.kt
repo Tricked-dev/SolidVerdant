@@ -53,7 +53,7 @@ fun SectionCard(
 
 @Preview
 @Composable
-private fun SectionCardPreview() {
+fun SectionCardPreview() {
     SolidVerdantTheme {
         SectionCard(title = "By project") {
             Text("Content row A", style = MaterialTheme.typography.bodyMedium)

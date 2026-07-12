@@ -91,6 +91,7 @@ class EntryTrustRulesTest {
             projects = projects,
             tasks = emptyList(),
             clients = listOf(Client("c1", "First"), Client("c2", "Second")),
+            zone = java.time.ZoneOffset.UTC,
         )
         assertEquals(listOf("b"), filtered.map { it.id })
     }

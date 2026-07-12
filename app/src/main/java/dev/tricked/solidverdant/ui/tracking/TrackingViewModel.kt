@@ -7,6 +7,7 @@
 package dev.tricked.solidverdant.ui.tracking
 
 import android.content.Context
+import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -22,8 +23,11 @@ import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
+import dev.tricked.solidverdant.domain.time.TemporalPolicy
+import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import dev.tricked.solidverdant.service.TimeTrackingNotificationService
 import dev.tricked.solidverdant.sync.SyncTrigger
+import dev.tricked.solidverdant.util.Clock
 import dev.tricked.solidverdant.util.IsoTimes
 import dev.tricked.solidverdant.widget.TimeTrackingWidget
 import kotlinx.coroutines.CancellationException
@@ -40,13 +44,24 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
+
+private const val RATE_LIMIT_RETRY_ATTEMPTS = 3
+private const val HTTP_TOO_MANY_REQUESTS = 429
+private const val MIN_RETRY_AFTER_SECONDS = 1
+private const val MAX_RETRY_AFTER_SECONDS = 60
+private const val DEFAULT_RETRY_AFTER_SECONDS = 5
+private const val MILLIS_PER_SECOND = 1_000L
+private const val TIMER_TICK_INTERVAL_MS = 1_000L
+private const val HISTORY_PROGRESS_CAP = 0.9f
 
 /** Which slice of history the user is currently looking at. */
 internal enum class HistoryWindowMode { RECENT, PAGINATED }
@@ -107,6 +122,14 @@ data class TrackingUiState(
     val editingTags: List<String> = emptyList(),
     val editingBillable: Boolean = false,
     val syncOperations: List<TimeEntryRepository.SyncOperation> = emptyList(),
+    val conflictedEntryIds: Set<String> = emptySet(),
+    /** Account temporal-policy zone; history filtering and new-entry pickers use it. */
+    val zone: ZoneId = ZoneId.systemDefault(),
+    /**
+     * Roadmap #13: id of an entry the UI should open for editing right after a duplicate/split
+     * (the freshly created copy / second half). One-shot: cleared via [TrackingViewModel.consumeEntryToEdit].
+     */
+    val entryToEditId: String? = null,
 ) {
     /** Mutations retain the legacy internal flag; refresh/sync have independent flags. */
     val isMutating: Boolean get() = isLoading
@@ -116,13 +139,21 @@ data class TrackingUiState(
  * ViewModel for time tracking operations
  */
 @HiltViewModel
+@Suppress("LargeClass")
 class TrackingViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val settingsDataStore: SettingsDataStore,
     private val timeEntryRepository: TimeEntryRepository,
     private val syncTrigger: SyncTrigger,
+    private val temporalPolicyProvider: TemporalPolicyProvider,
     @ApplicationContext private val context: Context,
+    private val clock: Clock,
 ) : ViewModel() {
+
+    // Account temporal-policy zone. Seeded synchronously (first-frame correct) and kept current by
+    // the collector in init. Provider owns the device-zone fallback.
+    @Volatile
+    private var currentPolicy: TemporalPolicy = runBlocking { temporalPolicyProvider.current() }
 
     private val cachedTrackingState = settingsDataStore.getCachedTrackingState()
     private val _uiState = MutableStateFlow(
@@ -145,10 +176,23 @@ class TrackingViewModel @Inject constructor(
                 editingTaskId = cached.activeEntry?.taskId,
                 editingTags = cached.activeEntry?.tags?.map { it.id }.orEmpty(),
                 editingBillable = cached.activeEntry?.billable ?: false,
+                zone = currentPolicy.zone,
             )
-        } ?: TrackingUiState(cachedContinueEntry = settingsDataStore.getCachedContinueEntry()),
+        } ?: TrackingUiState(
+            cachedContinueEntry = settingsDataStore.getCachedContinueEntry(),
+            zone = currentPolicy.zone,
+        ),
     )
     val uiState: StateFlow<TrackingUiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            temporalPolicyProvider.policy.collect { policy ->
+                currentPolicy = policy
+                _uiState.value = _uiState.value.copy(zone = policy.zone)
+            }
+        }
+    }
 
     val alwaysShowNotifications = settingsDataStore.alwaysShowNotification
     val appTheme = settingsDataStore.appTheme
@@ -180,6 +224,13 @@ class TrackingViewModel @Inject constructor(
     private var historyWindowStartOffset = 0
     private var historyWindowMode = HistoryWindowMode.RECENT
     private var isInitialized = false
+
+    /**
+     * Wall-clock of the last foreground-triggered full refresh. Returning to the app (or a rapid
+     * start/stop) within [FOREGROUND_REFRESH_DEBOUNCE_MS] reuses the just-fetched data instead of
+     * re-hitting the network, while an explicit user refresh remains unthrottled.
+     */
+    private var lastForegroundRefreshMs: Long? = null
 
     /**
      * SV-019: one in-flight "commit the delete once the undo window closes" job per soft-deleted
@@ -300,7 +351,10 @@ class TrackingViewModel @Inject constructor(
         historyWindowMode = HistoryWindowMode.RECENT
         dataCollectorJob = viewModelScope.launch {
             combine(
-                timeEntryRepository.observeTimeEntries(organizationId),
+                combine(
+                    timeEntryRepository.observeTimeEntries(organizationId),
+                    timeEntryRepository.observeConflicts(organizationId),
+                ) { entries, conflicts -> entries to conflicts.map { it.local.id }.toSet() },
                 timeEntryRepository.observeProjects(organizationId),
                 timeEntryRepository.observeTasks(organizationId),
                 combine(
@@ -308,9 +362,10 @@ class TrackingViewModel @Inject constructor(
                     timeEntryRepository.observeClients(organizationId),
                 ) { tags, clients -> tags to clients },
                 timeEntryRepository.observeActiveEntry(organizationId),
-            ) { entries, projects, tasks, catalog, active ->
+            ) { entriesAndConflicts, projects, tasks, catalog, active ->
                 TrackingData(
-                    entries = entries,
+                    entries = entriesAndConflicts.first,
+                    conflictedEntryIds = entriesAndConflicts.second,
                     projects = projects.filterNot { it.isArchived },
                     tasks = tasks.filterNot { it.isDone },
                     tags = catalog.first,
@@ -348,6 +403,7 @@ class TrackingViewModel @Inject constructor(
                     tasks = data.tasks,
                     tags = data.tags,
                     clients = data.clients,
+                    conflictedEntryIds = data.conflictedEntryIds,
                     currentTimeEntry = data.active,
                     isTracking = data.active != null,
                     hasLoadedTimeEntries = true,
@@ -412,6 +468,7 @@ class TrackingViewModel @Inject constructor(
 
     private data class TrackingData(
         val entries: List<TimeEntry>,
+        val conflictedEntryIds: Set<String>,
         val projects: List<Project>,
         val clients: List<Client>,
         val tasks: List<Task>,
@@ -452,9 +509,26 @@ class TrackingViewModel @Inject constructor(
         activeEntryMonitorJob = null
     }
 
-    /** Resume polling, refreshing all visible data after a longer background pause. */
+    /**
+     * Resume polling, refreshing all visible data after a longer background pause.
+     *
+     * The full-refresh path is debounced on wall-clock so that returning within a few seconds (or a
+     * rapid start/stop) does not spam the network; the in-screen poll and the collectors already
+     * keep an open screen fresh, so the foreground refresh only matters when the screen has gone
+     * stale. Pending local changes are flushed via [SyncTrigger.requestSync] on the same schedule.
+     */
     fun onAppForegrounded(organizationId: String, memberId: String, refreshAll: Boolean) {
         if (refreshAll) {
+            val now = clock.nowMs()
+            val last = lastForegroundRefreshMs
+            if (last != null && now - last < FOREGROUND_REFRESH_DEBOUNCE_MS) {
+                // Debounced: the data fetched moments ago is still fresh. Keep polling alive.
+                startActiveEntryMonitoring(organizationId)
+                return
+            }
+            lastForegroundRefreshMs = now
+            // Flush any queued local changes to the server before we re-read fresh state.
+            syncTrigger.requestSync()
             loadAllData(organizationId, memberId)
         } else {
             // Returning from the tile picker is usually too brief to trigger a full refresh,
@@ -464,6 +538,16 @@ class TrackingViewModel @Inject constructor(
             }
             startActiveEntryMonitoring(organizationId)
         }
+    }
+
+    /**
+     * Cancels [viewModelScope] for unit tests that install a test Main dispatcher; mirrors the
+     * sync-center VM teardown so no Main-bound collector straggles past `Dispatchers.resetMain()`.
+     * Not used in production.
+     */
+    @VisibleForTesting
+    internal fun cancelScopeForTest() {
+        viewModelScope.coroutineContext[Job]?.cancel()
     }
 
     /**
@@ -630,6 +714,7 @@ class TrackingViewModel @Inject constructor(
         }
     }
 
+    @Suppress("LongMethod", "LoopWithTooManyJumpStatements")
     fun jumpToHistoryDate(date: LocalDate) {
         val organizationId = historyOrganizationId ?: return
         val memberId = historyMemberId ?: return
@@ -701,7 +786,7 @@ class TrackingViewModel @Inject constructor(
                 completedProbes++
                 _uiState.value = _uiState.value.copy(
                     historyJumpProgress = (completedProbes.toFloat() / (expectedProbes + 1))
-                        .coerceAtMost(0.9f),
+                        .coerceAtMost(HISTORY_PROGRESS_CAP),
                 )
                 matchOffset = middle
                 when {
@@ -795,14 +880,15 @@ class TrackingViewModel @Inject constructor(
         limit: Int,
         offset: Int,
     ): Result<dev.tricked.solidverdant.data.model.TimeEntriesResponse> {
-        repeat(3) {
+        repeat(RATE_LIMIT_RETRY_ATTEMPTS) {
             val result = authRepository.getTimeEntries(organizationId, memberId, limit, offset)
             val error = result.exceptionOrNull()
-            if (error !is retrofit2.HttpException || error.code() != 429) return result
+            if (error !is retrofit2.HttpException || error.code() != HTTP_TOO_MANY_REQUESTS) return result
             val waitSeconds = error.response()?.headers()?.get("Retry-After")
-                ?.toIntOrNull()?.coerceIn(1, 60) ?: 5
+                ?.toIntOrNull()?.coerceIn(MIN_RETRY_AFTER_SECONDS, MAX_RETRY_AFTER_SECONDS)
+                ?: DEFAULT_RETRY_AFTER_SECONDS
             _uiState.value = _uiState.value.copy(historyRateLimitWaitSeconds = waitSeconds)
-            delay(waitSeconds * 1_000L)
+            delay(waitSeconds * MILLIS_PER_SECOND)
             _uiState.value = _uiState.value.copy(historyRateLimitWaitSeconds = null)
         }
         return Result.failure(IllegalStateException("Rate limit retry exhausted"))
@@ -827,7 +913,7 @@ class TrackingViewModel @Inject constructor(
                     // negative elapsed value and render as garbage (e.g. "-1:-5:-3").
                     val elapsed = (now.epochSecond - startInstant.epochSecond).coerceAtLeast(0)
                     _elapsedSeconds.value = elapsed
-                    delay(1000) // Update every second
+                    delay(TIMER_TICK_INTERVAL_MS) // Update every second
                 }
             } catch (e: CancellationException) {
                 // Expected when timer is stopped, don't log as error
@@ -935,7 +1021,7 @@ class TrackingViewModel @Inject constructor(
     /**
      * Update the current active time entry
      */
-    fun updateCurrentTimeEntry(organizationId: String, timeEntry: TimeEntry? = null, tags: List<String>? = null) {
+    fun updateCurrentTimeEntry(timeEntry: TimeEntry? = null, tags: List<String>? = null) {
         val entryToUpdate = timeEntry ?: _uiState.value.currentTimeEntry
         if (entryToUpdate == null) {
             Timber.w("No active time entry to update")
@@ -989,7 +1075,7 @@ class TrackingViewModel @Inject constructor(
     /**
      * Stop the active time entry
      */
-    fun stopTimeEntry(organizationId: String, memberId: String, userId: String) {
+    fun stopTimeEntry(userId: String) {
         val currentEntry = _uiState.value.currentTimeEntry
 
         // If paused, the entry is already stopped - just clear the paused state
@@ -1052,7 +1138,7 @@ class TrackingViewModel @Inject constructor(
      * Pause the active time entry - stops it via API but keeps notification in paused state
      * preserving the project/task/description for easy resume
      */
-    fun pauseTimeEntry(organizationId: String, userId: String) {
+    fun pauseTimeEntry(userId: String) {
         val currentEntry = _uiState.value.currentTimeEntry
         if (currentEntry == null) {
             Timber.w("No active time entry to pause")
@@ -1185,7 +1271,6 @@ class TrackingViewModel @Inject constructor(
      * Update a past time entry
      */
     fun updatePastTimeEntry(
-        organizationId: String,
         timeEntry: TimeEntry,
         description: String?,
         projectId: String?,
@@ -1218,6 +1303,51 @@ class TrackingViewModel @Inject constructor(
     }
 
     /**
+     * Roadmap #13: duplicate a completed entry, then open the copy for immediate editing. Running
+     * and conflicted entries are guarded by the repository; a failure surfaces as an error message.
+     */
+    fun duplicateTimeEntry(entryId: String) {
+        val memberId = historyMemberId ?: return
+        viewModelScope.launch {
+            timeEntryRepository.duplicateEntry(entryId, memberId)
+                .onSuccess { created ->
+                    syncTrigger.requestSync()
+                    _uiState.value = _uiState.value.copy(entryToEditId = created.id)
+                }
+                .onFailure { error ->
+                    Timber.e(error, "Failed to duplicate time entry")
+                    _uiState.value = _uiState.value.copy(error = error.message ?: "Failed to duplicate entry")
+                }
+        }
+    }
+
+    /**
+     * Roadmap #13: split a completed entry at [atIso]; on success open the new second half for
+     * immediate editing. Validation (interior instant, running/conflict guards) lives in the repo.
+     */
+    fun splitTimeEntry(entryId: String, atIso: String) {
+        val memberId = historyMemberId ?: return
+        viewModelScope.launch {
+            timeEntryRepository.splitEntry(entryId, atIso, memberId)
+                .onSuccess { newId ->
+                    syncTrigger.requestSync()
+                    _uiState.value = _uiState.value.copy(entryToEditId = newId)
+                }
+                .onFailure { error ->
+                    Timber.e(error, "Failed to split time entry")
+                    _uiState.value = _uiState.value.copy(error = error.message ?: "Failed to split entry")
+                }
+        }
+    }
+
+    /** One-shot consume of [TrackingUiState.entryToEditId] once the UI has opened the editor. */
+    fun consumeEntryToEdit() {
+        if (_uiState.value.entryToEditId != null) {
+            _uiState.value = _uiState.value.copy(entryToEditId = null)
+        }
+    }
+
+    /**
      * Delete a time entry.
      *
      * SV-019: only the local soft-delete happens here, synchronously with no outbox op created -
@@ -1226,7 +1356,7 @@ class TrackingViewModel @Inject constructor(
      * deferred behind the undo window in [pendingDeleteCommitJobs] and only runs if [undoDelete]
      * doesn't cancel it first.
      */
-    fun deleteTimeEntry(organizationId: String, timeEntryId: String) {
+    fun deleteTimeEntry(timeEntryId: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
@@ -1302,6 +1432,7 @@ class TrackingViewModel @Inject constructor(
 
     private companion object {
         const val ACTIVE_ENTRY_REFRESH_INTERVAL_MS = 10_000L
+        const val FOREGROUND_REFRESH_DEBOUNCE_MS = 5_000L
         const val FIRST_SCROLL_TOTAL = 150
         const val MAX_PAGE_SIZE = 500
         const val HISTORY_REFRESH_LIMIT = 250

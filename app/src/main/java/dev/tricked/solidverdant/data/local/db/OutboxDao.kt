@@ -102,4 +102,25 @@ interface OutboxDao {
      */
     @Query("DELETE FROM outbox WHERE timeEntryId = :entryId AND deadLettered = 1")
     suspend fun deleteDeadLetteredByEntryId(entryId: String): Int
+
+    /**
+     * The oldest captured base snapshot for an entry's still-queued operations (SV-027 rule 1): an
+     * offline STOP -> UPDATE chain must share the pre-stop base rather than each op re-snapshotting
+     * its own (already-mutated) pre-state. Null if no queued op for this entry carries a base yet.
+     */
+    @Query(
+        "SELECT baseSnapshotJson FROM outbox WHERE timeEntryId = :entryId AND baseSnapshotJson IS NOT NULL " +
+            "ORDER BY id ASC LIMIT 1",
+    )
+    suspend fun oldestBaseSnapshot(entryId: String): String?
+
+    /**
+     * Whether a queued START or CREATE exists for an entry (SV-027 rule 2): such an entry was born
+     * locally, so subsequent STOP/UPDATE/DELETE ops get base = null - there is nothing server-side
+     * to diverge from yet.
+     */
+    @Query(
+        "SELECT EXISTS(SELECT 1 FROM outbox WHERE timeEntryId = :entryId AND opType IN ('START', 'CREATE'))",
+    )
+    suspend fun hasPendingCreateOrStart(entryId: String): Boolean
 }

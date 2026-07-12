@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 同期センター画面 (#33)。生の HTTP/実装用語ではなく、わかりやすい言葉で。 -->
+    <string name="sync_center_title">同期センター</string>
+    <string name="sync_center_open">同期センターを開く</string>
+    <string name="sync_center_navigate_back">戻る</string>
+
+    <!-- 最新状況 -->
+    <string name="sync_freshness_title">最新の状態</string>
+    <string name="sync_last_pulled_label">サーバーから最後に同期</string>
+    <string name="sync_last_pushed_label">最後に変更をアップロード</string>
+    <string name="sync_never_pulled">まだ同期していません</string>
+    <string name="sync_never_pushed">アップロードした変更はまだありません</string>
+    <string name="sync_now">今すぐ同期</string>
+
+    <!-- 相対時間 -->
+    <string name="sync_time_just_now">たった今</string>
+    <string name="sync_time_minutes">%1$d 分前</string>
+    <string name="sync_time_hours">%1$d 時間前</string>
+    <string name="sync_time_days">%1$d 日前</string>
+
+    <!-- ステータス概要（色だけでなくアイコンでも状態を伝えます） -->
+    <string name="sync_status_synced">すべての変更が同期されています</string>
+    <string name="sync_status_pending">%1$d 件の変更が同期待ちです</string>
+    <string name="sync_status_failures">%1$d 件の変更がサーバーに届きませんでした</string>
+    <string name="sync_status_conflicts">%1$d 件の変更に確認が必要です</string>
+    <string name="sync_status_icon_synced">すべて同期済み</string>
+    <string name="sync_status_icon_warning">確認が必要です</string>
+
+    <!-- 同期待ちの変更 -->
+    <string name="sync_pending_section_title">同期待ち</string>
+    <string name="sync_pending_empty">同期待ちの項目はありません。</string>
+    <string name="sync_pending_item">この変更はまだサーバーに届いていません。</string>
+
+    <!-- 失敗した変更 -->
+    <string name="sync_failures_section_title">同期に失敗しました</string>
+    <string name="sync_conflicts_section_title">確認が必要です</string>
+    <string name="sync_conflict_item">この項目は別のデバイスで変更されたため、確認が必要です。</string>
+    <string name="sync_retry_all">すべて再試行</string>
+    <string name="sync_retry">再試行</string>
+    <string name="sync_discard">破棄</string>
+
+    <!-- 操作ごとの説明 -->
+    <string name="sync_op_start">タイマー開始</string>
+    <string name="sync_op_create">新しい時間エントリ</string>
+    <string name="sync_op_stop">タイマー停止</string>
+    <string name="sync_op_update">時間エントリを編集</string>
+    <string name="sync_op_delete">時間エントリを削除</string>
+
+    <!-- わかりやすい失敗理由 -->
+    <string name="sync_reason_offline">デバイスがオフラインだったため、この変更を送信できませんでした。</string>
+    <string name="sync_reason_server">サーバーがこの変更の受け入れで問題が発生しました。</string>
+    <string name="sync_reason_rejected">サーバーがこの変更を受け入れませんでした。</string>
+    <string name="sync_reason_generic">この変更を送信できませんでした。引き続き試行します。</string>
+
+    <!-- 空の状態 -->
+    <string name="sync_all_caught_up">すべて最新です。すべての変更がサーバーに安全に保存されています。</string>
+</resources>

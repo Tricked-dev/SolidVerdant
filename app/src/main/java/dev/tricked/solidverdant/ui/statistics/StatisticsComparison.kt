@@ -34,8 +34,10 @@ data class MetricDelta(val current: Long, val previous: Long) {
      * grow from (an empty previous period). Callers render null as "new"/no-percentage rather than
      * dividing by zero or reporting a misleading infinite jump.
      */
-    fun percentChange(): Double? = if (previous == 0L) null else (current - previous) * 100.0 / previous
+    fun percentChange(): Double? = if (previous == 0L) null else (current - previous) * PERCENT_SCALE / previous
 }
+
+private const val PERCENT_SCALE = 100.0
 
 /** How one project's tracked time moved between the two periods. */
 data class ProjectChange(val projectId: String?, val projectName: String?, val colorHex: String, val current: Long, val previous: Long) {

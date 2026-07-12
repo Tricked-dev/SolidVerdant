@@ -66,6 +66,12 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 
+private const val NARROW_CALENDAR_DAYS = 3
+private const val INITIAL_SCROLL_HOURS = 7
+private const val MAX_ALL_DAY_EVENTS = 3
+private const val FIRST_HOUR = 0
+private const val LAST_HOUR = 23
+
 /**
  * Google-Calendar-style multi-day time grid. Renders [CalendarUiState.visibleDays] as columns with
  * device-calendar events drawn as faded, read-only background blocks behind the tracked time
@@ -91,7 +97,7 @@ fun WeekCalendarView(
         // Never expose the unusable seven-column layout on a phone, including the first frame
         // before CalendarScreen's width effect updates the ViewModel after recreation.
         val days = if (state.viewMode == CalendarViewMode.WEEK && maxWidth < 600.dp) {
-            state.visibleDays.take(3)
+            state.visibleDays.take(NARROW_CALENDAR_DAYS)
         } else {
             state.visibleDays
         }
@@ -119,8 +125,8 @@ private fun WeekCalendarContent(
     onToday: () -> Unit,
     projects: List<Project>,
 ) {
-    val zone = remember { ZoneId.systemDefault() }
-    val today = remember { LocalDate.now() }
+    val zone = state.zone
+    val today = remember(zone) { LocalDate.now(zone) }
     val now = remember { Instant.now() }
     val locale = Locale.getDefault()
 
@@ -214,7 +220,7 @@ private fun WeekGrid(
     projects: List<Project>,
     onEntryClick: (TimeEntry) -> Unit,
 ) {
-    val initialScroll = with(LocalDensity.current) { (CalendarHourHeight * 7).roundToPx() }
+    val initialScroll = with(LocalDensity.current) { (CalendarHourHeight * INITIAL_SCROLL_HOURS).roundToPx() }
     val scrollState = rememberScrollState(initial = initialScroll)
     Box(
         modifier = Modifier
@@ -352,8 +358,8 @@ private fun AllDayRow(days: List<LocalDate>, allDayByDay: Map<LocalDate, List<De
             textAlign = TextAlign.End,
         )
         days.forEach { day ->
-            Column(modifier = Modifier.weight(1f).padding(horizontal = 1.dp)) {
-                allDayByDay[day].orEmpty().take(3).forEach { event ->
+            Column(modifier = Modifier.weight(1f).padding(horizontal = Dimens.Space1)) {
+                allDayByDay[day].orEmpty().take(MAX_ALL_DAY_EVENTS).forEach { event ->
                     val label = event.title?.ifBlank { null } ?: untitled
                     val base = event.eventColor()
                     Text(
@@ -472,7 +478,7 @@ private fun DayColumn(
 internal fun HourGridlines(modifier: Modifier = Modifier) {
     val lineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
     Box(modifier = modifier.fillMaxWidth().height(CalendarTotalHeight)) {
-        for (hour in 0..23) {
+        for (hour in FIRST_HOUR..LAST_HOUR) {
             Text(
                 text = "%02d:00".format(hour),
                 style = MaterialTheme.typography.labelSmall,

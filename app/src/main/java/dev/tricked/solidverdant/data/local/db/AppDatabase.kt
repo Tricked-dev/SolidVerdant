@@ -12,6 +12,14 @@ import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
+private const val DATABASE_VERSION_1 = 1
+private const val DATABASE_VERSION_2 = 2
+private const val DATABASE_VERSION_3 = 3
+private const val DATABASE_VERSION_4 = 4
+private const val DATABASE_VERSION_5 = 5
+private const val DATABASE_VERSION_6 = 6
+private const val DATABASE_VERSION_7 = 7
+
 @Database(
     entities = [
         TimeEntryEntity::class,
@@ -27,7 +35,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TemplateEntity::class,
         InboxDismissalEntity::class,
     ],
-    version = 4,
+    version = DATABASE_VERSION_7,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -45,7 +53,7 @@ abstract class AppDatabase : RoomDatabase() {
          * between these versions, so the migration is a single CREATE TABLE + its index, matching
          * the Room-generated schema for [ClientEntity].
          */
-        val MIGRATION_1_2 = object : Migration(1, 2) {
+        val MIGRATION_1_2 = object : Migration(DATABASE_VERSION_1, DATABASE_VERSION_2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `clients` (" +
@@ -66,7 +74,7 @@ abstract class AppDatabase : RoomDatabase() {
          *  - `deadLettered`: terminal dead-letter flag for permanently failed operations.
          * Existing rows keep an empty key and a non-dead-lettered state.
          */
-        val MIGRATION_2_3 = object : Migration(2, 3) {
+        val MIGRATION_2_3 = object : Migration(DATABASE_VERSION_2, DATABASE_VERSION_3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `outbox` ADD COLUMN `clientId` TEXT NOT NULL DEFAULT ''")
                 db.execSQL("ALTER TABLE `outbox` ADD COLUMN `deadLettered` INTEGER NOT NULL DEFAULT 0")
@@ -78,7 +86,7 @@ abstract class AppDatabase : RoomDatabase() {
          * `organizationId` indices, matching the Room-generated schema for [TemplateEntity] and
          * [InboxDismissalEntity]. No existing table changes, so no data migration is required.
          */
-        val MIGRATION_3_4 = object : Migration(3, 4) {
+        val MIGRATION_3_4 = object : Migration(DATABASE_VERSION_3, DATABASE_VERSION_4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `entry_templates` (" +
@@ -104,6 +112,60 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+        /**
+         * v4 -> v5 adds sync-conflict-detection columns (SV-027):
+         *  - `outbox.baseSnapshotJson`: last server-acked content a local edit was based on.
+         *  - `time_entries.conflictServerJson`: full server TimeEntry JSON ("theirs") captured at
+         *    conflict-detection time.
+         * Both are additive nullable columns; no existing data changes. [SyncState.CONFLICT] is
+         * stored as its name via [Converters], same as the existing enum values, so no column-type
+         * change is needed for `syncState` itself.
+         */
+        val MIGRATION_4_5 = object : Migration(DATABASE_VERSION_4, DATABASE_VERSION_5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `outbox` ADD COLUMN `baseSnapshotJson` TEXT")
+                db.execSQL("ALTER TABLE `time_entries` ADD COLUMN `conflictServerJson` TEXT")
+            }
+        }
+
+        /**
+         * v5 -> v6 adds account-ownership columns to `entry_templates` (Task 3.1):
+         *  - `ownerEndpoint` / `ownerUserId`: the account (API endpoint + user) that owns a
+         *    template. Both are nullable; legacy rows keep NULL owners until a later task claims
+         *    them. A composite index on (`ownerUserId`, `organizationId`) backs owner-scoped
+         *    queries. All changes are additive; no existing data is rewritten.
+         */
+        val MIGRATION_5_6 = object : Migration(DATABASE_VERSION_5, DATABASE_VERSION_6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `entry_templates` ADD COLUMN `ownerEndpoint` TEXT")
+                db.execSQL("ALTER TABLE `entry_templates` ADD COLUMN `ownerUserId` TEXT")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_entry_templates_ownerUserId_organizationId` " +
+                        "ON `entry_templates` (`ownerUserId`, `organizationId`)",
+                )
+            }
+        }
+
+        /**
+         * v6 -> v7 splits per-source freshness on `sync_meta` (roadmap #35, #79):
+         *  - `lastPushAtMs`: last successful outbox flush (push), distinct from the existing pull
+         *    `lastFullSyncAtMs`. Nullable; legacy rows keep NULL until the first successful push.
+         * Additive nullable column only; no existing data is rewritten.
+         */
+        val MIGRATION_6_7 = object : Migration(DATABASE_VERSION_6, DATABASE_VERSION_7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `sync_meta` ADD COLUMN `lastPushAtMs` INTEGER")
+            }
+        }
+
+        val MIGRATIONS: Array<Migration> =
+            arrayOf(
+                MIGRATION_1_2,
+                MIGRATION_2_3,
+                MIGRATION_3_4,
+                MIGRATION_4_5,
+                MIGRATION_5_6,
+                MIGRATION_6_7,
+            )
     }
 }

@@ -81,7 +81,7 @@ private val DonutSize = 140.dp
  * pass a theme token instead (see [hexToColor]); this literal only backs the default for non-Compose
  * callers (the calendar) that cannot resolve a theme colour.
  */
-private val UnknownProjectColor = Color(0xFF9E9E9E)
+private val UnknownProjectColor = Color.Gray
 
 /**
  * Parses a project colour hex into a [Color], falling back to [fallback] when the value is blank or
@@ -97,8 +97,8 @@ fun hexToColor(hex: String, fallback: Color = UnknownProjectColor): Color = try 
 
 fun formatDuration(seconds: Long): String {
     if (seconds <= 0) return "0m"
-    val h = seconds / 3600
-    val m = (seconds % 3600) / 60
+    val h = seconds / SECONDS_PER_HOUR
+    val m = (seconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE
     return when {
         h > 0 -> "${h}h ${m.toString().padStart(2, '0')}m"
         else -> "${m}m"
@@ -214,7 +214,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
                         }
                         Column(Modifier.fillMaxWidth()) {
                             s.perProject.forEach { p ->
-                                val pct = if (s.totalSeconds > 0) p.seconds * 100 / s.totalSeconds else 0
+                                val pct = if (s.totalSeconds > 0) p.seconds * PERCENT_SCALE_INT / s.totalSeconds else 0
                                 ProjectLegendRow(
                                     projectName = p.projectName,
                                     colorHex = p.colorHex,
@@ -227,6 +227,10 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
                         }
                     }
 
+                    if (state.estimateProgress.isNotEmpty()) {
+                        EstimatesCard(state.estimateProgress)
+                    }
+
                     SectionCard(title = stringResource(R.string.stats_trend)) {
                         InteractiveBarChart(
                             bars = s.trend,
@@ -234,7 +238,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
                             onBarClick = { bucket ->
                                 val end = when (state.granularity) {
                                     TrendGranularity.DAY -> bucket.startDate
-                                    TrendGranularity.WEEK -> bucket.startDate.plusDays(6)
+                                    TrendGranularity.WEEK -> bucket.startDate.plusDays(WEEK_DAYS_MINUS_ONE)
                                 }
                                 viewModel.openTrendDrillDown(bucket.label, bucket.startDate, end)
                             },
@@ -255,6 +259,11 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
         StatDrillDownSheet(state = dd, onDismiss = viewModel::closeDrillDown)
     }
 }
+
+private const val SECONDS_PER_HOUR = 3600
+private const val SECONDS_PER_MINUTE = 60
+private const val PERCENT_SCALE_INT = 100
+private const val WEEK_DAYS_MINUS_ONE = 6L
 
 @Composable
 private fun ExportAction(exporting: Boolean, onExport: () -> Unit) {
@@ -297,6 +306,98 @@ private fun ProjectLegendRow(projectName: String, colorHex: String, valueText: S
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f),
         )
+    }
+}
+
+/**
+ * "Estimates & progress": server-authoritative spent vs estimated time per project, remaining or
+ * overflow, and a consumed-fraction bar. Over-budget and near-estimate items are flagged with BOTH
+ * a colour and a text label (never colour alone). Rendered only when [items] is non-empty.
+ */
+@Composable
+private fun EstimatesCard(items: List<EstimateProgress>) {
+    SectionCard(title = stringResource(R.string.stats2_estimates_title)) {
+        val barFallback = MaterialTheme.colorScheme.primary
+        items.forEach { item ->
+            EstimateRow(item, barFallback)
+        }
+    }
+}
+
+@Composable
+private fun EstimateRow(item: EstimateProgress, defaultBarColor: Color) {
+    val swatchFallback = MaterialTheme.colorScheme.outline
+    val errorColor = MaterialTheme.colorScheme.error
+    val spent = item.spentSeconds.toLong()
+    val estimated = item.estimatedSeconds.toLong()
+    val spentOfText = stringResource(R.string.stats2_estimates_spent_of, formatDuration(spent), formatDuration(estimated))
+    val statusText = if (item.isOverBudget) {
+        stringResource(R.string.stats2_estimates_over, formatDuration((-item.remainingSeconds).toLong()))
+    } else {
+        stringResource(R.string.stats2_estimates_remaining, formatDuration(item.remainingSeconds.toLong()))
+    }
+    val rowCd = if (item.isOverBudget) {
+        stringResource(
+            R.string.stats2_estimates_over_content_description,
+            item.name,
+            formatDuration((-item.remainingSeconds).toLong()),
+        )
+    } else {
+        stringResource(
+            R.string.stats2_estimates_progress_content_description,
+            item.name,
+            formatDuration(spent),
+            formatDuration(estimated),
+        )
+    }
+    val barColor = if (item.isOverBudget) errorColor else defaultBarColor
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) { contentDescription = rowCd }
+            .padding(vertical = Dimens.Space4),
+        verticalArrangement = Arrangement.spacedBy(Dimens.Space4),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
+        ) {
+            ProjectSwatch(hexToColor(item.colorHex.orEmpty(), swatchFallback))
+            Text(
+                item.name,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                statusText,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (item.isOverBudget) errorColor else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        LinearProgressIndicator(
+            progress = { item.fraction.coerceIn(0f, 1f) },
+            modifier = Modifier.fillMaxWidth(),
+            color = barColor,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
+        ) {
+            Text(
+                spentOfText,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            if (item.isNearEstimate) {
+                Text(
+                    stringResource(R.string.stats2_estimates_near),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
+            }
+        }
     }
 }
 

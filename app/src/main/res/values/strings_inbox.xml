@@ -50,6 +50,17 @@
     <string name="inbox_issue_long_body">This entry is %1$s long. Check that it ended when you expected.</string>
     <string name="inbox_action_review">Review</string>
 
+    <string name="inbox_issue_conflict_title">Entry changed elsewhere</string>
+    <string name="inbox_issue_conflict_body">This entry was edited on this device and on the server. Choose which version to keep.</string>
+    <string name="inbox_conflict_mine">Mine: %1$s</string>
+    <string name="inbox_conflict_theirs">Server: %1$s</string>
+    <string name="inbox_conflict_deleted">Deleted</string>
+    <string name="inbox_conflict_unavailable">Unavailable</string>
+    <string name="inbox_conflict_empty_value">—</string>
+    <string name="inbox_conflict_version_summary">%1$s · %2$s · %3$s</string>
+    <string name="inbox_conflict_keep_mine">Keep mine</string>
+    <string name="inbox_conflict_keep_theirs">Keep server</string>
+
     <string name="inbox_action_dismiss">Dismiss</string>
     <string name="inbox_entry_untitled">Untitled entry</string>
 
@@ -85,4 +96,20 @@
     <string name="inbox_settings_increase">Increase</string>
     <string name="inbox_minutes_value">%1$d min</string>
     <string name="inbox_hours_value">%1$d h</string>
+
+    <!-- Horizon picker (SV-005) -->
+    <string name="inbox_horizon_picker_title">How far back should Review look?</string>
+    <string name="inbox_horizon_picker_body">Pick a starting point. You can widen or narrow it later from Inbox settings.</string>
+    <string name="inbox_horizon_today">Today</string>
+    <string name="inbox_horizon_this_week">This week</string>
+    <string name="inbox_horizon_last_30_days">Last 30 days</string>
+    <string name="inbox_horizon_everything">Everything</string>
+    <string name="inbox_horizon_chip_since">Since %1$s</string>
+    <string name="inbox_horizon_chip_cd">Change how far back Review looks</string>
+    <string name="inbox_settings_horizon">How far back to review</string>
+
+    <!-- Day grouping / bulk dismiss (SV-005 T4.3) -->
+    <string name="inbox_day_dismiss_all">Dismiss all</string>
+    <string name="inbox_day_dismiss_before">Dismiss everything before this</string>
+    <string name="inbox_day_more_cd">More actions for this day</string>
 </resources>

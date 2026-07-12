@@ -107,6 +107,9 @@ class TimeTrackingTileService : TileService() {
         private const val PREF_LAST_START_TIME = "last_start_time"
 
         private const val OPTIMISTIC_TIMEOUT_MS = 30_000L
+        private const val NETWORK_TIMEOUT_MS = 3_000L
+        private const val TILE_UPDATE_DEBOUNCE_MS = 500L
+        private const val NETWORK_FETCH_TIMEOUT_MS = 5_000L
     }
 
     private val broadcastReceiver = object : BroadcastReceiver() {
@@ -192,7 +195,7 @@ class TimeTrackingTileService : TileService() {
 
                 // Try to get active entry from network
                 val activeEntry = try {
-                    withTimeoutOrNull(3000L) {
+                    withTimeoutOrNull(NETWORK_TIMEOUT_MS) {
                         authRepository.getActiveTimeEntry().getOrNull()
                     }
                 } catch (e: Exception) {
@@ -380,7 +383,7 @@ class TimeTrackingTileService : TileService() {
      */
     private fun updateTileState(forceNetwork: Boolean = false) {
         val now = System.currentTimeMillis()
-        if (!forceNetwork && now - lastUpdateTime < 500) {
+        if (!forceNetwork && now - lastUpdateTime < TILE_UPDATE_DEBOUNCE_MS) {
             Timber.d("Debouncing updateTileState")
             return
         }
@@ -416,7 +419,7 @@ class TimeTrackingTileService : TileService() {
 
                 // Fetch from network - Result.success(null) means no entry, Result.failure means network failed
                 val result = try {
-                    withTimeoutOrNull(5000L) {
+                    withTimeoutOrNull(NETWORK_FETCH_TIMEOUT_MS) {
                         authRepository.getActiveTimeEntry()
                     }
                 } catch (e: Exception) {

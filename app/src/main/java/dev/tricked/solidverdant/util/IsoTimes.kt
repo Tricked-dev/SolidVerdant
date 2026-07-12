@@ -21,18 +21,26 @@ import java.time.ZonedDateTime
  */
 object IsoTimes {
 
+    private const val DATE_LENGTH = 10
+    private const val DATE_YEAR_END = 4
+    private const val DATE_MONTH_END = 7
+    private const val TIME_LENGTH = 16
+    private const val TIME_MARKER_INDEX = 10
+    private const val TIME_SEPARATOR_INDEX = 13
+    private const val TIME_START = 11
+
     /** Same result as `ZonedDateTime.parse(iso).toLocalDate()` for valid ISO date-times. */
     fun localDate(iso: String): LocalDate? {
-        if (iso.length >= 10 && iso[4] == '-' && iso[7] == '-') {
-            runCatching { return LocalDate.parse(iso.substring(0, 10)) }
+        if (iso.length >= DATE_LENGTH && iso[DATE_YEAR_END] == '-' && iso[DATE_MONTH_END] == '-') {
+            runCatching { return LocalDate.parse(iso.substring(0, DATE_LENGTH)) }
         }
         return runCatching { ZonedDateTime.parse(iso).toLocalDate() }.getOrNull()
     }
 
     /** Same result as `ZonedDateTime.parse(iso).format(ofPattern("HH:mm"))`. */
     fun hourMinute(iso: String): String? {
-        if (iso.length >= 16 && iso[10] == 'T' && iso[13] == ':') {
-            return iso.substring(11, 16)
+        if (iso.length >= TIME_LENGTH && iso[TIME_MARKER_INDEX] == 'T' && iso[TIME_SEPARATOR_INDEX] == ':') {
+            return iso.substring(TIME_START, TIME_LENGTH)
         }
         return runCatching {
             val parsed = ZonedDateTime.parse(iso)

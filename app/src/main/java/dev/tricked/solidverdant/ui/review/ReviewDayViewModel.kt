@@ -13,6 +13,8 @@ import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
+import dev.tricked.solidverdant.domain.time.TemporalPolicy
+import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import dev.tricked.solidverdant.reminder.currentOrganizationIdOrNull
 import dev.tricked.solidverdant.sync.SyncScheduler
 import dev.tricked.solidverdant.util.Clock
@@ -27,6 +29,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -50,9 +53,14 @@ class ReviewDayViewModel @Inject constructor(
     private val settings: SettingsDataStore,
     private val syncScheduler: SyncScheduler,
     private val clock: Clock,
+    private val temporalPolicyProvider: TemporalPolicyProvider,
 ) : ViewModel() {
 
-    private val zone: ZoneId get() = ZoneId.systemDefault()
+    // Account temporal-policy zone. Seeded synchronously (first-frame correct) and kept current by
+    // the uiState pipeline, which reads the policy flow directly. Provider owns the device fallback.
+    @Volatile
+    private var currentPolicy: TemporalPolicy = runBlocking { temporalPolicyProvider.current() }
+    private val zone: ZoneId get() = currentPolicy.zone
 
     private val organizationId = MutableStateFlow(settings.currentOrganizationIdOrNull())
     private val handledIds = MutableStateFlow<Set<String>>(emptySet())
@@ -74,7 +82,10 @@ class ReviewDayViewModel @Inject constructor(
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val uiState: StateFlow<ReviewDayUiState> = organizationId
+    val uiState: StateFlow<ReviewDayUiState> = combine(organizationId, temporalPolicyProvider.policy) { orgId, policy ->
+        currentPolicy = policy
+        orgId
+    }
         .flatMapLatest { orgId ->
             if (orgId.isNullOrBlank()) {
                 flowOf(
@@ -82,6 +93,7 @@ class ReviewDayViewModel @Inject constructor(
                         loading = false,
                         hasOrganization = false,
                         dateEpochDay = LocalDate.now(zone).toEpochDay(),
+                        zone = zone,
                     ),
                 )
             } else {
@@ -95,7 +107,7 @@ class ReviewDayViewModel @Inject constructor(
                 }
             }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), ReviewDayUiState(loading = true))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STATE_STOP_TIMEOUT_MS), ReviewDayUiState(loading = true))
 
     private fun buildState(
         entries: List<TimeEntry>,
@@ -165,6 +177,7 @@ class ReviewDayViewModel @Inject constructor(
         return ReviewDayUiState(
             loading = false,
             hasOrganization = true,
+            zone = zone,
             dateEpochDay = today.toEpochDay(),
             totalTrackedSeconds = total,
             billableSeconds = billable,
@@ -315,3 +328,5 @@ class ReviewDayViewModel @Inject constructor(
         }
     }
 }
+
+private const val STATE_STOP_TIMEOUT_MS = 5_000L

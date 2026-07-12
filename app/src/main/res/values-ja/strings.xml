@@ -33,7 +33,7 @@
     <string name="stats_empty">この期間に記録された時間はありません。</string><string name="stats_by_project">プロジェクト別</string><string name="stats_trend">推移</string><string name="stats_last_7_days">過去7日間</string><string name="stats_last_week">先週</string><string name="stats_this_week">今週</string><string name="stats_this_month">今月</string><string name="stats_previous_month">先月</string><string name="stats_custom">カスタム</string><string name="apply">適用</string><string name="stats_total">合計</string><string name="stats_entries">エントリー</string><string name="stats_average_day">1日平均</string><string name="calendar_show_month">月を表示</string><string name="calendar_previous_month">前の月</string><string name="calendar_next_month">次の月</string>
     <string name="long_timer_warning">長時間タイマーの警告</string><string name="long_timer_warning_description">%1$d時間後に警告します。この端末にのみ保存されます。</string><string name="hours_short">%1$d時間</string><string name="timer_running_long">このタイマーは%1$d時間実行されています。</string><string name="stop_now">今すぐ停止</string><string name="keep_running">続行</string><string name="adjust_end_time">終了時刻を調整</string><string name="overlap_warning_count">確認が必要な重複エントリーが%1$d組あります。保存はブロックされません。</string>
     <string name="test_connection">接続をテスト</string><string name="testing_connection">テスト中…</string>
-    <string name="sync_center">同期センター</string><string name="sync_synced">同期済み</string><string name="sync_pending">保留中</string><string name="sync_retrying">再試行中</string><string name="sync_failed">失敗</string><string name="sync_failed_count">%1$d件の変更に失敗しました</string><string name="sync_retrying_count">%1$d件の変更を再試行中</string><string name="sync_pending_count">%1$d件の変更が同期を待機中</string>
+    <string name="sync_center">同期センター</string><string name="sync_synced">同期済み</string><string name="sync_pending">保留中</string><string name="sync_retrying">再試行中</string><string name="sync_failed">失敗</string><string name="sync_failed_count">%1$d件の変更に失敗しました</string><string name="sync_retrying_count">%1$d件の変更を再試行中</string><string name="sync_pending_count">%1$d件の変更が同期を待機中</string><string name="sync_conflict">競合</string><string name="sync_conflict_count">%1$d件の競合を確認してください</string>
     <string name="profile_picture">プロフィール画像</string>
     <string name="search_history">履歴を検索</string>
     <string name="needs_categorization">分類が必要</string>
@@ -45,6 +45,7 @@
     <string name="app_name">ソリッドグリーン</string>
     <string name="tile_label">時間追跡</string>
     <string name="sync_error">一部の変更を同期できませんでした。自動的に再試行されます。</string>
+    <string name="sync_conflict_edit_locked">編集を保存する前に、レビューでこの同期競合を解決してください。</string>
 
     <!-- Login Screen -->
     <string name="solidtime_login">Solidtimeログイン</string>
@@ -71,6 +72,7 @@
 
     <!-- Tracking Screen -->
     <string name="time_tracking">時間追跡</string>
+    <string name="switch_organization">組織を切り替える</string>
     <string name="refresh">更新</string>
     <string name="logout">ログアウト</string>
     <string name="currently_tracking">追跡中</string>
@@ -115,6 +117,11 @@
     <string name="no_description">説明なし</string>
     <string name="edit_time_entry">時間エントリを編集</string>
     <string name="add_time_entry">時間エントリを追加</string>
+    <string name="duplicate_entry">複製</string>
+    <string name="split_entry">分割</string>
+    <string name="split_entry_title">時刻で分割</string>
+    <string name="split_entry_error">分割時刻はエントリの範囲内にする必要があります。</string>
+    <string name="entry_action_locked">実行中または競合中のエントリでは使用できません。</string>
     <string name="entry_date">日付</string>
     <string name="today">今日</string>
     <string name="yesterday">昨日</string>

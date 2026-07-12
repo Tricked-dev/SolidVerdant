@@ -33,12 +33,13 @@
     <string name="stats_empty">No tracked time in this range.</string><string name="stats_by_project">By project</string><string name="stats_trend">Trend</string><string name="stats_last_7_days">Last 7 days</string><string name="stats_last_week">Last week</string><string name="stats_this_week">This week</string><string name="stats_this_month">This month</string><string name="stats_previous_month">Previous month</string><string name="stats_custom">Custom</string><string name="apply">Apply</string><string name="stats_total">Total</string><string name="stats_entries">Entries</string><string name="stats_average_day">Avg / day</string><string name="calendar_show_month">Show month</string><string name="calendar_previous_month">Previous month</string><string name="calendar_next_month">Next month</string>
     <string name="long_timer_warning">Long-timer warning</string><string name="long_timer_warning_description">Warn after %1$d hours. Stored only on this device.</string><string name="hours_short">%1$dh</string><string name="timer_running_long">This timer has been running for %1$d hours.</string><string name="stop_now">Stop now</string><string name="keep_running">Keep running</string><string name="adjust_end_time">Adjust end time</string><string name="overlap_warning_count">%1$d overlapping entry pairs to review. Overlaps are warnings and do not block saving.</string>
     <string name="test_connection">Test connection</string><string name="testing_connection">Testing…</string>
-    <string name="sync_center">Sync center</string><string name="sync_synced">Synced</string><string name="sync_pending">Pending</string><string name="sync_retrying">Retrying</string><string name="sync_failed">Failed</string><string name="sync_failed_count">%1$d failed changes</string><string name="sync_retrying_count">Retrying %1$d changes</string><string name="sync_pending_count">%1$d changes waiting to sync</string>
+    <string name="sync_center">Sync center</string><string name="sync_synced">Synced</string><string name="sync_pending">Pending</string><string name="sync_retrying">Retrying</string><string name="sync_failed">Failed</string><string name="sync_failed_count">%1$d failed changes</string><string name="sync_retrying_count">Retrying %1$d changes</string><string name="sync_pending_count">%1$d changes waiting to sync</string><string name="sync_conflict">Conflict</string><string name="sync_conflict_count">%1$d conflicts need review</string>
     <!-- App Name -->
     <string name="app_name">SolidVerdant</string>
 
     <!-- Sync -->
     <string name="sync_error">Some changes couldn\'t be synced. They\'ll retry automatically.</string>
+    <string name="sync_conflict_edit_locked">Resolve this sync conflict in Review before saving edits.</string>
 
     <!-- Bottom Navigation -->
     <string name="nav_track">Track</string>
@@ -73,6 +74,7 @@
 
     <!-- Tracking Screen -->
     <string name="time_tracking">Time Tracking</string>
+    <string name="switch_organization">Switch organization</string>
     <string name="organization">Organization</string>
     <string name="refresh">Refresh</string>
     <string name="logout">Logout</string>
@@ -124,6 +126,11 @@
     <string name="no_description">No description</string>
     <string name="edit_time_entry">Edit Time Entry</string>
     <string name="add_time_entry">Add Time Entry</string>
+    <string name="duplicate_entry">Duplicate</string>
+    <string name="split_entry">Split</string>
+    <string name="split_entry_title">Split at time</string>
+    <string name="split_entry_error">Split time must be inside the entry.</string>
+    <string name="entry_action_locked">Not available for running or conflicted entries.</string>
     <string name="entry_date">Date</string>
     <string name="today">Today</string>
     <string name="yesterday">Yesterday</string>

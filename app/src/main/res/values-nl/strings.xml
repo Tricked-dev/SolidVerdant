@@ -33,7 +33,7 @@
     <string name="stats_empty">Geen geregistreerde tijd in deze periode.</string><string name="stats_by_project">Per project</string><string name="stats_trend">Trend</string><string name="stats_last_7_days">Afgelopen 7 dagen</string><string name="stats_last_week">Vorige week</string><string name="stats_this_week">Deze week</string><string name="stats_this_month">Deze maand</string><string name="stats_previous_month">Vorige maand</string><string name="stats_custom">Aangepast</string><string name="apply">Toepassen</string><string name="stats_total">Totaal</string><string name="stats_entries">Boekingen</string><string name="stats_average_day">Gem. / dag</string><string name="calendar_show_month">Maand tonen</string><string name="calendar_previous_month">Vorige maand</string><string name="calendar_next_month">Volgende maand</string>
     <string name="long_timer_warning">Waarschuwing lange timer</string><string name="long_timer_warning_description">Waarschuw na %1$d uur. Alleen op dit apparaat opgeslagen.</string><string name="hours_short">%1$du</string><string name="timer_running_long">Deze timer loopt al %1$d uur.</string><string name="stop_now">Nu stoppen</string><string name="keep_running">Doorgaan</string><string name="adjust_end_time">Eindtijd aanpassen</string><string name="overlap_warning_count">%1$d overlappende boekingsparen om te controleren. Overlap blokkeert opslaan niet.</string>
     <string name="test_connection">Verbinding testen</string><string name="testing_connection">Testen…</string>
-    <string name="sync_center">Synchronisatiecentrum</string><string name="sync_synced">Gesynchroniseerd</string><string name="sync_pending">In afwachting</string><string name="sync_retrying">Opnieuw proberen</string><string name="sync_failed">Mislukt</string><string name="sync_failed_count">%1$d mislukte wijzigingen</string><string name="sync_retrying_count">%1$d wijzigingen worden opnieuw geprobeerd</string><string name="sync_pending_count">%1$d wijzigingen wachten op synchronisatie</string>
+    <string name="sync_center">Synchronisatiecentrum</string><string name="sync_synced">Gesynchroniseerd</string><string name="sync_pending">In afwachting</string><string name="sync_retrying">Opnieuw proberen</string><string name="sync_failed">Mislukt</string><string name="sync_failed_count">%1$d mislukte wijzigingen</string><string name="sync_retrying_count">%1$d wijzigingen worden opnieuw geprobeerd</string><string name="sync_pending_count">%1$d wijzigingen wachten op synchronisatie</string><string name="sync_conflict">Conflict</string><string name="sync_conflict_count">%1$d conflicten moeten worden nagekeken</string>
     <string name="profile_picture">Profielfoto</string>
     <string name="search_history">Geschiedenis doorzoeken</string>
     <string name="needs_categorization">Moet worden gecategoriseerd</string>
@@ -45,6 +45,7 @@
     <string name="app_name">SolidGroen</string>
     <string name="tile_label">Tijdregistratie</string>
     <string name="sync_error">Sommige wijzigingen konden niet worden gesynchroniseerd. Ze worden automatisch opnieuw geprobeerd.</string>
+    <string name="sync_conflict_edit_locked">Los dit synchronisatieconflict eerst op in Review.</string>
 
     <!-- Login Screen -->
     <string name="solidtime_login">Solidtime Inloggen</string>
@@ -71,6 +72,7 @@
 
     <!-- Tracking Screen -->
     <string name="time_tracking">Tijdregistratie</string>
+    <string name="switch_organization">Organisatie wisselen</string>
     <string name="refresh">Vernieuwen</string>
     <string name="logout">Uitloggen</string>
     <string name="currently_tracking">Momenteel Aan Het Registreren</string>
@@ -115,6 +117,11 @@
     <string name="no_description">Geen beschrijving</string>
     <string name="edit_time_entry">Tijdregistratie Bewerken</string>
     <string name="add_time_entry">Tijdregistratie Toevoegen</string>
+    <string name="duplicate_entry">Dupliceren</string>
+    <string name="split_entry">Splitsen</string>
+    <string name="split_entry_title">Splitsen op tijd</string>
+    <string name="split_entry_error">De splitstijd moet binnen de registratie vallen.</string>
+    <string name="entry_action_locked">Niet beschikbaar voor lopende of conflicterende registraties.</string>
     <string name="entry_date">Datum</string>
     <string name="today">Vandaag</string>
     <string name="yesterday">Gisteren</string>

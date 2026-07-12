@@ -54,13 +54,16 @@ class ConnectionTester @Inject constructor(private val client: OkHttpClient) {
         }
         val url = endpoint.trimEnd('/') + "/api/v1/users/me"
         try {
-            client.newBuilder().followRedirects(false).callTimeout(15, TimeUnit.SECONDS).build().newCall(
+            client.newBuilder().followRedirects(false).callTimeout(CONNECTION_TIMEOUT_SECONDS, TimeUnit.SECONDS).build().newCall(
                 Request.Builder().url(url).header("Accept", "application/json").get().build(),
             ).execute().use { response ->
                 when (response.code) {
-                    200, 401, 403 -> ConnectionTestResult(ConnectionTestCode.READY, response.code)
-                    404 -> ConnectionTestResult(ConnectionTestCode.API_NOT_FOUND, response.code)
-                    in 500..599 -> ConnectionTestResult(ConnectionTestCode.SERVER_ERROR, response.code)
+                    HTTP_OK, HTTP_UNAUTHORIZED, HTTP_FORBIDDEN -> ConnectionTestResult(ConnectionTestCode.READY, response.code)
+                    HTTP_NOT_FOUND -> ConnectionTestResult(ConnectionTestCode.API_NOT_FOUND, response.code)
+                    in HTTP_SERVER_ERROR_START..HTTP_SERVER_ERROR_END -> ConnectionTestResult(
+                        ConnectionTestCode.SERVER_ERROR,
+                        response.code,
+                    )
                     else -> ConnectionTestResult(ConnectionTestCode.UNEXPECTED_RESPONSE, response.code)
                 }
             }
@@ -73,5 +76,15 @@ class ConnectionTester @Inject constructor(private val client: OkHttpClient) {
         } catch (e: Exception) {
             ConnectionTestResult(ConnectionTestCode.TEST_FAILED)
         }
+    }
+
+    private companion object {
+        const val CONNECTION_TIMEOUT_SECONDS = 15L
+        const val HTTP_OK = 200
+        const val HTTP_UNAUTHORIZED = 401
+        const val HTTP_FORBIDDEN = 403
+        const val HTTP_NOT_FOUND = 404
+        const val HTTP_SERVER_ERROR_START = 500
+        const val HTTP_SERVER_ERROR_END = 599
     }
 }

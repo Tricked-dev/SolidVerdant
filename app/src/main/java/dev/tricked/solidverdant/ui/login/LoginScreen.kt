@@ -62,9 +62,7 @@ fun LoginScreen(
     onConfigSave: (String, String) -> Unit,
     onConfigReset: () -> Unit,
     onTestConnection: (String, String) -> Unit,
-    onAuthUrlReady: (String) -> Unit,
     onClearAuthUrl: () -> Unit,
-    onClearError: () -> Unit,
 ) {
     val context = LocalContext.current
     var showConfigDialog by remember { mutableStateOf(false) }
@@ -139,7 +137,6 @@ fun LoginScreen(
             uiState.error?.let { error ->
                 ErrorCard(
                     error = error,
-                    onDismiss = onClearError,
                 )
             }
 
@@ -170,7 +167,7 @@ fun LoginScreen(
  * Error card to display error messages
  */
 @Composable
-private fun ErrorCard(error: String, onDismiss: () -> Unit) {
+private fun ErrorCard(error: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(

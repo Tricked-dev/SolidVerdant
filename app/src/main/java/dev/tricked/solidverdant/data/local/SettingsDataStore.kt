@@ -25,6 +25,7 @@ import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.User
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -49,6 +50,14 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     private val dataStore = context.settingsDataStore
     private val immediateCache = context.getSharedPreferences("immediate_ui_cache", Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true }
+
+    /**
+     * Change token for the synchronous [immediateCache] auth entries. The immediate cache has no
+     * built-in change-notification path, so [cacheAuth]/[clearCachedData] bump this counter to let
+     * [observeCachedAuth] re-read and re-emit. The synchronous read is intentional (first-frame
+     * pattern); we only need a signal that something changed.
+     */
+    private val authCacheChanges = MutableStateFlow(0)
 
     init {
         // Warm the SharedPreferences file on a background thread so the synchronous
@@ -94,6 +103,11 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
 
         /** Default reminder time: 17:00 local, expressed as minutes since midnight. */
         const val DEFAULT_REMINDER_MINUTE_OF_DAY: Int = 17 * 60
+        const val DEFAULT_LONG_TIMER_HOURS = 4
+        const val MIN_LONG_TIMER_HOURS = 1
+        const val MAX_LONG_TIMER_HOURS = 24
+        const val MINUTE_OF_DAY_START = 0
+        const val MAX_MINUTE_OF_DAY = 1439
 
         @Volatile
         private var instance: SettingsDataStore? = null
@@ -143,7 +157,14 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
                 }
             }
             .apply()
+        authCacheChanges.value += 1
     }
+
+    /**
+     * Emits the current [getCachedAuth] immediately and re-emits whenever the cached auth changes
+     * (via [cacheAuth]/[clearCachedData]). The read is synchronous by design (first-frame pattern).
+     */
+    fun observeCachedAuth(): Flow<CachedAuth?> = authCacheChanges.map { getCachedAuth() }
 
     fun cacheCurrentMembership(id: String) {
         immediateCache.edit().putString(CURRENT_MEMBERSHIP_ID, id).apply()
@@ -186,6 +207,7 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     /** Clear cached account data while preserving the user's app preferences. */
     suspend fun clearCachedData() {
         immediateCache.edit().clear().commit()
+        authCacheChanges.value += 1
         dataStore.edit(::clearWidgetState)
     }
 
@@ -214,7 +236,7 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         preferences[OPTIMISTIC_REFRESH] ?: true
     }.distinctUntilChanged()
 
-    val longTimerHours: Flow<Int> = dataStore.data.map { it[LONG_TIMER_HOURS] ?: 4 }.distinctUntilChanged()
+    val longTimerHours: Flow<Int> = dataStore.data.map { it[LONG_TIMER_HOURS] ?: DEFAULT_LONG_TIMER_HOURS }.distinctUntilChanged()
 
     /**
      * Deadline (epoch millis) at which the forgotten-timer warning should next fire, plus the
@@ -267,7 +289,7 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     }
 
     suspend fun setLongTimerHours(hours: Int) {
-        require(hours in 1..24)
+        require(hours in MIN_LONG_TIMER_HOURS..MAX_LONG_TIMER_HOURS)
         dataStore.edit { it[LONG_TIMER_HOURS] = hours }
     }
 
@@ -303,7 +325,7 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     }
 
     suspend fun setReminderMinuteOfDay(minuteOfDay: Int) {
-        require(minuteOfDay in 0..1439)
+        require(minuteOfDay in MINUTE_OF_DAY_START..MAX_MINUTE_OF_DAY)
         dataStore.edit { it[REMINDER_MINUTE_OF_DAY] = minuteOfDay }
     }
 

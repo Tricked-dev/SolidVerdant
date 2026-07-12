@@ -41,6 +41,8 @@ import dev.tricked.solidverdant.ui.components.AppStatusOverlay
 import dev.tricked.solidverdant.ui.login.LoginScreen
 import dev.tricked.solidverdant.ui.navigation.MainNavHost
 import dev.tricked.solidverdant.ui.navigation.ReviewRoutes
+import dev.tricked.solidverdant.ui.navigation.SettingsRoutes
+import dev.tricked.solidverdant.ui.navigation.SyncRoutes
 import dev.tricked.solidverdant.ui.review.ReviewBadgeViewModel
 import dev.tricked.solidverdant.ui.review.ReviewScreen
 import dev.tricked.solidverdant.ui.statistics.StatisticsScreen
@@ -268,6 +270,7 @@ fun SolidVerdantApp(
             MainNavHost(
                 navController = navController,
                 inboxBadgeCount = inboxBadgeCount,
+                onPrivacyLogout = { authViewModel.logout() },
                 reviewContent = {
                     ReviewScreen(
                         onOpenReminderSettings = {
@@ -329,21 +332,14 @@ fun SolidVerdantApp(
                         onStopTracking = {
                             authUiState.currentMembership?.let { membership ->
                                 authUiState.user?.let { user ->
-                                    trackingViewModel.stopTimeEntry(
-                                        organizationId = membership.organizationId,
-                                        memberId = membership.id,
-                                        userId = user.id,
-                                    )
+                                    trackingViewModel.stopTimeEntry(userId = user.id)
                                 }
                             }
                         },
                         onPauseTracking = {
                             authUiState.currentMembership?.let { membership ->
                                 authUiState.user?.let { user ->
-                                    trackingViewModel.pauseTimeEntry(
-                                        organizationId = membership.organizationId,
-                                        userId = user.id,
-                                    )
+                                    trackingViewModel.pauseTimeEntry(userId = user.id)
                                 }
                             }
                         },
@@ -374,11 +370,7 @@ fun SolidVerdantApp(
                             trackingViewModel.updateBillable(billable)
                         },
                         onUpdateCurrentEntry = {
-                            authUiState.currentMembership?.let { membership ->
-                                trackingViewModel.updateCurrentTimeEntry(
-                                    organizationId = membership.organizationId,
-                                )
-                            }
+                            trackingViewModel.updateCurrentTimeEntry()
                         },
                         onUpdatePastEntry = {
                                 entry: TimeEntry,
@@ -390,19 +382,16 @@ fun SolidVerdantApp(
                                 start: String,
                                 end: String,
                             ->
-                            authUiState.currentMembership?.let { membership ->
-                                trackingViewModel.updatePastTimeEntry(
-                                    organizationId = membership.organizationId,
-                                    timeEntry = entry,
-                                    description = description,
-                                    projectId = projectId,
-                                    taskId = taskId,
-                                    tags = tags,
-                                    billable = billable,
-                                    start = start,
-                                    end = end,
-                                )
-                            }
+                            trackingViewModel.updatePastTimeEntry(
+                                timeEntry = entry,
+                                description = description,
+                                projectId = projectId,
+                                taskId = taskId,
+                                tags = tags,
+                                billable = billable,
+                                start = start,
+                                end = end,
+                            )
                         },
                         onCreateEntry = {
                                 description: String?,
@@ -431,23 +420,24 @@ fun SolidVerdantApp(
                             }
                         },
                         onDeleteEntry = { timeEntryId ->
-                            authUiState.currentMembership?.let { membership ->
-                                trackingViewModel.deleteTimeEntry(
-                                    organizationId = membership.organizationId,
-                                    timeEntryId = timeEntryId,
-                                )
-                            }
+                            trackingViewModel.deleteTimeEntry(timeEntryId = timeEntryId)
                         },
+                        onDuplicateEntry = trackingViewModel::duplicateTimeEntry,
+                        onSplitEntry = trackingViewModel::splitTimeEntry,
+                        onEntryToEditConsumed = trackingViewModel::consumeEntryToEdit,
                         onUndoDelete = trackingViewModel::undoDelete,
                         onRetrySync = trackingViewModel::retrySync,
                         onRetrySyncEntry = trackingViewModel::retrySync,
+                        onOpenSyncCenter = {
+                            navController.navigate(SyncRoutes.SYNC_CENTER)
+                        },
+                        onOpenPrivacy = {
+                            navController.navigate(SettingsRoutes.PRIVACY)
+                        },
                         onLoadMoreEntries = trackingViewModel::loadMoreTimeEntries,
                         onLoadNewerEntries = trackingViewModel::loadNewerTimeEntries,
                         onJumpToDate = trackingViewModel::jumpToHistoryDate,
                         onHistoryJumpConsumed = trackingViewModel::consumeHistoryJump,
-                        getGroupedEntries = {
-                            trackingViewModel.getGroupedTimeEntries()
-                        },
                     )
                 },
                 calendarContent = {
@@ -460,7 +450,6 @@ fun SolidVerdantApp(
                             tags = trackingUiState.tags,
                             onSaveEntry = { entry, description, projectId, taskId, entryTags, billable, start, end ->
                                 trackingViewModel.updatePastTimeEntry(
-                                    organizationId = currentMembership.organizationId,
                                     timeEntry = entry,
                                     description = description,
                                     projectId = projectId,
@@ -494,12 +483,8 @@ fun SolidVerdantApp(
                     authViewModel.resetOAuthConfig()
                 },
                 onTestConnection = authViewModel::testConnection,
-                onAuthUrlReady = { /* URL is launched in LoginScreen */ },
                 onClearAuthUrl = {
                     authViewModel.clearAuthUrl()
-                },
-                onClearError = {
-                    authViewModel.clearError()
                 },
             )
         }

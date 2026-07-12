@@ -14,6 +14,8 @@ import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.ZoneId
+import java.time.ZoneOffset
 
 class CalendarDateUtilsTest {
 
@@ -25,6 +27,17 @@ class CalendarDateUtilsTest {
         // First cell is Monday of the week containing July 1 -> June 29, 2026.
         assertEquals(LocalDate.of(2026, 6, 29), weeks.first().first())
         // Grid contains every day of July.
+        val all = weeks.flatten()
+        (1..31).forEach { d -> assert(all.contains(LocalDate.of(2026, 7, d))) }
+    }
+
+    @Test
+    fun monthGridWeeks_honoursSundayWeekStart() {
+        // July 2026: 1st is a Wednesday. With SUNDAY start, the first cell is Sun June 28, 2026.
+        val weeks = monthGridWeeks(YearMonth.of(2026, 7), DayOfWeek.SUNDAY)
+        assertEquals(7, weeks.first().size)
+        assertEquals(DayOfWeek.SUNDAY, weeks.first().first().dayOfWeek)
+        assertEquals(LocalDate.of(2026, 6, 28), weeks.first().first())
         val all = weeks.flatten()
         (1..31).forEach { d -> assert(all.contains(LocalDate.of(2026, 7, d))) }
     }
@@ -65,7 +78,22 @@ class CalendarDateUtilsTest {
             duration = null,
             organizationId = "o",
         )
-        assertEquals(LocalDate.of(2026, 7, 6), entryLocalDate(e))
+        assertEquals(LocalDate.of(2026, 7, 6), entryLocalDate(e, ZoneOffset.UTC))
+    }
+
+    @Test
+    fun entryLocalDate_usesGivenZoneForDayBoundary() {
+        // 23:30Z on July 6 is already July 7 in Asia/Tokyo (UTC+9): the account zone decides the day.
+        val e = TimeEntry(
+            id = "1",
+            userId = "u",
+            start = "2026-07-06T23:30:00Z",
+            end = null,
+            duration = null,
+            organizationId = "o",
+        )
+        assertEquals(LocalDate.of(2026, 7, 7), entryLocalDate(e, ZoneId.of("Asia/Tokyo")))
+        assertEquals(LocalDate.of(2026, 7, 6), entryLocalDate(e, ZoneOffset.UTC))
     }
 
     @Test
@@ -79,7 +107,7 @@ class CalendarDateUtilsTest {
             duration = null,
             organizationId = "o",
         )
-        assertNull(entryLocalDate(e))
+        assertNull(entryLocalDate(e, ZoneOffset.UTC))
     }
 
     @Test

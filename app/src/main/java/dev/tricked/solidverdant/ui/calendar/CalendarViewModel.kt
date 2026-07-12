@@ -15,6 +15,8 @@ import dev.tricked.solidverdant.data.calendar.DeviceCalendar
 import dev.tricked.solidverdant.data.calendar.DeviceCalendarEvent
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.TimeEntryReader
+import dev.tricked.solidverdant.domain.time.TemporalPolicy
+import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -29,14 +31,13 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
-import java.time.temporal.WeekFields
-import java.util.Locale
 import javax.inject.Inject
 
 /** Which calendar layout the user is currently viewing. */
@@ -46,6 +47,8 @@ data class DayBucket(val date: LocalDate, val entries: List<TimeEntry>, val tota
 
 data class CalendarUiState(
     val viewMode: CalendarViewMode = CalendarViewMode.WEEK,
+    /** Account temporal-policy zone; day/week boundaries and "today" are computed in it. */
+    val zone: ZoneId = ZoneId.systemDefault(),
     val visibleMonth: YearMonth = YearMonth.now(),
     val selectedDate: LocalDate = LocalDate.now(),
     /** Anchor day for the week/day page; [visibleDays] is derived from it. */
@@ -73,22 +76,36 @@ class CalendarViewModel @Inject constructor(
     private val reader: TimeEntryReader,
     private val eventSource: CalendarEventSource,
     private val overlaySettings: CalendarOverlaySettings,
+    private val temporalPolicyProvider: TemporalPolicyProvider,
 ) : ViewModel() {
 
     private var organizationId: String? = null
     private var memberId: String? = null
     private var entriesJob: Job? = null
 
-    /** Locale's first day of week so the grid honours regional week-start conventions. */
-    private val weekStart: DayOfWeek = WeekFields.of(Locale.getDefault()).firstDayOfWeek
+    // Account temporal policy (zone + week start). Seeded synchronously from the provider's cached
+    // read so the first frame already uses the account zone/week-start (see StatisticsViewModel);
+    // kept current by the collector in init. The provider owns the device-zone fallback.
+    @Volatile
+    private var currentPolicy: TemporalPolicy = runBlocking { temporalPolicyProvider.current() }
+    private val zone: ZoneId get() = currentPolicy.zone
+    private val weekStart: DayOfWeek get() = currentPolicy.firstDayOfWeek
 
-    private val _uiState = MutableStateFlow(CalendarUiState(weekStart = weekStart))
+    private val _uiState = MutableStateFlow(
+        CalendarUiState(
+            zone = currentPolicy.zone,
+            weekStart = currentPolicy.firstDayOfWeek,
+            visibleMonth = YearMonth.now(currentPolicy.zone),
+            selectedDate = LocalDate.now(currentPolicy.zone),
+            weekAnchor = LocalDate.now(currentPolicy.zone),
+        ),
+    )
     val uiState: StateFlow<CalendarUiState> = _uiState.asStateFlow()
 
     // Overlay query inputs kept as flows so event queries react without recollecting time entries.
     private val viewModeInput = MutableStateFlow(CalendarViewMode.WEEK)
-    private val weekAnchorInput = MutableStateFlow(LocalDate.now())
-    private val dayCountInput = MutableStateFlow(7)
+    private val weekAnchorInput = MutableStateFlow(LocalDate.now(currentPolicy.zone))
+    private val dayCountInput = MutableStateFlow(FULL_WEEK_DAYS)
     private val hasPermissionInput = MutableStateFlow(false)
     private val retryCounter = MutableStateFlow(0)
 
@@ -104,6 +121,16 @@ class CalendarViewModel @Inject constructor(
 
     init {
         recomputeVisibleDays()
+
+        // React to account temporal-policy changes (login/logout/profile refresh): update the zone
+        // and week start, then re-derive the visible days off the new week start.
+        viewModelScope.launch {
+            temporalPolicyProvider.policy.collect { policy ->
+                currentPolicy = policy
+                _uiState.update { it.copy(zone = policy.zone, weekStart = policy.firstDayOfWeek) }
+                recomputeVisibleDays()
+            }
+        }
 
         // Mirror persisted overlay preferences into the UI state.
         viewModelScope.launch {
@@ -150,7 +177,7 @@ class CalendarViewModel @Inject constructor(
                     entries
                         // Skip entries whose start cannot be parsed instead of bucketing them
                         // onto today, which would corrupt the current day's total.
-                        .mapNotNull { entry -> entryLocalDate(entry)?.let { it to entry } }
+                        .mapNotNull { entry -> entryLocalDate(entry, zone)?.let { it to entry } }
                         .groupBy({ it.first }, { it.second })
                         .mapValues { (date, dayEntries) ->
                             DayBucket(
@@ -178,7 +205,7 @@ class CalendarViewModel @Inject constructor(
 
     /** Called by the UI as the available width changes so WEEK mode can drop to a 3-day layout. */
     fun setVisibleDayCount(count: Int) {
-        val safe = count.coerceIn(1, 7)
+        val safe = count.coerceIn(MIN_VISIBLE_DAYS, FULL_WEEK_DAYS)
         if (dayCountInput.value == safe) return
         dayCountInput.value = safe
         _uiState.update { it.copy(dayCount = safe) }
@@ -216,7 +243,7 @@ class CalendarViewModel @Inject constructor(
     }
 
     fun jumpToToday() {
-        val today = LocalDate.now()
+        val today = LocalDate.now(zone)
         weekAnchorInput.value = today
         _uiState.update {
             it.copy(
@@ -351,7 +378,6 @@ class CalendarViewModel @Inject constructor(
     private fun rangeFor(mode: CalendarViewMode, anchor: LocalDate, dayCount: Int): Pair<Long, Long>? {
         val days = visibleDaysFor(mode, anchor, dayCount)
         if (days.isEmpty()) return null
-        val zone = ZoneId.systemDefault()
         val start = days.first().atStartOfDay(zone).toInstant().toEpochMilli()
         val end = days.last().plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
         return start to end
@@ -382,3 +408,6 @@ class CalendarViewModel @Inject constructor(
 
     fun entriesForSelectedDay(): List<TimeEntry> = _uiState.value.bucketsByDate[_uiState.value.selectedDate]?.entries ?: emptyList()
 }
+
+private const val FULL_WEEK_DAYS = 7
+private const val MIN_VISIBLE_DAYS = 1

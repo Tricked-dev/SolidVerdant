@@ -73,7 +73,7 @@ class ManageTemplatesViewModel @Inject constructor(
     ) { selectedId, memberships ->
         val selected = memberships.firstOrNull { it.id == selectedId } ?: memberships.firstOrNull()
         selected?.organizationId
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STATE_STOP_TIMEOUT_MS), null)
 
     val uiState: StateFlow<ManageTemplatesUiState> =
         combine(organizationId, retryTrigger) { org, _ -> org }
@@ -103,12 +103,12 @@ class ManageTemplatesViewModel @Inject constructor(
                     }
                 }
             }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ManageTemplatesUiState())
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STATE_STOP_TIMEOUT_MS), ManageTemplatesUiState())
 
     /** Ordered quick-start list for the Track row, isolated so it recomposes only on real changes. */
     val quickStart: StateFlow<List<EntryTemplate>> = uiState
         .map { it.quickStart }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STATE_STOP_TIMEOUT_MS), emptyList())
 
     fun retry() {
         retryTrigger.value += 1
@@ -164,3 +164,5 @@ class ManageTemplatesViewModel @Inject constructor(
         const val QUICK_START_LIMIT = 12
     }
 }
+
+private const val STATE_STOP_TIMEOUT_MS = 5_000L

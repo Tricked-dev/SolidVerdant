@@ -17,12 +17,14 @@ import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
-import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.domain.inbox.InboxAnalyzer
 import dev.tricked.solidverdant.domain.inbox.InboxIssue
 import dev.tricked.solidverdant.domain.inbox.InboxSettings
 import dev.tricked.solidverdant.domain.inbox.InboxSettingsDataStore
+import dev.tricked.solidverdant.domain.inbox.resolveHorizonStartMs
+import dev.tricked.solidverdant.domain.time.TemporalPolicy
+import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import dev.tricked.solidverdant.sync.SyncTrigger
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.Dispatchers
@@ -37,9 +39,11 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.time.DayOfWeek
+import java.time.LocalDate
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -56,19 +60,20 @@ import javax.inject.Inject
 @HiltViewModel
 class InboxViewModel @Inject constructor(
     private val timeEntryRepository: TimeEntryRepository,
-    private val authRepository: AuthRepository,
     private val authDataStore: AuthDataStore,
     private val settingsDataStore: SettingsDataStore,
     private val inboxSettingsDataStore: InboxSettingsDataStore,
     private val dismissalDao: InboxDismissalDao,
     private val syncTrigger: SyncTrigger,
     private val clock: Clock,
+    private val temporalPolicyProvider: TemporalPolicyProvider,
 ) : ViewModel() {
 
     private data class OrgContext(val organizationId: String, val memberId: String, val userId: String, val preventOverlap: Boolean)
 
     private data class InboxData(
         val entries: List<TimeEntry>,
+        val conflicts: List<TimeEntryRepository.SyncConflict>,
         val projects: List<Project>,
         val tasks: List<Task>,
         val tags: List<Tag>,
@@ -77,10 +82,15 @@ class InboxViewModel @Inject constructor(
         val dismissals: List<InboxDismissalEntity>,
     )
 
-    private val zone: ZoneId = ZoneId.systemDefault()
+    // Account temporal-policy zone, used for gap-analysis day/window boundaries and shown-in-zone
+    // formatting downstream. Seeded synchronously from the provider's cached read (first-frame
+    // correct), then kept current by the collector in init. Provider owns the device-zone fallback.
+    @Volatile
+    private var currentPolicy: TemporalPolicy = runBlocking { temporalPolicyProvider.current() }
+    private val zone: ZoneId get() = currentPolicy.zone
     private val retentionMs = TimeUnit.DAYS.toMillis(InboxAnalyzer.DISMISSAL_RETENTION_DAYS)
 
-    private val _uiState = MutableStateFlow(InboxUiState())
+    private val _uiState = MutableStateFlow(InboxUiState(zone = currentPolicy.zone))
     val uiState: StateFlow<InboxUiState> = _uiState.asStateFlow()
 
     @Volatile
@@ -101,6 +111,12 @@ class InboxViewModel @Inject constructor(
     }.distinctUntilChanged()
 
     init {
+        viewModelScope.launch {
+            temporalPolicyProvider.policy.collect { policy ->
+                currentPolicy = policy
+                _uiState.update { it.copy(zone = policy.zone) }
+            }
+        }
         viewModelScope.launch { observeInbox() }
     }
 
@@ -113,7 +129,10 @@ class InboxViewModel @Inject constructor(
             } else {
                 maybeInitialRefresh(ctx)
                 combine(
-                    timeEntryRepository.observeTimeEntries(ctx.organizationId),
+                    combine(
+                        timeEntryRepository.observeTimeEntries(ctx.organizationId),
+                        timeEntryRepository.observeConflicts(ctx.organizationId),
+                    ) { entries, conflicts -> entries to conflicts },
                     timeEntryRepository.observeProjects(ctx.organizationId),
                     timeEntryRepository.observeTasks(ctx.organizationId),
                     timeEntryRepository.observeTags(ctx.organizationId),
@@ -124,10 +143,12 @@ class InboxViewModel @Inject constructor(
                     ) { settings, longTimerHours, dismissals ->
                         Triple(settings, longTimerHours, dismissals)
                     },
-                ) { entries, projects, tasks, tags, config ->
+                ) { entryData, projects, tasks, tags, config ->
+                    val (entries, conflicts) = entryData
                     val (settings, longTimerHours, dismissals) = config
                     ctx to InboxData(
                         entries = entries,
+                        conflicts = conflicts,
                         projects = projects.filterNot { it.isArchived },
                         tasks = tasks.filterNot { it.isDone },
                         tags = tags,
@@ -151,7 +172,25 @@ class InboxViewModel @Inject constructor(
                     .filter { now - it.dismissedAtMs <= retentionMs }
                     .map { it.issueKey }
                     .toSet()
-                Triple(now, config, InboxAnalyzer.analyze(data.entries, config, activeDismissed, now, zone))
+                val horizonStartMs =
+                    resolveHorizonStartMs(data.settings.horizonChosen, data.settings.horizonStartMs, now, zone)
+                // Conflicts below are DB-derived and always surfaced (not subject to the horizon).
+                val analyzerIssues = InboxAnalyzer.analyze(data.entries, config, activeDismissed, now, zone, horizonStartMs)
+                val conflictIssues = data.conflicts.map { conflict ->
+                    val startMs = parseEpochMillis(conflict.local.start) ?: now
+                    val endMs = conflict.local.end?.let(::parseEpochMillis) ?: now
+                    InboxIssue(
+                        key = "conflict:${conflict.local.id}",
+                        type = dev.tricked.solidverdant.domain.inbox.InboxIssueType.CONFLICT,
+                        startMs = startMs,
+                        endMs = maxOf(startMs, endMs),
+                        primaryEntry = conflict.local,
+                        conflictServer = conflict.server,
+                        conflictServerDeleted = conflict.serverDeleted,
+                        conflictLocalDeleted = conflict.localDeleted,
+                    )
+                }
+                Triple(now, config, conflictIssues + analyzerIssues)
             }
             pruneExpiredDismissals(data.dismissals, now)
             _uiState.update {
@@ -159,12 +198,14 @@ class InboxViewModel @Inject constructor(
                     isLoading = false,
                     organizationId = ctx.organizationId,
                     issues = issues,
-                    hasEntries = data.entries.isNotEmpty(),
+                    hasEntries = data.entries.isNotEmpty() || data.conflicts.isNotEmpty(),
                     config = config,
                     preventOverlap = ctx.preventOverlap,
                     projects = data.projects,
                     tasks = data.tasks,
                     tags = data.tags,
+                    horizonChosen = data.settings.horizonChosen,
+                    horizonStartMs = data.settings.horizonStartMs,
                 )
             }
         }
@@ -191,6 +232,7 @@ class InboxViewModel @Inject constructor(
 
     /** Persist a dismissal for [issue]; the analyzer immediately drops it from the list. */
     fun dismiss(issue: InboxIssue) {
+        if (issue.type == dev.tricked.solidverdant.domain.inbox.InboxIssueType.CONFLICT) return
         val ctx = context ?: return
         viewModelScope.launch {
             dismissalDao.upsert(
@@ -202,6 +244,38 @@ class InboxViewModel @Inject constructor(
             )
             _uiState.update { it.copy(pendingUndoKey = issue.key) }
         }
+    }
+
+    /**
+     * SV-005 T4.3: batch-dismiss every dismissible issue in [issues] (a day group) in one write.
+     * CONFLICT issues are skipped — they are pinned and never dismissed. No single [pendingUndoKey]
+     * is set for a batch; bulk undo is out of scope (individual undo still applies per card).
+     */
+    fun dismissDay(issues: List<InboxIssue>) {
+        val ctx = context ?: return
+        val now = clock.nowMs()
+        val dismissals = issues
+            .filterNot { it.type == dev.tricked.solidverdant.domain.inbox.InboxIssueType.CONFLICT }
+            .map { issue ->
+                InboxDismissalEntity(
+                    issueKey = issue.key,
+                    organizationId = ctx.organizationId,
+                    dismissedAtMs = now,
+                )
+            }
+        if (dismissals.isEmpty()) return
+        viewModelScope.launch { dismissalDao.upsertAll(dismissals) }
+    }
+
+    /**
+     * SV-005 T4.3: durable "clear everything before this day" — moves the horizon forward to
+     * [dayStartMs] (start-of-day in the account zone, computed by the pane). Unlike dismissals this
+     * does not create per-issue rows and is not subject to the 45-day dismissal-retention pruning, so
+     * the older issues stay gone; it is reversible from the settings horizon picker.
+     */
+    fun dismissBefore(dayStartMs: Long) {
+        context ?: return
+        viewModelScope.launch { inboxSettingsDataStore.setHorizonStart(dayStartMs) }
     }
 
     /** Undo the most recent dismissal (before its retention silently expires). */
@@ -222,6 +296,43 @@ class InboxViewModel @Inject constructor(
 
     fun consumeRefreshError() {
         _uiState.update { it.copy(refreshError = false) }
+    }
+
+    fun keepMine(issue: InboxIssue) {
+        if (issue.type != dev.tricked.solidverdant.domain.inbox.InboxIssueType.CONFLICT) return
+        context?.let { ctx ->
+            issue.primaryEntry?.id?.let { entryId ->
+                viewModelScope.launch {
+                    runCatching { timeEntryRepository.resolveKeepMine(entryId, ctx.memberId) }
+                        .onSuccess { resolved ->
+                            if (resolved) {
+                                syncTrigger.requestSync()
+                            } else {
+                                _uiState.update { it.copy(actionError = InboxActionError.RESOLVE_FAILED) }
+                            }
+                        }
+                        .onFailure {
+                            Timber.w(it, "Failed to keep local conflict version")
+                            _uiState.update { it.copy(actionError = InboxActionError.RESOLVE_FAILED) }
+                        }
+                }
+            }
+        }
+    }
+
+    fun keepTheirs(issue: InboxIssue) {
+        if (issue.type != dev.tricked.solidverdant.domain.inbox.InboxIssueType.CONFLICT) return
+        val entryId = issue.primaryEntry?.id ?: return
+        viewModelScope.launch {
+            runCatching { timeEntryRepository.resolveKeepTheirs(entryId) }
+                .onSuccess { resolved ->
+                    if (!resolved) _uiState.update { it.copy(actionError = InboxActionError.RESOLVE_FAILED) }
+                }
+                .onFailure {
+                    Timber.w(it, "Failed to keep server conflict version")
+                    _uiState.update { it.copy(actionError = InboxActionError.RESOLVE_FAILED) }
+                }
+        }
     }
 
     /**
@@ -313,6 +424,27 @@ class InboxViewModel @Inject constructor(
 
     // ---- Config editing ----
 
+    /**
+     * SV-005: record the user's horizon choice, computing the lower bound in the account zone and
+     * week-start. Called from the first-run picker and the settings sheet. Reuses the same [clock]
+     * "now" the analyze pipeline uses; EVERYTHING clears the bound (persisted null).
+     */
+    fun chooseHorizon(option: HorizonOption) {
+        val policy = currentPolicy
+        val startMs: Long? = when (option) {
+            HorizonOption.TODAY ->
+                LocalDate.now(policy.zone).atStartOfDay(policy.zone).toInstant().toEpochMilli()
+            HorizonOption.THIS_WEEK -> {
+                val today = LocalDate.now(policy.zone)
+                val daysBack = ((today.dayOfWeek.value - policy.firstDayOfWeek.value) + DAYS_PER_WEEK) % DAYS_PER_WEEK
+                today.minusDays(daysBack.toLong()).atStartOfDay(policy.zone).toInstant().toEpochMilli()
+            }
+            HorizonOption.LAST_30_DAYS -> clock.nowMs() - TimeUnit.DAYS.toMillis(LAST_N_DAYS.toLong())
+            HorizonOption.EVERYTHING -> null
+        }
+        viewModelScope.launch { inboxSettingsDataStore.setHorizonStart(startMs) }
+    }
+
     fun setCheckEnabled(check: InboxSettingsDataStore.InboxCheck, enabled: Boolean) {
         viewModelScope.launch { inboxSettingsDataStore.setCheckEnabled(check, enabled) }
     }
@@ -323,7 +455,10 @@ class InboxViewModel @Inject constructor(
 
     fun setWorkWindow(startMinute: Int, endMinute: Int) {
         viewModelScope.launch {
-            if (startMinute in 0..1440 && endMinute in 0..1440 && endMinute > startMinute) {
+            if (startMinute in MINUTE_OF_DAY_START..MINUTE_OF_DAY_END &&
+                endMinute in MINUTE_OF_DAY_START..MINUTE_OF_DAY_END &&
+                endMinute > startMinute
+            ) {
                 inboxSettingsDataStore.setWorkWindow(startMinute, endMinute)
             }
         }
@@ -331,13 +466,13 @@ class InboxViewModel @Inject constructor(
 
     fun setMinGapMinutes(minutes: Int) {
         viewModelScope.launch {
-            if (minutes in 1..24 * 60) inboxSettingsDataStore.setMinGapMinutes(minutes)
+            if (minutes in MIN_GAP_MINUTES..MAX_GAP_MINUTES) inboxSettingsDataStore.setMinGapMinutes(minutes)
         }
     }
 
     fun setMaxDurationHours(hours: Int) {
         viewModelScope.launch {
-            if (hours in 1..24) settingsDataStore.setLongTimerHours(hours)
+            if (hours in MIN_DURATION_HOURS..MAX_DURATION_HOURS) settingsDataStore.setLongTimerHours(hours)
         }
     }
 
@@ -348,4 +483,17 @@ class InboxViewModel @Inject constructor(
             expired.forEach { runCatching { dismissalDao.deleteByKey(it.issueKey) } }
         }
     }
+
+    private fun parseEpochMillis(value: String): Long? = runCatching {
+        java.time.OffsetDateTime.parse(value).toInstant().toEpochMilli()
+    }.getOrNull()
 }
+
+private const val MINUTE_OF_DAY_START = 0
+private const val MINUTE_OF_DAY_END = 1440
+private const val MIN_GAP_MINUTES = 1
+private const val MAX_GAP_MINUTES = 24 * 60
+private const val MIN_DURATION_HOURS = 1
+private const val MAX_DURATION_HOURS = 24
+private const val DAYS_PER_WEEK = 7
+private const val LAST_N_DAYS = 30

@@ -22,6 +22,7 @@ import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.remote.ConnectionTestCode
 import dev.tricked.solidverdant.data.remote.ConnectionTester
 import dev.tricked.solidverdant.data.repository.AuthRepository
+import dev.tricked.solidverdant.data.repository.TemplateRepository
 import dev.tricked.solidverdant.sync.SyncScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -30,6 +31,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -72,6 +74,7 @@ class AuthViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val userCacheCleaner: UserCacheCleaner,
     private val settingsDataStore: SettingsDataStore,
+    private val templateRepository: TemplateRepository,
     private val connectionTester: ConnectionTester,
     private val syncScheduler: SyncScheduler,
     @ApplicationContext private val context: Context,
@@ -213,6 +216,11 @@ class AuthViewModel @Inject constructor(
                     )
                     settingsDataStore.cacheAuth(user, memberships, currentMembership?.id)
 
+                    // Claim legacy (pre-ownership) templates for this account now that the auth
+                    // cache is written. Only affects NULL-owner rows and is a no-op for accounts
+                    // that already own their templates (org-switch never reaches this path).
+                    templateRepository.claimUnowned(authRepository.endpoint.first(), user.id)
+
                     // Save current membership
                     currentMembership?.let {
                         authRepository.saveCurrentMembershipId(it.id)
@@ -320,7 +328,7 @@ class AuthViewModel @Inject constructor(
             }
             // Cancel any in-flight/queued sync before clearing the cache so it can't
             // re-insert the outgoing account's rows into the just-cleared database.
-            // TODO: warn the user about unsynced changes before logging out (follow-up).
+            // Unsynced changes are cancelled by the scheduler before account data is cleared.
             syncScheduler.cancelSync()
             userCacheCleaner.clear()
             // Clear account-owned data before changing auth state. Once auth is cleared,

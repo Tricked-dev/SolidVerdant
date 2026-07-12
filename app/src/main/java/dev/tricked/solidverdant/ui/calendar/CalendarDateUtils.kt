@@ -15,19 +15,23 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
+private const val DAYS_PER_WEEK = 7
+private const val SECONDS_PER_HOUR = 3600
+private const val SECONDS_PER_MINUTE = 60
+
 fun monthGridWeeks(month: YearMonth, weekStart: DayOfWeek = DayOfWeek.MONDAY): List<List<LocalDate>> {
     val firstOfMonth = month.atDay(1)
-    val lead = ((firstOfMonth.dayOfWeek.value - weekStart.value) + 7) % 7
+    val lead = ((firstOfMonth.dayOfWeek.value - weekStart.value) + DAYS_PER_WEEK) % DAYS_PER_WEEK
     val gridStart = firstOfMonth.minusDays(lead.toLong())
     val lastOfMonth = month.atEndOfMonth()
     val gridEndExclusive = run {
-        val trail = ((weekStart.value + 6 - lastOfMonth.dayOfWeek.value) + 7) % 7
+        val trail = ((weekStart.value + DAYS_PER_WEEK - 1 - lastOfMonth.dayOfWeek.value) + DAYS_PER_WEEK) % DAYS_PER_WEEK
         lastOfMonth.plusDays(trail.toLong() + 1)
     }
     val totalDays = java.time.temporal.ChronoUnit.DAYS.between(gridStart, gridEndExclusive).toInt()
     return (0 until totalDays)
         .map { gridStart.plusDays(it.toLong()) }
-        .chunked(7)
+        .chunked(DAYS_PER_WEEK)
 }
 
 /**
@@ -36,9 +40,9 @@ fun monthGridWeeks(month: YearMonth, weekStart: DayOfWeek = DayOfWeek.MONDAY): L
  * Returning null (rather than falling back to today) keeps malformed entries from polluting the
  * current day's totals; callers must skip null buckets. Mirrors the aggregator's safe startDate.
  */
-fun entryLocalDate(entry: TimeEntry): LocalDate? = try {
+fun entryLocalDate(entry: TimeEntry, zone: ZoneId): LocalDate? = try {
     ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME)
-        .withZoneSameInstant(ZoneId.systemDefault())
+        .withZoneSameInstant(zone)
         .toLocalDate()
 } catch (_: Exception) {
     null
@@ -59,7 +63,7 @@ fun entryDurationSeconds(entry: TimeEntry, now: Instant): Long {
 
 fun formatDuration(seconds: Long): String {
     val safe = seconds.coerceAtLeast(0)
-    val hours = safe / 3600
-    val minutes = (safe % 3600) / 60
+    val hours = safe / SECONDS_PER_HOUR
+    val minutes = (safe % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE
     return "%dh %02dm".format(hours, minutes)
 }

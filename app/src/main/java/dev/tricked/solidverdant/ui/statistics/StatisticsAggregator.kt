@@ -9,6 +9,7 @@ package dev.tricked.solidverdant.ui.statistics
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -31,6 +32,28 @@ data class StatisticsSummary(
     val perProject: List<ProjectTotal>,
     val trend: List<TrendBucket>,
 )
+
+/** Fraction at/above which a project is flagged as approaching its estimate (but not yet over). */
+private const val NEAR_THRESHOLD = 0.9f
+
+/**
+ * Budget/progress for one project against its Solidtime estimate. [spentSeconds] and
+ * [estimatedSeconds] are the SERVER'S authoritative project-level totals (seconds) — not recomputed
+ * from local entries — so this is a reporting aid consistent across the whole organization. Derived,
+ * display-only: nothing here is persisted.
+ */
+data class EstimateProgress(val id: String, val name: String, val colorHex: String?, val estimatedSeconds: Int, val spentSeconds: Int) {
+    /** Seconds left against the estimate; negative when over budget. */
+    val remainingSeconds: Int get() = estimatedSeconds - spentSeconds
+
+    /** Spent as a fraction of the estimate; may exceed 1.0 when over budget. */
+    val fraction: Float get() = if (estimatedSeconds <= 0) 0f else spentSeconds.toFloat() / estimatedSeconds
+
+    val isOverBudget: Boolean get() = spentSeconds > estimatedSeconds
+
+    /** Approaching (but not past) the estimate — an early warning, distinct from [isOverBudget]. */
+    val isNearEstimate: Boolean get() = !isOverBudget && fraction >= NEAR_THRESHOLD
+}
 
 /** A single entry as surfaced in a drill-down list, clipped to the selected sub-range. */
 data class DrillDownRow(
@@ -74,6 +97,47 @@ object StatisticsAggregator {
             projectOk && taskOk && clientOk && tagOk && billableOk
         }
     }
+
+    /**
+     * Budget/progress for every in-scope project that carries a positive Solidtime estimate.
+     *
+     * Uses the server's authoritative project-level [Project.spentTime] vs [Project.estimatedTime]
+     * (both seconds) rather than recomputing spent from local entries, so the numbers match the rest
+     * of the Solidtime org (roadmap #83/#84). Archived projects and any without a non-null, positive
+     * estimate are dropped. The active [filters] are honoured on the dimensions that apply to a whole
+     * project — the explicit project set, the project's client, and its billable flag — so the
+     * section's scope stays consistent with the by-project view above it; the entry-level task/tag
+     * dimensions have no project-level meaning here and are ignored. Sorted over-budget first (most
+     * urgent), then by consumed fraction descending, then by name for a stable order.
+     */
+    fun projectEstimateProgress(projects: List<Project>, filters: StatFilters): List<EstimateProgress> = projects.asSequence()
+        .filter { !it.isArchived }
+        .filter { (it.estimatedTime ?: 0) > 0 }
+        .filter { p ->
+            val projectOk = filters.projectIds.isEmpty() || p.id in filters.projectIds
+            val clientOk = filters.clientIds.isEmpty() || (p.clientId != null && p.clientId in filters.clientIds)
+            val billableOk = when (filters.billable) {
+                BillableFilter.All -> true
+                BillableFilter.Billable -> p.isBillable
+                BillableFilter.NonBillable -> !p.isBillable
+            }
+            projectOk && clientOk && billableOk
+        }
+        .map { p ->
+            EstimateProgress(
+                id = p.id,
+                name = p.name,
+                colorHex = p.color,
+                estimatedSeconds = p.estimatedTime ?: 0,
+                spentSeconds = p.spentTime,
+            )
+        }
+        .sortedWith(
+            compareByDescending<EstimateProgress> { it.isOverBudget }
+                .thenByDescending { it.fraction }
+                .thenBy { it.name },
+        )
+        .toList()
 
     /** In-range contribution (seconds) of [e], or null when it does not overlap the window. */
     fun clippedSeconds(e: TimeEntry, zone: ZoneId, rangeStart: LocalDate, rangeEnd: LocalDate): Long? =
@@ -125,6 +189,7 @@ object StatisticsAggregator {
         rangeEnd: LocalDate,
         zone: ZoneId,
         granularity: TrendGranularity,
+        firstDayOfWeek: DayOfWeek,
     ): StatisticsSummary {
         val projectById = projects.associateBy { it.id }
 
@@ -158,7 +223,7 @@ object StatisticsAggregator {
         val days = ChronoUnit.DAYS.between(rangeStart, rangeEnd) + 1
         val avgPerDay = if (days > 0) totalSeconds / days else totalSeconds
 
-        val trend = buildTrend(counted.flatMap { it.daily }, rangeStart, rangeEnd, granularity)
+        val trend = buildTrend(counted.flatMap { it.daily }, rangeStart, rangeEnd, granularity, firstDayOfWeek)
 
         return StatisticsSummary(
             totalSeconds = totalSeconds,
@@ -182,6 +247,7 @@ object StatisticsAggregator {
      * still counts and attributes to the correct project/day. The returned per-day seconds sum to
      * the entry's total in-range contribution.
      */
+    @Suppress("ReturnCount")
     private fun clippedDailyBreakdown(
         e: TimeEntry,
         zone: ZoneId,
@@ -233,6 +299,7 @@ object StatisticsAggregator {
         rangeStart: LocalDate,
         rangeEnd: LocalDate,
         granularity: TrendGranularity,
+        firstDayOfWeek: DayOfWeek,
     ): List<TrendBucket> = when (granularity) {
         TrendGranularity.DAY -> {
             val byDay = rows.groupBy({ it.first }, { it.second }).mapValues { it.value.sum() }
@@ -241,7 +308,10 @@ object StatisticsAggregator {
                 .toList()
         }
         TrendGranularity.WEEK -> {
-            val wf = WeekFields.ISO
+            // Minimal-days pinned to ISO's 4 so a Monday firstDayOfWeek reproduces WeekFields.ISO
+            // byte-for-byte (same week-start grouping AND same W## week numbers); only the
+            // first-day-of-week shifts bucket boundaries for e.g. a Sunday-start account.
+            val wf = WeekFields.of(firstDayOfWeek, WEEK_MIN_DAYS)
             val byWeekStart = rows.groupBy(
                 { it.first.with(wf.dayOfWeek(), 1) },
                 { it.second },
@@ -253,10 +323,16 @@ object StatisticsAggregator {
                     val week = ws.get(wf.weekOfWeekBasedYear())
                     // Include the (week-based) year so labels don't collide across year
                     // boundaries, e.g. W52 of 2025 vs W52 of 2026 in a multi-year range.
-                    val yy = ws.get(wf.weekBasedYear()) % 100
+                    val yy = ws.get(wf.weekBasedYear()) % PERCENT_YEAR_BASE
                     TrendBucket("W$week '%02d".format(yy), ws, byWeekStart[ws] ?: 0L)
                 }
                 .toList()
         }
     }
 }
+
+private const val PERCENT_YEAR_BASE = 100
+
+// Matches WeekFields.ISO.minimalDaysInFirstWeek so a Monday firstDayOfWeek reproduces ISO week
+// numbering exactly; see the WEEK branch of buildTrend.
+private const val WEEK_MIN_DAYS = 4

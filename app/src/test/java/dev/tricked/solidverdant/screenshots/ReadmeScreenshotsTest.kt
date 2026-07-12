@@ -40,6 +40,7 @@ import dev.tricked.solidverdant.ui.calendar.WeekCalendarView
 import dev.tricked.solidverdant.ui.components.EditTimeEntryDialog
 import dev.tricked.solidverdant.ui.review.InboxHeader
 import dev.tricked.solidverdant.ui.review.InboxIssueCard
+import dev.tricked.solidverdant.ui.review.InboxIssueCardActions
 import dev.tricked.solidverdant.ui.review.ReviewContent
 import dev.tricked.solidverdant.ui.review.ReviewDayUiState
 import dev.tricked.solidverdant.ui.review.ReviewItem
@@ -227,6 +228,7 @@ class ReadmeScreenshotsTest {
     private fun groupedHistory(): Map<LocalDate, List<TimeEntry>> = historyEntries.groupBy { LocalDate.parse(it.start.substring(0, 10)) }
         .toSortedMap(compareByDescending { it })
 
+    @Suppress("LongMethod")
     private fun buildScreens(): List<Screen> = listOf(
         // 1. Track — active timer running + history rows with sync chips.
         Screen("track") {
@@ -236,7 +238,6 @@ class ReadmeScreenshotsTest {
                 currentTimeEntry = entry("running", "Landing page build", "2026-06-10T14:00:00Z", null, 0, taskId = "t1"),
                 projects = projects,
                 tasks = tasks,
-                tags = tags,
                 clients = clients,
                 timeEntries = historyEntries,
                 hasLoadedTimeEntries = true,
@@ -314,7 +315,6 @@ class ReadmeScreenshotsTest {
                 onEntryClick = {},
                 projects = projects,
                 tasks = tasks,
-                tags = tags,
             )
         },
         // 4. Calendar — week view with a couple of overlay calendar events.
@@ -460,7 +460,15 @@ class ReadmeScreenshotsTest {
                 modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                InboxHeader(issueCount = issues.size, isRefreshing = false, onRefresh = {}, onOpenSettings = {})
+                InboxHeader(
+                    issueCount = issues.size,
+                    isRefreshing = false,
+                    showHorizonChip = true,
+                    horizonLabel = "Everything",
+                    onHorizonChipClick = {},
+                    onRefresh = {},
+                    onOpenSettings = {},
+                )
                 issues.forEach { issue ->
                     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                         InboxIssueCard(
@@ -468,8 +476,10 @@ class ReadmeScreenshotsTest {
                             preventOverlap = true,
                             projectsById = projectsById,
                             zone = zone,
-                            onQuickFix = {},
-                            onDismiss = {},
+                            actions = InboxIssueCardActions(
+                                onQuickFix = {},
+                                onDismiss = {},
+                            ),
                         )
                     }
                 }

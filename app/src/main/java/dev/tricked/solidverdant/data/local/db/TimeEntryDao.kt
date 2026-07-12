@@ -12,7 +12,15 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Upsert
+import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.sync.ConflictSnapshot
 import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.json.Json
+
+private val conflictJson = Json {
+    encodeDefaults = true
+    ignoreUnknownKeys = true
+}
 
 @Dao
 interface TimeEntryDao {
@@ -27,6 +35,9 @@ interface TimeEntryDao {
 
     @Query("SELECT * FROM time_entries WHERE id = :id")
     suspend fun getById(id: String): TimeEntryEntity?
+
+    @Query("SELECT * FROM time_entries WHERE organizationId = :orgId AND syncState = 'CONFLICT' ORDER BY start DESC")
+    fun observeConflicts(orgId: String): Flow<List<TimeEntryEntity>>
 
     @Upsert
     suspend fun upsert(entry: TimeEntryEntity)
@@ -88,15 +99,86 @@ interface TimeEntryDao {
      * Never lets a server pull clobber an unsynced local edit or a pending soft-delete.
      */
     @Transaction
-    suspend fun applyServerEntries(entries: List<TimeEntryEntity>, tagIdsByEntry: Map<String, List<String>>) {
+    suspend fun applyServerEntries(
+        entries: List<TimeEntryEntity>,
+        tagIdsByEntry: Map<String, List<String>>,
+        baseSnapshotsByEntry: Map<String, String> = emptyMap(),
+        serverJsonByEntry: Map<String, String> = emptyMap(),
+    ) {
         entries.forEach { entity ->
             val local = getById(entity.id)
+            val tagIds = tagIdsByEntry[entity.id].orEmpty()
+            val serverJson = serverJsonByEntry[entity.id] ?: serverJson(entity, tagIds)
+            if (local?.syncState == SyncState.CONFLICT) {
+                // An unresolved conflict owns the local row. Pulls may refresh only "theirs";
+                // replacing the row here would destroy the recovery copy shown in Review.
+                if (!sameServerSnapshot(local.conflictServerJson, entity, tagIds)) {
+                    upsert(local.copy(conflictServerJson = serverJson))
+                }
+                return@forEach
+            }
             if (local != null && (local.syncState == SyncState.PENDING || local.pendingDelete)) {
+                val base = baseSnapshotsByEntry[entity.id]
+                if (base == null) return@forEach
+                val baseSnapshot = runCatching { conflictJson.decodeFromString<ConflictSnapshot>(base) }.getOrNull()
+                val serverSnapshot = ConflictSnapshot.of(
+                    start = entity.start,
+                    end = entity.end,
+                    description = entity.description,
+                    projectId = entity.projectId,
+                    taskId = entity.taskId,
+                    billable = entity.billable,
+                    tagIds = tagIds,
+                )
+                if (baseSnapshot?.matches(serverSnapshot) == true) return@forEach
+                upsert(local.copy(syncState = SyncState.CONFLICT, conflictServerJson = serverJson))
                 return@forEach
             }
             upsert(entity)
-            replaceTagRefs(entity.id, tagIdsByEntry[entity.id].orEmpty())
+            replaceTagRefs(entity.id, tagIds)
         }
+    }
+
+    private fun serverJson(entity: TimeEntryEntity, tagIds: List<String>): String = conflictJson.encodeToString(
+        TimeEntry(
+            id = entity.id,
+            description = entity.description,
+            userId = entity.userId,
+            start = entity.start,
+            end = entity.end,
+            duration = entity.duration,
+            taskId = entity.taskId,
+            projectId = entity.projectId,
+            tags = tagIds.map { dev.tricked.solidverdant.data.model.Tag(it) },
+            billable = entity.billable,
+            organizationId = entity.organizationId,
+        ),
+    )
+
+    private fun sameServerSnapshot(existingJson: String?, entity: TimeEntryEntity, tagIds: List<String>): Boolean {
+        val previous = existingJson
+            ?.let { runCatching { conflictJson.decodeFromString<TimeEntry>(it) }.getOrNull() }
+        return previous?.let {
+            ConflictSnapshot.of(
+                it.start,
+                it.end,
+                it.description,
+                it.projectId,
+                it.taskId,
+                it.billable,
+                it.tags.map { tag -> tag.id },
+            ).matches(
+                ConflictSnapshot.of(
+                    entity.start,
+                    entity.end,
+                    entity.description,
+                    entity.projectId,
+                    entity.taskId,
+                    entity.billable,
+                    tagIds,
+                ),
+            )
+        } ?: false
     }
 
     /**

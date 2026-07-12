@@ -23,8 +23,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
-/** Resolved bar geometry for a single [BarChart] draw pass. */
-data class BarChartSizing(val gap: Float, val barWidth: Float)
+private const val GAP_FRACTION = 0.02f
+private const val MAX_GAP_FRACTION = 0.5f
+private const val MIN_NON_ZERO_VALUE = 0.0001f
 
 /**
  * Computes gap and bar width for [count] bars across [width] pixels.
@@ -38,14 +39,14 @@ data class BarChartSizing(val gap: Float, val barWidth: Float)
 fun barChartSizing(width: Float, count: Int, minBarWidth: Float = 1f): BarChartSizing {
     if (count <= 0 || width <= 0f) return BarChartSizing(0f, 0f)
     // Gaps get at most half the width; the desired 2% shrinks as bars multiply.
-    val gap = (width * 0.02f).coerceAtMost(width * 0.5f / (count + 1))
+    val gap = (width * GAP_FRACTION).coerceAtMost(width * MAX_GAP_FRACTION / (count + 1))
     val barWidth = ((width - gap * (count + 1)) / count).coerceAtLeast(minBarWidth)
     return BarChartSizing(gap = gap, barWidth = barWidth)
 }
 
 @Composable
 fun BarChart(bars: List<Pair<String, Float>>, barColor: Color, modifier: Modifier = Modifier) {
-    val max = bars.maxOfOrNull { it.second }?.coerceAtLeast(0.0001f) ?: 0.0001f
+    val max = bars.maxOfOrNull { it.second }?.coerceAtLeast(MIN_NON_ZERO_VALUE) ?: MIN_NON_ZERO_VALUE
     val summary = bars.joinToString(", ") { (label, seconds) -> "$label: ${seconds.toLong()} seconds" }
     Column(modifier = modifier.semantics { contentDescription = summary }) {
         Canvas(

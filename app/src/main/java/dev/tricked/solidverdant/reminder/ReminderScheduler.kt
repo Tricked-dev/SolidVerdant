@@ -52,7 +52,7 @@ class ReminderScheduler @Inject constructor(
     /** Enqueue the unique periodic nudge anchored to the next occurrence of [minuteOfDay]. */
     fun schedule(minuteOfDay: Int, zone: ZoneId = ZoneId.systemDefault()) {
         val initialDelay = ReminderSchedule.initialDelayMillis(clock.nowMs(), zone, minuteOfDay)
-        val request = PeriodicWorkRequestBuilder<ReminderWorker>(24, TimeUnit.HOURS)
+        val request = PeriodicWorkRequestBuilder<ReminderWorker>(PERIODIC_INTERVAL_HOURS, TimeUnit.HOURS)
             .setInitialDelay(initialDelay, TimeUnit.MILLISECONDS)
             .addTag(TAG)
             .build()
@@ -72,6 +72,7 @@ class ReminderScheduler @Inject constructor(
     companion object {
         const val UNIQUE_NAME = "review-reminder"
         const val TAG = "review-reminder"
+        private const val PERIODIC_INTERVAL_HOURS = 24L
     }
 }
 

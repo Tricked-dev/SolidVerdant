@@ -250,7 +250,7 @@ class TimeTrackingNotificationService : Service() {
         }
         val openAppPendingIntent = PendingIntent.getActivity(
             this,
-            4,
+            ERROR_ACTION_REQUEST_CODE,
             openAppIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -545,13 +545,13 @@ class TimeTrackingNotificationService : Service() {
         if (longTimerWarningVisible) {
             val keepPendingIntent = PendingIntent.getService(
                 this,
-                5,
+                KEEP_RUNNING_REQUEST_CODE,
                 Intent(this, TimeTrackingNotificationService::class.java).apply { action = ACTION_KEEP_RUNNING },
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
             val adjustPendingIntent = PendingIntent.getActivity(
                 this,
-                6,
+                ADJUST_END_TIME_REQUEST_CODE,
                 Intent(this, MainActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                     putExtra(MainActivity.EXTRA_EDIT_ACTIVE_ENTRY, true)
@@ -595,11 +595,11 @@ class TimeTrackingNotificationService : Service() {
         val entryStart = startTime ?: return
         longWarningJob = serviceScope.launch {
             val waitSeconds = snoozeSeconds ?: run {
-                val threshold = settingsDataStore.longTimerHours.first() * 3600L
+                val threshold = settingsDataStore.longTimerHours.first() * SECONDS_PER_HOUR
                 val elapsed = Instant.now().epochSecond - entryStart.epochSecond
                 (threshold - elapsed).coerceAtLeast(0L)
             }
-            val deadlineEpochMs = System.currentTimeMillis() + waitSeconds * 1000L
+            val deadlineEpochMs = System.currentTimeMillis() + waitSeconds * MILLIS_PER_SECOND
             settingsDataStore.setLongTimerWarningDeadline(
                 deadlineEpochMs = deadlineEpochMs,
                 entryStartEpochMs = entryStart.toEpochMilli(),
@@ -653,7 +653,7 @@ class TimeTrackingNotificationService : Service() {
         }
         val resumePendingIntent = PendingIntent.getService(
             this,
-            3,
+            RESUME_REQUEST_CODE,
             resumeIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -698,9 +698,9 @@ class TimeTrackingNotificationService : Service() {
     }
 
     private fun formatDuration(totalSeconds: Long): String {
-        val hours = totalSeconds / 3600
-        val minutes = (totalSeconds % 3600) / 60
-        val seconds = totalSeconds % 60
+        val hours = totalSeconds / SECONDS_PER_HOUR
+        val minutes = (totalSeconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE
+        val seconds = totalSeconds % SECONDS_PER_MINUTE
         return String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, minutes, seconds)
     }
 
@@ -739,6 +739,14 @@ class TimeTrackingNotificationService : Service() {
         private const val CHANNEL_ID_ERROR = "time_tracking_error"
         private const val NOTIFICATION_ID = 1001
         private const val NOTIFICATION_ID_ERROR = 1002
+        private const val ERROR_ACTION_REQUEST_CODE = 4
+        private const val KEEP_RUNNING_REQUEST_CODE = 5
+        private const val ADJUST_END_TIME_REQUEST_CODE = 6
+        private const val RESUME_REQUEST_CODE = 3
+        private const val RESUME_PROMPT_REQUEST_CODE = 7
+        private const val SECONDS_PER_HOUR = 3600L
+        private const val SECONDS_PER_MINUTE = 60L
+        private const val MILLIS_PER_SECOND = 1000L
 
         const val ACTION_START_TRACKING =
             "dev.tricked.solidverdant.ACTION_START_TRACKING_NOTIFICATION"
@@ -808,7 +816,7 @@ class TimeTrackingNotificationService : Service() {
             }
             val openPendingIntent = PendingIntent.getActivity(
                 context,
-                7,
+                RESUME_PROMPT_REQUEST_CODE,
                 openIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )

@@ -111,4 +111,158 @@ class MigrationTest {
         }
         helper.close()
     }
+
+    @Test fun migration_4_5_adds_conflict_columns() {
+        val helper = openHelper(4) { db ->
+            db.execSQL(
+                "CREATE TABLE outbox (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "opType TEXT NOT NULL, organizationId TEXT NOT NULL, timeEntryId TEXT NOT NULL, " +
+                    "payloadJson TEXT NOT NULL, createdAtMs INTEGER NOT NULL, " +
+                    "attemptCount INTEGER NOT NULL, lastError TEXT, clientId TEXT NOT NULL, " +
+                    "deadLettered INTEGER NOT NULL)",
+            )
+            db.execSQL(
+                "INSERT INTO outbox (opType, organizationId, timeEntryId, payloadJson, createdAtMs, " +
+                    "attemptCount, clientId, deadLettered) " +
+                    "VALUES ('START', 'org1', 'local-1', '{}', 1, 0, 'client-1', 0)",
+            )
+            db.execSQL(
+                "CREATE TABLE time_entries (`id` TEXT NOT NULL, `description` TEXT, " +
+                    "`userId` TEXT NOT NULL, `start` TEXT NOT NULL, `end` TEXT, `duration` INTEGER, " +
+                    "`taskId` TEXT, `projectId` TEXT, `billable` INTEGER NOT NULL, " +
+                    "`organizationId` TEXT NOT NULL, `updatedAt` INTEGER NOT NULL, " +
+                    "`syncState` TEXT NOT NULL, `pendingDelete` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+            )
+            db.execSQL(
+                "INSERT INTO time_entries (id, description, userId, start, end, duration, taskId, " +
+                    "projectId, billable, organizationId, updatedAt, syncState, pendingDelete) " +
+                    "VALUES ('te1', 'desc', 'user1', '2026-07-11T00:00:00Z', NULL, NULL, NULL, NULL, " +
+                    "0, 'org1', 1, 'SYNCED', 0)",
+            )
+        }
+        val db = helper.writableDatabase
+
+        AppDatabase.MIGRATION_4_5.migrate(db)
+
+        // Pre-existing rows read the new nullable columns back as NULL.
+        db.query("SELECT baseSnapshotJson FROM outbox WHERE timeEntryId = 'local-1'").use { c ->
+            c.moveToFirst()
+            assertEquals(null, c.getString(0))
+        }
+        db.query("SELECT conflictServerJson FROM time_entries WHERE id = 'te1'").use { c ->
+            c.moveToFirst()
+            assertEquals(null, c.getString(0))
+        }
+
+        // A row can be written with syncState='CONFLICT' and read back.
+        db.execSQL(
+            "INSERT INTO time_entries (id, description, userId, start, end, duration, taskId, " +
+                "projectId, billable, organizationId, updatedAt, syncState, pendingDelete, " +
+                "conflictServerJson) " +
+                "VALUES ('te2', 'desc2', 'user1', '2026-07-11T00:00:00Z', NULL, NULL, NULL, NULL, " +
+                "0, 'org1', 1, 'CONFLICT', 0, '{\"id\":\"te2\"}')",
+        )
+        db.query("SELECT syncState, conflictServerJson FROM time_entries WHERE id = 'te2'").use { c ->
+            c.moveToFirst()
+            assertEquals("CONFLICT", c.getString(0))
+            assertEquals("{\"id\":\"te2\"}", c.getString(1))
+        }
+        helper.close()
+    }
+
+    @Test fun migration_5_6_adds_template_ownership() {
+        val helper = openHelper(5) { db ->
+            db.execSQL(
+                "CREATE TABLE `entry_templates` (" +
+                    "`id` TEXT NOT NULL, `organizationId` TEXT NOT NULL, `name` TEXT, " +
+                    "`projectId` TEXT, `taskId` TEXT, `description` TEXT, " +
+                    "`tagIds` TEXT NOT NULL, `billable` INTEGER NOT NULL, " +
+                    "`isFavorite` INTEGER NOT NULL, `sortOrder` INTEGER NOT NULL, " +
+                    "`createdAtMs` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_entry_templates_organizationId` " +
+                    "ON `entry_templates` (`organizationId`)",
+            )
+            // Legacy row inserted without the owner columns (they don't exist pre-migration).
+            db.execSQL(
+                "INSERT INTO entry_templates " +
+                    "(id, organizationId, name, projectId, taskId, description, tagIds, billable, " +
+                    "isFavorite, sortOrder, createdAtMs) " +
+                    "VALUES ('t1', 'org1', 'Standup', NULL, NULL, NULL, '', 0, 1, 3, 42)",
+            )
+        }
+        val db = helper.writableDatabase
+
+        AppDatabase.MIGRATION_5_6.migrate(db)
+
+        // Pre-existing row reads the new nullable owner columns back as NULL, other data survives.
+        db.query(
+            "SELECT ownerEndpoint, ownerUserId, name, isFavorite, sortOrder, createdAtMs " +
+                "FROM entry_templates WHERE id = 't1'",
+        ).use { c ->
+            c.moveToFirst()
+            assertEquals(null, c.getString(0))
+            assertEquals(null, c.getString(1))
+            assertEquals("Standup", c.getString(2))
+            assertEquals(1, c.getInt(3))
+            assertEquals(3, c.getInt(4))
+            assertEquals(42L, c.getLong(5))
+        }
+
+        // The composite owner index exists after migration.
+        db.query(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'entry_templates' " +
+                "AND name = 'index_entry_templates_ownerUserId_organizationId'",
+        ).use { c ->
+            assertEquals(true, c.moveToFirst())
+            assertEquals("index_entry_templates_ownerUserId_organizationId", c.getString(0))
+        }
+
+        // A row can be written with owner columns populated and read back.
+        db.execSQL(
+            "INSERT INTO entry_templates " +
+                "(id, organizationId, name, projectId, taskId, description, tagIds, billable, " +
+                "isFavorite, sortOrder, createdAtMs, ownerEndpoint, ownerUserId) " +
+                "VALUES ('t2', 'org1', NULL, NULL, NULL, NULL, '', 0, 0, 0, 7, 'https://api', 'user-9')",
+        )
+        db.query("SELECT ownerEndpoint, ownerUserId FROM entry_templates WHERE id = 't2'").use { c ->
+            c.moveToFirst()
+            assertEquals("https://api", c.getString(0))
+            assertEquals("user-9", c.getString(1))
+        }
+        helper.close()
+    }
+
+    @Test fun migration_6_7_adds_freshness_columns() {
+        val helper = openHelper(6) { db ->
+            db.execSQL(
+                "CREATE TABLE `sync_meta` (`organizationId` TEXT NOT NULL, " +
+                    "`lastFullSyncAtMs` INTEGER NOT NULL, PRIMARY KEY(`organizationId`))",
+            )
+            // Legacy row inserted without the per-source freshness column (it doesn't exist pre-migration).
+            db.execSQL("INSERT INTO sync_meta (organizationId, lastFullSyncAtMs) VALUES ('org1', 111)")
+        }
+        val db = helper.writableDatabase
+
+        AppDatabase.MIGRATION_6_7.migrate(db)
+
+        // Pre-existing row reads the new nullable column back as NULL; the pull timestamp survives.
+        db.query("SELECT lastFullSyncAtMs, lastPushAtMs FROM sync_meta WHERE organizationId = 'org1'").use { c ->
+            c.moveToFirst()
+            assertEquals(111L, c.getLong(0))
+            assertEquals(true, c.isNull(1))
+        }
+
+        // A row can be written with the push timestamp populated and read back.
+        db.execSQL(
+            "INSERT INTO sync_meta (organizationId, lastFullSyncAtMs, lastPushAtMs) VALUES ('org2', 222, 333)",
+        )
+        db.query("SELECT lastFullSyncAtMs, lastPushAtMs FROM sync_meta WHERE organizationId = 'org2'").use { c ->
+            c.moveToFirst()
+            assertEquals(222L, c.getLong(0))
+            assertEquals(333L, c.getLong(1))
+        }
+        helper.close()
+    }
 }

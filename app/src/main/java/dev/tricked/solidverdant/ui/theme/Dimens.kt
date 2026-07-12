@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
  */
 object Dimens {
     // --- Core dp spacing scale ---
+    val Space1 = 1.dp
     val Space2 = 2.dp
     val Space4 = 4.dp
     val Space8 = 8.dp
@@ -49,4 +50,5 @@ object Dimens {
 
     // --- Accessibility ---
     val MinTouchTarget = 48.dp
+    val NarrowCalendarWidth = 600.dp
 }

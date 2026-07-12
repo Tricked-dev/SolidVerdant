@@ -30,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TimePicker
@@ -84,6 +85,17 @@ fun InboxSettingsSheet(state: InboxUiState, viewModel: InboxViewModel, onDismiss
                 fontWeight = FontWeight.SemiBold,
             )
 
+            // Review horizon (SV-005)
+            SectionLabel(stringResource(R.string.inbox_settings_horizon))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                HorizonChoiceChip(stringResource(R.string.inbox_horizon_today)) { viewModel.chooseHorizon(HorizonOption.TODAY) }
+                HorizonChoiceChip(stringResource(R.string.inbox_horizon_this_week)) { viewModel.chooseHorizon(HorizonOption.THIS_WEEK) }
+                HorizonChoiceChip(stringResource(R.string.inbox_horizon_last_30_days)) {
+                    viewModel.chooseHorizon(HorizonOption.LAST_30_DAYS)
+                }
+                HorizonChoiceChip(stringResource(R.string.inbox_horizon_everything)) { viewModel.chooseHorizon(HorizonOption.EVERYTHING) }
+            }
+
             // Working days
             SectionLabel(stringResource(R.string.inbox_settings_work_days))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -124,8 +136,8 @@ fun InboxSettingsSheet(state: InboxUiState, viewModel: InboxViewModel, onDismiss
             Stepper(
                 label = stringResource(R.string.inbox_settings_min_gap),
                 value = stringResource(R.string.inbox_minutes_value, config.minGapMinutes),
-                onDecrease = { viewModel.setMinGapMinutes((config.minGapMinutes - 5).coerceAtLeast(1)) },
-                onIncrease = { viewModel.setMinGapMinutes(config.minGapMinutes + 5) },
+                onDecrease = { viewModel.setMinGapMinutes((config.minGapMinutes - MIN_GAP_STEP_MINUTES).coerceAtLeast(MIN_GAP_MINUTES)) },
+                onIncrease = { viewModel.setMinGapMinutes(config.minGapMinutes + MIN_GAP_STEP_MINUTES) },
                 decreaseCd = stringResource(R.string.inbox_settings_decrease),
                 increaseCd = stringResource(R.string.inbox_settings_increase),
             )
@@ -134,8 +146,16 @@ fun InboxSettingsSheet(state: InboxUiState, viewModel: InboxViewModel, onDismiss
             Stepper(
                 label = stringResource(R.string.inbox_settings_max_duration),
                 value = stringResource(R.string.inbox_hours_value, config.maxDurationHours),
-                onDecrease = { viewModel.setMaxDurationHours((config.maxDurationHours - 1).coerceAtLeast(1)) },
-                onIncrease = { viewModel.setMaxDurationHours((config.maxDurationHours + 1).coerceAtMost(24)) },
+                onDecrease = {
+                    viewModel.setMaxDurationHours(
+                        (config.maxDurationHours - MIN_DURATION_HOURS).coerceAtLeast(MIN_DURATION_HOURS),
+                    )
+                },
+                onIncrease = {
+                    viewModel.setMaxDurationHours(
+                        (config.maxDurationHours + MIN_DURATION_HOURS).coerceAtMost(MAX_DURATION_HOURS),
+                    )
+                },
                 decreaseCd = stringResource(R.string.inbox_settings_decrease),
                 increaseCd = stringResource(R.string.inbox_settings_increase),
             )
@@ -193,6 +213,11 @@ fun InboxSettingsSheet(state: InboxUiState, viewModel: InboxViewModel, onDismiss
 private enum class WorkField { START, END }
 
 @Composable
+private fun HorizonChoiceChip(label: String, onClick: () -> Unit) {
+    SuggestionChip(onClick = onClick, label = { Text(label) })
+}
+
+@Composable
 private fun SectionLabel(text: String) {
     Text(
         text = text,
@@ -236,14 +261,14 @@ private fun CheckToggle(label: String, checked: Boolean, onChange: (Boolean) -> 
 @Composable
 private fun WorkTimePickerDialog(initialMinute: Int, onDismiss: () -> Unit, onConfirm: (Int) -> Unit) {
     val state = rememberTimePickerState(
-        initialHour = (initialMinute / 60).coerceIn(0, 23),
-        initialMinute = initialMinute % 60,
+        initialHour = (initialMinute / MINUTES_PER_HOUR).coerceIn(MIN_HOUR, MAX_HOUR),
+        initialMinute = initialMinute % MINUTES_PER_HOUR,
         is24Hour = true,
     )
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            Button(onClick = { onConfirm(state.hour * 60 + state.minute) }) {
+            Button(onClick = { onConfirm(state.hour * MINUTES_PER_HOUR + state.minute) }) {
                 Text(stringResource(R.string.inbox_settings_done))
             }
         },
@@ -255,8 +280,18 @@ private fun WorkTimePickerDialog(initialMinute: Int, onDismiss: () -> Unit, onCo
 }
 
 private fun minuteText(minuteOfDay: Int): String {
-    val clamped = minuteOfDay.coerceIn(0, 1440)
-    val h = clamped / 60
-    val m = clamped % 60
+    val clamped = minuteOfDay.coerceIn(MINUTE_OF_DAY_START, MINUTE_OF_DAY_END)
+    val h = clamped / MINUTES_PER_HOUR
+    val m = clamped % MINUTES_PER_HOUR
     return "%02d:%02d".format(h, m)
 }
+
+private const val MIN_GAP_STEP_MINUTES = 5
+private const val MIN_GAP_MINUTES = 1
+private const val MIN_DURATION_HOURS = 1
+private const val MAX_DURATION_HOURS = 24
+private const val MINUTES_PER_HOUR = 60
+private const val MIN_HOUR = 0
+private const val MAX_HOUR = 23
+private const val MINUTE_OF_DAY_START = 0
+private const val MINUTE_OF_DAY_END = 1440

@@ -6,6 +6,7 @@
 
 package dev.tricked.solidverdant.ui.review
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,23 +20,31 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
@@ -51,6 +60,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -64,6 +75,7 @@ import dev.tricked.solidverdant.domain.inbox.InboxIssueType
 import dev.tricked.solidverdant.domain.inbox.MissingField
 import dev.tricked.solidverdant.ui.components.EditTimeEntryDialog
 import java.time.Instant
+import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -76,6 +88,13 @@ import java.time.format.DateTimeFormatter
  * states — not just the happy path.
  */
 private data class InboxEditTarget(val entry: TimeEntry, val isGap: Boolean)
+
+internal data class InboxIssueCardActions(
+    val onQuickFix: () -> Unit,
+    val onDismiss: () -> Unit,
+    val onKeepMine: () -> Unit = {},
+    val onKeepTheirs: () -> Unit = {},
+)
 
 @Composable
 fun InboxPane() {
@@ -110,7 +129,7 @@ fun InboxPane() {
         viewModel.consumeActionError()
     }
 
-    val zone = remember { ZoneId.systemDefault() }
+    val zone = state.zone
     val projectsById = remember(state.projects) { state.projects.associateBy { it.id } }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -118,6 +137,9 @@ fun InboxPane() {
             InboxHeader(
                 issueCount = state.issues.size,
                 isRefreshing = state.isRefreshing,
+                showHorizonChip = state.horizonChosen,
+                horizonLabel = horizonChipLabel(state.horizonStartMs, zone),
+                onHorizonChipClick = { showSettings = true },
                 onRefresh = viewModel::refresh,
                 onOpenSettings = { showSettings = true },
             )
@@ -128,40 +150,16 @@ fun InboxPane() {
 
             when {
                 state.isLoading -> LoadingState()
+                !state.horizonChosen -> HorizonPicker(onChoose = viewModel::chooseHorizon)
                 state.isCaughtUp && state.hasEntries -> CaughtUpState()
                 state.isCaughtUp -> NoDataState()
-                else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    items(items = state.issues, key = { it.key }) { issue ->
-                        DismissibleIssue(
-                            issue = issue,
-                            onDismiss = { viewModel.dismiss(issue) },
-                        ) {
-                            InboxIssueCard(
-                                issue = issue,
-                                preventOverlap = state.preventOverlap,
-                                projectsById = projectsById,
-                                zone = zone,
-                                onQuickFix = {
-                                    editTarget = when (issue.type) {
-                                        InboxIssueType.GAP -> {
-                                            val entry = viewModel.blankEntryFor(
-                                                startIso = isoOf(issue.startMs, zone),
-                                                endIso = isoOf(issue.endMs, zone),
-                                            )
-                                            entry?.let { InboxEditTarget(it, isGap = true) }
-                                        }
-                                        else -> issue.primaryEntry?.let { InboxEditTarget(it, isGap = false) }
-                                    }
-                                },
-                                onDismiss = { viewModel.dismiss(issue) },
-                            )
-                        }
-                    }
-                }
+                else -> InboxIssueList(
+                    state = state,
+                    projectsById = projectsById,
+                    zone = zone,
+                    viewModel = viewModel,
+                    onEdit = { editTarget = it },
+                )
             }
         }
 
@@ -199,23 +197,168 @@ fun InboxPane() {
     }
 }
 
+/**
+ * The triage list (SV-005 T4.3). CONFLICT issues stay pinned at the top as their own non-dismissible
+ * cards; every other issue is grouped by day (in the account [zone]), newest day first, under a
+ * sticky day header carrying the per-day "Dismiss all" and durable "Dismiss everything before this"
+ * actions. Individual per-card swipe/button dismiss still works within each day group.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun InboxHeader(issueCount: Int, isRefreshing: Boolean, onRefresh: () -> Unit, onOpenSettings: () -> Unit) {
+private fun InboxIssueList(
+    state: InboxUiState,
+    projectsById: Map<String, Project>,
+    zone: ZoneId,
+    viewModel: InboxViewModel,
+    onEdit: (InboxEditTarget?) -> Unit,
+) {
+    val conflicts = state.issues.filter { it.type == InboxIssueType.CONFLICT }
+    val dayGroups = remember(state.issues, zone) {
+        state.issues
+            .filterNot { it.type == InboxIssueType.CONFLICT }
+            .groupBy { Instant.ofEpochMilli(it.startMs).atZone(zone).toLocalDate() }
+            .toSortedMap(compareByDescending { it }) // newest day first
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        items(items = conflicts, key = { it.key }) { issue ->
+            IssueCard(issue, state, projectsById, zone, viewModel, onEdit)
+        }
+        dayGroups.forEach { (date, issues) ->
+            stickyHeader(key = "header:$date") {
+                InboxDayHeader(
+                    date = date,
+                    zone = zone,
+                    onDismissAll = { viewModel.dismissDay(issues) },
+                    onDismissBefore = {
+                        viewModel.dismissBefore(date.atStartOfDay(zone).toInstant().toEpochMilli())
+                    },
+                )
+            }
+            items(items = issues, key = { it.key }) { issue ->
+                DismissibleIssue(
+                    onDismiss = { viewModel.dismiss(issue) },
+                    content = { IssueCard(issue, state, projectsById, zone, viewModel, onEdit) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun IssueCard(
+    issue: InboxIssue,
+    state: InboxUiState,
+    projectsById: Map<String, Project>,
+    zone: ZoneId,
+    viewModel: InboxViewModel,
+    onEdit: (InboxEditTarget?) -> Unit,
+) {
+    InboxIssueCard(
+        issue = issue,
+        preventOverlap = state.preventOverlap,
+        projectsById = projectsById,
+        zone = zone,
+        actions = InboxIssueCardActions(
+            onQuickFix = {
+                onEdit(
+                    when (issue.type) {
+                        InboxIssueType.CONFLICT -> null
+                        InboxIssueType.GAP -> {
+                            val entry = viewModel.blankEntryFor(
+                                startIso = isoOf(issue.startMs, zone),
+                                endIso = isoOf(issue.endMs, zone),
+                            )
+                            entry?.let { InboxEditTarget(it, isGap = true) }
+                        }
+                        else -> issue.primaryEntry?.let { InboxEditTarget(it, isGap = false) }
+                    },
+                )
+            },
+            onDismiss = { viewModel.dismiss(issue) },
+            onKeepMine = { viewModel.keepMine(issue) },
+            onKeepTheirs = { viewModel.keepTheirs(issue) },
+        ),
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun InboxDayHeader(date: LocalDate, zone: ZoneId, onDismissAll: () -> Unit, onDismissBefore: () -> Unit) {
+    var menuOpen by remember { mutableStateOf(false) }
+    val moreCd = stringResource(R.string.inbox_day_more_cd)
+    Surface(color = MaterialTheme.colorScheme.surface) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = date.format(DAY_HEADER_FORMAT),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onDismissAll) { Text(stringResource(R.string.inbox_day_dismiss_all)) }
+            Box {
+                IconButton(onClick = { menuOpen = true }) {
+                    Icon(Icons.Outlined.MoreVert, contentDescription = moreCd)
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.inbox_day_dismiss_before)) },
+                        onClick = {
+                            menuOpen = false
+                            onDismissBefore()
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun InboxHeader(
+    issueCount: Int,
+    isRefreshing: Boolean,
+    showHorizonChip: Boolean,
+    horizonLabel: String,
+    onHorizonChipClick: () -> Unit,
+    onRefresh: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    val horizonChipCd = stringResource(R.string.inbox_horizon_chip_cd)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = if (issueCount == 0) {
-                stringResource(R.string.inbox_summary_none)
-            } else {
-                pluralStringResource(R.plurals.inbox_summary_count, issueCount, issueCount)
-            },
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.weight(1f),
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = if (issueCount == 0) {
+                    stringResource(R.string.inbox_summary_none)
+                } else {
+                    pluralStringResource(R.plurals.inbox_summary_count, issueCount, issueCount)
+                },
+                style = MaterialTheme.typography.titleMedium,
+            )
+            if (showHorizonChip) {
+                Spacer(Modifier.height(4.dp))
+                AssistChip(
+                    onClick = onHorizonChipClick,
+                    label = { Text(horizonLabel) },
+                    modifier = Modifier.semantics { contentDescription = horizonChipCd },
+                )
+            }
+        }
         if (isRefreshing) {
             CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
             Spacer(Modifier.width(8.dp))
@@ -281,6 +424,47 @@ private fun NoDataState() {
     )
 }
 
+/**
+ * First-run horizon onboarding (SV-005). Shown instead of the list until the user picks how far back
+ * Review should look; each choice calls back into [InboxViewModel.chooseHorizon] and unlocks the list.
+ */
+@Composable
+private fun HorizonPicker(onChoose: (HorizonOption) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.inbox_horizon_picker_title),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = stringResource(R.string.inbox_horizon_picker_body),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(4.dp))
+        HorizonOptionButton(stringResource(R.string.inbox_horizon_today)) { onChoose(HorizonOption.TODAY) }
+        HorizonOptionButton(stringResource(R.string.inbox_horizon_this_week)) { onChoose(HorizonOption.THIS_WEEK) }
+        HorizonOptionButton(stringResource(R.string.inbox_horizon_last_30_days)) { onChoose(HorizonOption.LAST_30_DAYS) }
+        HorizonOptionButton(stringResource(R.string.inbox_horizon_everything)) { onChoose(HorizonOption.EVERYTHING) }
+    }
+}
+
+@Composable
+private fun HorizonOptionButton(label: String, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(label, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
+    }
+}
+
 @Composable
 private fun CenteredMessage(icon: ImageVector, title: String, body: String, tint: androidx.compose.ui.graphics.Color) {
     Column(
@@ -305,7 +489,7 @@ private fun CenteredMessage(icon: ImageVector, title: String, body: String, tint
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DismissibleIssue(issue: InboxIssue, onDismiss: () -> Unit, content: @Composable () -> Unit) {
+private fun DismissibleIssue(onDismiss: () -> Unit, content: @Composable () -> Unit) {
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             if (value != SwipeToDismissBoxValue.Settled) {
@@ -339,6 +523,34 @@ internal fun InboxIssueCard(
     preventOverlap: Boolean,
     projectsById: Map<String, Project>,
     zone: ZoneId,
+    actions: InboxIssueCardActions,
+) {
+    if (issue.type == InboxIssueType.CONFLICT) {
+        ConflictIssueCard(
+            issue = issue,
+            projectsById = projectsById,
+            onKeepMine = actions.onKeepMine,
+            onKeepTheirs = actions.onKeepTheirs,
+        )
+    } else {
+        InboxIssueContent(
+            issue = issue,
+            preventOverlap = preventOverlap,
+            projectsById = projectsById,
+            zone = zone,
+            onQuickFix = actions.onQuickFix,
+            onDismiss = actions.onDismiss,
+        )
+    }
+}
+
+@Composable
+@Suppress("LongMethod")
+private fun InboxIssueContent(
+    issue: InboxIssue,
+    preventOverlap: Boolean,
+    projectsById: Map<String, Project>,
+    zone: ZoneId,
     onQuickFix: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -346,6 +558,7 @@ internal fun InboxIssueCard(
     val body: String
     val actionLabel: String
     when (issue.type) {
+        InboxIssueType.CONFLICT -> error("Conflict issues are rendered by ConflictIssueCard")
         InboxIssueType.OVERLAP -> {
             title = stringResource(R.string.inbox_issue_overlap_title)
             body = if (preventOverlap) {
@@ -372,11 +585,7 @@ internal fun InboxIssueCard(
         }
     }
 
-    val subject = when (issue.type) {
-        InboxIssueType.GAP -> null
-        InboxIssueType.OVERLAP -> issue.primaryEntry?.let { entrySubject(it, projectsById) }
-        else -> issue.primaryEntry?.let { entrySubject(it, projectsById) }
-    }
+    val subject = issue.primaryEntry?.let { entrySubject(it, projectsById) }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -410,6 +619,66 @@ internal fun InboxIssueCard(
 }
 
 @Composable
+private fun ConflictIssueCard(issue: InboxIssue, projectsById: Map<String, Project>, onKeepMine: () -> Unit, onKeepTheirs: () -> Unit) {
+    val mine = issue.primaryEntry
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = stringResource(R.string.inbox_issue_conflict_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = stringResource(R.string.inbox_issue_conflict_body),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = stringResource(
+                    R.string.inbox_conflict_mine,
+                    when {
+                        issue.conflictLocalDeleted -> stringResource(R.string.inbox_conflict_deleted)
+                        mine == null -> stringResource(R.string.inbox_conflict_unavailable)
+                        else -> conflictVersionText(mine, projectsById)
+                    },
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = stringResource(
+                    R.string.inbox_conflict_theirs,
+                    when {
+                        issue.conflictServerDeleted -> stringResource(R.string.inbox_conflict_deleted)
+                        issue.conflictServer == null -> stringResource(R.string.inbox_conflict_unavailable)
+                        else -> conflictVersionText(issue.conflictServer, projectsById)
+                    },
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            ) {
+                TextButton(onClick = onKeepTheirs) { Text(stringResource(R.string.inbox_conflict_keep_theirs)) }
+                FilledTonalButton(onClick = onKeepMine) { Text(stringResource(R.string.inbox_conflict_keep_mine)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun conflictVersionText(entry: TimeEntry, projectsById: Map<String, Project>): String {
+    val empty = stringResource(R.string.inbox_conflict_empty_value)
+    val description = entry.description?.takeIf { it.isNotBlank() } ?: empty
+    val project = entry.projectId?.let { projectsById[it]?.name ?: it } ?: empty
+    val tags = entry.tags.joinToString(", ") { it.name.ifBlank { it.id } }.ifBlank { empty }
+    return stringResource(R.string.inbox_conflict_version_summary, description, project, tags)
+}
+
+@Composable
 private fun missingFieldsText(fields: Set<MissingField>): String {
     val labels = fields.sortedBy { it.ordinal }.map {
         when (it) {
@@ -431,6 +700,17 @@ private fun entrySubject(entry: TimeEntry, projectsById: Map<String, Project>): 
 
 private val TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 private val DATE_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM, HH:mm")
+private val HORIZON_DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM")
+private val DAY_HEADER_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM yyyy")
+
+/** Chip text for the current horizon: "Everything" when unbounded, else "Since <short date>". */
+@Composable
+private fun horizonChipLabel(horizonStartMs: Long?, zone: ZoneId): String = if (horizonStartMs == null) {
+    stringResource(R.string.inbox_horizon_everything)
+} else {
+    val date = OffsetDateTime.ofInstant(Instant.ofEpochMilli(horizonStartMs), zone).format(HORIZON_DATE_FORMAT)
+    stringResource(R.string.inbox_horizon_chip_since, date)
+}
 
 private fun timeRangeText(startMs: Long, endMs: Long, zone: ZoneId): String {
     val start = OffsetDateTime.ofInstant(Instant.ofEpochMilli(startMs), zone)
@@ -442,15 +722,18 @@ private fun timeRangeText(startMs: Long, endMs: Long, zone: ZoneId): String {
 
 @Composable
 private fun durationText(durationMs: Long): String {
-    val totalMinutes = (durationMs / 60000L).coerceAtLeast(0)
-    val hours = totalMinutes / 60
-    val minutes = totalMinutes % 60
+    val totalMinutes = (durationMs / MILLIS_PER_MINUTE).coerceAtLeast(0)
+    val hours = totalMinutes / MINUTES_PER_HOUR
+    val minutes = totalMinutes % MINUTES_PER_HOUR
     return when {
         hours > 0 && minutes > 0 -> stringResource(R.string.inbox_duration_hm, hours, minutes)
         hours > 0 -> stringResource(R.string.inbox_duration_h, hours)
         else -> stringResource(R.string.inbox_duration_m, minutes)
     }
 }
+
+private const val MILLIS_PER_MINUTE = 60_000L
+private const val MINUTES_PER_HOUR = 60
 
 private fun isoOf(epochMs: Long, zone: ZoneId): String =
     OffsetDateTime.ofInstant(Instant.ofEpochMilli(epochMs), zone).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)

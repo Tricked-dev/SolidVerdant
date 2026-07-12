@@ -10,7 +10,7 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-enum class SyncState { SYNCED, PENDING }
+enum class SyncState { SYNCED, PENDING, CONFLICT }
 
 @Entity(
     tableName = "time_entries",
@@ -30,6 +30,11 @@ data class TimeEntryEntity(
     val updatedAt: Long,
     val syncState: SyncState,
     val pendingDelete: Boolean,
+    /**
+     * Full server TimeEntry JSON captured as "theirs" at conflict-detection time (SV-027). Null
+     * unless [syncState] is [SyncState.CONFLICT].
+     */
+    val conflictServerJson: String? = null,
 )
 
 @Entity(tableName = "projects")
@@ -78,8 +83,20 @@ data class TimeEntryTagCrossRef(val timeEntryId: String, val tagId: String)
 /** Projection row for [TimeEntryDao.observeTagRefs]; not a table. */
 data class TimeEntryTagRef(val timeEntryId: String, val tagId: String)
 
+/**
+ * Per-source freshness timestamps for an organization (roadmap #35, foundation for the sync-center
+ * screen #33). Roadmap #79 warns that a single "last synced" moment is misleading, so the genuinely
+ * distinct sources are tracked separately:
+ *  - [lastFullSyncAtMs]: last full PULL refresh (catalog + history are fetched together in
+ *    `refreshAll`, so they share one honest moment and are not split further).
+ *  - [lastPushAtMs]: last successful outbox flush (PUSH). NULL until the first successful push.
+ *
+ * There is deliberately no active-timer column: the active-entry endpoint is account-wide and its
+ * fetch is ephemeral (never cached with an org-scoped freshness moment), so a per-org active-timer
+ * timestamp could not be populated honestly.
+ */
 @Entity(tableName = "sync_meta")
-data class SyncMetaEntity(@PrimaryKey val organizationId: String, val lastFullSyncAtMs: Long)
+data class SyncMetaEntity(@PrimaryKey val organizationId: String, val lastFullSyncAtMs: Long, val lastPushAtMs: Long? = null)
 
 /**
  * Reusable entry template / favorite (gap analysis #9, #81). Account/organization scoped, local
@@ -88,7 +105,10 @@ data class SyncMetaEntity(@PrimaryKey val organizationId: String, val lastFullSy
  * user-facing label; [description] is optional local work content and receives the same protection
  * as cached entries.
  */
-@Entity(tableName = "entry_templates", indices = [Index("organizationId")])
+@Entity(
+    tableName = "entry_templates",
+    indices = [Index("organizationId"), Index("ownerUserId", "organizationId")],
+)
 data class TemplateEntity(
     @PrimaryKey val id: String,
     val organizationId: String,
@@ -101,6 +121,12 @@ data class TemplateEntity(
     val isFavorite: Boolean,
     val sortOrder: Int,
     val createdAtMs: Long,
+    /**
+     * Account that owns this template, identified by API endpoint and user ID (Task 3.1). Both are
+     * NULL for legacy templates created before ownership tracking; later tasks claim/scope them.
+     */
+    val ownerEndpoint: String? = null,
+    val ownerUserId: String? = null,
 )
 
 /**

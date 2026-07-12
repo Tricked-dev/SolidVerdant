@@ -16,12 +16,16 @@ import androidx.compose.ui.semantics.invisibleToUser
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
+private const val MIN_NON_ZERO_TOTAL = 0.0001f
+private const val START_ANGLE_DEGREES = -90f
+private const val FULL_CIRCLE_DEGREES = 360f
+
 /** Fallback diameter when a caller supplies no size; real callers pass their own via [modifier]. */
 private val DefaultDonutSize = 140.dp
 
 @Composable
 fun DonutChart(slices: List<Pair<Color, Float>>, modifier: Modifier = Modifier) {
-    val total = slices.sumOf { it.second.toDouble() }.toFloat().coerceAtLeast(0.0001f)
+    val total = slices.sumOf { it.second.toDouble() }.toFloat().coerceAtLeast(MIN_NON_ZERO_TOTAL)
     // Respect the caller's sizing (they place the chart in the layout); only guarantee a sensible
     // minimum so an unsized caller still renders a visible ring instead of a zero-size canvas.
     Canvas(
@@ -36,9 +40,9 @@ fun DonutChart(slices: List<Pair<Color, Float>>, modifier: Modifier = Modifier) 
             (size.height - diameter) / 2f,
         )
         val arcSize = androidx.compose.ui.geometry.Size(diameter, diameter)
-        var startAngle = -90f
+        var startAngle = START_ANGLE_DEGREES
         slices.forEach { (color, value) ->
-            val sweep = value / total * 360f
+            val sweep = value / total * FULL_CIRCLE_DEGREES
             drawArc(
                 color = color,
                 startAngle = startAngle,

@@ -68,6 +68,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
@@ -76,6 +77,7 @@ import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -83,6 +85,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
@@ -260,18 +263,21 @@ fun TrackingScreen(
     onUpdatePastEntry: (TimeEntry, String?, String?, String?, List<String>, Boolean, String, String) -> Unit,
     onCreateEntry: (String?, String?, String?, List<String>, Boolean, String, String) -> Unit,
     onDeleteEntry: (String) -> Unit,
+    onDuplicateEntry: (String) -> Unit,
+    onSplitEntry: (String, String) -> Unit,
+    onEntryToEditConsumed: () -> Unit,
     onUndoDelete: (TimeEntry) -> Unit,
     onRetrySync: () -> Unit,
     onRetrySyncEntry: (String) -> Unit,
+    onOpenSyncCenter: () -> Unit = {},
+    onOpenPrivacy: () -> Unit = {},
     onLoadMoreEntries: () -> Unit,
     onLoadNewerEntries: () -> Unit,
     onJumpToDate: (LocalDate) -> Unit,
     onHistoryJumpConsumed: () -> Unit,
-    getGroupedEntries: () -> Map<LocalDate, List<TimeEntry>>
 ) {
     var showEditDialog by remember { mutableStateOf<TimeEntry?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
-    var organizationMenuExpanded by remember { mutableStateOf(false) }
     var hasUserScrolledHistory by remember { mutableStateOf(false) }
     var calendarInitialDate by remember { mutableStateOf<LocalDate?>(null) }
     var historyFilter by remember { mutableStateOf(HistoryFilter()) }
@@ -295,8 +301,18 @@ fun TrackingScreen(
 
     LaunchedEffect(editActiveEntryRequested, uiState.currentTimeEntry) {
         if (editActiveEntryRequested) {
-            uiState.currentTimeEntry?.let { showEditDialog = it }
+            uiState.currentTimeEntry?.takeUnless { it.id in uiState.conflictedEntryIds }?.let { showEditDialog = it }
             if (uiState.currentTimeEntry != null) onEditActiveEntryConsumed()
+        }
+    }
+
+    // Roadmap #13: after a duplicate/split the VM emits the new entry's id; open it for editing
+    // once it surfaces in the observed list, then consume the one-shot signal.
+    LaunchedEffect(uiState.entryToEditId, uiState.timeEntries) {
+        val id = uiState.entryToEditId ?: return@LaunchedEffect
+        uiState.timeEntries.firstOrNull { it.id == id }?.let {
+            showEditDialog = it
+            onEntryToEditConsumed()
         }
     }
 
@@ -489,6 +505,25 @@ fun TrackingScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                onOpenPrivacy()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.privacy_menu_entry))
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
                         HorizontalDivider()
                         Text(
                             stringResource(R.string.long_timer_warning),
@@ -501,7 +536,7 @@ fun TrackingScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf(2, 4, 6, 8, 12).forEach { hours ->
+                            LONG_TIMER_OPTIONS.forEach { hours ->
                                 FilterChip(
                                     selected = longTimerHours == hours,
                                     onClick = { onLongTimerHoursChange(hours) },
@@ -683,57 +718,15 @@ fun TrackingScreen(
             topBar = {
                 TopAppBar(
                     title = {
-                        Column {
-                            Text(
-                                stringResource(R.string.time_tracking),
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            user?.name?.let {
-                                Text(
-                                    text = it,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            if (currentMembership != null) {
-                                Box {
-                                    Text(
-                                        text = currentMembership.organization.name,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.clickable(
-                                            enabled = memberships.size > 1 && !uiState.isTracking && !uiState.isPaused
-                                        ) { organizationMenuExpanded = true }
-                                    )
-                                    androidx.compose.material3.DropdownMenu(
-                                        expanded = organizationMenuExpanded,
-                                        onDismissRequest = { organizationMenuExpanded = false }
-                                    ) {
-                                        memberships.forEach { membership ->
-                                            DropdownMenuItem(
-                                                text = { Text(membership.organization.name) },
-                                                onClick = {
-                                                    organizationMenuExpanded = false
-                                                    onMembershipChange(membership)
-                                                },
-                                                trailingIcon = if (membership.id == currentMembership.id) {
-                                                    {
-                                                        Icon(
-                                                            imageVector = Icons.Default.Done,
-                                                            contentDescription = null
-                                                        )
-                                                    }
-                                                } else null
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        TrackingAppBarTitle(
+                            userName = user?.name,
+                            organizationName = currentMembership?.organization?.name,
+                            canSwitchOrganization = memberships.size > 1 &&
+                                !uiState.isTracking && !uiState.isPaused,
+                            memberships = memberships,
+                            currentMembershipId = currentMembership?.id,
+                            onMembershipChange = onMembershipChange,
+                        )
                     },
                     navigationIcon = {
                         IconButton(
@@ -771,8 +764,8 @@ fun TrackingScreen(
                         val syncTransition = rememberInfiniteTransition(label = "sync")
                         val syncRotation by syncTransition.animateFloat(
                             initialValue = 0f,
-                            targetValue = if (uiState.isSyncing) 360f else 0f,
-                            animationSpec = infiniteRepeatable(tween(900), RepeatMode.Restart),
+                            targetValue = if (uiState.isSyncing) FULL_ROTATION_DEGREES else 0f,
+                            animationSpec = infiniteRepeatable(tween(SYNC_ROTATION_DURATION_MS), RepeatMode.Restart),
                             label = "sync rotation"
                         )
                         IconButton(
@@ -818,6 +811,7 @@ fun TrackingScreen(
                             tasks = uiState.tasks,
                             clients = uiState.clients,
                             syncOperations = uiState.syncOperations,
+                            zone = uiState.zone,
                         ).groupBy { entry ->
                             IsoTimes.localDate(entry.start) ?: LocalDate.MIN
                         }
@@ -852,8 +846,17 @@ fun TrackingScreen(
                     }
                 }
                 val overlapCount = uiState.overlapCount
-                val onHistoryEdit = remember<(TimeEntry) -> Unit> { { entry -> showEditDialog = entry } }
-                val onHistoryDelete = remember<(TimeEntry) -> Unit> { { entry -> deletedEntry = entry; onDeleteEntry(entry.id) } }
+                val onHistoryEdit = remember(uiState.conflictedEntryIds) {
+                    { entry: TimeEntry -> if (entry.id !in uiState.conflictedEntryIds) showEditDialog = entry }
+                }
+                val onHistoryDelete = remember(uiState.conflictedEntryIds) {
+                    { entry: TimeEntry ->
+                        if (entry.id !in uiState.conflictedEntryIds) {
+                            deletedEntry = entry
+                            onDeleteEntry(entry.id)
+                        }
+                    }
+                }
                 val onHistoryDateClick = remember<(LocalDate) -> Unit> { { date -> calendarInitialDate = date } }
 
                 LaunchedEffect(uiState.historyJumpDate, groupedEntries) {
@@ -892,13 +895,13 @@ fun TrackingScreen(
                         }
                         item(key = "long_timer_warning") {
                             val elapsed by elapsedSeconds.collectAsState()
-                            if (uiState.isTracking && elapsed >= longTimerHours * 3600L &&
+                            if (uiState.isTracking && elapsed >= longTimerHours * SECONDS_PER_HOUR_LONG &&
                                 elapsed >= longTimerSnoozedUntil) {
                                 LongTimerWarning(
                                     hours = longTimerHours,
                                     onStop = onStopTracking,
                                     onKeepRunning = {
-                                        longTimerSnoozedUntil = elapsed + 3600L
+                                        longTimerSnoozedUntil = elapsed + SECONDS_PER_HOUR_LONG
                                         TimeTrackingNotificationService.snoozeLongTimerWarning(context)
                                     },
                                     onAdjust = { uiState.currentTimeEntry?.let { showEditDialog = it } },
@@ -950,7 +953,7 @@ fun TrackingScreen(
                         Row(Modifier.fillMaxSize()) {
                             LazyColumn(
                                 modifier = Modifier
-                                    .weight(0.9f)
+                                    .weight(WIDE_PRIMARY_WEIGHT)
                                     .fillMaxSize()
                                     .padding(horizontal = 24.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -964,7 +967,7 @@ fun TrackingScreen(
                             LazyColumn(
                                 state = wideHistoryListState,
                                 modifier = Modifier
-                                    .weight(1.1f)
+                                    .weight(WIDE_HISTORY_WEIGHT)
                                     .fillMaxSize()
                                     .testTag(TrackingTestTags.HISTORY_LIST)
                                     .nestedScroll(historyScrollConnection)
@@ -974,7 +977,7 @@ fun TrackingScreen(
                                 item { Spacer(Modifier.height(8.dp)) }
                                 item { HistoryFilters(historyFilter, uiState) { historyFilter = it } }
                                 if (uiState.syncOperations.isNotEmpty()) {
-                                    item { SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry) }
+                                    item { SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry, onOpenSyncCenter) }
                                 }
                                 trackingHistoryItems(
                                     uiState = uiState,
@@ -1027,6 +1030,7 @@ fun TrackingScreen(
     showEditDialog?.let { entry ->
         TimeEntryFormSheet(
             entry = entry,
+            zone = uiState.zone,
             suggestedStart = null,
             projects = uiState.projects,
             tasks = uiState.tasks,
@@ -1040,23 +1044,27 @@ fun TrackingScreen(
             preventOverlap = currentMembership?.organization?.preventOverlappingTimeEntries == true,
             templates = templateState.templates,
             onSaveAsTemplate = onSaveTemplateFromForm,
+            saveEnabled = entry.id !in uiState.conflictedEntryIds,
+            onDuplicate = { onDuplicateEntry(entry.id) },
+            onSplit = { atIso -> onSplitEntry(entry.id, atIso) },
         )
     }
 
     // Add-entry dialog
     if (showAddDialog) {
-        val suggestedStart = remember(uiState.timeEntries) {
-            val now = ZonedDateTime.now(ZoneId.systemDefault())
+        val suggestedStart = remember(uiState.timeEntries, uiState.zone) {
+            val now = ZonedDateTime.now(uiState.zone)
             uiState.timeEntries
                 .mapNotNull { it.end }
                 .mapNotNull { runCatching { ZonedDateTime.parse(it, DateTimeFormatter.ISO_DATE_TIME) }.getOrNull() }
                 .maxOrNull()
-                ?.withZoneSameInstant(ZoneId.systemDefault())
+                ?.withZoneSameInstant(uiState.zone)
                 ?.takeIf { it.toLocalDate() == now.toLocalDate() && it.isBefore(now) }
                 ?: now.minusHours(1)
         }
         TimeEntryFormSheet(
             entry = null,
+            zone = uiState.zone,
             suggestedStart = suggestedStart,
             projects = uiState.projects,
             tasks = uiState.tasks,
@@ -1163,8 +1171,8 @@ private fun HistoryFilters(filter: HistoryFilter, uiState: TrackingUiState, onCh
         }
         AnimatedVisibility(
             visible = expanded,
-            enter = fadeIn(tween(180)) + expandVertically(tween(220)),
-            exit = fadeOut(tween(120)) + shrinkVertically(tween(180)),
+            enter = fadeIn(tween(FILTER_ENTER_DURATION_MS)) + expandVertically(tween(FILTER_EXPAND_DURATION_MS)),
+            exit = fadeOut(tween(FILTER_EXIT_DURATION_MS)) + shrinkVertically(tween(FILTER_COLLAPSE_DURATION_MS)),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
@@ -1210,14 +1218,14 @@ private fun HistoryFilters(filter: HistoryFilter, uiState: TrackingUiState, onCh
                 label = { Text(stringResource(R.string.today)) },
             )
             FilterChip(
-                selected = filter.startDate == today.minusDays(6) && filter.endDate == today,
-                onClick = { onChange(filter.copy(startDate = today.minusDays(6), endDate = today)) },
+                selected = filter.startDate == today.minusDays(LAST_7_DAYS_OFFSET) && filter.endDate == today,
+                onClick = { onChange(filter.copy(startDate = today.minusDays(LAST_7_DAYS_OFFSET), endDate = today)) },
                 label = { Text(stringResource(R.string.stats_last_7_days)) },
             )
             FilterChip(
                 selected = filter.startDate != null && filter.endDate != null &&
                     !(filter.startDate == today && filter.endDate == today) &&
-                    !(filter.startDate == today.minusDays(6) && filter.endDate == today),
+                    !(filter.startDate == today.minusDays(LAST_7_DAYS_OFFSET) && filter.endDate == today),
                 onClick = { showDateRangePicker = true },
                 label = { Text(stringResource(R.string.stats_custom)) },
             )
@@ -1326,11 +1334,14 @@ private fun SyncCenter(
     operations: List<TimeEntryRepository.SyncOperation>,
     onRetry: () -> Unit,
     onRetryEntry: (String) -> Unit,
+    onOpenSyncCenter: () -> Unit = {},
 ) {
     val failed = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.FAILED }
     val retrying = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.RETRYING }
+    val conflicts = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.CONFLICT }
     val summaryStatus = when {
         failed > 0 -> TimeEntryRepository.EntrySyncStatus.FAILED
+        conflicts > 0 -> TimeEntryRepository.EntrySyncStatus.CONFLICT
         retrying > 0 -> TimeEntryRepository.EntrySyncStatus.RETRYING
         else -> TimeEntryRepository.EntrySyncStatus.PENDING
     }
@@ -1349,6 +1360,7 @@ private fun SyncCenter(
                 Text(
                     when {
                         failed > 0 -> stringResource(R.string.sync_failed_count, failed)
+                        conflicts > 0 -> stringResource(R.string.sync_conflict_count, conflicts)
                         retrying > 0 -> stringResource(R.string.sync_retrying_count, retrying)
                         else -> stringResource(R.string.sync_pending_count, operations.size)
                     },
@@ -1376,6 +1388,10 @@ private fun SyncCenter(
                     Text(stringResource(R.string.retry))
                 }
             }
+        }
+        HorizontalDivider()
+        TextButton(onClick = onOpenSyncCenter, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.sync_center_open))
         }
     }
 }
@@ -1443,7 +1459,7 @@ internal fun LazyListScope.trackingHistoryItems(
 ) {
     if (!uiState.hasLoadedTimeEntries && uiState.timeEntries.isEmpty()) {
         item(key = "history_loading_header") { HistoryLoadingHeader() }
-        repeat(4) { index ->
+            repeat(HISTORY_PLACEHOLDER_COUNT) { index ->
             item(key = "history_loading_$index") { HistoryLoadingEntry(index) }
         }
         return
@@ -1644,7 +1660,7 @@ private fun HistoryLoadingEntry(index: Int) {
             ) {
                 GhostBlock(
                     Modifier
-                        .fillMaxWidth(if (index % 2 == 0) 0.62f else 0.45f)
+                        .fillMaxWidth(if (index % ALTERNATING_ROW_COUNT == 0) GHOST_PRIMARY_WIDTH else GHOST_SECONDARY_WIDTH)
                         .height(13.dp),
                     alpha
                 )
@@ -2024,7 +2040,7 @@ private fun DescriptionFieldWithSuggestions(
             .distinctBy { entry ->
                 "${entry.description}|${entry.projectId}|${entry.taskId}|${entry.tags.map { it.id }.sorted()}"
             }
-            .take(5)
+            .take(RECENT_ENTRIES_LIMIT)
     }
 
     ExposedDropdownMenuBox(
@@ -2386,6 +2402,111 @@ private fun CollapsibleTimeEntryGroup(
 }
 
 /**
+ * Track top-app-bar title: the "Time tracking" heading plus, on subordinate lines, the signed-in
+ * user's name and their active organization.
+ *
+ * When [userName] and [organizationName] are identical (trimmed, case-sensitive) the two would read
+ * as duplicated text / a rendering glitch, so we collapse them into a single line.
+ *
+ * The organization line only signals its interactivity when a real switch is possible
+ * ([canSwitchOrganization]): it then gains a dropdown arrow plus [Role.Button] semantics with a
+ * "Switch organization" content description and opens the membership picker on click. Otherwise it
+ * is inert, plain [onSurfaceVariant] text with no click target and no affordance icon.
+ */
+@Composable
+internal fun TrackingAppBarTitle(
+    userName: String?,
+    organizationName: String?,
+    canSwitchOrganization: Boolean,
+    memberships: List<Membership>,
+    currentMembershipId: String?,
+    onMembershipChange: (Membership) -> Unit,
+) {
+    var organizationMenuExpanded by remember { mutableStateOf(false) }
+    val collapsed = userName != null && organizationName != null &&
+        userName.trim() == organizationName.trim()
+
+    Column {
+        Text(
+            stringResource(R.string.time_tracking),
+            fontWeight = FontWeight.SemiBold
+        )
+
+        // When collapsed, the org line represents both user and org, so skip the separate user line.
+        if (userName != null && !collapsed) {
+            Text(
+                text = userName,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        if (organizationName != null) {
+            Box {
+                if (canSwitchOrganization) {
+                    val switchDescription = stringResource(R.string.switch_organization)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clickable { organizationMenuExpanded = true }
+                            .semantics {
+                                role = Role.Button
+                                contentDescription = switchDescription
+                            }
+                    ) {
+                        Text(
+                            text = organizationName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                } else {
+                    Text(
+                        text = organizationName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                androidx.compose.material3.DropdownMenu(
+                    expanded = organizationMenuExpanded,
+                    onDismissRequest = { organizationMenuExpanded = false }
+                ) {
+                    memberships.forEach { membership ->
+                        DropdownMenuItem(
+                            text = { Text(membership.organization.name) },
+                            onClick = {
+                                organizationMenuExpanded = false
+                                onMembershipChange(membership)
+                            },
+                            trailingIcon = if (membership.id == currentMembershipId) {
+                                {
+                                    Icon(
+                                        imageVector = Icons.Default.Done,
+                                        contentDescription = null
+                                    )
+                                }
+                            } else null
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
  * Compact time entry row showing past entry details (collapsed view)
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -2505,7 +2626,7 @@ private fun CompactTimeEntryRow(
         ) {
             // Kit chip renders nothing for SYNCED (and null); only PENDING /
             // RETRYING / FAILED surface, so a healthy row stays clutter-free.
-            syncStatus?.let { SyncChip(status = it) }
+            syncStatus?.let { SyncChip(status = it, showLabel = false) }
             // Duration (use totalDuration if grouped, otherwise entry duration)
             Text(
                 text = durationText,
@@ -2549,10 +2670,12 @@ private fun CompactTimeEntryRow(
 /**
  * Create/edit time entry bottom sheet. [entry] null = create mode.
  */
+@Suppress("LongParameterList", "LongMethod", "CyclomaticComplexMethod")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun TimeEntryFormSheet(
     entry: TimeEntry?, // null = create mode
+    zone: ZoneId, // account temporal-policy zone for the new-entry fallback start
     suggestedStart: ZonedDateTime?, // create mode: pre-filled start (end of last entry / now-1h)
     projects: List<Project>,
     tasks: List<Task>,
@@ -2563,6 +2686,9 @@ private fun TimeEntryFormSheet(
     preventOverlap: Boolean = false,
     templates: List<EntryTemplate> = emptyList(),
     onSaveAsTemplate: ((TemplateDraft) -> Unit)? = null,
+    saveEnabled: Boolean = true,
+    onDuplicate: (() -> Unit)? = null,
+    onSplit: ((String) -> Unit)? = null,
 ) {
     var description by remember { mutableStateOf(entry?.description ?: "") }
     var projectId by remember { mutableStateOf(entry?.projectId) }
@@ -2572,7 +2698,7 @@ private fun TimeEntryFormSheet(
     var templateMenuExpanded by remember { mutableStateOf(false) }
     val originalStart = remember(entry?.id) {
         entry?.let { ZonedDateTime.parse(it.start, DateTimeFormatter.ISO_DATE_TIME) }
-            ?: (suggestedStart ?: ZonedDateTime.now(ZoneId.systemDefault()).minusHours(1))
+            ?: (suggestedStart ?: ZonedDateTime.now(zone).minusHours(1))
                 .withSecond(0).withNano(0)
     }
     val originalEnd = remember(entry?.id) {
@@ -2590,6 +2716,7 @@ private fun TimeEntryFormSheet(
     }
     var editingTime by remember { mutableStateOf<TimeField?>(null) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var showSplitPicker by remember { mutableStateOf(false) }
     val durationIsValid = durationMinutes.toLongOrNull()?.let { it > 0 } == true
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -2776,7 +2903,11 @@ private fun TimeEntryFormSheet(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             FilledTonalIconButton(
-                                onClick = { setDuration((durationMinutes.toLongOrNull() ?: 1) - 15) },
+                                onClick = {
+                                    setDuration(
+                                        (durationMinutes.toLongOrNull() ?: MINIMUM_DURATION_MINUTES) - DURATION_STEP_MINUTES,
+                                    )
+                                },
                                 modifier = Modifier.size(48.dp)
                             ) {
                                 Icon(
@@ -2789,7 +2920,9 @@ private fun TimeEntryFormSheet(
                                 onValueChange = { value ->
                                     if (value.all(Char::isDigit)) {
                                         durationMinutes = value
-                                        value.toLongOrNull()?.takeIf { it > 0 }?.let { endTime = startTime.plusMinutes(it) }
+                                        value.toLongOrNull()
+                                            ?.takeIf { it >= MINIMUM_DURATION_MINUTES }
+                                            ?.let { endTime = startTime.plusMinutes(it) }
                                     }
                                 },
                                 label = { Text(stringResource(R.string.minutes)) },
@@ -2801,7 +2934,7 @@ private fun TimeEntryFormSheet(
                                 shape = RoundedCornerShape(12.dp)
                             )
                             FilledTonalIconButton(
-                                onClick = { setDuration((durationMinutes.toLongOrNull() ?: 0) + 15) },
+                                onClick = { setDuration((durationMinutes.toLongOrNull() ?: 0) + DURATION_STEP_MINUTES) },
                                 modifier = Modifier.size(48.dp)
                             ) {
                                 Icon(
@@ -2865,6 +2998,38 @@ private fun TimeEntryFormSheet(
 
                 EntryValidationBanner(result = validation, durationHours = durationHours)
 
+                if (!saveEnabled) {
+                    Text(
+                        text = stringResource(R.string.sync_conflict_edit_locked),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+
+                // Roadmap #13: Duplicate/Split act on the stored entry. Only for completed
+                // (has end) and editable (not conflicted) entries; hidden otherwise.
+                val canDuplicateOrSplit = entry?.end != null && saveEnabled
+                if (canDuplicateOrSplit && (onDuplicate != null || onSplit != null)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (onDuplicate != null) {
+                            OutlinedButton(
+                                onClick = { onDuplicate(); onDismiss() },
+                                shape = RoundedCornerShape(8.dp),
+                            ) {
+                                Text(stringResource(R.string.duplicate_entry))
+                            }
+                        }
+                        if (onSplit != null) {
+                            OutlinedButton(
+                                onClick = { showSplitPicker = true },
+                                shape = RoundedCornerShape(8.dp),
+                            ) {
+                                Text(stringResource(R.string.split_entry))
+                            }
+                        }
+                    }
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
@@ -2892,7 +3057,7 @@ private fun TimeEntryFormSheet(
                                 endTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
                             )
                         },
-                        enabled = durationIsValid && validation.canSave,
+                        enabled = saveEnabled && durationIsValid && validation.canSave,
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.testTag(TrackingTestTags.SHEET_SAVE_BUTTON)
                     ) {
@@ -2950,6 +3115,27 @@ private fun TimeEntryFormSheet(
             }
         ) { DatePicker(state = datePickerState) }
     }
+
+    // Roadmap #13/#64: split-time picker constrained to the strictly-interior (start, end) window.
+    if (showSplitPicker && entry?.end != null && onSplit != null) {
+        // Midpoint is a sensible default and always a valid interior instant.
+        val midpoint = originalStart.plus(java.time.Duration.between(originalStart, originalEnd).dividedBy(2))
+        EntryTimePickerDialog(
+            title = stringResource(R.string.split_entry_title),
+            initial = midpoint,
+            onDismiss = { showSplitPicker = false },
+            onConfirm = { hour, minute ->
+                showSplitPicker = false
+                val candidate = originalStart.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
+                // Clamp into the open interval: reject boundary/out-of-range picks (half-open
+                // semantics) - the repository re-validates, this just avoids an obvious no-op.
+                if (candidate.isAfter(originalStart) && candidate.isBefore(originalEnd)) {
+                    onSplit(candidate.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+                    onDismiss()
+                }
+            },
+        )
+    }
 }
 
 private enum class TimeField { Start, End }
@@ -2992,35 +3178,6 @@ private fun EntryTimePickerDialog(
         confirmButton = { Button(onClick = { onConfirm(state.hour, state.minute) }) { Text(stringResource(R.string.done)) } },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
     )
-}
-
-/**
- * Error card
- */
-@Composable
-private fun ErrorCard(error: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFEF4444).copy(alpha = 0.1f)
-        ),
-        shape = RoundedCornerShape(8.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = stringResource(R.string.error),
-                style = MaterialTheme.typography.titleMedium,
-                color = Color(0xFFEF4444),
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = error,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFFEF4444).copy(alpha = 0.9f)
-            )
-        }
-    }
 }
 
 /**
@@ -3153,6 +3310,36 @@ private fun AboutSection(context: Context) {
 
 private const val OBTAINIUM_PACKAGE = "dev.imranr.obtainium"
 private const val OBTAINIUM_INSTALL_URL = "https://obtainium.imranr.dev/"
+private const val FULL_ROTATION_DEGREES = 360f
+private const val SECONDS_PER_HOUR = 3600
+private const val SECONDS_PER_MINUTE = 60
+private const val SECONDS_PER_HOUR_LONG = 3600L
+private const val SECONDS_PER_MINUTE_LONG = 60L
+private const val FILTER_ENTER_DURATION_MS = 180
+private const val FILTER_EXPAND_DURATION_MS = 220
+private const val FILTER_EXIT_DURATION_MS = 120
+private const val FILTER_COLLAPSE_DURATION_MS = 180
+private const val SYNC_ROTATION_DURATION_MS = 900
+private const val ALTERNATING_ROW_COUNT = 2
+private const val GHOST_PRIMARY_WIDTH = 0.62f
+private const val GHOST_SECONDARY_WIDTH = 0.45f
+private const val WIDE_PRIMARY_WEIGHT = 0.9f
+private const val WIDE_HISTORY_WEIGHT = 1.1f
+private const val HISTORY_PLACEHOLDER_COUNT = 4
+private const val RECENT_ENTRIES_LIMIT = 5
+private const val DURATION_STEP_MINUTES = 15L
+private const val MINIMUM_DURATION_MINUTES = 1L
+private const val TWO_HOURS = 2
+private const val FOUR_HOURS = 4
+private const val SIX_HOURS = 6
+private const val EIGHT_HOURS = 8
+private const val TWELVE_HOURS = 12
+private val LONG_TIMER_OPTIONS = listOf(TWO_HOURS, FOUR_HOURS, SIX_HOURS, EIGHT_HOURS, TWELVE_HOURS)
+private const val MAX_CROSS_MIDNIGHT_HOURS = 18L
+private const val LONG_DURATION_WARNING_HOURS = 12L
+private const val MAX_DURATION_HOURS = 24L
+private const val LAST_7_DAYS_OFFSET = 6L
+@Suppress("MaxLineLength")
 private const val OBTAINIUM_ADD_APP_URL = "obtainium://app/%7B%22id%22%3A%22dev.tricked.solidverdant%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FTricked-dev%2FSolidVerdant%22%2C%22author%22%3A%22Tricked-dev%22%2C%22name%22%3A%22SolidVerdant%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22autoApkFilterByArch%5C%22%3Atrue%7D%22%7D"
 
 private fun isObtainiumInstalled(context: Context): Boolean = try {
@@ -3220,9 +3407,9 @@ private fun copyToClipboard(context: Context, text: String) {
 internal fun formatElapsedTime(seconds: Long): String {
     // Defensive floor: a device clock behind the entry's start must never render as "-1:-5:-3".
     val safeSeconds = seconds.coerceAtLeast(0)
-    val hours = safeSeconds / 3600
-    val minutes = (safeSeconds % 3600) / 60
-    val secs = safeSeconds % 60
+    val hours = safeSeconds / SECONDS_PER_HOUR_LONG
+    val minutes = (safeSeconds % SECONDS_PER_HOUR_LONG) / SECONDS_PER_MINUTE_LONG
+    val secs = safeSeconds % SECONDS_PER_MINUTE_LONG
     return String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, minutes, secs)
 }
 
@@ -3235,11 +3422,11 @@ internal fun formatElapsedTime(seconds: Long): String {
 internal object EntryTimeValidator {
     /** An end clock-time earlier than start rolls to the next day only within this span; beyond it
      *  the inversion is treated as a mistake rather than an intended overnight shift. */
-    val MAX_CROSS_MIDNIGHT: java.time.Duration = java.time.Duration.ofHours(18)
+    val MAX_CROSS_MIDNIGHT: java.time.Duration = java.time.Duration.ofHours(MAX_CROSS_MIDNIGHT_HOURS)
     /** Durations at or above this are plausible but worth confirming before saving. */
-    val LONG_DURATION_WARNING: java.time.Duration = java.time.Duration.ofHours(12)
+    val LONG_DURATION_WARNING: java.time.Duration = java.time.Duration.ofHours(LONG_DURATION_WARNING_HOURS)
     /** Hard ceiling; a single entry longer than this is almost certainly an error. */
-    val MAX_DURATION: java.time.Duration = java.time.Duration.ofHours(24)
+    val MAX_DURATION: java.time.Duration = java.time.Duration.ofHours(MAX_DURATION_HOURS)
 
     enum class Error { END_NOT_AFTER_START, TOO_LONG }
     enum class Warning { LONG_DURATION, OVERLAP, OVERLAP_POLICY }
@@ -3358,9 +3545,9 @@ private fun formatTimeRange(start: String, end: String?): String {
  * Format duration in seconds to HH:MM:SS
  */
 private fun formatDuration(seconds: Int): String {
-    val hours = seconds / 3600
-    val minutes = (seconds % 3600) / 60
-    val secs = seconds % 60
+    val hours = seconds / SECONDS_PER_HOUR
+    val minutes = (seconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE
+    val secs = seconds % SECONDS_PER_MINUTE
     return String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, minutes, secs)
 }
 
@@ -3369,15 +3556,15 @@ private fun utcDateOf(epochMillis: Long): LocalDate = Instant.ofEpochMilli(epoch
 
 /** Format a day total without seconds to keep history headers compact. */
 private fun formatCompactDuration(seconds: Int): String {
-    val hours = seconds / 3600
-    val minutes = (seconds % 3600) / 60
+    val hours = seconds / SECONDS_PER_HOUR
+    val minutes = (seconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE
     return if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
 }
 
 private fun formatEditableDuration(minutes: Long): String {
     val safeMinutes = minutes.coerceAtLeast(0)
-    val hours = safeMinutes / 60
-    val remainingMinutes = safeMinutes % 60
+    val hours = safeMinutes / SECONDS_PER_MINUTE_LONG
+    val remainingMinutes = safeMinutes % SECONDS_PER_MINUTE_LONG
     return when {
         hours > 0 && remainingMinutes > 0 -> "${hours}h ${remainingMinutes}m"
         hours > 0 -> "${hours}h"

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sync Center screen (#33). Plain-language, never raw HTTP/impl terms. -->
+    <string name="sync_center_title">Sync center</string>
+    <string name="sync_center_open">Open sync center</string>
+    <string name="sync_center_navigate_back">Back</string>
+
+    <!-- Freshness section -->
+    <string name="sync_freshness_title">Up to date</string>
+    <string name="sync_last_pulled_label">Last synced from server</string>
+    <string name="sync_last_pushed_label">Last change uploaded</string>
+    <string name="sync_never_pulled">Not synced yet</string>
+    <string name="sync_never_pushed">No changes uploaded yet</string>
+    <string name="sync_now">Sync now</string>
+
+    <!-- Relative-time labels -->
+    <string name="sync_time_just_now">Just now</string>
+    <string name="sync_time_minutes">%1$d min ago</string>
+    <string name="sync_time_hours">%1$d hr ago</string>
+    <string name="sync_time_days">%1$d days ago</string>
+
+    <!-- Status summary (plain-language, paired with an icon so status is not colour-only) -->
+    <string name="sync_status_synced">All changes are synced</string>
+    <string name="sync_status_pending">%1$d changes waiting to sync</string>
+    <string name="sync_status_failures">%1$d changes failed to reach the server</string>
+    <string name="sync_status_conflicts">%1$d changes need your review</string>
+    <string name="sync_status_icon_synced">Everything synced</string>
+    <string name="sync_status_icon_warning">Attention needed</string>
+
+    <!-- Pending changes section -->
+    <string name="sync_pending_section_title">Waiting to sync</string>
+    <string name="sync_pending_empty">Nothing is waiting to sync.</string>
+    <string name="sync_pending_item">This change hasn\'t reached the server yet.</string>
+
+    <!-- Failures section -->
+    <string name="sync_failures_section_title">Failed to sync</string>
+    <string name="sync_conflicts_section_title">Need your review</string>
+    <string name="sync_conflict_item">This entry changed on another device and needs your review.</string>
+    <string name="sync_retry_all">Retry all</string>
+    <string name="sync_retry">Retry</string>
+    <string name="sync_discard">Discard</string>
+
+    <!-- Per-op change descriptions -->
+    <string name="sync_op_start">Started timer</string>
+    <string name="sync_op_create">New time entry</string>
+    <string name="sync_op_stop">Stopped timer</string>
+    <string name="sync_op_update">Edited time entry</string>
+    <string name="sync_op_delete">Deleted time entry</string>
+
+    <!-- Plain-language failure reasons (raw error mapped to friendly text) -->
+    <string name="sync_reason_offline">Your device was offline, so this change couldn\'t be sent.</string>
+    <string name="sync_reason_server">The server had a problem accepting this change.</string>
+    <string name="sync_reason_rejected">The server wouldn\'t accept this change.</string>
+    <string name="sync_reason_generic">This change couldn\'t be sent. We\'ll keep trying.</string>
+
+    <!-- Empty state -->
+    <string name="sync_all_caught_up">You\'re all caught up. Every change is safely on the server.</string>
+</resources>

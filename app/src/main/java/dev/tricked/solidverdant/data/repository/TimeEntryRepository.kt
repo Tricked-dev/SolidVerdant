@@ -16,6 +16,7 @@ import dev.tricked.solidverdant.data.local.db.SyncMetaDao
 import dev.tricked.solidverdant.data.local.db.SyncMetaEntity
 import dev.tricked.solidverdant.data.local.db.SyncState
 import dev.tricked.solidverdant.data.local.db.TimeEntryDao
+import dev.tricked.solidverdant.data.local.db.TimeEntryEntity
 import dev.tricked.solidverdant.data.local.db.toEntity
 import dev.tricked.solidverdant.data.local.db.toModel
 import dev.tricked.solidverdant.data.model.Client
@@ -24,6 +25,8 @@ import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.RemoteDataSource
+import dev.tricked.solidverdant.data.remote.TimeEntriesQuery
+import dev.tricked.solidverdant.sync.ConflictSnapshot
 import dev.tricked.solidverdant.sync.CreatePayload
 import dev.tricked.solidverdant.sync.StartPayload
 import dev.tricked.solidverdant.sync.StopPayload
@@ -40,7 +43,11 @@ import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private const val MONTH_PAGE_SIZE = 250
+private const val MAX_MONTH_ENTRIES = 15_000
+
 @Singleton
+@Suppress("LargeClass")
 class TimeEntryRepository @Inject constructor(
     private val timeEntryDao: TimeEntryDao,
     private val catalogDao: CatalogDao,
@@ -51,7 +58,9 @@ class TimeEntryRepository @Inject constructor(
     private val json: Json,
     private val database: AppDatabase,
 ) : TimeEntryReader {
-    enum class EntrySyncStatus { SYNCED, PENDING, RETRYING, FAILED }
+    enum class EntrySyncStatus { SYNCED, PENDING, RETRYING, FAILED, CONFLICT }
+
+    data class SyncConflict(val local: TimeEntry, val server: TimeEntry?, val serverDeleted: Boolean, val localDeleted: Boolean)
 
     data class SyncOperation(
         val entryId: String,
@@ -81,8 +90,34 @@ class TimeEntryRepository @Inject constructor(
         }
     }
 
+    fun observeConflicts(organizationId: String): Flow<List<SyncConflict>> = combine(
+        timeEntryDao.observeConflicts(organizationId),
+        catalogDao.observeTags(organizationId),
+        timeEntryDao.observeTagRefs(organizationId),
+    ) { entities, tagEntities, tagRefs ->
+        val tagsById = tagEntities.associate { it.id to it.toModel() }
+        val tagIdsByEntry = tagRefs.groupBy({ it.timeEntryId }, { it.tagId })
+        entities.mapNotNull { entity ->
+            val localTags = tagIdsByEntry[entity.id].orEmpty().mapNotNull { tagsById[it] }
+            val serverJson = entity.conflictServerJson
+            val serverDeleted = serverJson == ConflictSnapshot.DELETED_MARKER
+            val server = if (serverDeleted || serverJson == null) {
+                null
+            } else {
+                runCatching { json.decodeFromString<TimeEntry>(serverJson) }.getOrNull()
+            }
+            SyncConflict(
+                local = entity.toModel(localTags),
+                server = server,
+                serverDeleted = serverDeleted,
+                localDeleted = entity.pendingDelete,
+            )
+        }
+    }
+
+    @Suppress("LoopWithTooManyJumpStatements")
     override suspend fun loadMonth(organizationId: String, memberId: String, month: YearMonth) {
-        val pageSize = 250
+        val pageSize = MONTH_PAGE_SIZE
         var offset = 0
         val targetStart = month.atDay(1)
         // Tombstoning (SV-020) must be scoped to exactly what was fetched: the union of every
@@ -92,19 +127,21 @@ class TimeEntryRepository @Inject constructor(
         val allServerIds = mutableListOf<String>()
         var minStart: String? = null
         var maxStart: String? = null
-        while (offset < 15_000) {
+        while (offset < MAX_MONTH_ENTRIES) {
             val response = remote.getTimeEntries(
-                organizationId,
-                memberId,
-                pageSize,
-                offset,
-                onlyFullDates = false,
+                TimeEntriesQuery(
+                    organizationId = organizationId,
+                    memberId = memberId,
+                    limit = pageSize,
+                    offset = offset,
+                    onlyFullDates = false,
+                ),
             ).getOrElse {
                 Timber.e(it, "Failed loading calendar month %s", month)
                 return
             }
             val now = clock.nowMs()
-            timeEntryDao.applyServerEntries(
+            applyServerEntries(
                 response.data.map { it.toEntity(updatedAt = now, syncState = SyncState.SYNCED) },
                 response.data.associate { entry -> entry.id to entry.tags.map { it.id } },
             )
@@ -135,8 +172,19 @@ class TimeEntryRepository @Inject constructor(
 
     fun observeOutboxCount(): Flow<Int> = outboxDao.observeCount()
 
-    fun observeSyncOperations(orgId: String): Flow<List<SyncOperation>> = outboxDao.observeAll().map { operations ->
-        operations.filter { it.organizationId == orgId }.map { op ->
+    /**
+     * Reactive sync freshness for an org (last full pull + last successful push), for the dedicated
+     * Sync Center screen (#33). Delegates to [SyncMetaDao.observe] so the UI never touches the DAO
+     * directly. Emits NULL until the first sync stamps a row.
+     */
+    fun observeSyncMeta(orgId: String): Flow<SyncMetaEntity?> = syncMetaDao.observe(orgId)
+
+    fun observeSyncOperations(orgId: String): Flow<List<SyncOperation>> = combine(
+        outboxDao.observeAll(),
+        timeEntryDao.observeConflicts(orgId),
+    ) { operations, conflicts ->
+        val conflictIds = conflicts.map { it.id }.toSet()
+        val queued = operations.filter { it.organizationId == orgId && it.timeEntryId !in conflictIds }.map { op ->
             SyncOperation(
                 entryId = op.timeEntryId,
                 type = op.opType,
@@ -149,6 +197,15 @@ class TimeEntryRepository @Inject constructor(
                 error = op.lastError,
             )
         }
+        queued + conflicts.map { conflict ->
+            SyncOperation(
+                entryId = conflict.id,
+                type = OutboxOpType.UPDATE,
+                status = EntrySyncStatus.CONFLICT,
+                attemptCount = 0,
+                error = null,
+            )
+        }
     }
 
     /** Pull the full first frame for an org and upsert into Room (last-write-wins). */
@@ -157,7 +214,9 @@ class TimeEntryRepository @Inject constructor(
         val clients = remote.getClients(organizationId).getOrThrow()
         val tasks = remote.getTasks(organizationId).getOrThrow()
         val tags = remote.getTags(organizationId).getOrThrow()
-        val entries = remote.getTimeEntries(organizationId, memberId, limit = 250, offset = 0, onlyFullDates = false)
+        val entries = remote.getTimeEntries(
+            TimeEntriesQuery(organizationId, memberId, limit = 250, offset = 0, onlyFullDates = false),
+        )
             .getOrThrow().data
 
         catalogDao.upsertProjects(projects.map { it.toEntity(organizationId) })
@@ -175,7 +234,7 @@ class TimeEntryRepository @Inject constructor(
         // Single transaction; the pending-edit/soft-delete guard lives in applyServerEntries.
         // (The previous `updatedAt > now` guard was dead code: updatedAt is always stamped in
         // the past, so it never held and pending edits/deletes were silently overwritten.)
-        timeEntryDao.applyServerEntries(
+        applyServerEntries(
             entries.map { it.toEntity(updatedAt = now, syncState = SyncState.SYNCED) },
             entries.associate { entry -> entry.id to entry.tags.map { it.id } },
         )
@@ -193,7 +252,9 @@ class TimeEntryRepository @Inject constructor(
                 entries.map { it.id },
             )
         }
-        syncMetaDao.upsert(SyncMetaEntity(organizationId, now))
+        // Stamp the pull-refresh moment without clobbering the push timestamp (a concurrent
+        // SyncWorker flush may have written lastPushAtMs); stampFullSync updates that column alone.
+        syncMetaDao.stampFullSync(organizationId, now)
         Result.success(Unit)
     } catch (e: Exception) {
         Timber.e(e, "refreshAll failed")
@@ -245,6 +306,16 @@ class TimeEntryRepository @Inject constructor(
         val now = clock.nowMs()
         val end = nowIso()
         database.withTransaction {
+            val current = timeEntryDao.getById(entry.id)
+            if (current?.syncState == SyncState.CONFLICT) {
+                // Stopping is the one mutation allowed on a conflicted row: time capture must not
+                // be blocked. Keep the row conflicted and preserve the server recovery copy.
+                timeEntryDao.upsert(
+                    current.copy(end = end, updatedAt = now, pendingDelete = false),
+                )
+                return@withTransaction
+            }
+            val base = captureBaseSnapshot(entry.id)
             timeEntryDao.upsert(entry.copy(end = end).toEntity(updatedAt = now, syncState = SyncState.PENDING))
             outboxDao.insert(
                 OutboxEntity(
@@ -254,6 +325,7 @@ class TimeEntryRepository @Inject constructor(
                     createdAtMs = now,
                     clientId = newClientId(),
                     payloadJson = json.encodeToString(StopPayload(userId, entry.start, end = end)),
+                    baseSnapshotJson = base,
                 ),
             )
         }
@@ -262,6 +334,10 @@ class TimeEntryRepository @Inject constructor(
     suspend fun updateEntry(entry: TimeEntry, tagIds: List<String>) {
         val now = clock.nowMs()
         database.withTransaction {
+            check(timeEntryDao.getById(entry.id)?.syncState != SyncState.CONFLICT) {
+                "Resolve the sync conflict in Review before editing this entry"
+            }
+            val base = captureBaseSnapshot(entry.id)
             timeEntryDao.upsert(entry.toEntity(updatedAt = now, syncState = SyncState.PENDING))
             timeEntryDao.replaceTagRefs(entry.id, tagIds)
             outboxDao.insert(
@@ -283,6 +359,7 @@ class TimeEntryRepository @Inject constructor(
                             tagIds,
                         ),
                     ),
+                    baseSnapshotJson = base,
                 ),
             )
         }
@@ -345,6 +422,79 @@ class TimeEntryRepository @Inject constructor(
     }
 
     /**
+     * Roadmap #13: create a straight duplicate of a completed entry, reusing [createCompletedEntry]
+     * so the copy goes through the outbox exactly like any manual entry. The duplicate keeps the
+     * same start/end and all metadata (description/project/task/tags/billable).
+     *
+     * Only completed, non-conflicted entries can be duplicated: a running entry has no `end` to copy
+     * (duplicating an open timer would create a second running timer), and a CONFLICT entry is
+     * edit-locked (SV-027) until resolved in Review.
+     */
+    suspend fun duplicateEntry(entryId: String, memberId: String): Result<TimeEntry> = runCatching {
+        val source = timeEntryDao.getById(entryId)
+            ?: error("Entry not found")
+        check(source.syncState != SyncState.CONFLICT) {
+            "Resolve the sync conflict in Review before duplicating this entry"
+        }
+        val end = source.end ?: error("Cannot duplicate a running entry")
+        createCompletedEntry(
+            organizationId = source.organizationId,
+            memberId = memberId,
+            userId = source.userId,
+            description = source.description ?: "",
+            projectId = source.projectId,
+            taskId = source.taskId,
+            tagIds = timeEntryDao.tagIdsFor(entryId),
+            billable = source.billable,
+            start = source.start,
+            end = end,
+        )
+    }
+
+    /**
+     * Roadmap #13/#64: split a completed entry at [atIso] into two adjacent halves. The original is
+     * shortened to end at `at` via [updateEntry] and a new completed entry covering `[at, end]` is
+     * created via [createCompletedEntry]; both mutations flow through the outbox (no sync bypass).
+     * Metadata (description/project/task/tags/billable) is preserved on both halves.
+     *
+     * `at` must fall strictly inside the entry (`start < at < end`) — a half-open interval, so
+     * `at == start` or `at == end` is rejected. Running and CONFLICT (SV-027) entries cannot split.
+     * Returns the new second-half entry id so the caller can open it for immediate editing.
+     */
+    suspend fun splitEntry(entryId: String, atIso: String, memberId: String): Result<String> = runCatching {
+        val source = timeEntryDao.getById(entryId)
+            ?: error("Entry not found")
+        check(source.syncState != SyncState.CONFLICT) {
+            "Resolve the sync conflict in Review before splitting this entry"
+        }
+        val end = source.end ?: error("Cannot split a running entry")
+        // Parse as OffsetDateTime->Instant so mixed "Z"/"+02:00" offsets compare correctly.
+        val startInstant = java.time.OffsetDateTime.parse(source.start).toInstant()
+        val endInstant = java.time.OffsetDateTime.parse(end).toInstant()
+        val atInstant = java.time.OffsetDateTime.parse(atIso).toInstant()
+        require(atInstant.isAfter(startInstant) && atInstant.isBefore(endInstant)) {
+            "Split time must be strictly between the entry's start and end"
+        }
+        val tagIds = timeEntryDao.tagIdsFor(entryId)
+        val original = source.toModel(tagIds.map { Tag(it) })
+        // First half: shorten the original to end at `at` (keeps its id, tags and base snapshot).
+        updateEntry(original.copy(end = atIso), tagIds)
+        // Second half: [at, originalEnd] as a brand-new completed entry with identical metadata.
+        createCompletedEntry(
+            organizationId = source.organizationId,
+            memberId = memberId,
+            userId = source.userId,
+            description = source.description ?: "",
+            projectId = source.projectId,
+            taskId = source.taskId,
+            tagIds = tagIds,
+            billable = source.billable,
+            start = atIso,
+            end = end,
+        ).id
+    }
+
+    /**
      * SV-019 step 1 of 2: hide the entry locally right away, without telling the server anything
      * yet. No outbox op is created here, so a caller's undo window (see [TrackingViewModel]) can
      * still cancel the delete for free — there is nothing queued to race against the sync worker.
@@ -353,6 +503,8 @@ class TimeEntryRepository @Inject constructor(
      */
     suspend fun softDeleteLocal(entry: TimeEntry) {
         val now = clock.nowMs()
+        val current = timeEntryDao.getById(entry.id)
+        if (current?.syncState == SyncState.CONFLICT) return
         timeEntryDao.upsert(entry.toEntity(updatedAt = now, syncState = SyncState.PENDING, pendingDelete = true))
     }
 
@@ -371,10 +523,16 @@ class TimeEntryRepository @Inject constructor(
     suspend fun commitDelete(entry: TimeEntry) {
         val now = clock.nowMs()
         database.withTransaction {
+            if (timeEntryDao.getById(entry.id)?.syncState == SyncState.CONFLICT) return@withTransaction
             if (entry.id.startsWith("local-")) {
                 timeEntryDao.deleteById(entry.id)
                 outboxDao.deleteByTimeEntryId(entry.id)
             } else {
+                // softDeleteLocal has already flipped this row to PENDING by the time we get here,
+                // but the content fields are still the last server-acked ones - captureBaseSnapshot
+                // reads them from the entity, not from `entry`, so the PENDING flag flip is
+                // irrelevant to what gets snapshotted (SV-027 rule 3).
+                val base = captureBaseSnapshot(entry.id)
                 outboxDao.insert(
                     OutboxEntity(
                         opType = OutboxOpType.DELETE,
@@ -383,6 +541,7 @@ class TimeEntryRepository @Inject constructor(
                         createdAtMs = now,
                         clientId = newClientId(),
                         payloadJson = "{}",
+                        baseSnapshotJson = base,
                     ),
                 )
             }
@@ -465,6 +624,242 @@ class TimeEntryRepository @Inject constructor(
      * otherwise the op keeps surfacing in Track's Sync center forever with only a re-failing Retry.
      */
     suspend fun discardFailedSync(entryId: String): Boolean = outboxDao.deleteDeadLetteredByEntryId(entryId) > 0
+
+    suspend fun resolveKeepMine(conflict: SyncConflict, memberId: String?): Boolean {
+        val current = timeEntryDao.getById(conflict.local.id)
+        val canResolve = current?.syncState == SyncState.CONFLICT &&
+            current.conflictServerJson != null &&
+            (!conflict.serverDeleted || memberId != null) &&
+            (conflict.serverDeleted || conflict.server != null)
+        if (!canResolve) return false
+        val local = current!!
+        val serverBaseSnapshot = conflict.server?.let { server ->
+            json.encodeToString(
+                ConflictSnapshot.of(
+                    server.start,
+                    server.end,
+                    server.description,
+                    server.projectId,
+                    server.taskId,
+                    server.billable,
+                    server.tags.map { it.id },
+                ),
+            )
+        }
+        val now = clock.nowMs()
+        database.withTransaction {
+            outboxDao.deleteByTimeEntryId(local.id)
+            when {
+                conflict.serverDeleted -> enqueueRecreate(local, conflict, requireNotNull(memberId), now)
+                local.pendingDelete -> enqueueDelete(local, serverBaseSnapshot, now)
+                else -> enqueueUpdate(local, conflict, serverBaseSnapshot, now)
+            }
+        }
+        return true
+    }
+
+    private suspend fun enqueueRecreate(current: TimeEntryEntity, conflict: SyncConflict, memberId: String, now: Long) {
+        timeEntryDao.upsert(
+            current.copy(
+                syncState = SyncState.PENDING,
+                pendingDelete = false,
+                conflictServerJson = null,
+                updatedAt = now,
+            ),
+        )
+        timeEntryDao.replaceTagRefs(current.id, conflict.local.tags.map { it.id })
+        outboxDao.insert(
+            OutboxEntity(
+                opType = OutboxOpType.CREATE,
+                organizationId = current.organizationId,
+                timeEntryId = current.id,
+                createdAtMs = now,
+                clientId = newClientId(),
+                payloadJson = json.encodeToString(
+                    CreatePayload(
+                        memberId,
+                        current.userId,
+                        current.start,
+                        current.end ?: nowIso(),
+                        current.description.orEmpty(),
+                        current.projectId,
+                        current.taskId,
+                        current.billable,
+                        conflict.local.tags.map { it.id },
+                    ),
+                ),
+            ),
+        )
+    }
+
+    private suspend fun enqueueDelete(current: TimeEntryEntity, baseSnapshot: String?, now: Long) {
+        timeEntryDao.upsert(
+            current.copy(syncState = SyncState.PENDING, conflictServerJson = null, updatedAt = now),
+        )
+        outboxDao.insert(
+            OutboxEntity(
+                opType = OutboxOpType.DELETE,
+                organizationId = current.organizationId,
+                timeEntryId = current.id,
+                createdAtMs = now,
+                clientId = newClientId(),
+                payloadJson = "{}",
+                baseSnapshotJson = baseSnapshot,
+            ),
+        )
+    }
+
+    private suspend fun enqueueUpdate(current: TimeEntryEntity, conflict: SyncConflict, baseSnapshot: String?, now: Long) {
+        timeEntryDao.upsert(
+            current.copy(syncState = SyncState.PENDING, conflictServerJson = null, updatedAt = now),
+        )
+        timeEntryDao.replaceTagRefs(current.id, conflict.local.tags.map { it.id })
+        outboxDao.insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = current.organizationId,
+                timeEntryId = current.id,
+                createdAtMs = now,
+                clientId = newClientId(),
+                payloadJson = json.encodeToString(
+                    UpdatePayload(
+                        current.userId,
+                        current.start,
+                        current.end,
+                        current.description,
+                        current.projectId,
+                        current.taskId,
+                        current.billable,
+                        conflict.local.tags.map { it.id },
+                    ),
+                ),
+                baseSnapshotJson = baseSnapshot,
+            ),
+        )
+    }
+
+    suspend fun resolveKeepMine(entryId: String, memberId: String?): Boolean {
+        return resolveKeepMine(conflictFor(entryId) ?: return false, memberId)
+    }
+
+    suspend fun resolveKeepTheirs(conflict: SyncConflict): Boolean {
+        val current = timeEntryDao.getById(conflict.local.id)
+        val canResolve = current?.syncState == SyncState.CONFLICT &&
+            (conflict.server != null || current.conflictServerJson == ConflictSnapshot.DELETED_MARKER)
+        if (!canResolve) return false
+        val server = conflict.server
+        return if (server == null) {
+            timeEntryDao.clearTagRefs(current!!.id)
+            timeEntryDao.deleteById(current.id)
+            true
+        } else {
+            val now = clock.nowMs()
+            database.withTransaction {
+                timeEntryDao.upsert(server.toEntity(updatedAt = now, syncState = SyncState.SYNCED))
+                timeEntryDao.replaceTagRefs(server.id, server.tags.map { it.id })
+                outboxDao.deleteByTimeEntryId(current!!.id)
+            }
+            true
+        }
+    }
+
+    suspend fun resolveKeepTheirs(entryId: String): Boolean {
+        return resolveKeepTheirs(conflictFor(entryId) ?: return false)
+    }
+
+    private suspend fun conflictFor(entryId: String): SyncConflict? {
+        val entity = timeEntryDao.getById(entryId)
+        return if (entity == null || entity.syncState != SyncState.CONFLICT) {
+            null
+        } else {
+            buildConflict(entity, entryId)
+        }
+    }
+
+    private suspend fun buildConflict(entity: TimeEntryEntity, entryId: String): SyncConflict? {
+        val serverJson = entity.conflictServerJson ?: return null
+        val localTags = timeEntryDao.tagIdsFor(entryId).map { Tag(it) }
+        val serverDeleted = serverJson == ConflictSnapshot.DELETED_MARKER
+        val server = if (serverDeleted) {
+            null
+        } else {
+            runCatching { json.decodeFromString<TimeEntry>(serverJson) }.getOrNull()
+        }
+        return SyncConflict(
+            local = entity.toModel(localTags),
+            server = server,
+            serverDeleted = serverDeleted,
+            localDeleted = entity.pendingDelete,
+        )
+    }
+
+    private suspend fun applyServerEntries(entries: List<TimeEntryEntity>, tagIdsByEntry: Map<String, List<String>>) {
+        val bases = outboxDao.peekAll()
+            .filter { it.baseSnapshotJson != null }
+            .groupBy { it.timeEntryId }
+            .mapValues { (_, ops) -> ops.minBy { it.id }.baseSnapshotJson!! }
+        val serverJsonByEntry = entries.associate { entity ->
+            val tags = tagIdsByEntry[entity.id].orEmpty().map { Tag(it) }
+            entity.id to json.encodeToString(
+                TimeEntry(
+                    entity.id,
+                    entity.description,
+                    entity.userId,
+                    entity.start,
+                    entity.end,
+                    entity.duration,
+                    entity.taskId,
+                    entity.projectId,
+                    tags,
+                    entity.billable,
+                    entity.organizationId,
+                ),
+            )
+        }
+        database.withTransaction {
+            timeEntryDao.applyServerEntries(
+                entries = entries,
+                tagIdsByEntry = tagIdsByEntry,
+                baseSnapshotsByEntry = bases,
+                serverJsonByEntry = serverJsonByEntry,
+            )
+            // Pull-side conflicts no longer have a meaningful queued write. Clear them in the
+            // same transaction so Review immediately becomes the sole recovery surface.
+            entries.forEach { entity ->
+                if (timeEntryDao.getById(entity.id)?.syncState == SyncState.CONFLICT) {
+                    outboxDao.deleteByTimeEntryId(entity.id)
+                }
+            }
+        }
+    }
+
+    /**
+     * SV-027 base-snapshot capture for a STOP/UPDATE/DELETE enqueue, applied inside the same
+     * transaction that enqueues the op, before the local mutation is written. Rules, in order:
+     * 1. a queued op for this entry already carries a base -> reuse the oldest such base (an
+     *    offline STOP->UPDATE chain shares the pre-stop base);
+     * 2. else a queued START/CREATE exists for the entry -> null (born locally, nothing on the
+     *    server to diverge from);
+     * 3. else -> snapshot the entity's pre-mutation content (the last server-acked content).
+     */
+    private suspend fun captureBaseSnapshot(entryId: String): String? = outboxDao.oldestBaseSnapshot(entryId)
+        ?: if (outboxDao.hasPendingCreateOrStart(entryId)) {
+            null
+        } else {
+            timeEntryDao.getById(entryId)?.let { current ->
+                json.encodeToString(
+                    ConflictSnapshot.of(
+                        start = current.start,
+                        end = current.end,
+                        description = current.description,
+                        projectId = current.projectId,
+                        taskId = current.taskId,
+                        billable = current.billable,
+                        tagIds = timeEntryDao.tagIdsFor(entryId),
+                    ),
+                )
+            }
+        }
 
     /** Stable idempotency key for a new outbox operation; persisted on the row (see OutboxEntity). */
     private fun newClientId(): String = java.util.UUID.randomUUID().toString()

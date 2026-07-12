@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sync Center-scherm (#33). Begrijpelijke taal, nooit ruwe HTTP-/technische termen. -->
+    <string name="sync_center_title">Synchronisatiecentrum</string>
+    <string name="sync_center_open">Synchronisatiecentrum openen</string>
+    <string name="sync_center_navigate_back">Terug</string>
+
+    <!-- Actualiteit -->
+    <string name="sync_freshness_title">Actueel</string>
+    <string name="sync_last_pulled_label">Laatst opgehaald van server</string>
+    <string name="sync_last_pushed_label">Laatste wijziging geüpload</string>
+    <string name="sync_never_pulled">Nog niet gesynchroniseerd</string>
+    <string name="sync_never_pushed">Nog geen wijzigingen geüpload</string>
+    <string name="sync_now">Nu synchroniseren</string>
+
+    <!-- Relatieve tijd -->
+    <string name="sync_time_just_now">Zojuist</string>
+    <string name="sync_time_minutes">%1$d min geleden</string>
+    <string name="sync_time_hours">%1$d uur geleden</string>
+    <string name="sync_time_days">%1$d dagen geleden</string>
+
+    <!-- Statusoverzicht (met pictogram, dus niet alleen kleur) -->
+    <string name="sync_status_synced">Alle wijzigingen zijn gesynchroniseerd</string>
+    <string name="sync_status_pending">%1$d wijzigingen wachten op synchronisatie</string>
+    <string name="sync_status_failures">%1$d wijzigingen konden de server niet bereiken</string>
+    <string name="sync_status_conflicts">%1$d wijzigingen vragen om je aandacht</string>
+    <string name="sync_status_icon_synced">Alles gesynchroniseerd</string>
+    <string name="sync_status_icon_warning">Aandacht vereist</string>
+
+    <!-- Wachtende wijzigingen -->
+    <string name="sync_pending_section_title">Wacht op synchronisatie</string>
+    <string name="sync_pending_empty">Er wacht niets op synchronisatie.</string>
+    <string name="sync_pending_item">Deze wijziging heeft de server nog niet bereikt.</string>
+
+    <!-- Mislukkingen -->
+    <string name="sync_failures_section_title">Synchronisatie mislukt</string>
+    <string name="sync_conflicts_section_title">Vraagt om je aandacht</string>
+    <string name="sync_conflict_item">Dit item is op een ander apparaat gewijzigd en vraagt om je aandacht.</string>
+    <string name="sync_retry_all">Alles opnieuw proberen</string>
+    <string name="sync_retry">Opnieuw</string>
+    <string name="sync_discard">Verwijderen</string>
+
+    <!-- Beschrijvingen per bewerking -->
+    <string name="sync_op_start">Timer gestart</string>
+    <string name="sync_op_create">Nieuwe tijdregistratie</string>
+    <string name="sync_op_stop">Timer gestopt</string>
+    <string name="sync_op_update">Tijdregistratie bewerkt</string>
+    <string name="sync_op_delete">Tijdregistratie verwijderd</string>
+
+    <!-- Begrijpelijke redenen voor mislukking -->
+    <string name="sync_reason_offline">Je apparaat was offline, dus deze wijziging kon niet worden verzonden.</string>
+    <string name="sync_reason_server">De server had een probleem met het verwerken van deze wijziging.</string>
+    <string name="sync_reason_rejected">De server accepteerde deze wijziging niet.</string>
+    <string name="sync_reason_generic">Deze wijziging kon niet worden verzonden. We blijven het proberen.</string>
+
+    <!-- Lege staat -->
+    <string name="sync_all_caught_up">Je bent helemaal bij. Elke wijziging staat veilig op de server.</string>
+</resources>

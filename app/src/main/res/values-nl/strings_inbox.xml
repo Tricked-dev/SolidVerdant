@@ -44,6 +44,17 @@
     <string name="inbox_issue_long_body">Dit item duurt %1$s. Controleer of het op het verwachte moment is gestopt.</string>
     <string name="inbox_action_review">Nakijken</string>
 
+    <string name="inbox_issue_conflict_title">Item elders gewijzigd</string>
+    <string name="inbox_issue_conflict_body">Dit item is op dit apparaat en op de server gewijzigd. Kies welke versie je wilt behouden.</string>
+    <string name="inbox_conflict_mine">Mijn versie: %1$s</string>
+    <string name="inbox_conflict_theirs">Server: %1$s</string>
+    <string name="inbox_conflict_deleted">Verwijderd</string>
+    <string name="inbox_conflict_unavailable">Niet beschikbaar</string>
+    <string name="inbox_conflict_empty_value">—</string>
+    <string name="inbox_conflict_version_summary">%1$s · %2$s · %3$s</string>
+    <string name="inbox_conflict_keep_mine">Mijn versie houden</string>
+    <string name="inbox_conflict_keep_theirs">Serverversie houden</string>
+
     <string name="inbox_action_dismiss">Negeren</string>
     <string name="inbox_entry_untitled">Item zonder titel</string>
 
@@ -76,4 +87,20 @@
     <string name="inbox_settings_increase">Verhogen</string>
     <string name="inbox_minutes_value">%1$d min</string>
     <string name="inbox_hours_value">%1$d u</string>
+
+    <!-- Horizon picker (SV-005) -->
+    <string name="inbox_horizon_picker_title">Hoe ver terug moet Review kijken?</string>
+    <string name="inbox_horizon_picker_body">Kies een startpunt. Je kunt dit later aanpassen in de inbox-instellingen.</string>
+    <string name="inbox_horizon_today">Vandaag</string>
+    <string name="inbox_horizon_this_week">Deze week</string>
+    <string name="inbox_horizon_last_30_days">Afgelopen 30 dagen</string>
+    <string name="inbox_horizon_everything">Alles</string>
+    <string name="inbox_horizon_chip_since">Sinds %1$s</string>
+    <string name="inbox_horizon_chip_cd">Wijzig hoe ver terug Review kijkt</string>
+    <string name="inbox_settings_horizon">Hoe ver terug te reviewen</string>
+
+    <!-- Day grouping / bulk dismiss (SV-005 T4.3) -->
+    <string name="inbox_day_dismiss_all">Alles negeren</string>
+    <string name="inbox_day_dismiss_before">Alles voor deze dag negeren</string>
+    <string name="inbox_day_more_cd">Meer acties voor deze dag</string>
 </resources>

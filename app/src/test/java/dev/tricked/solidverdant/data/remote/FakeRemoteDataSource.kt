@@ -14,6 +14,7 @@ import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntriesResponse
 import dev.tricked.solidverdant.data.model.TimeEntry
 
+@Suppress("LongParameterList")
 class FakeRemoteDataSource(
     var entries: List<TimeEntry> = emptyList(),
     var projects: List<Project> = emptyList(),
@@ -36,8 +37,7 @@ class FakeRemoteDataSource(
     var lastEndTime: String? = null
     val deleted = mutableListOf<String>()
 
-    override suspend fun getTimeEntries(organizationId: String, memberId: String, limit: Int, offset: Int, onlyFullDates: Boolean) =
-        Result.success(TimeEntriesResponse(data = entries))
+    override suspend fun getTimeEntries(query: TimeEntriesQuery) = Result.success(TimeEntriesResponse(data = entries))
     override suspend fun getProjects(organizationId: String) = Result.success(projects)
     override suspend fun getClients(organizationId: String) = Result.success(clients)
     override suspend fun getTasks(organizationId: String) = Result.success(tasks)
