@@ -7,6 +7,7 @@
 package dev.tricked.solidverdant.ui.statistics
 
 import android.net.Uri
+import androidx.annotation.VisibleForTesting
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,6 +22,7 @@ import dev.tricked.solidverdant.domain.time.TemporalPolicy
 import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -127,6 +129,23 @@ class StatisticsViewModel @Inject constructor(
         viewModelScope.launch {
             temporalPolicyProvider.policy.collect { currentPolicy = it }
         }
+    }
+
+    /**
+     * Cancels [viewModelScope] for unit tests. Production uses [ViewModel.clear], but that is
+     * internal in lifecycle-viewmodel 2.8.x and cannot be called from tests; a test that sets a test
+     * [Dispatchers.Main] must still tear down every Main-bound coroutine this ViewModel launched (the
+     * init policy collector and the [uiState] pipeline) before `Dispatchers.resetMain()`, otherwise a
+     * straggling continuation races the reset with "Main is used concurrently with setting it".
+     *
+     * This only *requests* cancellation (no join): the coroutines run on the test's Main dispatcher,
+     * so the caller must advance that dispatcher's scheduler to idle afterwards to actually run the
+     * cancellation to completion — joining here would block on a scheduler this method cannot drive.
+     * Not used in production.
+     */
+    @VisibleForTesting
+    internal fun cancelScopeForTest() {
+        viewModelScope.coroutineContext[Job]?.cancel()
     }
 
     private val rangeFlow = MutableStateFlow<StatRange>(StatRange.ThisWeek)

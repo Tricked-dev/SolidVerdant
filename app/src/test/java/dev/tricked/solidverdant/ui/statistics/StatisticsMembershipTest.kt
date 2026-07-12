@@ -63,6 +63,15 @@ class StatisticsMembershipTest {
     private lateinit var temporalPolicyProvider: TemporalPolicyProvider
     private val dispatcher = StandardTestDispatcher()
 
+    // Every ViewModel built during a test is tracked so teardown can cancel its viewModelScope
+    // before resetMain(). The VM launches coroutines on viewModelScope (Dispatchers.Main.immediate)
+    // — the init{} policy collector and the uiState pipeline — that are NOT children of the runTest
+    // scope, so they outlive the test body. That pipeline hops to real Dispatchers.IO/Default and
+    // posts continuations back to Main; if one lands while @After runs resetMain(), the run fails
+    // intermittently with "Dispatchers.Main is used concurrently with setting it". Cancelling the
+    // scope first makes teardown deterministic.
+    private val viewModels = mutableListOf<StatisticsViewModel>()
+
     @Before
     fun setup() {
         kotlinx.coroutines.Dispatchers.setMain(dispatcher)
@@ -101,6 +110,11 @@ class StatisticsMembershipTest {
 
     @After
     fun teardown() {
+        // Cancel every VM's viewModelScope and drain the test scheduler so no Main-bound coroutine
+        // (the init policy collector or a uiState continuation returning from Dispatchers.IO/Default)
+        // is still active when resetMain() runs.
+        viewModels.forEach { it.cancelScopeForTest() }
+        dispatcher.scheduler.advanceUntilIdle()
         db.close()
         kotlinx.coroutines.Dispatchers.resetMain()
     }
@@ -112,7 +126,7 @@ class StatisticsMembershipTest {
         authDataStore = authDataStore,
         catalogDao = db.catalogDao(),
         temporalPolicyProvider = temporalPolicyProvider,
-    )
+    ).also { viewModels += it }
 
     /** Seeds a cached membership plus one cached, already-synced time entry today (within [StatRange.ThisWeek]). */
     private suspend fun seedMembership(membershipId: String, orgId: String) {
