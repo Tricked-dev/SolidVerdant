@@ -651,6 +651,137 @@ class TimeEntryRepositoryWriteTest {
             .onFailure { assertTrue(it is IllegalStateException) }
     }
 
+    @Test fun duplicate_creates_completed_copy_with_same_metadata_and_enqueues_create() = runTest {
+        val entry = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "meeting",
+            projectId = "p1",
+            taskId = "t1",
+            billable = true,
+        )
+        db.timeEntryDao().upsert(entry.toEntity(1L, SyncState.SYNCED))
+        db.timeEntryDao().replaceTagRefs(entry.id, listOf("tag-1", "tag-2"))
+
+        assertTrue(repo.duplicateEntry(entry.id, "member1").isSuccess)
+
+        val copies = repo.observeTimeEntries("org1").first().filter { it.id != entry.id }
+        assertEquals(1, copies.size)
+        val copy = copies.single()
+        assertTrue(copy.id.startsWith("local-create-"))
+        assertEquals(entry.start, copy.start)
+        assertEquals(entry.end, copy.end)
+        assertEquals("meeting", copy.description)
+        assertEquals("p1", copy.projectId)
+        assertEquals("t1", copy.taskId)
+        assertEquals(true, copy.billable)
+        assertEquals(setOf("tag-1", "tag-2"), db.timeEntryDao().tagIdsFor(copy.id).toSet())
+
+        val createOps = db.outboxDao().peekAll().filter { it.opType == OutboxOpType.CREATE }
+        assertEquals(1, createOps.size)
+        assertEquals(copy.id, createOps.single().timeEntryId)
+    }
+
+    @Test fun duplicate_refuses_running_entry() = runTest {
+        val running = repo.startEntry("org1", "m", "u", null, null, "x", emptyList())
+        db.outboxDao().peekAll().forEach { db.outboxDao().delete(it) }
+
+        assertTrue(repo.duplicateEntry(running.id, "member1").isFailure)
+        assertTrue(db.outboxDao().peekAll().none { it.opType == OutboxOpType.CREATE })
+    }
+
+    @Test fun duplicate_refuses_conflicted_entry() = runTest {
+        val entry = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "x",
+        )
+        db.timeEntryDao().upsert(entry.toEntity(2L, SyncState.CONFLICT))
+
+        assertTrue(repo.duplicateEntry(entry.id, "member1").isFailure)
+        assertTrue(db.outboxDao().peekAll().none { it.opType == OutboxOpType.CREATE })
+    }
+
+    @Test fun split_shortens_original_and_creates_second_half_with_metadata() = runTest {
+        val entry = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T10:00:00Z",
+            description = "long task",
+            projectId = "p1",
+            taskId = "t1",
+            billable = true,
+        )
+        db.timeEntryDao().upsert(entry.toEntity(1L, SyncState.SYNCED))
+        db.timeEntryDao().replaceTagRefs(entry.id, listOf("tag-1"))
+
+        val at = "2026-07-07T09:00:00Z"
+        val newId = repo.splitEntry(entry.id, at, "member1").getOrNull()
+
+        val original = db.timeEntryDao().getById("server-1")
+        assertEquals(at, original?.end)
+
+        assertTrue(newId != null && newId.startsWith("local-create-"))
+        val second = db.timeEntryDao().getById(newId!!)
+        assertEquals(at, second?.start)
+        assertEquals("2026-07-07T10:00:00Z", second?.end)
+        assertEquals("long task", second?.description)
+        assertEquals("p1", second?.projectId)
+        assertEquals("t1", second?.taskId)
+        assertEquals(true, second?.billable)
+        assertEquals(setOf("tag-1"), db.timeEntryDao().tagIdsFor(newId).toSet())
+
+        val ops = db.outboxDao().peekAll()
+        assertTrue(ops.any { it.opType == OutboxOpType.UPDATE && it.timeEntryId == "server-1" })
+        assertTrue(ops.any { it.opType == OutboxOpType.CREATE && it.timeEntryId == newId })
+    }
+
+    @Test fun split_rejects_boundary_and_out_of_range_instants() = runTest {
+        val entry = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T10:00:00Z",
+            description = "x",
+        )
+        db.timeEntryDao().upsert(entry.toEntity(1L, SyncState.SYNCED))
+
+        // at == start, at == end, before start, after end are all invalid (half-open interval).
+        assertTrue(repo.splitEntry(entry.id, "2026-07-07T08:00:00Z", "member1").isFailure)
+        assertTrue(repo.splitEntry(entry.id, "2026-07-07T10:00:00Z", "member1").isFailure)
+        assertTrue(repo.splitEntry(entry.id, "2026-07-07T07:00:00Z", "member1").isFailure)
+        assertTrue(repo.splitEntry(entry.id, "2026-07-07T11:00:00Z", "member1").isFailure)
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+    }
+
+    @Test fun split_refuses_running_and_conflicted_entries() = runTest {
+        val running = repo.startEntry("org1", "m", "u", null, null, "x", emptyList())
+        db.outboxDao().peekAll().forEach { db.outboxDao().delete(it) }
+        assertTrue(repo.splitEntry(running.id, "2026-07-07T09:00:00Z", "member1").isFailure)
+
+        val conflicted = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T10:00:00Z",
+            description = "x",
+        )
+        db.timeEntryDao().upsert(conflicted.toEntity(2L, SyncState.CONFLICT))
+        assertTrue(repo.splitEntry(conflicted.id, "2026-07-07T09:00:00Z", "member1").isFailure)
+
+        assertTrue(db.outboxDao().peekAll().none { it.opType == OutboxOpType.CREATE })
+    }
+
     @Test fun keep_mine_recreates_an_entry_deleted_on_server() = runTest {
         val entry = TimeEntry(
             id = "server-1",

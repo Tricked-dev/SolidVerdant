@@ -422,6 +422,79 @@ class TimeEntryRepository @Inject constructor(
     }
 
     /**
+     * Roadmap #13: create a straight duplicate of a completed entry, reusing [createCompletedEntry]
+     * so the copy goes through the outbox exactly like any manual entry. The duplicate keeps the
+     * same start/end and all metadata (description/project/task/tags/billable).
+     *
+     * Only completed, non-conflicted entries can be duplicated: a running entry has no `end` to copy
+     * (duplicating an open timer would create a second running timer), and a CONFLICT entry is
+     * edit-locked (SV-027) until resolved in Review.
+     */
+    suspend fun duplicateEntry(entryId: String, memberId: String): Result<TimeEntry> = runCatching {
+        val source = timeEntryDao.getById(entryId)
+            ?: error("Entry not found")
+        check(source.syncState != SyncState.CONFLICT) {
+            "Resolve the sync conflict in Review before duplicating this entry"
+        }
+        val end = source.end ?: error("Cannot duplicate a running entry")
+        createCompletedEntry(
+            organizationId = source.organizationId,
+            memberId = memberId,
+            userId = source.userId,
+            description = source.description ?: "",
+            projectId = source.projectId,
+            taskId = source.taskId,
+            tagIds = timeEntryDao.tagIdsFor(entryId),
+            billable = source.billable,
+            start = source.start,
+            end = end,
+        )
+    }
+
+    /**
+     * Roadmap #13/#64: split a completed entry at [atIso] into two adjacent halves. The original is
+     * shortened to end at `at` via [updateEntry] and a new completed entry covering `[at, end]` is
+     * created via [createCompletedEntry]; both mutations flow through the outbox (no sync bypass).
+     * Metadata (description/project/task/tags/billable) is preserved on both halves.
+     *
+     * `at` must fall strictly inside the entry (`start < at < end`) — a half-open interval, so
+     * `at == start` or `at == end` is rejected. Running and CONFLICT (SV-027) entries cannot split.
+     * Returns the new second-half entry id so the caller can open it for immediate editing.
+     */
+    suspend fun splitEntry(entryId: String, atIso: String, memberId: String): Result<String> = runCatching {
+        val source = timeEntryDao.getById(entryId)
+            ?: error("Entry not found")
+        check(source.syncState != SyncState.CONFLICT) {
+            "Resolve the sync conflict in Review before splitting this entry"
+        }
+        val end = source.end ?: error("Cannot split a running entry")
+        // Parse as OffsetDateTime->Instant so mixed "Z"/"+02:00" offsets compare correctly.
+        val startInstant = java.time.OffsetDateTime.parse(source.start).toInstant()
+        val endInstant = java.time.OffsetDateTime.parse(end).toInstant()
+        val atInstant = java.time.OffsetDateTime.parse(atIso).toInstant()
+        require(atInstant.isAfter(startInstant) && atInstant.isBefore(endInstant)) {
+            "Split time must be strictly between the entry's start and end"
+        }
+        val tagIds = timeEntryDao.tagIdsFor(entryId)
+        val original = source.toModel(tagIds.map { Tag(it) })
+        // First half: shorten the original to end at `at` (keeps its id, tags and base snapshot).
+        updateEntry(original.copy(end = atIso), tagIds)
+        // Second half: [at, originalEnd] as a brand-new completed entry with identical metadata.
+        createCompletedEntry(
+            organizationId = source.organizationId,
+            memberId = memberId,
+            userId = source.userId,
+            description = source.description ?: "",
+            projectId = source.projectId,
+            taskId = source.taskId,
+            tagIds = tagIds,
+            billable = source.billable,
+            start = atIso,
+            end = end,
+        ).id
+    }
+
+    /**
      * SV-019 step 1 of 2: hide the entry locally right away, without telling the server anything
      * yet. No outbox op is created here, so a caller's undo window (see [TrackingViewModel]) can
      * still cancel the delete for free — there is nothing queued to race against the sync worker.

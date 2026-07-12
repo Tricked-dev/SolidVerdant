@@ -422,6 +422,9 @@ fun SolidVerdantApp(
                         onDeleteEntry = { timeEntryId ->
                             trackingViewModel.deleteTimeEntry(timeEntryId = timeEntryId)
                         },
+                        onDuplicateEntry = trackingViewModel::duplicateTimeEntry,
+                        onSplitEntry = trackingViewModel::splitTimeEntry,
+                        onEntryToEditConsumed = trackingViewModel::consumeEntryToEdit,
                         onUndoDelete = trackingViewModel::undoDelete,
                         onRetrySync = trackingViewModel::retrySync,
                         onRetrySyncEntry = trackingViewModel::retrySync,

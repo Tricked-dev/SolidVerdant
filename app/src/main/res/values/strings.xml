@@ -126,6 +126,11 @@
     <string name="no_description">No description</string>
     <string name="edit_time_entry">Edit Time Entry</string>
     <string name="add_time_entry">Add Time Entry</string>
+    <string name="duplicate_entry">Duplicate</string>
+    <string name="split_entry">Split</string>
+    <string name="split_entry_title">Split at time</string>
+    <string name="split_entry_error">Split time must be inside the entry.</string>
+    <string name="entry_action_locked">Not available for running or conflicted entries.</string>
     <string name="entry_date">Date</string>
     <string name="today">Today</string>
     <string name="yesterday">Yesterday</string>

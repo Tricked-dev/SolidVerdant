@@ -263,6 +263,9 @@ fun TrackingScreen(
     onUpdatePastEntry: (TimeEntry, String?, String?, String?, List<String>, Boolean, String, String) -> Unit,
     onCreateEntry: (String?, String?, String?, List<String>, Boolean, String, String) -> Unit,
     onDeleteEntry: (String) -> Unit,
+    onDuplicateEntry: (String) -> Unit,
+    onSplitEntry: (String, String) -> Unit,
+    onEntryToEditConsumed: () -> Unit,
     onUndoDelete: (TimeEntry) -> Unit,
     onRetrySync: () -> Unit,
     onRetrySyncEntry: (String) -> Unit,
@@ -300,6 +303,16 @@ fun TrackingScreen(
         if (editActiveEntryRequested) {
             uiState.currentTimeEntry?.takeUnless { it.id in uiState.conflictedEntryIds }?.let { showEditDialog = it }
             if (uiState.currentTimeEntry != null) onEditActiveEntryConsumed()
+        }
+    }
+
+    // Roadmap #13: after a duplicate/split the VM emits the new entry's id; open it for editing
+    // once it surfaces in the observed list, then consume the one-shot signal.
+    LaunchedEffect(uiState.entryToEditId, uiState.timeEntries) {
+        val id = uiState.entryToEditId ?: return@LaunchedEffect
+        uiState.timeEntries.firstOrNull { it.id == id }?.let {
+            showEditDialog = it
+            onEntryToEditConsumed()
         }
     }
 
@@ -1032,6 +1045,8 @@ fun TrackingScreen(
             templates = templateState.templates,
             onSaveAsTemplate = onSaveTemplateFromForm,
             saveEnabled = entry.id !in uiState.conflictedEntryIds,
+            onDuplicate = { onDuplicateEntry(entry.id) },
+            onSplit = { atIso -> onSplitEntry(entry.id, atIso) },
         )
     }
 
@@ -2672,6 +2687,8 @@ private fun TimeEntryFormSheet(
     templates: List<EntryTemplate> = emptyList(),
     onSaveAsTemplate: ((TemplateDraft) -> Unit)? = null,
     saveEnabled: Boolean = true,
+    onDuplicate: (() -> Unit)? = null,
+    onSplit: ((String) -> Unit)? = null,
 ) {
     var description by remember { mutableStateOf(entry?.description ?: "") }
     var projectId by remember { mutableStateOf(entry?.projectId) }
@@ -2699,6 +2716,7 @@ private fun TimeEntryFormSheet(
     }
     var editingTime by remember { mutableStateOf<TimeField?>(null) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var showSplitPicker by remember { mutableStateOf(false) }
     val durationIsValid = durationMinutes.toLongOrNull()?.let { it > 0 } == true
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -2988,6 +3006,30 @@ private fun TimeEntryFormSheet(
                     )
                 }
 
+                // Roadmap #13: Duplicate/Split act on the stored entry. Only for completed
+                // (has end) and editable (not conflicted) entries; hidden otherwise.
+                val canDuplicateOrSplit = entry?.end != null && saveEnabled
+                if (canDuplicateOrSplit && (onDuplicate != null || onSplit != null)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (onDuplicate != null) {
+                            OutlinedButton(
+                                onClick = { onDuplicate(); onDismiss() },
+                                shape = RoundedCornerShape(8.dp),
+                            ) {
+                                Text(stringResource(R.string.duplicate_entry))
+                            }
+                        }
+                        if (onSplit != null) {
+                            OutlinedButton(
+                                onClick = { showSplitPicker = true },
+                                shape = RoundedCornerShape(8.dp),
+                            ) {
+                                Text(stringResource(R.string.split_entry))
+                            }
+                        }
+                    }
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
@@ -3072,6 +3114,27 @@ private fun TimeEntryFormSheet(
                 }
             }
         ) { DatePicker(state = datePickerState) }
+    }
+
+    // Roadmap #13/#64: split-time picker constrained to the strictly-interior (start, end) window.
+    if (showSplitPicker && entry?.end != null && onSplit != null) {
+        // Midpoint is a sensible default and always a valid interior instant.
+        val midpoint = originalStart.plus(java.time.Duration.between(originalStart, originalEnd).dividedBy(2))
+        EntryTimePickerDialog(
+            title = stringResource(R.string.split_entry_title),
+            initial = midpoint,
+            onDismiss = { showSplitPicker = false },
+            onConfirm = { hour, minute ->
+                showSplitPicker = false
+                val candidate = originalStart.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
+                // Clamp into the open interval: reject boundary/out-of-range picks (half-open
+                // semantics) - the repository re-validates, this just avoids an obvious no-op.
+                if (candidate.isAfter(originalStart) && candidate.isBefore(originalEnd)) {
+                    onSplit(candidate.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+                    onDismiss()
+                }
+            },
+        )
     }
 }
 

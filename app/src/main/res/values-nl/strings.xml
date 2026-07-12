@@ -117,6 +117,11 @@
     <string name="no_description">Geen beschrijving</string>
     <string name="edit_time_entry">Tijdregistratie Bewerken</string>
     <string name="add_time_entry">Tijdregistratie Toevoegen</string>
+    <string name="duplicate_entry">Dupliceren</string>
+    <string name="split_entry">Splitsen</string>
+    <string name="split_entry_title">Splitsen op tijd</string>
+    <string name="split_entry_error">De splitstijd moet binnen de registratie vallen.</string>
+    <string name="entry_action_locked">Niet beschikbaar voor lopende of conflicterende registraties.</string>
     <string name="entry_date">Datum</string>
     <string name="today">Vandaag</string>
     <string name="yesterday">Gisteren</string>

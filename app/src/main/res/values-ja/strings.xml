@@ -117,6 +117,11 @@
     <string name="no_description">説明なし</string>
     <string name="edit_time_entry">時間エントリを編集</string>
     <string name="add_time_entry">時間エントリを追加</string>
+    <string name="duplicate_entry">複製</string>
+    <string name="split_entry">分割</string>
+    <string name="split_entry_title">時刻で分割</string>
+    <string name="split_entry_error">分割時刻はエントリの範囲内にする必要があります。</string>
+    <string name="entry_action_locked">実行中または競合中のエントリでは使用できません。</string>
     <string name="entry_date">日付</string>
     <string name="today">今日</string>
     <string name="yesterday">昨日</string>

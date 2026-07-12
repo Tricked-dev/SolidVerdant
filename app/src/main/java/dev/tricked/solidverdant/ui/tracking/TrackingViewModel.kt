@@ -125,6 +125,11 @@ data class TrackingUiState(
     val conflictedEntryIds: Set<String> = emptySet(),
     /** Account temporal-policy zone; history filtering and new-entry pickers use it. */
     val zone: ZoneId = ZoneId.systemDefault(),
+    /**
+     * Roadmap #13: id of an entry the UI should open for editing right after a duplicate/split
+     * (the freshly created copy / second half). One-shot: cleared via [TrackingViewModel.consumeEntryToEdit].
+     */
+    val entryToEditId: String? = null,
 ) {
     /** Mutations retain the legacy internal flag; refresh/sync have independent flags. */
     val isMutating: Boolean get() = isLoading
@@ -1294,6 +1299,51 @@ class TrackingViewModel @Inject constructor(
 
             _uiState.value = _uiState.value.copy(isLoading = false)
             Timber.d("Time entry updated successfully (optimistic)")
+        }
+    }
+
+    /**
+     * Roadmap #13: duplicate a completed entry, then open the copy for immediate editing. Running
+     * and conflicted entries are guarded by the repository; a failure surfaces as an error message.
+     */
+    fun duplicateTimeEntry(entryId: String) {
+        val memberId = historyMemberId ?: return
+        viewModelScope.launch {
+            timeEntryRepository.duplicateEntry(entryId, memberId)
+                .onSuccess { created ->
+                    syncTrigger.requestSync()
+                    _uiState.value = _uiState.value.copy(entryToEditId = created.id)
+                }
+                .onFailure { error ->
+                    Timber.e(error, "Failed to duplicate time entry")
+                    _uiState.value = _uiState.value.copy(error = error.message ?: "Failed to duplicate entry")
+                }
+        }
+    }
+
+    /**
+     * Roadmap #13: split a completed entry at [atIso]; on success open the new second half for
+     * immediate editing. Validation (interior instant, running/conflict guards) lives in the repo.
+     */
+    fun splitTimeEntry(entryId: String, atIso: String) {
+        val memberId = historyMemberId ?: return
+        viewModelScope.launch {
+            timeEntryRepository.splitEntry(entryId, atIso, memberId)
+                .onSuccess { newId ->
+                    syncTrigger.requestSync()
+                    _uiState.value = _uiState.value.copy(entryToEditId = newId)
+                }
+                .onFailure { error ->
+                    Timber.e(error, "Failed to split time entry")
+                    _uiState.value = _uiState.value.copy(error = error.message ?: "Failed to split entry")
+                }
+        }
+    }
+
+    /** One-shot consume of [TrackingUiState.entryToEditId] once the UI has opened the editor. */
+    fun consumeEntryToEdit() {
+        if (_uiState.value.entryToEditId != null) {
+            _uiState.value = _uiState.value.copy(entryToEditId = null)
         }
     }
 
