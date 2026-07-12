@@ -18,6 +18,7 @@ private const val DATABASE_VERSION_3 = 3
 private const val DATABASE_VERSION_4 = 4
 private const val DATABASE_VERSION_5 = 5
 private const val DATABASE_VERSION_6 = 6
+private const val DATABASE_VERSION_7 = 7
 
 @Database(
     entities = [
@@ -34,7 +35,7 @@ private const val DATABASE_VERSION_6 = 6
         TemplateEntity::class,
         InboxDismissalEntity::class,
     ],
-    version = DATABASE_VERSION_6,
+    version = DATABASE_VERSION_7,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -145,7 +146,26 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v6 -> v7 splits per-source freshness on `sync_meta` (roadmap #35, #79):
+         *  - `lastPushAtMs`: last successful outbox flush (push), distinct from the existing pull
+         *    `lastFullSyncAtMs`. Nullable; legacy rows keep NULL until the first successful push.
+         * Additive nullable column only; no existing data is rewritten.
+         */
+        val MIGRATION_6_7 = object : Migration(DATABASE_VERSION_6, DATABASE_VERSION_7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `sync_meta` ADD COLUMN `lastPushAtMs` INTEGER")
+            }
+        }
+
         val MIGRATIONS: Array<Migration> =
-            arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+            arrayOf(
+                MIGRATION_1_2,
+                MIGRATION_2_3,
+                MIGRATION_3_4,
+                MIGRATION_4_5,
+                MIGRATION_5_6,
+                MIGRATION_6_7,
+            )
     }
 }

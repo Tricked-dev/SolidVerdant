@@ -13,7 +13,6 @@ import dev.tricked.solidverdant.data.local.db.OutboxDao
 import dev.tricked.solidverdant.data.local.db.OutboxEntity
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
 import dev.tricked.solidverdant.data.local.db.SyncMetaDao
-import dev.tricked.solidverdant.data.local.db.SyncMetaEntity
 import dev.tricked.solidverdant.data.local.db.SyncState
 import dev.tricked.solidverdant.data.local.db.TimeEntryDao
 import dev.tricked.solidverdant.data.local.db.TimeEntryEntity
@@ -245,7 +244,9 @@ class TimeEntryRepository @Inject constructor(
                 entries.map { it.id },
             )
         }
-        syncMetaDao.upsert(SyncMetaEntity(organizationId, now))
+        // Stamp the pull-refresh moment without clobbering the push timestamp (a concurrent
+        // SyncWorker flush may have written lastPushAtMs); stampFullSync updates that column alone.
+        syncMetaDao.stampFullSync(organizationId, now)
         Result.success(Unit)
     } catch (e: Exception) {
         Timber.e(e, "refreshAll failed")

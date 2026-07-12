@@ -57,7 +57,18 @@ class SyncWorkerTest {
                     appContext: android.content.Context,
                     workerClassName: String,
                     params: androidx.work.WorkerParameters,
-                ) = SyncWorker(appContext, params, db.outboxDao(), db.timeEntryDao(), db, remote, json, clock, status)
+                ) = SyncWorker(
+                    appContext,
+                    params,
+                    db.outboxDao(),
+                    db.timeEntryDao(),
+                    db.syncMetaDao(),
+                    db,
+                    remote,
+                    json,
+                    clock,
+                    status,
+                )
             }).build()
 
     @Test fun start_op_reconciles_temp_id_to_server_id() = runTest {
@@ -81,6 +92,28 @@ class SyncWorkerTest {
         assertNull(db.timeEntryDao().getById("local-1"))
     }
 
+    @Test fun successful_drain_stamps_push_timestamp() = runTest {
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.START,
+                organizationId = "org1",
+                timeEntryId = "local-1",
+                createdAtMs = 1L,
+                payloadJson = json.encodeToString(
+                    StartPayload("m1", "u1", "p1", null, "work", emptyList()),
+                ),
+            ),
+        )
+        remote.startResult = { it.copy(id = "server-1") }
+
+        buildWorker().doWork()
+
+        val meta = db.syncMetaDao().get("org1")
+        assertEquals(1L, meta?.lastPushAtMs)
+        // Push stamping must not invent a pull moment: lastFullSyncAtMs stays at its seed default.
+        assertEquals(0L, meta?.lastFullSyncAtMs)
+    }
+
     @Test fun transient_failure_returns_retry_and_keeps_op() = runTest {
         remote.failNextWrite = true
         db.outboxDao().insert(
@@ -95,6 +128,8 @@ class SyncWorkerTest {
         val result = buildWorker().doWork()
         assertEquals(ListenableWorker.Result.retry(), result)
         assertEquals(1, db.outboxDao().peekAll().size)
+        // No op reached the server, so no push timestamp is written.
+        assertNull(db.syncMetaDao().get("org1"))
     }
 
     @Test fun rejected_op_is_dead_lettered_and_not_reattempted() = runTest {

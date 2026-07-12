@@ -83,8 +83,20 @@ data class TimeEntryTagCrossRef(val timeEntryId: String, val tagId: String)
 /** Projection row for [TimeEntryDao.observeTagRefs]; not a table. */
 data class TimeEntryTagRef(val timeEntryId: String, val tagId: String)
 
+/**
+ * Per-source freshness timestamps for an organization (roadmap #35, foundation for the sync-center
+ * screen #33). Roadmap #79 warns that a single "last synced" moment is misleading, so the genuinely
+ * distinct sources are tracked separately:
+ *  - [lastFullSyncAtMs]: last full PULL refresh (catalog + history are fetched together in
+ *    `refreshAll`, so they share one honest moment and are not split further).
+ *  - [lastPushAtMs]: last successful outbox flush (PUSH). NULL until the first successful push.
+ *
+ * There is deliberately no active-timer column: the active-entry endpoint is account-wide and its
+ * fetch is ephemeral (never cached with an org-scoped freshness moment), so a per-org active-timer
+ * timestamp could not be populated honestly.
+ */
 @Entity(tableName = "sync_meta")
-data class SyncMetaEntity(@PrimaryKey val organizationId: String, val lastFullSyncAtMs: Long)
+data class SyncMetaEntity(@PrimaryKey val organizationId: String, val lastFullSyncAtMs: Long, val lastPushAtMs: Long? = null)
 
 /**
  * Reusable entry template / favorite (gap analysis #9, #81). Account/organization scoped, local

@@ -233,4 +233,36 @@ class MigrationTest {
         }
         helper.close()
     }
+
+    @Test fun migration_6_7_adds_freshness_columns() {
+        val helper = openHelper(6) { db ->
+            db.execSQL(
+                "CREATE TABLE `sync_meta` (`organizationId` TEXT NOT NULL, " +
+                    "`lastFullSyncAtMs` INTEGER NOT NULL, PRIMARY KEY(`organizationId`))",
+            )
+            // Legacy row inserted without the per-source freshness column (it doesn't exist pre-migration).
+            db.execSQL("INSERT INTO sync_meta (organizationId, lastFullSyncAtMs) VALUES ('org1', 111)")
+        }
+        val db = helper.writableDatabase
+
+        AppDatabase.MIGRATION_6_7.migrate(db)
+
+        // Pre-existing row reads the new nullable column back as NULL; the pull timestamp survives.
+        db.query("SELECT lastFullSyncAtMs, lastPushAtMs FROM sync_meta WHERE organizationId = 'org1'").use { c ->
+            c.moveToFirst()
+            assertEquals(111L, c.getLong(0))
+            assertEquals(true, c.isNull(1))
+        }
+
+        // A row can be written with the push timestamp populated and read back.
+        db.execSQL(
+            "INSERT INTO sync_meta (organizationId, lastFullSyncAtMs, lastPushAtMs) VALUES ('org2', 222, 333)",
+        )
+        db.query("SELECT lastFullSyncAtMs, lastPushAtMs FROM sync_meta WHERE organizationId = 'org2'").use { c ->
+            c.moveToFirst()
+            assertEquals(222L, c.getLong(0))
+            assertEquals(333L, c.getLong(1))
+        }
+        helper.close()
+    }
 }

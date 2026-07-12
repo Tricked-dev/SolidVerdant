@@ -17,6 +17,7 @@ import dev.tricked.solidverdant.data.local.db.AppDatabase
 import dev.tricked.solidverdant.data.local.db.OutboxDao
 import dev.tricked.solidverdant.data.local.db.OutboxEntity
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
+import dev.tricked.solidverdant.data.local.db.SyncMetaDao
 import dev.tricked.solidverdant.data.local.db.SyncState
 import dev.tricked.solidverdant.data.local.db.TimeEntryDao
 import dev.tricked.solidverdant.data.local.db.toEntity
@@ -38,6 +39,7 @@ class SyncWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
     private val outboxDao: OutboxDao,
     private val timeEntryDao: TimeEntryDao,
+    private val syncMetaDao: SyncMetaDao,
     private val database: AppDatabase,
     private val remote: RemoteDataSource,
     private val json: Json,
@@ -63,6 +65,10 @@ class SyncWorker @AssistedInject constructor(
         // op immediately before it is processed (and again before any write-back), so a STOP/UPDATE
         // in the same drain targets the real server id instead of 404ing on the retired local one.
         val rekeyed = mutableMapOf<String, String>()
+        // Organizations that had at least one op genuinely flushed to the server this run. Only
+        // these get a fresh push timestamp; Superseded (never hit the server) and dead-letters
+        // (failed) do not count as a push moment.
+        val pushedOrgs = mutableSetOf<String>()
         var retryResult: Result? = null
         ops.forEach { rawOp ->
             // A conflict can delete every queued operation for the entry. Re-read before acting
@@ -73,6 +79,7 @@ class SyncWorker @AssistedInject constructor(
             when (val outcome = process(op, conflictIndexes)) {
                 is Outcome.Success -> {
                     outboxDao.delete(op)
+                    pushedOrgs += op.organizationId
                     // Record the rekey so every remaining op for this entry in this same drain
                     // (still holding the old id in its in-memory snapshot) is remapped before use.
                     outcome.rekeyedTo?.let { rekeyed[op.timeEntryId] = it }
@@ -107,6 +114,11 @@ class SyncWorker @AssistedInject constructor(
                 }
             }
         }
+        // Stamp the push moment for every org that had at least one op reach the server, even when
+        // another op still needs a retry: the successful ops genuinely flushed. stampPush touches
+        // only lastPushAtMs, never the pull timestamp a concurrent refresh may have written.
+        val pushedAt = clock.nowMs()
+        pushedOrgs.forEach { orgId -> syncMetaDao.stampPush(orgId, pushedAt) }
         if (retryResult != null) {
             syncStatus.set(SyncStatus.Idle)
             return retryResult
