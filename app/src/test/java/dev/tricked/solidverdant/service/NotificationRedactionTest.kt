@@ -12,6 +12,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import androidx.test.core.app.ApplicationProvider
+import dev.tricked.solidverdant.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -135,5 +136,129 @@ class NotificationRedactionTest {
 
         val publicText = publicVersion.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
         assertTrue(publicText.isBlank())
+    }
+
+    @Test
+    fun paused_notification_mutation_actions_are_foreground_services_with_entry_context() {
+        val controller = Robolectric.buildService(TimeTrackingNotificationService::class.java)
+        val service = controller.create().get()
+
+        service.onStartCommand(startTrackingIntent(), 0, 1)
+        val activeNotification = checkNotNull(shadowOf(service).lastForegroundNotification)
+        assertTrue(
+            "Pause must launch a foreground service",
+            shadowOf(activeNotification.actions[0].actionIntent).isForegroundService,
+        )
+        assertTrue(
+            "Stop must launch a foreground service",
+            shadowOf(activeNotification.actions[1].actionIntent).isForegroundService,
+        )
+        service.onStartCommand(
+            Intent(
+                ApplicationProvider.getApplicationContext(),
+                TimeTrackingNotificationService::class.java,
+            ).apply {
+                action = TimeTrackingNotificationService.ACTION_SHOW_PAUSED
+            },
+            0,
+            2,
+        )
+
+        val notificationManager = shadowOf(
+            ApplicationProvider.getApplicationContext<Context>()
+                .getSystemService(NotificationManager::class.java),
+        )
+        val posted = checkNotNull(notificationManager.getNotification(1001))
+        assertEquals(2, posted.actions.size)
+
+        val resumeAction = shadowOf(posted.actions[0].actionIntent)
+        assertTrue("Resume must launch a foreground service", resumeAction.isForegroundService)
+        val resumeIntent = checkNotNull(resumeAction.savedIntent)
+        assertEquals(secretProject, resumeIntent.getStringExtra(TimeTrackingNotificationService.EXTRA_PROJECT_NAME))
+        assertEquals(secretTask, resumeIntent.getStringExtra(TimeTrackingNotificationService.EXTRA_TASK_NAME))
+        assertEquals(secretDescription, resumeIntent.getStringExtra(TimeTrackingNotificationService.EXTRA_DESCRIPTION))
+
+        val stopAction = shadowOf(posted.actions[1].actionIntent)
+        assertTrue("Stop must launch a foreground service", stopAction.isForegroundService)
+    }
+
+    @Test
+    fun long_timer_keep_running_action_is_a_foreground_service_with_entry_context() {
+        val controller = Robolectric.buildService(TimeTrackingNotificationService::class.java)
+        val service = controller.create().get()
+
+        val startIntent = startTrackingIntent()
+        service.onStartCommand(startIntent, 0, 1)
+        service.onStartCommand(
+            Intent(
+                ApplicationProvider.getApplicationContext(),
+                TimeTrackingNotificationService::class.java,
+            ).apply {
+                action = TimeTrackingNotificationService.ACTION_SHOW_LONG_TIMER_WARNING
+                putExtra(
+                    TimeTrackingNotificationService.EXTRA_ENTRY_START_EPOCH_MS,
+                    startIntent.getLongExtra(TimeTrackingNotificationService.EXTRA_START_TIME, 0L),
+                )
+            },
+            0,
+            2,
+        )
+
+        val notification = checkNotNull(shadowOf(service).lastForegroundNotification)
+        val keepRunningAction = notification.actions.first {
+            it.title == ApplicationProvider.getApplicationContext<Context>()
+                .getString(R.string.keep_running)
+        }
+        val actionIntent = shadowOf(keepRunningAction.actionIntent)
+
+        assertTrue("Keep Running must launch a foreground service", actionIntent.isForegroundService)
+        val savedIntent = checkNotNull(actionIntent.savedIntent)
+        assertEquals(TimeTrackingNotificationService.ACTION_KEEP_RUNNING, savedIntent.action)
+        assertEquals(secretProject, savedIntent.getStringExtra(TimeTrackingNotificationService.EXTRA_PROJECT_NAME))
+        assertEquals(secretTask, savedIntent.getStringExtra(TimeTrackingNotificationService.EXTRA_TASK_NAME))
+        assertEquals(secretDescription, savedIntent.getStringExtra(TimeTrackingNotificationService.EXTRA_DESCRIPTION))
+    }
+
+    @Test
+    fun keep_running_action_restores_active_foreground_notification_on_a_fresh_service() {
+        val firstController = Robolectric.buildService(TimeTrackingNotificationService::class.java)
+        val firstService = firstController.create().get()
+        val startIntent = startTrackingIntent()
+        firstService.onStartCommand(startIntent, 0, 1)
+        firstService.onStartCommand(
+            Intent(
+                ApplicationProvider.getApplicationContext(),
+                TimeTrackingNotificationService::class.java,
+            ).apply {
+                action = TimeTrackingNotificationService.ACTION_SHOW_LONG_TIMER_WARNING
+                putExtra(
+                    TimeTrackingNotificationService.EXTRA_ENTRY_START_EPOCH_MS,
+                    startIntent.getLongExtra(TimeTrackingNotificationService.EXTRA_START_TIME, 0L),
+                )
+            },
+            0,
+            2,
+        )
+
+        val warning = checkNotNull(shadowOf(firstService).lastForegroundNotification)
+        val keepRunningAction = warning.actions.first {
+            it.title == ApplicationProvider.getApplicationContext<Context>()
+                .getString(R.string.keep_running)
+        }
+        val keepRunningIntent = checkNotNull(shadowOf(keepRunningAction.actionIntent).savedIntent)
+
+        val restoredService = Robolectric.buildService(TimeTrackingNotificationService::class.java)
+            .create()
+            .get()
+        restoredService.onStartCommand(keepRunningIntent, 0, 1)
+
+        val restoredNotification = checkNotNull(shadowOf(restoredService).lastForegroundNotification)
+        assertTrue(
+            "A fresh service must restore an active notification before handling Keep Running",
+            restoredNotification.actions.any {
+                it.title == ApplicationProvider.getApplicationContext<Context>()
+                    .getString(R.string.pause)
+            },
+        )
     }
 }
