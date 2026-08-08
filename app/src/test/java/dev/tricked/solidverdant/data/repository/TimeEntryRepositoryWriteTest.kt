@@ -389,6 +389,40 @@ class TimeEntryRepositoryWriteTest {
         assertEquals("old text", base.description)
     }
 
+    @Test fun update_recomputes_stale_duration_from_multi_day_endpoints() = runTest {
+        val entry = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-06T23:00:00Z",
+            end = "2026-07-08T01:00:00Z",
+            duration = 3_600,
+        )
+        db.timeEntryDao().upsert(entry.toEntity(1L, SyncState.SYNCED))
+
+        repo.updateEntry(entry, tagIds = emptyList())
+
+        assertEquals(26 * 3_600, db.timeEntryDao().getById(entry.id)?.duration)
+    }
+
+    @Test fun create_completed_entry_is_immediately_visible_with_derived_multi_day_duration() = runTest {
+        val created = repo.createCompletedEntry(
+            organizationId = "org1",
+            memberId = "member",
+            userId = "u",
+            description = "multi-day",
+            projectId = null,
+            taskId = null,
+            tagIds = emptyList(),
+            billable = false,
+            start = "2026-07-06T23:00:00Z",
+            end = "2026-07-08T01:00:00Z",
+        )
+
+        assertEquals(26 * 3_600, created.duration)
+        assertEquals(26 * 3_600, db.timeEntryDao().getById(created.id)?.duration)
+    }
+
     @Test fun stop_captures_pre_stop_base() = runTest {
         // SV-027 rule 3: base for a STOP op must reflect the entry before `end` was written.
         val entry = TimeEntry(
@@ -716,6 +750,25 @@ class TimeEntryRepositoryWriteTest {
         assertTrue(db.outboxDao().peekAll().none { it.opType == OutboxOpType.CREATE })
     }
 
+    @Test fun duplicate_accepts_duration_only_multi_day_server_response() = runTest {
+        val entry = TimeEntry(
+            id = "duration-only",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T23:00:00+02:00",
+            end = null,
+            duration = 26 * 3600,
+            description = "multi-day",
+        )
+        db.timeEntryDao().upsert(entry.toEntity(1L, SyncState.SYNCED))
+
+        val copy = repo.duplicateEntry(entry.id, "member1").getOrThrow()
+
+        assertEquals("2026-07-07T23:00:00+02:00", copy.start)
+        assertEquals("2026-07-08T23:00:00Z", copy.end)
+        assertEquals(26 * 3600, copy.duration)
+    }
+
     @Test fun duplicate_refuses_conflicted_entry() = runTest {
         val entry = TimeEntry(
             id = "server-1",
@@ -784,6 +837,24 @@ class TimeEntryRepositoryWriteTest {
         assertTrue(repo.splitEntry(entry.id, "2026-07-07T07:00:00Z", "member1").isFailure)
         assertTrue(repo.splitEntry(entry.id, "2026-07-07T11:00:00Z", "member1").isFailure)
         assertTrue(db.outboxDao().peekAll().isEmpty())
+    }
+
+    @Test fun split_accepts_duration_only_multi_day_server_response() = runTest {
+        val entry = TimeEntry(
+            id = "duration-only",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T23:00:00+02:00",
+            end = null,
+            duration = 26 * 3600,
+            description = "multi-day",
+        )
+        db.timeEntryDao().upsert(entry.toEntity(1L, SyncState.SYNCED))
+
+        val secondId = repo.splitEntry(entry.id, "2026-07-08T10:00:00+02:00", "member1").getOrThrow()
+
+        assertEquals("2026-07-08T10:00:00+02:00", db.timeEntryDao().getById(entry.id)?.end)
+        assertEquals("2026-07-08T23:00:00Z", db.timeEntryDao().getById(secondId)?.end)
     }
 
     @Test fun split_refuses_running_and_conflicted_entries() = runTest {

@@ -11,8 +11,9 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.hasTestTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidTest
+import dev.tricked.solidverdant.e2e.BackendPortable
+import dev.tricked.solidverdant.e2e.E2eFixture
 import dev.tricked.solidverdant.e2e.E2eRule
-import dev.tricked.solidverdant.e2e.mock.MockSolidtimeServer
 import dev.tricked.solidverdant.e2e.robots.TrackRobot
 import dev.tricked.solidverdant.ui.tracking.TrackingTestTags
 import org.junit.Rule
@@ -31,33 +32,33 @@ class UiReactivityE2eTest {
     @get:Rule
     val e2e = E2eRule(this)
 
+    @BackendPortable
     @Test
     fun serverSideEditShowsAfterPullToRefresh() {
-        e2e.mockServer.presetLoggedInWorld() // seeds "Seeded work" (id seed-entry-1)
+        val source = e2e.prepare(E2eFixture.Completed(e2e.completedFixtureEntry()))
         e2e.launchApp()
         val robot = TrackRobot(e2e.composeRule).waitForHistory().assertEntryVisible("Seeded work")
 
         // Another client renames the entry on the server.
-        val renamed = e2e.mockServer.timeEntries.first { it.id == "seed-entry-1" }
-            .copy(description = "Renamed on server")
-        e2e.mockServer.timeEntries.removeAll { it.id == "seed-entry-1" }
-        e2e.mockServer.addTimeEntry(renamed)
+        e2e.updateOnServer(requireNotNull(source.logicalId)) { it.copy(description = "Renamed on server") }
 
         refreshAndAwait(robot)
 
         robot.assertEntryVisible("Renamed on server")
     }
 
+    @BackendPortable
     @Test
     fun entryCreatedElsewhereShowsAfterPullToRefresh() {
-        e2e.mockServer.presetLoggedInWorld()
+        e2e.prepare(E2eFixture.Completed(e2e.completedFixtureEntry()))
         e2e.launchApp()
         val robot = TrackRobot(e2e.composeRule).waitForHistory().assertEntryVisible("Seeded work")
 
-        e2e.mockServer.addTimeEntry(
-            MockSolidtimeServer.defaultCompletedEntry(
-                id = "created-elsewhere-1",
+        e2e.createOnServer(
+            e2e.completedFixtureEntry(
+                logicalId = "created-elsewhere-1",
                 description = "Booked from the web app",
+                start = java.time.Instant.ofEpochMilli(e2e.testClock.nowMs).minusSeconds(3_600),
             ),
         )
 
@@ -68,7 +69,7 @@ class UiReactivityE2eTest {
 
     @Test
     fun elapsedTimerVisiblyTicksWhileTracking() {
-        e2e.mockServer.presetLoggedInWorld(seededEntry = null)
+        e2e.requireMockBackend().presetLoggedInWorld(seededEntry = null)
         e2e.launchApp()
         val robot = TrackRobot(e2e.composeRule).waitForHistory()
 
@@ -90,14 +91,6 @@ class UiReactivityE2eTest {
         ?.config?.getOrNull(SemanticsProperties.Text)?.joinToString() ?: ""
 
     private fun refreshAndAwait(robot: TrackRobot) {
-        val requestsBeforeRefresh = e2e.mockServer.callsMatching("GET", "/time-entries").size
         robot.tapRefresh()
-        e2e.composeRule.waitUntil(REFRESH_WAIT_MS) {
-            e2e.mockServer.callsMatching("GET", "/time-entries").size > requestsBeforeRefresh
-        }
-    }
-
-    private companion object {
-        const val REFRESH_WAIT_MS = 30_000L
     }
 }

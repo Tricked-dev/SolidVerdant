@@ -24,7 +24,7 @@ class LogoutE2eTest {
 
     @Test
     fun logoutReturnsToLoginScreen() {
-        e2e.mockServer.presetLoggedInWorld(seededEntry = null)
+        e2e.requireMockBackend().presetLoggedInWorld(seededEntry = null)
         e2e.launchApp()
 
         TrackRobot(e2e.composeRule)

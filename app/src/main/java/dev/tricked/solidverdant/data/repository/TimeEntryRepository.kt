@@ -26,6 +26,7 @@ import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.RemoteDataSource
 import dev.tricked.solidverdant.data.remote.TimeEntriesQuery
+import dev.tricked.solidverdant.domain.time.parseTimeEntryInstant
 import dev.tricked.solidverdant.sync.ConflictSnapshot
 import dev.tricked.solidverdant.sync.CreatePayload
 import dev.tricked.solidverdant.sync.StartPayload
@@ -37,7 +38,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 import timber.log.Timber
+import java.time.Duration
 import java.time.YearMonth
+import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
@@ -116,10 +119,10 @@ class TimeEntryRepository @Inject constructor(
     }
 
     @Suppress("LoopWithTooManyJumpStatements")
-    override suspend fun loadMonth(organizationId: String, memberId: String, month: YearMonth) {
+    override suspend fun loadMonth(organizationId: String, memberId: String, month: YearMonth, zone: ZoneId) {
         val pageSize = MONTH_PAGE_SIZE
         var offset = 0
-        val targetStart = month.atDay(1)
+        val queryEnd = month.plusMonths(1).atDay(1).atStartOfDay(zone).toInstant().toString()
         // Tombstoning (SV-020) must be scoped to exactly what was fetched: the union of every
         // returned id, bounded by the tightest [minStart, maxStart] actually observed across all
         // pages of this call. Widening either bound risks deleting a local row the fetch never
@@ -135,6 +138,10 @@ class TimeEntryRepository @Inject constructor(
                     limit = pageSize,
                     offset = offset,
                     onlyFullDates = false,
+                    // Solidtime filters both bounds by the entry's start timestamp. Omitting the
+                    // lower bound is required to retain a long entry that carries into this month.
+                    start = null,
+                    end = queryEnd,
                 ),
             ).getOrElse {
                 Timber.e(it, "Failed loading calendar month %s", month)
@@ -150,12 +157,7 @@ class TimeEntryRepository @Inject constructor(
                 if (minStart == null || entry.start < minStart!!) minStart = entry.start
                 if (maxStart == null || entry.start > maxStart!!) maxStart = entry.start
             }
-            val dates = response.data.mapNotNull { entry ->
-                runCatching {
-                    ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME).toLocalDate()
-                }.getOrNull()
-            }
-            if (response.data.isEmpty() || dates.minOrNull()?.isBefore(targetStart) == true) break
+            if (response.data.isEmpty()) break
             offset += response.data.size
             if (response.data.size < pageSize || offset >= (response.meta?.total ?: Int.MAX_VALUE)) break
         }
@@ -323,7 +325,12 @@ class TimeEntryRepository @Inject constructor(
                 // be blocked. Keep the row conflicted and preserve the server recovery copy, but
                 // still enqueue the narrow end-only STOP so the server timer actually ends.
                 timeEntryDao.upsert(
-                    current.copy(end = end, updatedAt = now, pendingDelete = false),
+                    current.copy(
+                        end = end,
+                        duration = completedDurationSeconds(targetStart, end),
+                        updatedAt = now,
+                        pendingDelete = false,
+                    ),
                 )
                 outboxDao.insert(
                     OutboxEntity(
@@ -338,8 +345,9 @@ class TimeEntryRepository @Inject constructor(
                 return@withTransaction
             }
             val base = captureBaseSnapshot(targetId)
-            val stopped = current?.copy(end = end, updatedAt = now, syncState = SyncState.PENDING)
-                ?: entry.copy(end = end).toEntity(updatedAt = now, syncState = SyncState.PENDING)
+            val duration = completedDurationSeconds(targetStart, end)
+            val stopped = current?.copy(end = end, duration = duration, updatedAt = now, syncState = SyncState.PENDING)
+                ?: entry.copy(end = end, duration = duration).toEntity(updatedAt = now, syncState = SyncState.PENDING)
             timeEntryDao.upsert(stopped)
             outboxDao.insert(
                 OutboxEntity(
@@ -357,12 +365,13 @@ class TimeEntryRepository @Inject constructor(
 
     suspend fun updateEntry(entry: TimeEntry, tagIds: List<String>) {
         val now = clock.nowMs()
+        val normalizedEntry = entry.withDerivedCompletedDuration()
         database.withTransaction {
             check(timeEntryDao.getById(entry.id)?.syncState != SyncState.CONFLICT) {
                 "Resolve the sync conflict in Review before editing this entry"
             }
             val base = captureBaseSnapshot(entry.id)
-            timeEntryDao.upsert(entry.toEntity(updatedAt = now, syncState = SyncState.PENDING))
+            timeEntryDao.upsert(normalizedEntry.toEntity(updatedAt = now, syncState = SyncState.PENDING))
             timeEntryDao.replaceTagRefs(entry.id, tagIds)
             outboxDao.insert(
                 OutboxEntity(
@@ -373,13 +382,13 @@ class TimeEntryRepository @Inject constructor(
                     clientId = newClientId(),
                     payloadJson = json.encodeToString(
                         UpdatePayload(
-                            entry.userId,
-                            entry.start,
-                            entry.end,
-                            entry.description,
-                            entry.projectId,
-                            entry.taskId,
-                            entry.billable,
+                            normalizedEntry.userId,
+                            normalizedEntry.start,
+                            normalizedEntry.end,
+                            normalizedEntry.description,
+                            normalizedEntry.projectId,
+                            normalizedEntry.taskId,
+                            normalizedEntry.billable,
                             tagIds,
                         ),
                     ),
@@ -409,7 +418,7 @@ class TimeEntryRepository @Inject constructor(
             userId = userId,
             start = start,
             end = end,
-            duration = null,
+            duration = completedDurationSeconds(start, end),
             taskId = taskId,
             projectId = projectId,
             tags = tagIds.map { Tag(it) },
@@ -460,7 +469,7 @@ class TimeEntryRepository @Inject constructor(
         check(source.syncState != SyncState.CONFLICT) {
             "Resolve the sync conflict in Review before duplicating this entry"
         }
-        val end = source.end ?: error("Cannot duplicate a running entry")
+        val end = completedEndIso(source) ?: error("Cannot duplicate a running entry")
         createCompletedEntry(
             organizationId = source.organizationId,
             memberId = memberId,
@@ -491,7 +500,7 @@ class TimeEntryRepository @Inject constructor(
         check(source.syncState != SyncState.CONFLICT) {
             "Resolve the sync conflict in Review before splitting this entry"
         }
-        val end = source.end ?: error("Cannot split a running entry")
+        val end = completedEndIso(source) ?: error("Cannot split a running entry")
         // Parse as OffsetDateTime->Instant so mixed "Z"/"+02:00" offsets compare correctly.
         val startInstant = java.time.OffsetDateTime.parse(source.start).toInstant()
         val endInstant = java.time.OffsetDateTime.parse(end).toInstant()
@@ -889,6 +898,25 @@ class TimeEntryRepository @Inject constructor(
 
     /** Stable idempotency key for a new outbox operation; persisted on the row (see OutboxEntity). */
     private fun newClientId(): String = java.util.UUID.randomUUID().toString()
+
+    private fun TimeEntry.withDerivedCompletedDuration(): TimeEntry = if (end == null) {
+        this
+    } else {
+        completedDurationSeconds(start, end)?.let { copy(duration = it) } ?: this
+    }
+
+    private fun completedDurationSeconds(start: String, end: String): Int? = runCatching {
+        Duration.between(
+            ZonedDateTime.parse(start, DateTimeFormatter.ISO_DATE_TIME).toInstant(),
+            ZonedDateTime.parse(end, DateTimeFormatter.ISO_DATE_TIME).toInstant(),
+        ).seconds.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
+    }.getOrNull()
+
+    /** Resolves both Solidtime completed-entry response shapes without treating duration=0 as done. */
+    private fun completedEndIso(entry: TimeEntryEntity): String? = entry.end
+        ?: entry.duration?.takeIf { it > 0 }?.let { seconds ->
+            parseTimeEntryInstant(entry.start)?.plusSeconds(seconds.toLong())?.toString()
+        }
 
     private fun nowIso(): String = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC)
         .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'"))

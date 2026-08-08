@@ -31,6 +31,7 @@ class FakeRemoteDataSource(
     var updateResult: (TimeEntry) -> TimeEntry = { it },
 ) : RemoteDataSource {
     val started = mutableListOf<Triple<String, String?, String?>>()
+    val created = mutableListOf<TimeEntry>()
 
     // Capture-time timestamps received on the last START/STOP call, for SV-017 assertions.
     var lastStartTime: String? = null
@@ -81,9 +82,18 @@ class FakeRemoteDataSource(
             ),
         )
     }
-    override suspend fun createTimeEntry(organizationId: String, memberId: String, userId: String, entry: TimeEntry, tags: List<String>) =
-        writeError?.let { Result.failure(it) }
-            ?: if (failNextWrite) Result.failure(java.io.IOException("offline")) else Result.success(startResult(entry))
+    override suspend fun createTimeEntry(
+        organizationId: String,
+        memberId: String,
+        userId: String,
+        entry: TimeEntry,
+        tags: List<String>,
+    ): Result<TimeEntry> {
+        writeError?.let { return Result.failure(it) }
+        if (failNextWrite) return Result.failure(java.io.IOException("offline"))
+        created += entry
+        return Result.success(startResult(entry))
+    }
     override suspend fun stopTimeEntry(organizationId: String, timeEntryId: String, userId: String, startTime: String, endTime: String) =
         writeError?.let { Result.failure(it) }
             ?: if (failNextWrite) {

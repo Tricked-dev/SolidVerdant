@@ -27,6 +27,9 @@ import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.model.UserResponse
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -177,8 +180,12 @@ class MockSolidtimeServer {
 
     // ---- Assertions ---------------------------------------------------------------------------
 
-    fun callsMatching(method: String, pathContains: String): List<RecordedCall> =
-        recordedCalls.filter { it.method == method && it.path.contains(pathContains) }
+    fun callsMatching(method: String, pathContains: String): List<RecordedCall> {
+        // synchronizedList only synchronizes individual operations. Its iterator remains fail-fast,
+        // so copy under the list monitor before tests inspect calls while MockWebServer records more.
+        val snapshot = synchronized(recordedCalls) { recordedCalls.toList() }
+        return snapshot.filter { it.method == method && it.path.contains(pathContains) }
+    }
 
     fun wasRequested(method: String, pathContains: String): Boolean = callsMatching(method, pathContains).isNotEmpty()
 
@@ -277,6 +284,7 @@ class MockSolidtimeServer {
     }
 
     private fun handleCreateOrStart(orgId: String, body: String): MockResponse {
+        validateWriteTimestamps(body)?.let { return it }
         val req = runCatching { json.decodeFromString<StartTimeEntryRequest>(body) }.getOrNull()
         val entry = TimeEntry(
             id = "server-${idCounter.getAndIncrement()}",
@@ -297,6 +305,7 @@ class MockSolidtimeServer {
     }
 
     private fun handleUpdateOrStop(orgId: String, id: String, body: String): MockResponse {
+        validateWriteTimestamps(body)?.let { return it }
         // Both stop and update arrive as PUT; decode leniently for the fields we echo back.
         val existing = timeEntries.firstOrNull { it.id == id }
         val patch = runCatching { json.decodeFromString<PutBody>(body) }.getOrNull()
@@ -315,6 +324,30 @@ class MockSolidtimeServer {
         return ok(json.encodeToString(TimeEntryResponse(data = updated)))
     }
 
+    /** Match Solidtime's write validator: timestamps are UTC, second-precision values ending in Z. */
+    private fun validateWriteTimestamps(body: String): MockResponse? {
+        val fields = runCatching { json.parseToJsonElement(body).jsonObject }.getOrElse {
+            return validationError("body")
+        }
+        val invalid = listOf("start", "end").filter { field ->
+            val value = fields[field]?.jsonPrimitive?.contentOrNull ?: return@filter false
+            !SOLIDTIME_UTC_TIMESTAMP.matches(value) || runCatching { Instant.parse(value) }.isFailure
+        }
+        return invalid.takeIf { it.isNotEmpty() }?.let(::validationError)
+    }
+
+    private fun validationError(field: String): MockResponse = validationError(listOf(field))
+
+    private fun validationError(fields: List<String>): MockResponse {
+        val errors = fields.joinToString(",") { field ->
+            """"$field":["The $field field must match the format Y-m-dTH:i:sZ."]"""
+        }
+        return MockResponse()
+            .setResponseCode(422)
+            .setHeader("Content-Type", "application/json")
+            .setBody("""{"message":"The given data was invalid.","errors":{$errors}}""")
+    }
+
     private fun ok(bodyJson: String): MockResponse = MockResponse()
         .setResponseCode(200)
         .setHeader("Content-Type", "application/json")
@@ -331,6 +364,8 @@ class MockSolidtimeServer {
             Regex("""/api/v1/organizations/([^/]+)/time-entries""")
         private val ENTRY_ITEM_REGEX =
             Regex("""/api/v1/organizations/([^/]+)/time-entries/([^/]+)""")
+        private val SOLIDTIME_UTC_TIMESTAMP =
+            Regex("""\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z""")
 
         fun defaultUser(id: String = DEFAULT_USER_ID): User =
             User(id = id, name = "Test User", email = "test@example.com", timezone = "UTC", weekStart = "monday")

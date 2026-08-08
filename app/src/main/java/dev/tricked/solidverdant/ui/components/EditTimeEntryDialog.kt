@@ -65,10 +65,12 @@ import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.ui.theme.Dimens
 import dev.tricked.solidverdant.ui.tracking.EntryTimeValidator
 import dev.tricked.solidverdant.ui.tracking.EntryTrustRules
 import dev.tricked.solidverdant.ui.tracking.EntryValidationBanner
 import dev.tricked.solidverdant.ui.tracking.TagsSelector
+import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import dev.tricked.solidverdant.ui.tracking.ProjectTaskDropdown as TrackingProjectTaskDropdown
@@ -77,6 +79,7 @@ import dev.tricked.solidverdant.ui.tracking.ProjectTaskDropdown as TrackingProje
 @Composable
 fun EditTimeEntryDialog(
     entry: TimeEntry,
+    zone: ZoneId,
     projects: List<Project>,
     tasks: List<Task>,
     tags: List<Tag>,
@@ -91,17 +94,20 @@ fun EditTimeEntryDialog(
     var taskId by remember { mutableStateOf(entry.taskId) }
     var selectedTags by remember { mutableStateOf(entry.tags.map { it.id }) }
     var billable by remember { mutableStateOf(entry.billable) }
-    val originalStart = remember(entry.id) { ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME) }
-    val originalEnd = remember(entry.id) {
-        entry.end?.let { ZonedDateTime.parse(it, DateTimeFormatter.ISO_DATE_TIME) }
+    val originalStart = remember(entry.id, zone) {
+        ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME).withZoneSameInstant(zone)
+    }
+    val originalEnd = remember(entry.id, zone) {
+        entry.end?.let { ZonedDateTime.parse(it, DateTimeFormatter.ISO_DATE_TIME).withZoneSameInstant(zone) }
             ?: originalStart.plusSeconds((entry.duration ?: 0).toLong())
     }
-    var startTime by remember(entry.id) { mutableStateOf(originalStart) }
-    var endTime by remember(entry.id) { mutableStateOf(originalEnd) }
-    var durationMinutes by remember(entry.id) {
+    var startTime by remember(entry.id, zone) { mutableStateOf(originalStart) }
+    var endTime by remember(entry.id, zone) { mutableStateOf(originalEnd) }
+    var durationMinutes by remember(entry.id, zone) {
         mutableStateOf(java.time.Duration.between(originalStart, originalEnd).toMinutes().coerceAtLeast(1).toString())
     }
     var editingTime by remember { mutableStateOf<TimeField?>(null) }
+    var editingDate by remember { mutableStateOf<TimeField?>(null) }
     val durationIsValid = durationMinutes.toLongOrNull()?.let { it > 0 } == true
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -154,7 +160,27 @@ fun EditTimeEntryDialog(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
+            ) {
+                EntryDateFieldButton(
+                    label = stringResource(R.string.start_date),
+                    date = startTime.toLocalDate(),
+                    onClick = { editingDate = TimeField.Start },
+                    modifier = Modifier.weight(1f),
+                    testTag = EditTimeEntryTestTags.START_DATE,
+                )
+                EntryDateFieldButton(
+                    label = stringResource(R.string.end_date),
+                    date = endTime.toLocalDate(),
+                    onClick = { editingDate = TimeField.End },
+                    modifier = Modifier.weight(1f),
+                    testTag = EditTimeEntryTestTags.END_DATE,
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
             ) {
                 TimeFieldButton(
                     label = stringResource(R.string.start_time),
@@ -375,6 +401,25 @@ fun EditTimeEntryDialog(
                     durationMinutes = java.time.Duration.between(startTime, endTime).toMinutes().toString()
                 }
                 editingTime = null
+            },
+        )
+    }
+
+    editingDate?.let { field ->
+        val current = if (field == TimeField.Start) startTime else endTime
+        EntryDatePickerDialog(
+            initialDate = current.toLocalDate(),
+            onDismiss = { editingDate = null },
+            onConfirm = { date ->
+                if (field == TimeField.Start) {
+                    val minutes = durationMinutes.toLongOrNull() ?: 1
+                    startTime = startTime.with(date)
+                    endTime = startTime.plusMinutes(minutes)
+                } else {
+                    endTime = endTime.with(date)
+                    durationMinutes = java.time.Duration.between(startTime, endTime).toMinutes().toString()
+                }
+                editingDate = null
             },
         )
     }

@@ -7,6 +7,10 @@
 package dev.tricked.solidverdant.ui.calendar
 
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.domain.time.LocalDayTimeSlice
+import dev.tricked.solidverdant.domain.time.clipTimeEntryToLocalDay
+import dev.tricked.solidverdant.domain.time.timeEntryDurationSeconds
+import dev.tricked.solidverdant.domain.time.timeEntryLocalDaySlices
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -48,18 +52,14 @@ fun entryLocalDate(entry: TimeEntry, zone: ZoneId): LocalDate? = try {
     null
 }
 
-fun entryDurationSeconds(entry: TimeEntry, now: Instant): Long {
-    entry.duration?.let { return it.toLong().coerceAtLeast(0) }
-    return try {
-        val start = ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME).toInstant()
-        val end = entry.end?.let {
-            ZonedDateTime.parse(it, DateTimeFormatter.ISO_DATE_TIME).toInstant()
-        } ?: now
-        (end.epochSecond - start.epochSecond).coerceAtLeast(0)
-    } catch (_: Exception) {
-        0L
-    }
-}
+fun entryDurationSeconds(entry: TimeEntry, now: Instant): Long = timeEntryDurationSeconds(entry, now) ?: 0L
+
+/** Seconds from [entry] that belong to exactly [day] in the account [zone]. */
+fun entryDurationSecondsOnDay(entry: TimeEntry, day: LocalDate, zone: ZoneId, now: Instant): Long =
+    clipTimeEntryToLocalDay(entry, day, zone, now)?.seconds ?: 0L
+
+/** Every local day covered by [entry], with the entry's seconds clipped to that day. */
+fun entryDaySlices(entry: TimeEntry, zone: ZoneId, now: Instant): List<LocalDayTimeSlice> = timeEntryLocalDaySlices(entry, zone, now)
 
 fun formatDuration(seconds: Long): String {
     val safe = seconds.coerceAtLeast(0)

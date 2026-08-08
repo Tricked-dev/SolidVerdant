@@ -66,13 +66,14 @@ class EntryTimeValidatorTest {
         assertTrue(result.canSave)
     }
 
-    @Test fun `duration over 24h is blocked as too long`() {
+    @Test fun `multi-day duration is a warning and remains saveable`() {
         val result = EntryTimeValidator.evaluate(
             at("2026-07-06T09:00:00Z"),
-            at("2026-07-07T10:00:00Z"),
+            at("2026-07-08T10:00:00Z"),
         )
-        assertEquals(EntryTimeValidator.Error.TOO_LONG, result.error)
-        assertFalse(result.canSave)
+        assertNull(result.error)
+        assertTrue(result.warnings.contains(EntryTimeValidator.Warning.LONG_DURATION))
+        assertTrue(result.canSave)
     }
 
     @Test fun `long but plausible duration warns yet still saves`() {

@@ -69,6 +69,29 @@ class CalendarDateUtilsTest {
     }
 
     @Test
+    fun entryDurationSeconds_prefersExplicitEndOverStaleDuration() {
+        val e = TimeEntry(
+            id = "1",
+            userId = "u",
+            start = "2026-07-06T23:00:00Z",
+            end = "2026-07-08T01:00:00Z",
+            duration = 3_600,
+            organizationId = "o",
+        )
+
+        assertEquals(26 * 3_600L, entryDurationSeconds(e, Instant.parse("2026-07-09T00:00:00Z")))
+        assertEquals(
+            24 * 3_600L,
+            entryDurationSecondsOnDay(
+                e,
+                LocalDate.of(2026, 7, 7),
+                ZoneOffset.UTC,
+                Instant.parse("2026-07-09T00:00:00Z"),
+            ),
+        )
+    }
+
+    @Test
     fun entryLocalDate_parsesValidStart() {
         val e = TimeEntry(
             id = "1",
@@ -108,6 +131,86 @@ class CalendarDateUtilsTest {
             organizationId = "o",
         )
         assertNull(entryLocalDate(e, ZoneOffset.UTC))
+    }
+
+    @Test
+    fun entryDaySlices_clipsMultiDayEntryAtEveryLocalMidnight() {
+        val entry = TimeEntry(
+            id = "multi-day",
+            userId = "u",
+            start = "2026-07-06T23:00:00Z",
+            end = "2026-07-08T01:00:00Z",
+            organizationId = "o",
+        )
+
+        val slices = entryDaySlices(
+            entry = entry,
+            zone = ZoneOffset.UTC,
+            now = Instant.parse("2026-07-09T00:00:00Z"),
+        )
+
+        assertEquals(
+            listOf(
+                LocalDate.of(2026, 7, 6) to 3_600L,
+                LocalDate.of(2026, 7, 7) to 86_400L,
+                LocalDate.of(2026, 7, 8) to 3_600L,
+            ),
+            slices.map { it.date to it.seconds },
+        )
+    }
+
+    @Test
+    fun entryDaySlices_doesNotCreateSliceForExclusiveMidnightEnd() {
+        val entry = TimeEntry(
+            id = "ends-at-midnight",
+            userId = "u",
+            start = "2026-07-06T23:00:00Z",
+            end = "2026-07-07T00:00:00Z",
+            organizationId = "o",
+        )
+
+        val slices = entryDaySlices(entry, ZoneOffset.UTC, Instant.parse("2026-07-08T00:00:00Z"))
+
+        assertEquals(listOf(LocalDate.of(2026, 7, 6)), slices.map { it.date })
+        assertEquals(3_600L, slices.single().seconds)
+    }
+
+    @Test
+    fun entryDaySlices_usesRealDayLengthAcrossDstBoundary() {
+        val entry = TimeEntry(
+            id = "dst-day",
+            userId = "u",
+            start = "2026-03-28T23:00:00Z",
+            end = "2026-03-29T22:00:00Z",
+            organizationId = "o",
+        )
+
+        val slices = entryDaySlices(entry, ZoneId.of("Europe/Amsterdam"), Instant.parse("2026-03-30T00:00:00Z"))
+
+        assertEquals(listOf(LocalDate.of(2026, 3, 29)), slices.map { it.date })
+        assertEquals(23 * 3_600L, slices.single().seconds)
+    }
+
+    @Test
+    fun entryDaySlices_treatsZeroDurationWithoutEndAsRunning() {
+        val entry = TimeEntry(
+            id = "running",
+            userId = "u",
+            start = "2026-07-06T23:00:00Z",
+            end = null,
+            duration = 0,
+            organizationId = "o",
+        )
+
+        val slices = entryDaySlices(entry, ZoneOffset.UTC, Instant.parse("2026-07-07T01:00:00Z"))
+
+        assertEquals(
+            listOf(
+                LocalDate.of(2026, 7, 6) to 3_600L,
+                LocalDate.of(2026, 7, 7) to 3_600L,
+            ),
+            slices.map { it.date to it.seconds },
+        )
     }
 
     @Test

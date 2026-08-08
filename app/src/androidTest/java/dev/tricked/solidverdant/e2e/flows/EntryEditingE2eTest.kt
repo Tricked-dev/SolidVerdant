@@ -11,9 +11,10 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidTest
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.e2e.BackendPortable
+import dev.tricked.solidverdant.e2e.E2eFixture
 import dev.tricked.solidverdant.e2e.E2eRule
 import dev.tricked.solidverdant.e2e.robots.TrackRobot
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -35,9 +36,10 @@ class EntryEditingE2eTest {
 
     private val context: Context get() = ApplicationProvider.getApplicationContext()
 
+    @BackendPortable
     @Test
     fun editedDescriptionRendersAndSyncsToServer() {
-        e2e.mockServer.presetLoggedInWorld() // seeds "Seeded work" (id seed-entry-1)
+        val source = e2e.prepare(E2eFixture.Completed(e2e.completedFixtureEntry()))
         e2e.launchApp()
         val robot = TrackRobot(e2e.composeRule).waitForHistory().assertEntryVisible("Seeded work")
 
@@ -49,19 +51,37 @@ class EntryEditingE2eTest {
         robot.assertEntryVisible("Edited via e2e")
 
         // Outbox drains an UPDATE for the seeded id carrying the new description.
-        e2e.composeRule.waitUntil(WAIT_MS) {
-            e2e.runPendingSync()
-            e2e.mockServer.callsMatching("PUT", "seed-entry-1").any { it.body.contains("Edited via e2e") }
+        val snapshot = e2e.awaitServer(WAIT_MS, driveSync = true) { current ->
+            current.entry(source)?.description == "Edited via e2e"
         }
         assertTrue(
-            "Server never received the edited description",
-            e2e.mockServer.callsMatching("PUT", "seed-entry-1").any { it.body.contains("Edited via e2e") },
+            "Server never persisted the edited description",
+            snapshot.entry(source)?.description == "Edited via e2e",
         )
     }
 
+    @BackendPortable
+    @Test
+    fun duplicatedEntryCreatesANewServerEntryInsteadOfAdoptingItsSource() {
+        val source = e2e.prepare(E2eFixture.Completed(e2e.completedFixtureEntry()))
+        e2e.launchApp()
+        val robot = TrackRobot(e2e.composeRule).waitForHistory().assertEntryVisible("Seeded work")
+
+        robot.tapFirstEntryEdit().duplicateOpenEntry()
+
+        val snapshot = e2e.awaitServer(WAIT_MS, driveSync = true) { current ->
+            current.entries.count { it.description == "Seeded work" } == 2
+        }
+        val matchingEntries = snapshot.entries.filter { it.description == "Seeded work" }
+        assertTrue("Duplicate should leave both the source and a new server entry", matchingEntries.size == 2)
+        assertTrue("Duplicate and source must have distinct server ids", matchingEntries.map { it.id }.distinct().size == 2)
+        assertTrue("Duplicate must not replace its source", matchingEntries.any { it.id == source.serverId })
+    }
+
+    @BackendPortable
     @Test
     fun deletedEntryIsRestoredByUndoAndNoDeleteReachesTheServer() {
-        e2e.mockServer.presetLoggedInWorld()
+        val source = e2e.prepare(E2eFixture.Completed(e2e.completedFixtureEntry()))
         e2e.launchApp()
         val robot = TrackRobot(e2e.composeRule).waitForHistory().assertEntryVisible("Seeded work")
 
@@ -72,13 +92,9 @@ class EntryEditingE2eTest {
 
         // Draining sync after the undo must not carry the delete to the server.
         e2e.runPendingSync()
-        assertFalse(
-            "Undo should have cancelled the queued DELETE",
-            e2e.mockServer.wasRequested("DELETE", "seed-entry-1"),
-        )
         assertTrue(
-            "Seeded entry must still exist on the server",
-            e2e.mockServer.timeEntries.any { it.id == "seed-entry-1" },
+            "Undo should leave the seeded entry persisted on the server",
+            e2e.serverSnapshot().entry(source) != null,
         )
     }
 

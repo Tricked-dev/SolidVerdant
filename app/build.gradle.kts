@@ -192,6 +192,16 @@ tasks.named("check").configure {
     )
 }
 
+// AGP 8.13 can start test-source lint analysis while Hilt is still replacing its generated
+// component sources. That race intermittently leaves lint resolving a just-removed Java file or
+// half-built FIR superclass graph. The repository gate runs lint and Android-test assembly in one
+// invocation, so make the two test lint analyzers wait for the final Hilt Android-test sources.
+listOf("lintAnalyzeDebugUnitTest", "lintAnalyzeDebugAndroidTest").forEach { lintTask ->
+    tasks.matching { it.name == lintTask }.configureEach {
+        dependsOn("hiltJavaCompileDebugAndroidTest")
+    }
+}
+
 /*
  Dependency versions are defined in the top level build.gradle file. This helps keeping track of
  all versions in a single place. This improves readability and helps managing project complexity.

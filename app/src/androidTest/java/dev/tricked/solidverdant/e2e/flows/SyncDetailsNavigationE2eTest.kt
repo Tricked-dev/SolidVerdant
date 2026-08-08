@@ -22,7 +22,7 @@ class SyncDetailsNavigationE2eTest {
 
     @Test
     fun compactTrackSyncSummaryOpensSyncAndRecoveryScreen() {
-        e2e.mockServer.presetLoggedInWorld()
+        e2e.requireMockBackend().presetLoggedInWorld()
         e2e.seedFailedSync()
         e2e.launchApp()
 

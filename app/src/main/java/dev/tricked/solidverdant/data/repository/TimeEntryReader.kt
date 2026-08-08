@@ -9,6 +9,7 @@ package dev.tricked.solidverdant.data.repository
 import dev.tricked.solidverdant.data.model.TimeEntry
 import kotlinx.coroutines.flow.Flow
 import java.time.YearMonth
+import java.time.ZoneId
 
 /**
  * Read-only, cache-backed stream of time entries.
@@ -17,5 +18,5 @@ import java.time.YearMonth
  */
 interface TimeEntryReader {
     fun observeTimeEntries(organizationId: String): Flow<List<TimeEntry>>
-    suspend fun loadMonth(organizationId: String, memberId: String, month: YearMonth) = Unit
+    suspend fun loadMonth(organizationId: String, memberId: String, month: YearMonth, zone: ZoneId = ZoneId.systemDefault()) = Unit
 }

@@ -50,6 +50,9 @@ fun MainNavHost(
     reviewContent: @Composable () -> Unit = {},
     inboxBadgeCount: Int = 0,
     onPrivacyLogout: () -> Unit = {},
+    syncCenterContent: @Composable () -> Unit = {
+        SyncCenterScreen(onBack = { navController.popBackStack() })
+    },
 ) {
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -61,10 +64,15 @@ fun MainNavHost(
                 inboxBadgeCount = inboxBadgeCount,
                 onNavigate = { screen ->
                     if (currentRoute != screen.route) {
-                        navController.navigate(screen.route) {
-                            popUpTo(Screen.Track.route) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
+                        val isNestedDestination = currentRoute != null && bottomNavScreens.none { it.route == currentRoute }
+                        val returnedToExistingTab = isNestedDestination &&
+                            navController.popBackStack(screen.route, inclusive = false)
+                        if (!returnedToExistingTab) {
+                            navController.navigate(screen.route) {
+                                popUpTo(Screen.Track.route) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
                         }
                     }
                 },
@@ -97,7 +105,7 @@ fun MainNavHost(
                 ManageTemplatesScreen(onBack = { navController.popBackStack() })
             }
             composable(SyncRoutes.SYNC_CENTER) {
-                SyncCenterScreen(onBack = { navController.popBackStack() })
+                syncCenterContent()
             }
             composable(SettingsRoutes.PRIVACY) {
                 PrivacyScreen(

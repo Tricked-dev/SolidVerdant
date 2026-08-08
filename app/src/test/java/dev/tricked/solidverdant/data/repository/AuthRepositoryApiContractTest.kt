@@ -9,6 +9,7 @@ package dev.tricked.solidverdant.data.repository
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import dev.tricked.solidverdant.data.local.AuthDataStore
+import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.ApiClientFactory
 import dev.tricked.solidverdant.di.NetworkModule
 import kotlinx.coroutines.runBlocking
@@ -21,10 +22,12 @@ import okhttp3.mockwebserver.RecordedRequest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import retrofit2.HttpException
 import java.util.Collections
 
 @RunWith(RobolectricTestRunner::class)
@@ -94,6 +97,204 @@ class AuthRepositoryApiContractTest {
 
         assertEquals("entry", active?.id)
         assertEquals(listOf("tag-id"), active?.tags?.map { it.id })
+    }
+
+    @Test
+    fun `multi-day update converts editor offsets to Solidtime UTC wire format`() = runTest {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val body = request.body.readUtf8()
+                return if (
+                    body.contains("\"start\":\"2026-08-07T08:00:00Z\"") &&
+                    body.contains("\"end\":\"2026-08-08T08:00:00Z\"")
+                ) {
+                    MockResponse()
+                        .setHeader("Content-Type", "application/json")
+                        .setBody(
+                            """{"data":{"id":"entry","start":"2026-08-07T08:00:00Z","end":"2026-08-08T08:00:00Z","duration":86400,"description":null,"task_id":null,"project_id":null,"organization_id":"org","user_id":"user","tags":[],"billable":false,"type":"work"}}""",
+                        )
+                } else {
+                    MockResponse()
+                        .setResponseCode(422)
+                        .setHeader("Content-Type", "application/json")
+                        .setBody(
+                            """{"message":"The given data was invalid.","errors":{"start":["The start field must match the format Y-m-dTH:i:sZ."],"end":["The end field must match the format Y-m-dTH:i:sZ."]}}""",
+                        )
+                }
+            }
+        }
+
+        val result = repository.updateTimeEntry(
+            "org",
+            TimeEntry(
+                id = "entry",
+                userId = "user",
+                start = "2026-08-07T10:00:00+02:00",
+                end = "2026-08-08T10:00:00+02:00",
+                organizationId = "org",
+            ),
+        )
+
+        assertTrue(result.isSuccess)
+    }
+
+    @Test
+    fun `start create and stop convert captured offsets to Solidtime UTC wire format`() = runTest {
+        val writeBodies = Collections.synchronizedList(mutableListOf<String>())
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val body = request.body.readUtf8()
+                writeBodies += body
+                return MockResponse()
+                    .setHeader("Content-Type", "application/json")
+                    .setBody(
+                        """{"data":{"id":"entry","start":"2026-08-07T08:00:00Z","end":"2026-08-08T08:00:00Z","duration":86400,"description":null,"task_id":null,"project_id":null,"organization_id":"org","user_id":"user","tags":[],"billable":false,"type":"work"}}""",
+                    )
+            }
+        }
+
+        assertTrue(repository.startTimeEntry("org", "member", "user", startIso = "2026-08-07T10:00:00+02:00").isSuccess)
+        assertTrue(
+            repository.createTimeEntry(
+                organizationId = "org",
+                memberId = "member",
+                userId = "user",
+                start = "2026-08-07T10:00:00+02:00",
+                end = "2026-08-08T10:00:00+02:00",
+            ).isSuccess,
+        )
+        assertTrue(
+            repository.stopTimeEntry(
+                organizationId = "org",
+                timeEntryId = "entry",
+                userId = "user",
+                startTime = "2026-08-07T10:00:00+02:00",
+                endIso = "2026-08-08T10:00:00+02:00",
+            ).isSuccess,
+        )
+
+        assertTrue(writeBodies[0].contains("\"start\":\"2026-08-07T08:00:00Z\""))
+        assertTrue(writeBodies[1].contains("\"start\":\"2026-08-07T08:00:00Z\""))
+        assertTrue(writeBodies[1].contains("\"end\":\"2026-08-08T08:00:00Z\""))
+        assertEquals("{\"end\":\"2026-08-08T08:00:00Z\"}", writeBodies[2])
+    }
+
+    @Test
+    fun `completed entry is created atomically with billable and tags in the official post`() = runTest {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val body = request.body.readUtf8()
+                return if (
+                    request.method == "POST" &&
+                    body.contains("\"billable\":true") &&
+                    body.contains("\"tags\":[\"tag-id\"]")
+                ) {
+                    MockResponse()
+                        .setResponseCode(201)
+                        .setHeader("Content-Type", "application/json")
+                        .setBody(
+                            """{"data":{"id":"entry","start":"2026-08-07T08:00:00Z","end":"2026-08-07T09:00:00Z","duration":3600,"description":"Atomic","task_id":null,"project_id":null,"organization_id":"org","user_id":"user","tags":["tag-id"],"billable":true,"type":"work"}}""",
+                        )
+                } else {
+                    MockResponse()
+                        .setResponseCode(422)
+                        .setHeader("Content-Type", "application/json")
+                        .setBody("""{"message":"The given data was invalid."}""")
+                }
+            }
+        }
+
+        val created = repository.createTimeEntry(
+            organizationId = "org",
+            memberId = "member",
+            userId = "user",
+            start = "2026-08-07T08:00:00Z",
+            end = "2026-08-07T09:00:00Z",
+            description = "Atomic",
+            tags = listOf("tag-id"),
+            billable = true,
+        ).getOrThrow()
+
+        assertTrue(created.billable)
+        assertEquals(listOf("tag-id"), created.tags.map { it.id })
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `official time entry list accepts total-only metadata and unknown links`() = runTest {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody(
+                    """{"data":[{"id":"entry","start":"2026-08-07T08:00:00Z","end":null,"duration":0,"description":null,"task_id":null,"project_id":null,"organization_id":"org","user_id":"user","tags":["tag-id"],"billable":false,"type":"work"}],"links":{"next":null},"meta":{"total":1}}""",
+                ),
+        )
+
+        val response = repository.getTimeEntries("org", "member").getOrThrow()
+
+        assertEquals(1, response.meta?.total)
+        assertNull(response.meta?.currentPage)
+        assertEquals(listOf("tag-id"), response.data.single().tags.map { it.id })
+    }
+
+    @Test
+    fun `official empty 204 delete succeeds while missing entry 404 remains observable`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(204))
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(404)
+                .setHeader("Content-Type", "application/json")
+                .setBody("""{"message":"No query results for model [App\\Models\\TimeEntry]."}"""),
+        )
+
+        assertTrue(repository.deleteTimeEntry("org", "existing").isSuccess)
+        val missing = repository.deleteTimeEntry("org", "missing")
+        assertTrue(missing.isFailure)
+        assertEquals(404, (missing.exceptionOrNull() as HttpException).code())
+    }
+
+    @Test
+    fun `official validation and rate limit statuses retain their HTTP details`() = runTest {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(422)
+                .setHeader("Content-Type", "application/json")
+                .setBody(
+                    """{"message":"The given data was invalid.","errors":{"end":["The end field must match the format Y-m-dTH:i:sZ."]}}""",
+                ),
+        )
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(429)
+                .setHeader("Content-Type", "application/json")
+                .setHeader("Retry-After", "17")
+                .setBody("""{"message":"Too Many Attempts."}"""),
+        )
+
+        val invalid = repository.updateTimeEntry(
+            "org",
+            TimeEntry(
+                id = "entry",
+                userId = "user",
+                start = "2026-08-07T08:00:00Z",
+                end = "2026-08-07T09:00:00Z",
+                organizationId = "org",
+            ),
+        )
+        val invalidHttp = invalid.exceptionOrNull() as HttpException
+        assertEquals(422, invalidHttp.code())
+
+        val limited = repository.stopTimeEntry(
+            organizationId = "org",
+            timeEntryId = "entry",
+            userId = "user",
+            startTime = "2026-08-07T08:00:00Z",
+            endIso = "2026-08-07T09:00:00Z",
+        )
+        val limitedHttp = limited.exceptionOrNull() as HttpException
+        assertEquals(429, limitedHttp.code())
+        assertEquals("17", limitedHttp.response()?.headers()?.get("Retry-After"))
     }
 
     @Test

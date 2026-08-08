@@ -35,7 +35,7 @@ class TabNavigationE2eTest {
 
     @Test
     fun allTabsRenderAgainstStressDataAndTrackRestores() {
-        e2e.mockServer.presetStressWorld(entryCount = 60)
+        e2e.requireMockBackend().presetStressWorld(entryCount = 60)
         e2e.launchApp()
         TrackRobot(e2e.composeRule).waitForHistory()
 

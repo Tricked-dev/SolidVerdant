@@ -18,8 +18,7 @@ plugins {
 // `./gradlew spotlessApply` to fix.
 spotless {
     kotlin {
-        target("**/src/**/*.kt")
-        targetExclude("**/build/**")
+        target(rootProject.fileTree("app/src") { include("**/*.kt") })
         ktlint("1.5.0").editorConfigOverride(
             mapOf(
                 // Composables are PascalCase functions by convention.
@@ -42,7 +41,7 @@ spotless {
         }
     }
     kotlinGradle {
-        target("*.gradle.kts", "app/*.gradle.kts")
+        target(rootProject.files("build.gradle.kts", "app/build.gradle.kts"))
         licenseHeaderFile(rootProject.file("spotless/copyright.kts"), "(^(?![\\/ ]\\*).*$)")
         trimTrailingWhitespace()
         endWithNewline()

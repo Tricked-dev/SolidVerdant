@@ -7,6 +7,7 @@
 package dev.tricked.solidverdant.e2e
 
 import dev.tricked.solidverdant.ui.calendar.CalendarTestTags
+import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
 import dev.tricked.solidverdant.ui.login.LoginTestTags
 import dev.tricked.solidverdant.ui.sync.SyncCenterTestTags
 import dev.tricked.solidverdant.ui.tracking.TrackingTestTags
@@ -19,6 +20,7 @@ import dev.tricked.solidverdant.ui.tracking.TrackingTestTags
  * single import; the UI applies the same constants via `Modifier.testTag(...)`.
  */
 object TestTags {
+    const val TRACK_PRIMARY_LIST = TrackingTestTags.PRIMARY_LIST
     const val TRACK_HISTORY_LIST = TrackingTestTags.HISTORY_LIST
     const val TRACK_ENTRY_ROW = TrackingTestTags.ENTRY_ROW
     const val TRACK_START_BUTTON = TrackingTestTags.START_BUTTON
@@ -31,10 +33,21 @@ object TestTags {
     const val TRACK_CONTINUE_BUTTON = TrackingTestTags.CONTINUE_BUTTON
     const val TRACK_SHEET_DESCRIPTION_FIELD = TrackingTestTags.SHEET_DESCRIPTION_FIELD
     const val TRACK_SHEET_SAVE_BUTTON = TrackingTestTags.SHEET_SAVE_BUTTON
+    const val TRACK_SHEET_DUPLICATE_BUTTON = TrackingTestTags.SHEET_DUPLICATE_BUTTON
     const val TRACK_SYNC_DETAILS_BUTTON = TrackingTestTags.SYNC_DETAILS_BUTTON
+    const val TRACK_FILTER_OPEN_BUTTON = TrackingTestTags.FILTER_OPEN_BUTTON
+    const val TRACK_FILTER_SEARCH_FIELD = TrackingTestTags.FILTER_SEARCH_FIELD
+    const val TRACK_FILTER_CLOSE_BUTTON = TrackingTestTags.FILTER_CLOSE_BUTTON
     const val SYNC_STATUS_SCREEN = SyncCenterTestTags.SCREEN
     const val SYNC_STATUS_BACK_BUTTON = SyncCenterTestTags.BACK_BUTTON
     const val LOGIN_BUTTON = LoginTestTags.LOGIN_BUTTON
     const val STATS_SCREEN = "stats_screen"
     const val CALENDAR_WEEK_GRID = CalendarTestTags.WEEK_GRID
+    const val CALENDAR_MODE_MONTH = CalendarTestTags.MODE_MONTH
+    const val TRACK_SHEET_START_DATE = TrackingTestTags.SHEET_START_DATE
+    const val TRACK_SHEET_END_DATE = TrackingTestTags.SHEET_END_DATE
+    const val ENTRY_DATE_PICKER = EditTimeEntryTestTags.DATE_PICKER
+    const val ENTRY_DATE_PICKER_CONFIRM = EditTimeEntryTestTags.DATE_PICKER_CONFIRM
+
+    fun trackEntryTimeRange(entryId: String): String = TrackingTestTags.entryTimeRange(entryId)
 }

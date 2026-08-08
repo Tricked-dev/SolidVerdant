@@ -172,16 +172,29 @@ fun MonthCalendarView(
                                     text = day.dayOfMonth.toString(),
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (inMonth) {
-                                        Color.Unspecified
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
-                                    },
+                                    color = calendarDayContentColor(
+                                        selected = selected,
+                                        isToday = false,
+                                        primary = MaterialTheme.colorScheme.primary,
+                                        onPrimaryContainer = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        default = if (inMonth) {
+                                            Color.Unspecified
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+                                        },
+                                    ),
                                 )
                                 if (bucket != null) {
                                     Text(
                                         text = formatDuration(bucket.totalSeconds),
                                         style = MaterialTheme.typography.labelSmall,
+                                        color = calendarDayContentColor(
+                                            selected = selected,
+                                            isToday = false,
+                                            primary = MaterialTheme.colorScheme.primary,
+                                            onPrimaryContainer = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            default = Color.Unspecified,
+                                        ),
                                     )
                                 }
                             }
@@ -284,7 +297,7 @@ fun DayTimeline(
                     color = blockColor,
                     title = label,
                     subtitle = subtitle,
-                    time = formatDuration(entryDurationSeconds(entry, now)),
+                    time = formatDuration(entryDurationSecondsOnDay(entry, day, zone, now)),
                     modifier = Modifier
                         .padding(start = CalendarGutterWidth, end = Dimens.Space2)
                         .offset(y = CalendarTotalHeight * top)

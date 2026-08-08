@@ -92,10 +92,56 @@ class StatisticsAggregatorTest {
     }
 
     @Test
-    fun `skips active entries`() {
-        val active = entry("1", "2026-07-01T09:00:00Z", end = null, duration = null)
+    fun `explicit end wins over stale duration for a multi-day entry`() {
+        val e = entry(
+            "1",
+            "2026-07-06T23:00:00Z",
+            "2026-07-08T01:00:00Z",
+            duration = 3600,
+        )
+
         val s = compute(
-            listOf(active),
+            listOf(e),
+            projects,
+            LocalDate.parse("2026-07-06"),
+            LocalDate.parse("2026-07-08"),
+            utc,
+            TrendGranularity.DAY,
+        )
+
+        assertEquals(26 * 3600L, s.totalSeconds)
+        assertEquals(listOf(3600L, 24 * 3600L, 3600L), s.trend.map { it.seconds })
+    }
+
+    @Test
+    fun `multi-day entry accepts offset timestamps from the API`() {
+        val e = entry(
+            "1",
+            "2026-07-06T23:00:00+02:00",
+            "2026-07-08T01:00:00+02:00",
+        )
+
+        val s = compute(
+            listOf(e),
+            projects,
+            LocalDate.parse("2026-07-06"),
+            LocalDate.parse("2026-07-08"),
+            ZoneId.of("Europe/Amsterdam"),
+            TrendGranularity.DAY,
+        )
+
+        assertEquals(26 * 3600L, s.totalSeconds)
+        assertEquals(listOf(3600L, 24 * 3600L, 3600L), s.trend.map { it.seconds })
+    }
+
+    @Test
+    fun `skips active entries`() {
+        val entries = listOf(
+            entry("null-duration", "2026-07-01T09:00:00Z", end = null, duration = null),
+            entry("zero-duration", "2026-07-01T10:00:00Z", end = null, duration = 0),
+        )
+        val s = compute(
+            entries,
             projects,
             LocalDate.parse("2026-07-01"),
             LocalDate.parse("2026-07-01"),

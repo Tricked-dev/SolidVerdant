@@ -172,6 +172,7 @@ fun InboxPane() {
     editTarget?.let { target ->
         EditTimeEntryDialog(
             entry = target.entry,
+            zone = zone,
             projects = state.projects,
             tasks = state.tasks,
             tags = state.tags,

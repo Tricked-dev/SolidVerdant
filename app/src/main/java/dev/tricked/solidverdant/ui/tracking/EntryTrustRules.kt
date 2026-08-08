@@ -11,6 +11,9 @@ import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
+import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
+import dev.tricked.solidverdant.domain.time.resolveTimeEntryInterval
+import dev.tricked.solidverdant.domain.time.timeEntryOverlapsLocalDateRange
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -38,9 +41,7 @@ object EntryTrustRules {
     fun overlapCount(entries: List<TimeEntry>, now: Instant = Instant.now()): Int =
         entries.groupBy { it.organizationId }.values.sumOf { organizationEntries ->
             val intervals = organizationEntries.mapNotNull { entry ->
-                val start = entry.start.toInstantOrNull() ?: return@mapNotNull null
-                val end = entry.end?.toInstantOrNull() ?: now
-                if (end.isAfter(start)) start to end else null
+                resolveTimeEntryInterval(entry, now)
             }.sortedBy { it.first }
             val activeEnds = PriorityQueue<Instant>()
             var count = 0
@@ -54,16 +55,13 @@ object EntryTrustRules {
 
     fun overlaps(first: TimeEntry, second: TimeEntry, now: Instant = Instant.now()): Boolean {
         if (first.organizationId != second.organizationId || first.id == second.id) return false
-        val firstStart = first.start.toInstantOrNull() ?: return false
-        val secondStart = second.start.toInstantOrNull() ?: return false
-        val firstEnd = first.end?.toInstantOrNull() ?: now
-        val secondEnd = second.end?.toInstantOrNull() ?: now
-        if (!firstEnd.isAfter(firstStart) || !secondEnd.isAfter(secondStart)) return false
+        val (firstStart, firstEnd) = resolveTimeEntryInterval(first, now) ?: return false
+        val (secondStart, secondEnd) = resolveTimeEntryInterval(second, now) ?: return false
         return firstStart < secondEnd && secondStart < firstEnd
     }
 
     fun isLongRunning(entry: TimeEntry, threshold: Duration, now: Instant = Instant.now()): Boolean {
-        if (entry.end != null || threshold.isNegative || threshold.isZero) return false
+        if (!isRunningTimeEntry(entry) || threshold.isNegative || threshold.isZero) return false
         val start = entry.start.toInstantOrNull() ?: return false
         return Duration.between(start, now) >= threshold
     }
@@ -76,6 +74,7 @@ object EntryTrustRules {
         clients: List<Client> = emptyList(),
         syncOperations: List<TimeEntryRepository.SyncOperation> = emptyList(),
         zone: ZoneId,
+        now: Instant = Instant.now(),
     ): List<TimeEntry> {
         val query = filter.query.trim()
         val projectNames = projects.associate { it.id to it.name }
@@ -90,7 +89,6 @@ object EntryTrustRules {
                 add(clientNames[clientIdByProject[entry.projectId]].orEmpty())
                 addAll(entry.tags.map { it.name })
             }
-            val entryDate = entry.start.toInstantOrNull()?.atZone(zone)?.toLocalDate()
             val status = syncOperations.lastOrNull { it.entryId == entry.id }?.status
             (query.isBlank() || searchable.any { it.contains(query, ignoreCase = true) }) &&
                 (filter.billable == null || entry.billable == filter.billable) &&
@@ -98,12 +96,17 @@ object EntryTrustRules {
                 (filter.clientId == null || clientIdByProject[entry.projectId] == filter.clientId) &&
                 (filter.taskId == null || entry.taskId == filter.taskId) &&
                 (filter.tagId == null || entry.tags.any { it.id == filter.tagId }) &&
-                (!filter.runningOnly || entry.end == null) &&
+                (!filter.runningOnly || isRunningTimeEntry(entry)) &&
                 (!filter.missingProjectOnly || entry.projectId == null) &&
                 (!filter.missingDescriptionOnly || entry.description.isNullOrBlank()) &&
                 (!filter.needsCategorization || entry.projectId == null || entry.description.isNullOrBlank()) &&
-                (filter.startDate == null || (entryDate != null && !entryDate.isBefore(filter.startDate))) &&
-                (filter.endDate == null || (entryDate != null && !entryDate.isAfter(filter.endDate))) &&
+                timeEntryOverlapsLocalDateRange(
+                    entry = entry,
+                    startDate = filter.startDate,
+                    endDate = filter.endDate,
+                    zone = zone,
+                    now = now,
+                ) &&
                 (filter.syncStatus == null || status == filter.syncStatus)
         }
     }

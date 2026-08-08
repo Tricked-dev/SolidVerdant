@@ -8,11 +8,11 @@ package dev.tricked.solidverdant.e2e.flows
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidTest
-import dev.tricked.solidverdant.data.model.StartTimeEntryRequest
+import dev.tricked.solidverdant.e2e.BackendPortable
+import dev.tricked.solidverdant.e2e.E2eFixture
 import dev.tricked.solidverdant.e2e.E2eRule
 import dev.tricked.solidverdant.e2e.robots.TrackRobot
-import kotlinx.serialization.json.Json
-import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -29,24 +29,28 @@ class ContinueLastEntryE2eTest {
     @get:Rule
     val e2e = E2eRule(this)
 
-    private val json = Json { ignoreUnknownKeys = true }
-
+    @BackendPortable
     @Test
     fun continueCarriesLastEntryDescriptionIntoTheServerStart() {
-        e2e.mockServer.presetLoggedInWorld() // seeds completed entry "Seeded work"
+        val source = e2e.prepare(E2eFixture.Completed(e2e.completedFixtureEntry()))
+        val sourceServerId = requireNotNull(source.serverId)
         e2e.launchApp()
         val robot = TrackRobot(e2e.composeRule).waitForHistory().assertEntryVisible("Seeded work")
 
         robot.tapContinueLastEntry().assertStopButtonVisible()
 
-        e2e.composeRule.waitUntil(WAIT_MS) {
-            e2e.runPendingSync()
-            e2e.mockServer.wasRequested("POST", "/time-entries")
+        val snapshot = e2e.awaitServer(WAIT_MS, driveSync = true) { current ->
+            (current.entries + listOfNotNull(current.activeEntry)).any {
+                it.id != sourceServerId && it.description == "Seeded work" && it.end == null
+            }
         }
 
-        val startRequest = e2e.mockServer.callsMatching("POST", "/time-entries").first()
-        val payload = json.decodeFromString<StartTimeEntryRequest>(startRequest.body)
-        assertEquals("Seeded work", payload.description)
+        assertTrue(
+            "Continued timer should persist the source description on a distinct active entry",
+            (snapshot.entries + listOfNotNull(snapshot.activeEntry)).any {
+                it.id != sourceServerId && it.description == "Seeded work" && it.end == null
+            },
+        )
     }
 
     companion object {

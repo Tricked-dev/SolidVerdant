@@ -9,16 +9,13 @@ package dev.tricked.solidverdant.ui.calendar
 import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.data.calendar.DeviceCalendarEvent
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.domain.time.resolveTimeEntryInterval
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
-import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
 
-/** Seconds in a 24h day. All timed layout fractions are expressed relative to this. */
-const val SECONDS_PER_DAY: Long = 86_400L
 private const val HOURS_PER_DAY = 24
 private const val DAYS_PER_WEEK = 7
 private const val MILLIS_PER_SECOND = 1000L
@@ -49,21 +46,10 @@ val CalendarTotalHeight = CalendarHourHeight * HOURS_PER_DAY
  */
 fun timelineOffsets(entry: TimeEntry, day: LocalDate, now: Instant, zone: ZoneId): Pair<Float, Float> {
     val dayStart = day.atStartOfDay(zone).toInstant()
-    val secondsInDay = SECONDS_PER_DAY.toFloat()
-    val start = try {
-        ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME).toInstant()
-    } catch (_: Exception) {
-        dayStart
-    }
-    val end = entry.end?.let {
-        try {
-            ZonedDateTime.parse(it, DateTimeFormatter.ISO_DATE_TIME).toInstant()
-        } catch (_: Exception) {
-            now
-        }
-    } ?: now
-    val topSec = (start.epochSecond - dayStart.epochSecond).coerceIn(0, SECONDS_PER_DAY)
-    val endSec = (end.epochSecond - dayStart.epochSecond).coerceIn(0, SECONDS_PER_DAY)
+    val secondsInDay = secondsInLocalDay(day, zone).toFloat()
+    val (start, end) = resolveTimeEntryInterval(entry, now) ?: (dayStart to now)
+    val topSec = (start.epochSecond - dayStart.epochSecond).coerceIn(0, secondsInDay.toLong())
+    val endSec = (end.epochSecond - dayStart.epochSecond).coerceIn(0, secondsInDay.toLong())
     val top = topSec / secondsInDay
     val height = ((endSec - topSec) / secondsInDay).coerceAtLeast(MIN_ENTRY_HEIGHT_FRACTION)
     return top to height
@@ -131,7 +117,8 @@ fun pageAnchor(anchor: LocalDate, weekStart: DayOfWeek, dayCount: Int, direction
 
 /**
  * Clips an instant range to [day] in [zone], returning the covered second-offsets within the day
- * as `startSec..endSec` (both in `0..86_400`), or null when the range does not intersect the day.
+ * as elapsed second offsets within the timezone-aware local day, or null when the range does not
+ * intersect the day. A DST transition day can contain 23 or 25 elapsed hours.
  */
 fun clampToDaySeconds(startMs: Long, endMs: Long, day: LocalDate, zone: ZoneId): Pair<Long, Long>? {
     val dayStartMs = day.atStartOfDay(zone).toInstant().toEpochMilli()
@@ -139,8 +126,9 @@ fun clampToDaySeconds(startMs: Long, endMs: Long, day: LocalDate, zone: ZoneId):
     val s = maxOf(startMs, dayStartMs)
     val e = minOf(endMs, dayEndMs)
     if (e <= s) return null
-    val startSec = ((s - dayStartMs) / MILLIS_PER_SECOND).coerceIn(0L, SECONDS_PER_DAY)
-    val endSec = ((e - dayStartMs) / MILLIS_PER_SECOND).coerceIn(0L, SECONDS_PER_DAY)
+    val secondsInDay = (dayEndMs - dayStartMs) / MILLIS_PER_SECOND
+    val startSec = ((s - dayStartMs) / MILLIS_PER_SECOND).coerceIn(0L, secondsInDay)
+    val endSec = ((e - dayStartMs) / MILLIS_PER_SECOND).coerceIn(0L, secondsInDay)
     if (endSec <= startSec) return null
     return startSec to endSec
 }
@@ -226,10 +214,11 @@ fun layoutTimedEvents(events: List<DeviceCalendarEvent>, day: LocalDate, zone: Z
     val packing = packOverlaps(clipped.map { it.startSec to it.endSec })
     val dayStartMs = day.atStartOfDay(zone).toInstant().toEpochMilli()
     val dayEndMs = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+    val secondsInDay = secondsInLocalDay(day, zone).toFloat()
 
     return clipped.mapIndexed { i, c ->
-        val startFraction = c.startSec.toFloat() / SECONDS_PER_DAY
-        val rawHeight = (c.endSec - c.startSec).toFloat() / SECONDS_PER_DAY
+        val startFraction = c.startSec.toFloat() / secondsInDay
+        val rawHeight = (c.endSec - c.startSec).toFloat() / secondsInDay
         val (col, colCount) = packing[i]
         EventBlock(
             event = c.event,
@@ -251,37 +240,29 @@ fun layoutTimedEvents(events: List<DeviceCalendarEvent>, day: LocalDate, zone: Z
 fun layoutTrackedEntries(entries: List<TimeEntry>, day: LocalDate, now: Instant, zone: ZoneId): List<TrackedEntryBlock> {
     data class Clipped(val entry: TimeEntry, val startSec: Long, val endSec: Long)
 
-    val dayStart = day.atStartOfDay(zone).toInstant()
     val clipped = entries.mapNotNull { entry ->
-        val start = try {
-            ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME).toInstant()
-        } catch (_: Exception) {
-            dayStart
-        }
-        val end = entry.end?.let {
-            try {
-                ZonedDateTime.parse(it, DateTimeFormatter.ISO_DATE_TIME).toInstant()
-            } catch (_: Exception) {
-                now
-            }
-        } ?: now
+        val (start, end) = resolveTimeEntryInterval(entry, now) ?: return@mapNotNull null
         clampToDaySeconds(start.toEpochMilli(), end.toEpochMilli(), day, zone)
             ?.let { (startSec, endSec) -> Clipped(entry, startSec, endSec) }
     }.sortedWith(compareBy({ it.startSec }, { -it.endSec }, { it.entry.id }))
 
     val packing = packOverlaps(clipped.map { it.startSec to it.endSec })
+    val secondsInDay = secondsInLocalDay(day, zone).toFloat()
     return clipped.mapIndexed { index, item ->
         val (column, columnCount) = packing[index]
         TrackedEntryBlock(
             entry = item.entry,
-            startFraction = item.startSec.toFloat() / SECONDS_PER_DAY,
-            heightFraction = ((item.endSec - item.startSec).toFloat() / SECONDS_PER_DAY)
+            startFraction = item.startSec.toFloat() / secondsInDay,
+            heightFraction = ((item.endSec - item.startSec).toFloat() / secondsInDay)
                 .coerceAtLeast(MIN_ENTRY_HEIGHT_FRACTION),
             column = column,
             columnCount = columnCount,
         )
     }
 }
+
+internal fun secondsInLocalDay(day: LocalDate, zone: ZoneId): Long =
+    day.plusDays(1).atStartOfDay(zone).toEpochSecond() - day.atStartOfDay(zone).toEpochSecond()
 
 /**
  * All-day events covering [day]. The provider expresses all-day boundaries as UTC midnight, so

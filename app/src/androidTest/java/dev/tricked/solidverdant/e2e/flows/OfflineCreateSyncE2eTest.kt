@@ -8,6 +8,8 @@ package dev.tricked.solidverdant.e2e.flows
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidTest
+import dev.tricked.solidverdant.e2e.BackendPortable
+import dev.tricked.solidverdant.e2e.E2eFixture
 import dev.tricked.solidverdant.e2e.E2eRule
 import dev.tricked.solidverdant.e2e.robots.TrackRobot
 import org.junit.Assert.assertTrue
@@ -38,10 +40,11 @@ class OfflineCreateSyncE2eTest {
     @get:Rule
     val e2e = E2eRule(this)
 
+    @BackendPortable
     @Test
     fun startedEntryIsPostedToServerOnSync() {
         // Logged-in world with no pre-existing entries.
-        e2e.mockServer.presetLoggedInWorld(seededEntry = null)
+        e2e.prepare(E2eFixture.Empty)
 
         e2e.launchApp()
 
@@ -51,14 +54,11 @@ class OfflineCreateSyncE2eTest {
         robot.tapStart().assertStopButtonVisible()
 
         // Deterministically drain the outbox through the real SyncWorker.
-        e2e.composeRule.waitUntil(WAIT_MS) {
-            e2e.runPendingSync()
-            e2e.mockServer.wasRequested("POST", "/time-entries")
-        }
+        val snapshot = e2e.awaitServer(WAIT_MS, driveSync = true) { it.activeEntry != null }
 
         assertTrue(
-            "Expected the started entry to be POSTed to the mock backend",
-            e2e.mockServer.wasRequested("POST", "/time-entries"),
+            "Expected the started entry to persist as the server's active timer",
+            snapshot.activeEntry != null,
         )
     }
 

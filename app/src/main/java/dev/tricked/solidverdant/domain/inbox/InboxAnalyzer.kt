@@ -7,6 +7,8 @@
 package dev.tricked.solidverdant.domain.inbox
 
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.domain.time.isCompletedTimeEntry
+import dev.tricked.solidverdant.domain.time.resolveTimeEntryInterval
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -136,16 +138,15 @@ object InboxAnalyzer {
     ): List<InboxIssue> {
         val now = Instant.ofEpochMilli(nowMs)
         val intervals = entries.mapNotNull { entry ->
-            val start = parseInstant(entry.start) ?: return@mapNotNull null
-            val end = entry.end?.let { parseInstant(it) } ?: now
-            if (end.isAfter(start)) Interval(start, end, entry) else null
+            val (start, end) = resolveTimeEntryInterval(entry, now) ?: return@mapNotNull null
+            Interval(start, end, entry)
         }.sortedBy { it.start }
 
         val issues = buildList {
             if (config.checkOverlaps) addAll(overlapIssues(intervals))
             if (config.checkGaps) addAll(gapIssues(intervals, config, now, zone, horizonStartMs))
-            if (config.anyMissingCheckEnabled) addAll(missingIssues(entries, config))
-            if (config.checkLongDuration) addAll(longDurationIssues(entries, config))
+            if (config.anyMissingCheckEnabled) addAll(missingIssues(entries, config, now))
+            if (config.checkLongDuration) addAll(longDurationIssues(entries, config, now))
         }
 
         return issues
@@ -275,43 +276,41 @@ object InboxAnalyzer {
 
     // ---- Missing metadata -----------------------------------------------------------------------
 
-    private fun missingIssues(entries: List<TimeEntry>, config: InboxCheckConfig): List<InboxIssue> = entries.mapNotNull { entry ->
-        if (entry.end == null) return@mapNotNull null // still running; handled on Track
-        val start = parseInstant(entry.start) ?: return@mapNotNull null
-        val end = parseInstant(entry.end) ?: return@mapNotNull null
-        val missing = buildSet {
-            if (config.checkMissingProject && entry.projectId == null) add(MissingField.PROJECT)
-            // A missing task is only meaningful once a project is chosen.
-            if (config.checkMissingTask && entry.projectId != null && entry.taskId == null) {
-                add(MissingField.TASK)
+    private fun missingIssues(entries: List<TimeEntry>, config: InboxCheckConfig, now: Instant): List<InboxIssue> =
+        entries.mapNotNull { entry ->
+            if (!isCompletedTimeEntry(entry)) return@mapNotNull null // still running; handled on Track
+            val (start, end) = resolveTimeEntryInterval(entry, now) ?: return@mapNotNull null
+            val missing = buildSet {
+                if (config.checkMissingProject && entry.projectId == null) add(MissingField.PROJECT)
+                // A missing task is only meaningful once a project is chosen.
+                if (config.checkMissingTask && entry.projectId != null && entry.taskId == null) {
+                    add(MissingField.TASK)
+                }
+                if (config.checkMissingDescription && entry.description.isNullOrBlank()) {
+                    add(MissingField.DESCRIPTION)
+                }
+                if (config.checkMissingTags && entry.tags.isEmpty()) add(MissingField.TAGS)
             }
-            if (config.checkMissingDescription && entry.description.isNullOrBlank()) {
-                add(MissingField.DESCRIPTION)
-            }
-            if (config.checkMissingTags && entry.tags.isEmpty()) add(MissingField.TAGS)
+            if (missing.isEmpty()) return@mapNotNull null
+            val fieldToken = missing.map { it.name }.sorted().joinToString(",")
+            InboxIssue(
+                key = "missing:$RULE_VERSION:${entry.id}:${start.epochSecond}:$fieldToken",
+                type = InboxIssueType.MISSING_METADATA,
+                startMs = start.toEpochMilli(),
+                endMs = end.toEpochMilli(),
+                primaryEntry = entry,
+                missingFields = missing,
+            )
         }
-        if (missing.isEmpty()) return@mapNotNull null
-        val fieldToken = missing.map { it.name }.sorted().joinToString(",")
-        InboxIssue(
-            key = "missing:$RULE_VERSION:${entry.id}:${start.epochSecond}:$fieldToken",
-            type = InboxIssueType.MISSING_METADATA,
-            startMs = start.toEpochMilli(),
-            endMs = end.toEpochMilli(),
-            primaryEntry = entry,
-            missingFields = missing,
-        )
-    }
 
     // ---- Long duration --------------------------------------------------------------------------
 
-    private fun longDurationIssues(entries: List<TimeEntry>, config: InboxCheckConfig): List<InboxIssue> {
+    private fun longDurationIssues(entries: List<TimeEntry>, config: InboxCheckConfig, now: Instant): List<InboxIssue> {
         if (config.maxDurationHours <= 0) return emptyList()
         val thresholdSeconds = config.maxDurationHours * SECONDS_PER_HOUR
         return entries.mapNotNull { entry ->
-            val endRaw = entry.end ?: return@mapNotNull null
-            val start = parseInstant(entry.start) ?: return@mapNotNull null
-            val end = parseInstant(endRaw) ?: return@mapNotNull null
-            if (!end.isAfter(start)) return@mapNotNull null
+            if (!isCompletedTimeEntry(entry)) return@mapNotNull null
+            val (start, end) = resolveTimeEntryInterval(entry, now) ?: return@mapNotNull null
             if (end.epochSecond - start.epochSecond < thresholdSeconds) return@mapNotNull null
             InboxIssue(
                 key = "long:$RULE_VERSION:${entry.id}:${config.maxDurationHours}:${start.epochSecond}:${end.epochSecond}",

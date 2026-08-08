@@ -15,6 +15,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 class EntryTrustRulesTest {
     private fun entry(id: String, start: String, end: String?, org: String = "org") = TimeEntry(
@@ -58,6 +60,23 @@ class EntryTrustRulesTest {
         assertTrue(EntryTrustRules.overlapCount(entries) == 2)
     }
 
+    @Test fun `positive duration without end is completed and overlaps across midnight`() {
+        val durationOnly = entry("duration", "2026-07-06T23:00:00+02:00", null).copy(duration = 3 * 3600)
+        val overlapping = entry("other", "2026-07-07T00:30:00+02:00", "2026-07-07T01:30:00+02:00")
+
+        assertTrue(EntryTrustRules.overlaps(durationOnly, overlapping))
+        assertFalse(EntryTrustRules.isLongRunning(durationOnly, Duration.ofHours(1), Instant.parse("2026-07-08T00:00:00Z")))
+
+        val running = EntryTrustRules.filter(
+            entries = listOf(durationOnly),
+            filter = HistoryFilter(runningOnly = true),
+            projects = emptyList(),
+            tasks = emptyList(),
+            zone = ZoneOffset.UTC,
+        )
+        assertTrue(running.isEmpty())
+    }
+
     @Test fun `long timer check uses explicit threshold`() {
         val now = Instant.parse("2026-07-06T12:00:00Z")
         assertTrue(
@@ -94,5 +113,28 @@ class EntryTrustRulesTest {
             zone = java.time.ZoneOffset.UTC,
         )
         assertEquals(listOf("b"), filtered.map { it.id })
+    }
+
+    @Test
+    fun `history date filter includes entry that overlaps selected day`() {
+        val spanning = entry(
+            id = "spanning",
+            start = "2026-07-06T23:00:00Z",
+            end = "2026-07-07T01:00:00Z",
+        )
+
+        val filtered = EntryTrustRules.filter(
+            entries = listOf(spanning),
+            filter = HistoryFilter(
+                startDate = LocalDate.of(2026, 7, 7),
+                endDate = LocalDate.of(2026, 7, 7),
+            ),
+            projects = emptyList(),
+            tasks = emptyList(),
+            zone = ZoneOffset.UTC,
+            now = Instant.parse("2026-07-08T00:00:00Z"),
+        )
+
+        assertEquals(listOf("spanning"), filtered.map { it.id })
     }
 }

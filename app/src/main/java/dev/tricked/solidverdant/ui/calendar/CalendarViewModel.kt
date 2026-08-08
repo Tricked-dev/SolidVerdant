@@ -175,15 +175,13 @@ class CalendarViewModel @Inject constructor(
                 val buckets = withContext(Dispatchers.Default) {
                     val now = Instant.now()
                     entries
-                        // Skip entries whose start cannot be parsed instead of bucketing them
-                        // onto today, which would corrupt the current day's total.
-                        .mapNotNull { entry -> entryLocalDate(entry, zone)?.let { it to entry } }
-                        .groupBy({ it.first }, { it.second })
-                        .mapValues { (date, dayEntries) ->
+                        .flatMap { entry -> entryDaySlices(entry, zone, now).map { slice -> slice to entry } }
+                        .groupBy({ it.first.date }, { it })
+                        .mapValues { (date, daySlices) ->
                             DayBucket(
                                 date = date,
-                                entries = dayEntries.sortedByDescending { it.start },
-                                totalSeconds = dayEntries.sumOf { entryDurationSeconds(it, now) },
+                                entries = daySlices.map { it.second }.sortedByDescending { it.start },
+                                totalSeconds = daySlices.sumOf { it.first.seconds },
                             )
                         }
                 }
@@ -401,7 +399,7 @@ class CalendarViewModel @Inject constructor(
         }
         _uiState.update { it.copy(isLoading = true) }
         viewModelScope.launch {
-            months.forEach { reader.loadMonth(org, member, it) }
+            months.forEach { reader.loadMonth(org, member, it, state.zone) }
             _uiState.update { it.copy(isLoading = false) }
         }
     }

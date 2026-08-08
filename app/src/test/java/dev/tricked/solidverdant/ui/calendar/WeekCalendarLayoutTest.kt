@@ -16,6 +16,7 @@ import org.junit.Test
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.ZoneOffset
 
 class WeekCalendarLayoutTest {
@@ -105,7 +106,7 @@ class WeekCalendarLayoutTest {
         val end = Instant.parse("2026-07-07T01:00:00Z").toEpochMilli()
         val day6 = clampToDaySeconds(start, end, LocalDate.of(2026, 7, 6), utc)
         val day7 = clampToDaySeconds(start, end, LocalDate.of(2026, 7, 7), utc)
-        assertEquals(23 * 3600L to SECONDS_PER_DAY, day6)
+        assertEquals(23 * 3600L to 24 * 3600L, day6)
         assertEquals(0L to 3600L, day7)
     }
 
@@ -192,6 +193,49 @@ class WeekCalendarLayoutTest {
         val blocks = layoutTrackedEntries(entries, day, Instant.parse("2026-07-06T13:00:00Z"), utc)
 
         assertTrue(blocks.all { it.column == 0 && it.columnCount == 1 })
+    }
+
+    @Test
+    fun layoutTrackedEntries_usesPositiveDurationFallbackAcrossMidnight() {
+        val entry = entry("duration", "2026-07-06T23:00:00Z", null).copy(duration = 3 * 3600)
+
+        val firstDay = layoutTrackedEntries(
+            entries = listOf(entry),
+            day = LocalDate.of(2026, 7, 6),
+            now = Instant.parse("2026-07-08T00:00:00Z"),
+            zone = utc,
+        ).single()
+        val secondDay = layoutTrackedEntries(
+            entries = listOf(entry),
+            day = LocalDate.of(2026, 7, 7),
+            now = Instant.parse("2026-07-08T00:00:00Z"),
+            zone = utc,
+        ).single()
+
+        assertEquals(1f / 24f, firstDay.heightFraction, 0.001f)
+        assertEquals(0f, secondDay.startFraction, 0.001f)
+        assertEquals(2f / 24f, secondDay.heightFraction, 0.001f)
+    }
+
+    @Test
+    fun layoutTrackedEntries_fillsEntireTwentyThreeHourDstDay() {
+        val amsterdam = ZoneId.of("Europe/Amsterdam")
+        val day = LocalDate.of(2026, 3, 29)
+        val entry = entry(
+            id = "dst",
+            startIso = "2026-03-28T23:00:00Z",
+            endIso = "2026-03-29T22:00:00Z",
+        )
+
+        val block = layoutTrackedEntries(
+            entries = listOf(entry),
+            day = day,
+            now = Instant.parse("2026-03-30T00:00:00Z"),
+            zone = amsterdam,
+        ).single()
+
+        assertEquals(0f, block.startFraction, 0.001f)
+        assertEquals(1f, block.heightFraction, 0.001f)
     }
 
     // --- All-day coverage --------------------------------------------------------------------

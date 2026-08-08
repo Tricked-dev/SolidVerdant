@@ -9,8 +9,9 @@ package dev.tricked.solidverdant.e2e.flows
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidTest
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.e2e.BackendPortable
+import dev.tricked.solidverdant.e2e.E2eFixture
 import dev.tricked.solidverdant.e2e.E2eRule
-import dev.tricked.solidverdant.e2e.mock.MockSolidtimeServer
 import dev.tricked.solidverdant.e2e.robots.TrackRobot
 import org.junit.Assert.assertNull
 import org.junit.Rule
@@ -30,19 +31,19 @@ class ActiveEntryOnLaunchE2eTest {
     @get:Rule
     val e2e = E2eRule(this)
 
+    @BackendPortable
     @Test
     fun serverSideActiveEntryShowsAsRunningTimerOnLaunch() {
-        e2e.mockServer.presetLoggedInWorld(seededEntry = null)
         val remoteActive = TimeEntry(
             id = "remote-active-1",
             description = "Started on the desktop",
-            userId = MockSolidtimeServer.DEFAULT_USER_ID,
+            userId = e2e.session.userId,
             start = Instant.ofEpochMilli(e2e.testClock.nowMs).minusSeconds(600).toString(),
             end = null,
-            organizationId = MockSolidtimeServer.DEFAULT_ORG_ID,
+            organizationId = e2e.session.organizationId,
         )
-        e2e.mockServer.activeEntry = remoteActive
-        e2e.mockServer.addTimeEntry(remoteActive)
+        val remoteHandle = e2e.prepare(E2eFixture.Active(remoteActive))
+        val remoteServerId = requireNotNull(remoteHandle.serverId)
 
         e2e.launchApp()
         val robot = TrackRobot(e2e.composeRule).waitForHistory()
@@ -51,15 +52,16 @@ class ActiveEntryOnLaunchE2eTest {
         robot.assertStopButtonVisible()
 
         // And the remote timer is stoppable from this device.
-        robot.tapStop().assertStartButtonVisible()
+        robot.tapStop()
+        e2e.composeRule.waitUntil(WAIT_MS) { e2e.hasPendingStop(remoteServerId) }
+        robot.assertStartButtonVisible()
 
         // The optimistic UI transition is not enough: the STOP must drain from the outbox and
         // close the entry that was started by the other client.
-        e2e.composeRule.waitUntil(WAIT_MS) {
-            e2e.runPendingSync()
-            e2e.mockServer.timeEntries.singleOrNull { it.id == remoteActive.id }?.end != null
+        val stoppedSnapshot = e2e.awaitServer(WAIT_MS, driveSync = true) { snapshot ->
+            snapshot.entry(remoteHandle)?.end != null
         }
-        assertNull(e2e.mockServer.activeEntry)
+        assertNull(stoppedSnapshot.activeEntry)
     }
 
     companion object {

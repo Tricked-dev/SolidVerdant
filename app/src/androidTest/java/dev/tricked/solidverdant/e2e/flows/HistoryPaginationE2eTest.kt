@@ -37,7 +37,7 @@ class HistoryPaginationE2eTest {
     fun deepHistoryScrollRequestsOlderPagesFromTheServer() {
         // 600 entries: beyond both the 250-entry refresh window AND the 500-entry quick-fill
         // page, so the oldest history can only arrive via a follow-up request with offset > 0.
-        e2e.mockServer.presetStressWorld(entryCount = 600)
+        e2e.requireMockBackend().presetStressWorld(entryCount = 600)
         e2e.launchApp()
         TrackRobot(e2e.composeRule).waitForHistory()
 
@@ -63,12 +63,12 @@ class HistoryPaginationE2eTest {
 
         assertTrue(
             "Expected at least one follow-up page with a non-zero offset; saw: " +
-                e2e.mockServer.callsMatching("GET", "/time-entries").map { it.path },
+                e2e.requireMockBackend().callsMatching("GET", "/time-entries").map { it.path },
             pagedRequestHappened(),
         )
     }
 
-    private fun pagedRequestHappened(): Boolean = e2e.mockServer.callsMatching("GET", "/time-entries").any { call ->
+    private fun pagedRequestHappened(): Boolean = e2e.requireMockBackend().callsMatching("GET", "/time-entries").any { call ->
         val offset = Regex("""offset=(\d+)""").find(call.path)?.groupValues?.get(1)?.toIntOrNull()
         offset != null && offset > 0
     }

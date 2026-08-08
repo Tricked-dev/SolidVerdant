@@ -8,8 +8,9 @@ package dev.tricked.solidverdant.e2e.flows
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidTest
+import dev.tricked.solidverdant.e2e.BackendPortable
+import dev.tricked.solidverdant.e2e.E2eFixture
 import dev.tricked.solidverdant.e2e.E2eRule
-import dev.tricked.solidverdant.e2e.mock.MockSolidtimeServer
 import dev.tricked.solidverdant.e2e.robots.TrackRobot
 import org.junit.Rule
 import org.junit.Test
@@ -30,11 +31,10 @@ class AppLaunchE2eTest {
     @get:Rule
     val e2e = E2eRule(this)
 
+    @BackendPortable
     @Test
     fun seededEntryAppearsInHistory() {
-        e2e.mockServer.presetLoggedInWorld(
-            seededEntry = MockSolidtimeServer.defaultCompletedEntry(description = "Seeded work"),
-        )
+        e2e.prepare(E2eFixture.Completed(e2e.completedFixtureEntry(description = "Seeded work")))
 
         e2e.launchApp()
 

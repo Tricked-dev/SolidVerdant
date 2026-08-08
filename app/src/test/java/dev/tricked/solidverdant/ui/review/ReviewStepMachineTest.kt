@@ -6,11 +6,15 @@
 
 package dev.tricked.solidverdant.ui.review
 
+import dev.tricked.solidverdant.data.model.TimeEntry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 class ReviewStepMachineTest {
 
@@ -101,5 +105,63 @@ class ReviewStepMachineTest {
     @Test fun `unsorted intervals are handled`() {
         val intervals = listOf(1000L..1200L, 0L..100L, 300L..400L)
         assertEquals(600L, ReviewDayViewModel.largestGap(intervals))
+    }
+
+    @Test
+    fun `day facts clip entries that started before today`() {
+        val entries = listOf(
+            TimeEntry(
+                id = "overnight",
+                userId = "u",
+                start = "2026-07-06T23:00:00Z",
+                end = "2026-07-07T01:00:00Z",
+                billable = true,
+                organizationId = "org",
+            ),
+            TimeEntry(
+                id = "morning",
+                userId = "u",
+                start = "2026-07-07T02:00:00Z",
+                end = "2026-07-07T03:00:00Z",
+                projectId = "project",
+                organizationId = "org",
+            ),
+        )
+
+        val facts = ReviewDayViewModel.buildDayFacts(
+            entries = entries,
+            day = LocalDate.of(2026, 7, 7),
+            zone = ZoneOffset.UTC,
+            now = Instant.parse("2026-07-07T12:00:00Z"),
+        )
+
+        assertEquals(7_200L, facts.totalSeconds)
+        assertEquals(3_600L, facts.billableSeconds)
+        assertEquals(2, facts.entries.size)
+        assertEquals(listOf("overnight"), facts.uncategorized.map { it.id })
+        assertEquals(3_600L, ReviewDayViewModel.largestGap(facts.intervals))
+    }
+
+    @Test
+    fun `day facts include duration-only completed entry on every covered day`() {
+        val entry = TimeEntry(
+            id = "duration-only",
+            userId = "u",
+            start = "2026-07-06T23:00:00Z",
+            end = null,
+            duration = 26 * 3600,
+            projectId = null,
+            organizationId = "org",
+        )
+
+        val middleDay = ReviewDayViewModel.buildDayFacts(
+            entries = listOf(entry),
+            day = LocalDate.of(2026, 7, 7),
+            zone = ZoneOffset.UTC,
+            now = Instant.parse("2026-07-09T00:00:00Z"),
+        )
+
+        assertEquals(24 * 3600L, middleDay.totalSeconds)
+        assertEquals(listOf("duration-only"), middleDay.uncategorized.map { it.id })
     }
 }

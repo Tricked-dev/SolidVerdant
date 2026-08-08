@@ -9,4 +9,5 @@ package dev.tricked.solidverdant.ui.calendar
 /** Stable semantics owned by the calendar UI and consumed by on-device tests. */
 object CalendarTestTags {
     const val WEEK_GRID = "calendar_week_grid"
+    const val MODE_MONTH = "calendar_mode_month"
 }

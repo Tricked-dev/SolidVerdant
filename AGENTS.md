@@ -73,11 +73,11 @@ fully automatic, no-approval CI triggering is required.
 Use the pinned development environment:
 
 ```sh
-nix develop --command env -u LD_LIBRARY_PATH ./gradlew --no-daemon spotlessCheck testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+devenv tasks run android:gate
 ```
 
-The flake pins JDK 21 plus SDK platforms 36/37 and build-tools 35, so the JVM test and Roborazzi
-screenshot suites run on any machine with nix (on NixOS, point
+Devenv pins JDK 21 plus SDK platforms 36/37 and build-tools 35, so the JVM test and Roborazzi
+screenshot suites run on any machine with Devenv (on NixOS, point
 `android.aapt2FromMavenOverride` in `~/.gradle/gradle.properties` at the nix SDK's aapt2).
 
 For the connected development device, install `app-debug.apk`; its package is `dev.tricked.solidverdant.dev`. Run instrumentation with:

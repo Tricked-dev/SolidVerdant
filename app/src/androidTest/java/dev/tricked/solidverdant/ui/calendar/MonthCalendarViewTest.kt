@@ -10,6 +10,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import dev.tricked.solidverdant.data.model.TimeEntry
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -47,8 +48,8 @@ class MonthCalendarViewTest {
                 onEntryClick = { clicked = it.id },
             )
         }
-        composeRule.onNodeWithTag("day-cell-2026-07-06").assertIsDisplayed()
-        composeRule.onNodeWithTag("entry-row-e1").performClick()
+        composeRule.onNodeWithTag("day-cell-2026-07-06").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("entry-row-e1").performScrollTo().assertIsDisplayed().performClick()
         assertEquals("e1", clicked)
     }
 }

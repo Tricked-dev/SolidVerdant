@@ -130,6 +130,62 @@ class CsvExporterTest {
     }
 
     @Test
+    fun `buildRows treats explicit offset end as authoritative over stale duration`() {
+        val entry = TimeEntry(
+            id = "multi-day",
+            userId = "u",
+            start = "2026-07-01T23:00:00+02:00",
+            end = "2026-07-03T01:00:00+02:00",
+            duration = 60,
+            organizationId = "org",
+        )
+
+        val row = CsvExporter.buildRows(
+            entries = listOf(entry),
+            projects = emptyList(),
+            clients = emptyList(),
+            tasks = emptyList(),
+            tags = emptyList(),
+            zone = ZoneId.of("Europe/Amsterdam"),
+            organizationName = "Org",
+            billableYes = "Yes",
+            billableNo = "No",
+        ).single()
+
+        assertEquals("2026-07-02T23:00:00Z", row[2])
+        assertEquals("93600", row[4])
+        assertEquals("26:00:00", row[5])
+    }
+
+    @Test
+    fun `buildRows leaves server-style running zero-duration entry open`() {
+        val entry = TimeEntry(
+            id = "running",
+            userId = "u",
+            start = "2026-07-01T09:00:00Z",
+            end = null,
+            duration = 0,
+            organizationId = "org",
+        )
+
+        val row = CsvExporter.buildRows(
+            entries = listOf(entry),
+            projects = emptyList(),
+            clients = emptyList(),
+            tasks = emptyList(),
+            tags = emptyList(),
+            zone = utc,
+            organizationName = "Org",
+            billableYes = "Yes",
+            billableNo = "No",
+        ).single()
+
+        assertEquals("", row[2])
+        assertEquals("", row[4])
+        assertEquals("", row[5])
+    }
+
+    @Test
     fun `buildRows tolerates an unparseable start with blank end and duration`() {
         val entry = TimeEntry(
             id = "bad",

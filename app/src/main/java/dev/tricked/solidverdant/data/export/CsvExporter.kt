@@ -16,6 +16,7 @@ import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.domain.time.parseTimeEntryInstant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -119,9 +120,9 @@ class CsvExporter @Inject constructor(@ApplicationContext private val context: C
 
         /**
          * Maps each entry to one CSV row. End time and duration are derived consistently: an entry
-         * with an explicit duration reports that duration and a computed end instant; otherwise the
-         * end/duration come from the parsed end timestamp. Unparseable timestamps yield blank cells
-         * rather than crashing the whole export.
+         * with an explicit end reports the elapsed interval even if the server's duration is stale.
+         * A positive duration is the fallback when no end exists; zero/null with no end remains a
+         * running entry. Unparseable timestamps yield blank cells rather than crashing the export.
          */
         fun buildRows(
             entries: List<TimeEntry>,
@@ -139,17 +140,17 @@ class CsvExporter @Inject constructor(@ApplicationContext private val context: C
             val taskById = tasks.associateBy { it.id }
             val tagNameById = tags.associate { it.id to it.name }
             return entries.map { e ->
-                val startInstant = runCatching { Instant.parse(e.start) }.getOrNull()
+                val startInstant = parseTimeEntryInstant(e.start)
                 val endInstant: Instant? = when {
-                    e.duration != null && startInstant != null ->
-                        startInstant.plusSeconds(e.duration.toLong().coerceAtLeast(0))
-                    e.end != null -> runCatching { Instant.parse(e.end) }.getOrNull()
+                    e.end != null -> parseTimeEntryInstant(e.end)
+                    e.duration != null && e.duration > 0 && startInstant != null ->
+                        startInstant.plusSeconds(e.duration.toLong())
                     else -> null
                 }
                 val durationSeconds: Long? = when {
-                    e.duration != null -> e.duration.toLong().coerceAtLeast(0)
                     startInstant != null && endInstant != null ->
                         (endInstant.epochSecond - startInstant.epochSecond).coerceAtLeast(0)
+                    e.end == null && e.duration != null && e.duration > 0 -> e.duration.toLong()
                     else -> null
                 }
                 val project = e.projectId?.let { projectById[it] }

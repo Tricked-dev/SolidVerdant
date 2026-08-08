@@ -23,7 +23,9 @@ import dev.tricked.solidverdant.data.local.db.TimeEntryDao
 import dev.tricked.solidverdant.data.local.db.toEntity
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.RemoteDataSource
+import dev.tricked.solidverdant.data.remote.SolidtimeTimestamps
 import dev.tricked.solidverdant.data.remote.TimeEntriesQuery
+import dev.tricked.solidverdant.domain.time.parseTimeEntryInstant
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.serialization.json.Json
 import retrofit2.HttpException
@@ -103,6 +105,15 @@ class SyncWorker @AssistedInject constructor(
                         retryResult = Result.retry()
                     }
                 }
+                Outcome.RateLimited -> {
+                    // Solidtime's per-user API limit is a temporary one-minute window. Do not
+                    // consume the operation's terminal retry budget: a healthy queued change must
+                    // not become a permanent sync failure merely because the window stayed closed.
+                    outboxDao.update(
+                        op.copy(lastError = "Rate limited; retry scheduled"),
+                    )
+                    retryResult = Result.retry()
+                }
                 Outcome.Fail -> {
                     // Server rejected the change: this will never succeed, so dead-letter it now.
                     deadLetter(op, "Server rejected this change", failedEntryIds)
@@ -162,6 +173,7 @@ class SyncWorker @AssistedInject constructor(
         /** [rekeyedTo] is set only when this op reconciled a local- id to a new server id. */
         data class Success(val rekeyedTo: String? = null) : Outcome()
         data object Retry : Outcome()
+        data object RateLimited : Outcome()
         data object Fail : Outcome()
 
         /** A revived dead-lettered op superseded by a later write; drop without touching the server. */
@@ -191,7 +203,8 @@ class SyncWorker @AssistedInject constructor(
         if (op.opType !in CONFLICT_CHECK_OPS || op.baseSnapshotJson == null) return null
         val baseSnapshotJson = op.baseSnapshotJson
         return when (val index = conflictIndexes[op.organizationId]) {
-            is ConflictIndex.Failed, null -> Outcome.Retry
+            is ConflictIndex.Failed -> if (index.rateLimited) Outcome.RateLimited else Outcome.Retry
+            null -> Outcome.Retry
             is ConflictIndex.Ready -> {
                 val server = index.entries[op.timeEntryId]
                 if (server == null) {
@@ -235,8 +248,21 @@ class SyncWorker @AssistedInject constructor(
     }
 
     private suspend fun processCreate(op: OutboxEntity): Outcome.Success {
-        val payload = json.decodeFromString<CreatePayload>(op.payloadJson)
-        val adopted = findCreatedDuplicate(op.organizationId, payload)
+        val queuedPayload = json.decodeFromString<CreatePayload>(op.payloadJson)
+        val matchingBeforeWrite = matchingCreatedEntries(op.organizationId, queuedPayload)
+        val payload = if (queuedPayload.recoveryBaselineEntryIds == null) {
+            queuedPayload.copy(recoveryBaselineEntryIds = matchingBeforeWrite.map { it.id }).also { prepared ->
+                // Persist the baseline before the POST. If the server commits but the response is
+                // lost (or the process dies), the next worker can distinguish that new entry from
+                // identical entries that predated this operation, including Duplicate's source.
+                outboxDao.update(op.copy(payloadJson = json.encodeToString(prepared)))
+            }
+        } else {
+            queuedPayload
+        }
+        val adopted = queuedPayload.recoveryBaselineEntryIds?.let { baseline ->
+            matchingBeforeWrite.firstOrNull { it.id !in baseline }
+        }
         val server = adopted ?: run {
             val local = TimeEntry(
                 id = op.timeEntryId,
@@ -361,7 +387,7 @@ class SyncWorker @AssistedInject constructor(
                 ConflictIndex.Ready(entries.associateBy { it.id })
             }.getOrElse { error ->
                 Timber.w(error, "Could not fetch conflict comparison data")
-                ConflictIndex.Failed
+                ConflictIndex.Failed(rateLimited = error is HttpException && error.code() == HTTP_TOO_MANY_REQUESTS)
             }
         }
     }
@@ -406,28 +432,40 @@ class SyncWorker @AssistedInject constructor(
             wholeSecondUtc(maxOf(instants.max() + padding, clock.nowMs() + padding))
     }
 
-    /**
-     * Best-effort duplicate detection for CREATE retries: look for a server entry that matches the
-     * queued payload on the immutable fields (start/end/project/task/description). Used only when a
-     * prior attempt may have committed but lost its response.
-     */
-    private suspend fun findCreatedDuplicate(orgId: String, p: CreatePayload): TimeEntry? {
-        val page = remote.getTimeEntries(
-            TimeEntriesQuery(
-                organizationId = orgId,
-                memberId = p.memberId,
-                limit = PAGE_SIZE,
-                offset = 0,
-                onlyFullDates = false,
-            ),
-        ).getOrNull() ?: return null
-        return page.data.firstOrNull { e ->
-            e.start == p.start &&
-                e.end == p.end &&
-                e.projectId == p.projectId &&
-                e.taskId == p.taskId &&
-                (e.description ?: "") == p.description
+    /** Return every server entry that could be this CREATE, scanning the bounded timestamp window. */
+    private suspend fun matchingCreatedEntries(orgId: String, p: CreatePayload): List<TimeEntry> {
+        val matches = mutableListOf<TimeEntry>()
+        val payloadStart = parseTimeEntryInstant(p.start)
+        val payloadEnd = parseTimeEntryInstant(p.end)
+        var offset = 0
+        while (offset < MAX_PAGE_SCAN) {
+            val response = remote.getTimeEntries(
+                TimeEntriesQuery(
+                    organizationId = orgId,
+                    memberId = p.memberId,
+                    limit = PAGE_SIZE,
+                    offset = offset,
+                    onlyFullDates = false,
+                    start = SolidtimeTimestamps.utc(p.start),
+                    end = SolidtimeTimestamps.utc(p.end),
+                ),
+            ).getOrThrow()
+            matches += response.data.filter { entry ->
+                parseTimeEntryInstant(entry.start) == payloadStart &&
+                    entry.end?.let(::parseTimeEntryInstant) == payloadEnd &&
+                    entry.projectId == p.projectId &&
+                    entry.taskId == p.taskId &&
+                    (entry.description ?: "") == p.description
+            }
+            if (response.data.isEmpty() ||
+                response.data.size < PAGE_SIZE ||
+                offset + response.data.size >= (response.meta?.total ?: Int.MAX_VALUE)
+            ) {
+                break
+            }
+            offset += response.data.size
         }
+        return matches
     }
 
     private suspend fun reconcile(localId: String, server: TimeEntry, fallbackTagIds: List<String>? = null): Outcome.Success {
@@ -455,7 +493,7 @@ class SyncWorker @AssistedInject constructor(
     private fun classify(e: Exception): Outcome = when {
         e is IOException -> Outcome.Retry
         e is HttpException && e.code() == HTTP_REQUEST_TIMEOUT -> Outcome.Retry
-        e is HttpException && e.code() == HTTP_TOO_MANY_REQUESTS -> Outcome.Retry
+        e is HttpException && e.code() == HTTP_TOO_MANY_REQUESTS -> Outcome.RateLimited
         e is HttpException && e.code() >= HTTP_SERVER_ERROR_START -> Outcome.Retry
         else -> Outcome.Fail
     }
@@ -481,7 +519,7 @@ class SyncWorker @AssistedInject constructor(
 
 private sealed class ConflictIndex {
     data class Ready(val entries: Map<String, TimeEntry>) : ConflictIndex()
-    data object Failed : ConflictIndex()
+    data class Failed(val rateLimited: Boolean) : ConflictIndex()
 }
 
 private fun TimeEntry.toConflictSnapshot(): ConflictSnapshot = ConflictSnapshot.of(

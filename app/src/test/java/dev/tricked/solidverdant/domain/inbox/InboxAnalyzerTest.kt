@@ -100,6 +100,38 @@ class InboxAnalyzerTest {
         assertEquals(0, issues.count { it.type == InboxIssueType.OVERLAP })
     }
 
+    @Test fun `duration-only completed response participates in overlap checks`() {
+        val durationOnly = entry("duration", "2026-07-06T23:00:00+02:00", null).copy(duration = 3 * 3600)
+        val explicit = entry("explicit", "2026-07-07T00:30:00+02:00", "2026-07-07T01:30:00+02:00")
+
+        val issues = analyze(listOf(durationOnly, explicit), config(checkGaps = false))
+
+        assertEquals(1, issues.count { it.type == InboxIssueType.OVERLAP })
+    }
+
+    @Test fun `duration-only completed response is eligible for metadata and long-duration checks`() {
+        val durationOnly = entry(
+            id = "duration",
+            start = "2026-07-06T08:00:00Z",
+            end = null,
+            projectId = null,
+        ).copy(duration = 26 * 3600)
+
+        val issues = analyze(
+            listOf(durationOnly),
+            config(
+                checkGaps = false,
+                checkOverlaps = false,
+                checkMissingProject = true,
+                checkLongDuration = true,
+                maxDurationHours = 24,
+            ),
+        )
+
+        assertEquals(1, issues.count { it.type == InboxIssueType.MISSING_METADATA })
+        assertEquals(1, issues.count { it.type == InboxIssueType.LONG_DURATION })
+    }
+
     @Test fun `overlap key is stable regardless of pair order`() {
         val a = entry("a", "2026-07-06T09:00:00Z", "2026-07-06T11:00:00Z")
         val b = entry("b", "2026-07-06T10:00:00Z", "2026-07-06T12:00:00Z")

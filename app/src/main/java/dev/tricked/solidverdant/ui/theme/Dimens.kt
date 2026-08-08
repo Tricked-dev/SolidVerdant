@@ -50,5 +50,7 @@ object Dimens {
 
     // --- Accessibility ---
     val MinTouchTarget = 48.dp
+    val ControlHeightLarge = 64.dp
+    val IconMedium = 24.dp
     val NarrowCalendarWidth = 600.dp
 }

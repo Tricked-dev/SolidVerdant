@@ -563,6 +563,7 @@ class ReadmeScreenshotsTest {
                 }
                 EditTimeEntryDialog(
                     entry = editing,
+                    zone = ZoneId.systemDefault(),
                     projects = projects,
                     tasks = tasks,
                     tags = tags,

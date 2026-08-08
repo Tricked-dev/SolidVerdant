@@ -44,6 +44,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -140,6 +141,11 @@ fun CalendarScreen(
                         selected = state.viewMode == mode,
                         onClick = { viewModel.setViewMode(mode) },
                         shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
+                        modifier = if (mode == CalendarViewMode.MONTH) {
+                            Modifier.testTag(CalendarTestTags.MODE_MONTH)
+                        } else {
+                            Modifier
+                        },
                     ) {
                         Text(stringResource(labelRes))
                     }
@@ -201,6 +207,7 @@ fun CalendarScreen(
     editing?.let { entry ->
         EditTimeEntryDialog(
             entry = entry,
+            zone = state.zone,
             projects = projects,
             tasks = tasks,
             tags = tags,

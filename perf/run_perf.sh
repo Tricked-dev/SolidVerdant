@@ -81,7 +81,7 @@ BENCH_TASKS="assembleBenchmark"
 [[ "${SKIP_STARTUP:-0}" == "1" ]] && BENCH_TASKS=""
 if [[ "${SKIP_BUILD:-0}" != "1" ]]; then
     echo "Building $BENCH_TASKS + perftest APKs..."
-    nix develop --command env -u LD_LIBRARY_PATH ./gradlew --no-daemon \
+    devenv shell -- env -u LD_LIBRARY_PATH ./gradlew --no-daemon \
         -Pperf.testBuildType=perftest \
         $BENCH_TASKS assemblePerftest assemblePerftestAndroidTest
 fi

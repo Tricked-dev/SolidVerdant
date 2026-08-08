@@ -21,6 +21,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.time.ZoneOffset
 
 /**
  * SV-010 regression: the "Billable" control must be a single semantics node exposing
@@ -53,6 +54,7 @@ class BillableAccessibilityTest {
             MaterialTheme {
                 EditTimeEntryDialog(
                     entry = entry(billable),
+                    zone = ZoneOffset.UTC,
                     projects = emptyList(),
                     tasks = emptyList(),
                     tags = emptyList(),

@@ -12,6 +12,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.work.Configuration
 import androidx.work.WorkManager
 import androidx.work.testing.SynchronousExecutor
@@ -28,9 +29,12 @@ import dev.tricked.solidverdant.data.local.db.AppDatabase
 import dev.tricked.solidverdant.data.local.db.OutboxEntity
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
 import dev.tricked.solidverdant.data.local.db.TemplateEntity
+import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.remote.RemoteDataSource
 import dev.tricked.solidverdant.e2e.di.TestClock
 import dev.tricked.solidverdant.e2e.mock.MockSolidtimeServer
 import dev.tricked.solidverdant.sync.SyncScheduler
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.rules.RuleChain
 import org.junit.rules.TestRule
@@ -44,8 +48,8 @@ import org.junit.runners.model.Statement
  * @get:Rule val e2e = E2eRule(this)
  * ```
  *
- * Before the app launches it: starts [MockSolidtimeServer], seeds [AuthDataStore] so the app boots
- * LOGGED IN and pointed at the mock, and initializes a test [WorkManager] backed by the app's
+ * Before the app launches it: selects the mock or real backend, seeds [AuthDataStore] so the app
+ * boots LOGGED IN and pointed at that backend, and initializes a test [WorkManager] backed by the app's
  * [HiltWorkerFactory] and a [SynchronousExecutor] so [dev.tricked.solidverdant.sync.SyncWorker] runs
  * deterministically.
  *
@@ -53,12 +57,10 @@ import org.junit.runners.model.Statement
  * empty Compose rule and launches the real [MainActivity] via [ActivityScenario] in [launchApp] —
  * this lets a test preset the mock's catalogue BEFORE the activity reads it.
  *
- * Exposes [mockServer], [testClock], and the WorkManager [testDriver] plus [runPendingSync] so tests
- * can drive sync. State (DataStore + WorkManager) is reset between tests.
+ * Exposes [testClock] and the WorkManager [testDriver] plus [runPendingSync] so tests can drive sync.
+ * State (DataStore + WorkManager) is reset between tests.
  */
 class E2eRule(private val test: Any) : TestRule {
-
-    val mockServer = MockSolidtimeServer()
 
     val composeRule: ComposeTestRule = createEmptyComposeRule()
 
@@ -72,7 +74,12 @@ class E2eRule(private val test: Any) : TestRule {
     val testClock: TestClock get() = entryPoint.testClock()
 
     private lateinit var authDataStore: AuthDataStore
+    private lateinit var backend: E2eBackend
+    private lateinit var currentSession: E2eSession
+    private var prepared = false
     private var scenario: ActivityScenario<MainActivity>? = null
+
+    val session: E2eSession get() = currentSession
 
     val testDriver get() = WorkManagerTestInitHelper.getTestDriver(context)
 
@@ -85,6 +92,7 @@ class E2eRule(private val test: Any) : TestRule {
         fun testClock(): TestClock
         fun database(): AppDatabase
         fun settingsDataStore(): SettingsDataStore
+        fun remoteDataSource(): RemoteDataSource
     }
 
     /** Configuration that must run after Hilt is up but before the activity launches. */
@@ -93,8 +101,12 @@ class E2eRule(private val test: Any) : TestRule {
             override fun evaluate() {
                 hiltRule.inject()
                 authDataStore = entryPoint.authDataStore()
-
-                mockServer.start()
+                backend = when (InstrumentationRegistry.getArguments().getString(BACKEND_ARGUMENT)?.lowercase() ?: MOCK_BACKEND) {
+                    MOCK_BACKEND -> MockE2eBackend()
+                    REAL_BACKEND -> RealSolidtimeE2eBackend(context, entryPoint.remoteDataSource())
+                    else -> error("Unknown E2E backend; use -e $BACKEND_ARGUMENT $MOCK_BACKEND|$REAL_BACKEND")
+                }
+                currentSession = backend.open()
                 testClock.reset()
 
                 // Boot the app logged-in and aimed at the mock backend.
@@ -105,9 +117,9 @@ class E2eRule(private val test: Any) : TestRule {
                     entryPoint.database().clearAllTables()
                     entryPoint.settingsDataStore().clearCachedData()
                     authDataStore.clearAll()
-                    authDataStore.saveOAuthConfig(mockServer.baseUrl(), "test-client")
-                    authDataStore.saveTokens("test-access-token", "test-refresh-token")
-                    authDataStore.saveCurrentMembershipId(MockSolidtimeServer.DEFAULT_MEMBERSHIP_ID)
+                    authDataStore.saveOAuthConfig(currentSession.baseUrl, currentSession.clientId)
+                    authDataStore.saveTokens(currentSession.accessToken, currentSession.refreshToken)
+                    authDataStore.saveCurrentMembershipId(currentSession.membershipId)
                 }
 
                 // Deterministic WorkManager: HiltWorkerFactory so SyncWorker's deps resolve, and
@@ -130,7 +142,7 @@ class E2eRule(private val test: Any) : TestRule {
                     // Without this, workers in later tests retain dependencies from the first
                     // test component and can tear down the activity mid-flow.
                     WorkManagerTestInitHelper.closeWorkDatabase()
-                    mockServer.shutdown()
+                    backend.close()
                 }
             }
         }
@@ -143,8 +155,60 @@ class E2eRule(private val test: Any) : TestRule {
 
     // ---- Test-facing helpers ------------------------------------------------------------------
 
-    /** Launch the real [MainActivity]. Call AFTER presetting [mockServer] catalogue. */
-    fun launchApp(): ActivityScenario<MainActivity> = ActivityScenario.launch(MainActivity::class.java).also { scenario = it }
+    /** Replace the complete server world before launching the real app. */
+    fun prepare(fixture: E2eFixture): E2eFixtureHandle = runBlocking {
+        check(scenario == null) { "Prepare the E2E fixture before launching the app" }
+        backend.prepare(fixture).also { prepared = true }
+    }
+
+    fun serverSnapshot(): E2eServerSnapshot = runBlocking { backend.snapshot() }
+
+    /**
+     * Poll server state at a bounded cadence outside Compose's tight [ComposeTestRule.waitUntil]
+     * loop. The satisfying snapshot is returned so callers do not immediately spend another
+     * control-plane request fetching the state they just observed.
+     */
+    fun awaitServer(
+        timeoutMs: Long,
+        pollDelayMs: Long = DEFAULT_SERVER_POLL_DELAY_MS,
+        driveSync: Boolean = false,
+        predicate: (E2eServerSnapshot) -> Boolean,
+    ): E2eServerSnapshot = runBlocking {
+        require(timeoutMs > 0L) { "timeoutMs must be positive" }
+        require(pollDelayMs > 0L) { "pollDelayMs must be positive" }
+        val startedAt = System.nanoTime()
+        var elapsedMs = 0L
+        while (elapsedMs <= timeoutMs) {
+            if (driveSync) runPendingSync()
+            val snapshot = backend.snapshot()
+            if (predicate(snapshot)) return@runBlocking snapshot
+
+            elapsedMs = (System.nanoTime() - startedAt) / NANOS_PER_MILLISECOND
+            val remainingMs = timeoutMs - elapsedMs
+            if (remainingMs > 0L) delay(minOf(pollDelayMs, remainingMs))
+        }
+        throw AssertionError("Server state did not satisfy the predicate within $timeoutMs ms")
+    }
+
+    fun createOnServer(entry: TimeEntry): E2eFixtureHandle = runBlocking { backend.create(entry) }
+
+    fun updateOnServer(logicalId: String, transform: (TimeEntry) -> TimeEntry): E2eFixtureHandle = runBlocking {
+        val existing = backend.snapshot().entry(logicalId)
+            ?: error("No server entry is mapped to logical fixture '$logicalId'")
+        backend.update(logicalId, transform(existing))
+    }
+
+    /** Explicit escape hatch for mock-only paging, stress, and fault-injection tests. */
+    fun requireMockBackend(): MockSolidtimeServer {
+        prepared = true
+        return backend.mockServerOrNull() ?: error("This E2E flow requires the mock backend")
+    }
+
+    /** Launch the real [MainActivity]. Call after [prepare] or [requireMockBackend]. */
+    fun launchApp(): ActivityScenario<MainActivity> {
+        check(prepared) { "Call prepare(E2eFixture...) before launchApp()" }
+        return ActivityScenario.launch(MainActivity::class.java).also { scenario = it }
+    }
 
     /**
      * Deterministically run any sync work the app enqueued: meet the constraints on the unique
@@ -154,6 +218,13 @@ class E2eRule(private val test: Any) : TestRule {
         val wm = WorkManager.getInstance(context)
         val infos = wm.getWorkInfosForUniqueWork(SyncScheduler.UNIQUE_NAME).get()
         infos.forEach { info -> testDriver?.setAllConstraintsMet(info.id) }
+    }
+
+    /** Whether the optimistic local STOP has committed before the worker is allowed to run. */
+    fun hasPendingStop(entryId: String): Boolean = runBlocking {
+        entryPoint.database().outboxDao().peekAll().any {
+            it.timeEntryId == entryId && it.opType == OutboxOpType.STOP
+        }
     }
 
     /** Seed a large local-only collection that has no server endpoint. */
@@ -191,5 +262,13 @@ class E2eRule(private val test: Any) : TestRule {
                 deadLettered = true,
             ),
         )
+    }
+
+    companion object {
+        private const val BACKEND_ARGUMENT = "e2eBackend"
+        private const val MOCK_BACKEND = "mock"
+        private const val REAL_BACKEND = "real"
+        private const val DEFAULT_SERVER_POLL_DELAY_MS = 500L
+        private const val NANOS_PER_MILLISECOND = 1_000_000L
     }
 }

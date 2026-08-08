@@ -8,6 +8,8 @@ package dev.tricked.solidverdant.e2e.flows
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidTest
+import dev.tricked.solidverdant.e2e.BackendPortable
+import dev.tricked.solidverdant.e2e.E2eFixture
 import dev.tricked.solidverdant.e2e.E2eRule
 import dev.tricked.solidverdant.e2e.robots.TrackRobot
 import org.junit.Assert.assertTrue
@@ -27,35 +29,33 @@ class TrackingLifecycleE2eTest {
     @get:Rule
     val e2e = E2eRule(this)
 
+    @BackendPortable
     @Test
     fun startThenStopSyncsACompletedEntryToTheServer() {
-        e2e.mockServer.presetLoggedInWorld(seededEntry = null)
+        e2e.prepare(E2eFixture.Empty)
         e2e.launchApp()
         val robot = TrackRobot(e2e.composeRule).waitForHistory()
 
         robot.tapStart().assertStopButtonVisible()
 
         // Drain the START op so the server owns the running entry.
-        e2e.composeRule.waitUntil(WAIT_MS) {
-            e2e.runPendingSync()
-            e2e.mockServer.wasRequested("POST", "/time-entries")
-        }
+        val startedSnapshot = e2e.awaitServer(WAIT_MS, driveSync = true) { it.activeEntry != null }
+        val startedServerId = requireNotNull(startedSnapshot.activeEntry).id
 
         robot.tapStop().assertStartButtonVisible()
 
         // Drain the STOP op; the mock marks the entry completed when the PUT carries an end.
-        e2e.composeRule.waitUntil(WAIT_MS) {
-            e2e.runPendingSync()
-            e2e.mockServer.timeEntries.any { it.end != null }
+        val completedSnapshot = e2e.awaitServer(WAIT_MS, driveSync = true) { snapshot ->
+            snapshot.entries.firstOrNull { it.id == startedServerId }?.end != null
         }
 
-        val completed = e2e.mockServer.timeEntries.filter { it.end != null }
-        assertTrue("Expected exactly one completed entry on the server, got $completed", completed.size == 1)
+        val completed = completedSnapshot.entries.firstOrNull { it.id == startedServerId }
+        assertTrue("Expected the started server entry to be completed, got $completed", completed?.end != null)
     }
 
     @Test
     fun runningTimerSurvivesActivityRecreation() {
-        e2e.mockServer.presetLoggedInWorld(seededEntry = null)
+        e2e.requireMockBackend().presetLoggedInWorld(seededEntry = null)
         val scenario = e2e.launchApp()
         val robot = TrackRobot(e2e.composeRule).waitForHistory()
 

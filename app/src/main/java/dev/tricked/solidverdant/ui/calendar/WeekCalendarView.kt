@@ -323,18 +323,26 @@ private fun DayHeaderCell(
         Text(
             text = weekday,
             style = MaterialTheme.typography.labelSmall,
-            color = if (isToday) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
+            color = calendarDayContentColor(
+                selected = selected,
+                isToday = isToday,
+                primary = MaterialTheme.colorScheme.primary,
+                onPrimaryContainer = MaterialTheme.colorScheme.onPrimaryContainer,
+                default = MaterialTheme.colorScheme.onSurfaceVariant,
+            ),
             maxLines = 1,
         )
         Text(
             text = day.dayOfMonth.toString(),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = if (isToday || selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (isToday) MaterialTheme.colorScheme.primary else Color.Unspecified,
+            color = calendarDayContentColor(
+                selected = selected,
+                isToday = isToday,
+                primary = MaterialTheme.colorScheme.primary,
+                onPrimaryContainer = MaterialTheme.colorScheme.onPrimaryContainer,
+                default = Color.Unspecified,
+            ),
         )
     }
 }
@@ -508,7 +516,7 @@ internal fun HourGridlines(modifier: Modifier = Modifier) {
 @Composable
 internal fun CurrentTimeMarker(now: Instant, day: LocalDate, zone: ZoneId, modifier: Modifier = Modifier) {
     val fraction = (now.epochSecond - day.atStartOfDay(zone).toInstant().epochSecond)
-        .toFloat() / SECONDS_PER_DAY
+        .toFloat() / secondsInLocalDay(day, zone)
     if (fraction in 0f..1f) {
         Box(
             modifier = modifier

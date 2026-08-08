@@ -26,10 +26,14 @@ import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.domain.time.TemporalPolicy
 import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
+import dev.tricked.solidverdant.domain.time.isCompletedTimeEntry
+import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
+import dev.tricked.solidverdant.domain.time.parseTimeEntryInstant
+import dev.tricked.solidverdant.domain.time.timeEntryLocalDaySlices
+import dev.tricked.solidverdant.domain.time.timeEntryOverlapsLocalDateRange
 import dev.tricked.solidverdant.service.TimeTrackingNotificationService
 import dev.tricked.solidverdant.sync.SyncTrigger
 import dev.tricked.solidverdant.util.Clock
-import dev.tricked.solidverdant.util.IsoTimes
 import dev.tricked.solidverdant.widget.TimeTrackingWidget
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -185,7 +189,7 @@ class TrackingViewModel @Inject constructor(
                 overlapCount = cached.overlapCount,
                 hasLoadedTimeEntries = true,
                 cachedContinueEntry = cached.timeEntries
-                    .firstOrNull { it.end != null && !it.description.isNullOrBlank() }
+                    .firstOrNull { isCompletedTimeEntry(it) && !it.description.isNullOrBlank() }
                     ?: settingsDataStore.getCachedContinueEntry(),
                 projects = cached.projects,
                 clients = cached.clients,
@@ -237,6 +241,7 @@ class TrackingViewModel @Inject constructor(
     private var lastCachedContinueEntry: TimeEntry? = null
     private var collectingOrganizationId: String? = null
     private var lastCollectedActiveId: String? = null
+    private val locallyStoppingEntryIds = mutableSetOf<String>()
     private var historyOrganizationId: String? = null
     private var historyMemberId: String? = null
     private var historyLoadStage = 0
@@ -401,7 +406,7 @@ class TrackingViewModel @Inject constructor(
                     data = data,
                     overlapCount = EntryTrustRules.overlapCount(data.entries),
                     continueEntry = data.entries
-                        .filter { it.end != null && !it.description.isNullOrBlank() }
+                        .filter { isCompletedTimeEntry(it) && !it.description.isNullOrBlank() }
                         .maxByOrNull { it.start },
                 )
             }.flowOn(Dispatchers.Default).conflate().collect { (data, overlapCount, continueEntry) ->
@@ -481,6 +486,15 @@ class TrackingViewModel @Inject constructor(
             timeEntryRepository.observeSyncOperations(organizationId)
                 .distinctUntilChanged()
                 .collect { operations ->
+                    operations.filter { it.type == OutboxOpType.STOP }.forEach { operation ->
+                        if (operation.status !in setOf(
+                                TimeEntryRepository.EntrySyncStatus.PENDING,
+                                TimeEntryRepository.EntrySyncStatus.RETRYING,
+                            )
+                        ) {
+                            locallyStoppingEntryIds.remove(operation.entryId)
+                        }
+                    }
                     _uiState.value = _uiState.value.copy(syncOperations = operations)
                 }
         }
@@ -573,10 +587,12 @@ class TrackingViewModel @Inject constructor(
             .onSuccess { timeEntry ->
                 // The active-entry endpoint is account-wide. Only surface an entry for the
                 // organization currently selected in the app.
-                val currentTimeEntry = timeEntry
-                    ?.takeIf { it.organizationId == organizationId }
+                val serverTimeEntry = timeEntry?.takeIf { it.organizationId == organizationId }
+                if (serverTimeEntry == null) locallyStoppingEntryIds.clear()
+                val currentTimeEntry = serverTimeEntry
                     ?.takeUnless {
-                        shouldDeferServerActiveWhileStopping(it.id, _uiState.value.syncOperations)
+                        it.id in locallyStoppingEntryIds ||
+                            shouldDeferServerActiveWhileStopping(it.id, _uiState.value.syncOperations)
                     }
                 // A locally started timer whose START/CREATE is still in the outbox does not
                 // exist on the server yet. A poll or foreground refresh answering "no active
@@ -739,19 +755,6 @@ class TrackingViewModel @Inject constructor(
         val organizationId = historyOrganizationId ?: return
         val memberId = historyMemberId ?: return
         if (_uiState.value.isLoadingMoreTimeEntries) return
-        val loadedDates = _uiState.value.timeEntries.mapNotNull { entry ->
-            IsoTimes.localDate(entry.start)
-        }
-        val newestLoadedDate = loadedDates.maxOrNull()
-        val oldestLoadedDate = loadedDates.minOrNull()
-        if (newestLoadedDate != null &&
-            oldestLoadedDate != null &&
-            date in oldestLoadedDate..newestLoadedDate
-        ) {
-            // The screen resolves an empty selected day to the nearest loaded date header.
-            _uiState.value = _uiState.value.copy(historyJumpDate = date)
-            return
-        }
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isLoadingMoreTimeEntries = true,
@@ -800,9 +803,8 @@ class TrackingViewModel @Inject constructor(
                     )
                     return@launch
                 }
-                val probeDate = probe.data.firstOrNull()?.let { entry ->
-                    IsoTimes.localDate(entry.start)
-                } ?: break
+                val probeDate = probe.data.firstOrNull()?.let { entry -> historyEntryStartDate(entry, _uiState.value.zone) }
+                    ?: break
                 completedProbes++
                 _uiState.value = _uiState.value.copy(
                     historyJumpProgress = (completedProbes.toFloat() / (expectedProbes + 1))
@@ -837,11 +839,21 @@ class TrackingViewModel @Inject constructor(
                 return@launch
             }
             val tagsById = _uiState.value.tags.associateBy { it.id }
-            val window = response.data.map { entry ->
+            val carryInEntries = loadEntriesOverlappingDate(organizationId, memberId, date).getOrElse { error ->
+                _uiState.value = _uiState.value.copy(
+                    isLoadingMoreTimeEntries = false,
+                    historyJumpTarget = null,
+                    historyJumpProgress = null,
+                    historyRateLimitWaitSeconds = null,
+                    error = error.message,
+                )
+                return@launch
+            }
+            val window = (response.data + carryInEntries).distinctBy { it.id }.map { entry ->
                 entry.copy(tags = entry.tags.map { tagsById[it.id] ?: it })
             }
             historyWindowStartOffset = windowStart
-            historyOffset = windowStart + window.size
+            historyOffset = windowStart + response.data.size
             historyLoadStage = 2
             // The jumped-to window is authoritative; keep the collector from replacing it.
             historyWindowMode = HistoryWindowMode.PAGINATED
@@ -899,9 +911,18 @@ class TrackingViewModel @Inject constructor(
         memberId: String,
         limit: Int,
         offset: Int,
+        start: String? = null,
+        end: String? = null,
     ): Result<dev.tricked.solidverdant.data.model.TimeEntriesResponse> {
         repeat(RATE_LIMIT_RETRY_ATTEMPTS) {
-            val result = authRepository.getTimeEntries(organizationId, memberId, limit, offset)
+            val result = authRepository.getTimeEntries(
+                organizationId,
+                memberId,
+                limit,
+                offset,
+                start = start,
+                end = end,
+            )
             val error = result.exceptionOrNull()
             if (error !is retrofit2.HttpException || error.code() != HTTP_TOO_MANY_REQUESTS) return result
             val waitSeconds = error.response()?.headers()?.get("Retry-After")
@@ -913,6 +934,40 @@ class TrackingViewModel @Inject constructor(
         }
         return Result.failure(IllegalStateException("Rate limit retry exhausted"))
     }
+
+    /**
+     * Solidtime's date bounds filter entry starts, not interval intersection. A date jump therefore
+     * has to scan every entry that started before the target day's end and retain the intervals
+     * that actually overlap the day; otherwise a long carry-in can sit arbitrarily far before the
+     * normal binary-search window.
+     */
+    private suspend fun loadEntriesOverlappingDate(organizationId: String, memberId: String, date: LocalDate): Result<List<TimeEntry>> =
+        runCatching {
+            val zone = _uiState.value.zone
+            val queryEnd = date.plusDays(1).atStartOfDay(zone).toInstant().toString()
+            val now = Instant.ofEpochMilli(clock.nowMs())
+            val matches = mutableListOf<TimeEntry>()
+            val seenIds = mutableSetOf<String>()
+            var offset = 0
+            while (true) {
+                val page = getHistoryPageWithRateLimit(
+                    organizationId = organizationId,
+                    memberId = memberId,
+                    limit = MAX_PAGE_SIZE,
+                    offset = offset,
+                    start = null,
+                    end = queryEnd,
+                ).getOrThrow()
+                val newEntries = page.data.filter { seenIds.add(it.id) }
+                matches += newEntries.filter {
+                    timeEntryOverlapsLocalDateRange(it, date, date, zone, now)
+                }
+                offset += page.data.size
+                val total = page.meta?.total
+                if (page.data.size < MAX_PAGE_SIZE || (total != null && offset >= total) || newEntries.isEmpty()) break
+            }
+            matches
+        }
 
     /**
      * Start the elapsed time timer
@@ -1064,7 +1119,7 @@ class TrackingViewModel @Inject constructor(
             syncTrigger.requestSync()
 
             // Reassert the foreground notification with the edited details.
-            if (updatedEntry.end == null) {
+            if (isRunningTimeEntry(updatedEntry)) {
                 val projectName = _uiState.value.projects.find { it.id == updatedEntry.projectId }?.name
                 val taskName = _uiState.value.tasks.find { it.id == updatedEntry.taskId }?.name
                 TimeTrackingNotificationService.startTracking(
@@ -1095,7 +1150,7 @@ class TrackingViewModel @Inject constructor(
     /**
      * Stop the active time entry
      */
-    fun stopTimeEntry(userId: String) {
+    fun stopTimeEntry() {
         val currentEntry = _uiState.value.currentTimeEntry
 
         // If paused, the entry is already stopped - just clear the paused state
@@ -1122,11 +1177,15 @@ class TrackingViewModel @Inject constructor(
             return
         }
 
+        // Active polling can complete between the local STOP transaction and the outbox observer
+        // emission. Suppress that exact server id synchronously while the STOP is being queued.
+        locallyStoppingEntryIds += currentEntry.id
+
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
             // Optimistic local stop + outbox enqueue. The collector clears the active entry.
-            timeEntryRepository.stopEntry(currentEntry, userId)
+            timeEntryRepository.stopEntry(currentEntry, currentEntry.userId)
             syncTrigger.requestSync()
 
             _uiState.value = _uiState.value.copy(
@@ -1158,7 +1217,7 @@ class TrackingViewModel @Inject constructor(
      * Pause the active time entry - stops it via API but keeps notification in paused state
      * preserving the project/task/description for easy resume
      */
-    fun pauseTimeEntry(userId: String) {
+    fun pauseTimeEntry() {
         val currentEntry = _uiState.value.currentTimeEntry
         if (currentEntry == null) {
             Timber.w("No active time entry to pause")
@@ -1169,7 +1228,7 @@ class TrackingViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
             // Optimistic local stop + outbox enqueue; keep editing state for resume.
-            timeEntryRepository.stopEntry(currentEntry, userId)
+            timeEntryRepository.stopEntry(currentEntry, currentEntry.userId)
             syncTrigger.requestSync()
 
             _uiState.value = _uiState.value.copy(
@@ -1446,7 +1505,14 @@ class TrackingViewModel @Inject constructor(
      * Get grouped time entries by date
      */
     fun getGroupedTimeEntries(): Map<LocalDate, List<TimeEntry>> = _uiState.value.timeEntries
-        .groupBy { entry -> IsoTimes.localDate(entry.start) ?: LocalDate.now() }
+        .asSequence()
+        .filter(::isCompletedTimeEntry)
+        .flatMap { entry ->
+            timeEntryLocalDaySlices(entry, _uiState.value.zone, Instant.ofEpochMilli(clock.nowMs()))
+                .asSequence()
+                .map { it.date to entry }
+        }
+        .groupBy({ it.first }, { it.second })
         .toSortedMap(compareByDescending { it })
 
     override fun onCleared() {
@@ -1468,3 +1534,6 @@ class TrackingViewModel @Inject constructor(
         const val DELETE_UNDO_WINDOW_MS = 5_000L
     }
 }
+
+internal fun historyEntryStartDate(entry: TimeEntry, zone: ZoneId): LocalDate? =
+    parseTimeEntryInstant(entry.start)?.atZone(zone)?.toLocalDate()

@@ -18,6 +18,7 @@ import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.UpdateTimeEntryRequest
 import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.remote.ApiClientFactory
+import dev.tricked.solidverdant.data.remote.SolidtimeTimestamps
 import dev.tricked.solidverdant.util.PKCEUtil
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -230,7 +231,7 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
 
         // Use current time in format: Y-m-d\TH:i:s\Z (e.g., 2025-12-01T21:32:10Z)
         val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
-        val start = startIso?.takeIf { it.isNotBlank() }
+        val start = startIso?.takeIf { it.isNotBlank() }?.let(SolidtimeTimestamps::utc)
             ?: java.time.ZonedDateTime.now().withZoneSameInstant(java.time.ZoneOffset.UTC).format(formatter)
 
         val request = dev.tricked.solidverdant.data.model.StartTimeEntryRequest(
@@ -254,6 +255,7 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
      * Create a completed time entry with an explicit start and end (manual entry).
      * Does not affect any currently running entry.
      */
+    @Suppress("UnusedParameter")
     suspend fun createTimeEntry(
         organizationId: String,
         memberId: String,
@@ -271,36 +273,19 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
 
         val request = dev.tricked.solidverdant.data.model.StartTimeEntryRequest(
             memberId = memberId,
-            start = start,
-            end = end,
+            start = SolidtimeTimestamps.utc(start),
+            end = SolidtimeTimestamps.utc(end),
             description = description,
             projectId = projectId,
             taskId = taskId,
-            billable = false,
+            billable = billable,
+            tags = tags,
         )
 
         val created = api.startTimeEntry(organizationId, request).data!!
 
-        // Mirror the start-tracking flow: billable and tags are applied via a
-        // follow-up update rather than on create.
-        val final = if (tags.isNotEmpty() || billable) {
-            val updateRequest = UpdateTimeEntryRequest(
-                userId = userId,
-                start = created.start,
-                end = created.end,
-                description = created.description,
-                projectId = created.projectId,
-                taskId = created.taskId,
-                billable = billable,
-                tags = tags,
-            )
-            api.updateTimeEntry(organizationId, created.id, updateRequest).data!!
-        } else {
-            created
-        }
-
         Timber.d("Manual time entry created")
-        Result.success(final)
+        Result.success(created)
     } catch (e: Exception) {
         Timber.e(e, "Failed to create manual time entry")
         Result.failure(e)
@@ -325,7 +310,7 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
 
         // Use current time in format: Y-m-d\TH:i:s\Z (e.g., 2025-12-01T21:32:10Z)
         val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
-        val end = endIso?.takeIf { it.isNotBlank() }
+        val end = endIso?.takeIf { it.isNotBlank() }?.let(SolidtimeTimestamps::utc)
             ?: java.time.ZonedDateTime.now().withZoneSameInstant(java.time.ZoneOffset.UTC).format(formatter)
 
         // Stopping is a narrow command: only set the end timestamp. Re-sending the cached start
@@ -461,8 +446,8 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
 
         val request = UpdateTimeEntryRequest(
             userId = timeEntry.userId,
-            start = timeEntry.start,
-            end = timeEntry.end,
+            start = SolidtimeTimestamps.utc(timeEntry.start),
+            end = timeEntry.end?.let(SolidtimeTimestamps::utc),
             description = timeEntry.description,
             projectId = timeEntry.projectId,
             taskId = timeEntry.taskId,

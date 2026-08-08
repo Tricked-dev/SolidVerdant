@@ -25,6 +25,7 @@ import kotlinx.serialization.json.Json
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -95,6 +96,95 @@ class SyncWorkerTest {
         assertTrue(db.outboxDao().peekAll().isEmpty())
         // temp id row was rekeyed
         assertNull(db.timeEntryDao().getById("local-1"))
+    }
+
+    @Test fun fresh_duplicate_create_does_not_adopt_the_identical_source_entry() = runTest {
+        val source = TimeEntry(
+            id = "server-source",
+            userId = "u1",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "meeting",
+        )
+        val localCopy = source.copy(id = "local-copy")
+        db.timeEntryDao().upsert(source.toEntity(updatedAt = 1L, syncState = SyncState.SYNCED))
+        db.timeEntryDao().upsert(localCopy.toEntity(updatedAt = 2L, syncState = SyncState.PENDING))
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.CREATE,
+                organizationId = "org1",
+                timeEntryId = localCopy.id,
+                createdAtMs = 2L,
+                payloadJson = json.encodeToString(
+                    CreatePayload(
+                        memberId = "m1",
+                        userId = source.userId,
+                        start = source.start,
+                        end = source.end!!,
+                        description = source.description!!,
+                        projectId = null,
+                        taskId = null,
+                        billable = false,
+                        tagIds = emptyList(),
+                    ),
+                ),
+            ),
+        )
+        remote.entries = listOf(source)
+        remote.startResult = { it.copy(id = "server-copy") }
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+        assertEquals(1, remote.created.size)
+        assertEquals(SyncState.SYNCED, db.timeEntryDao().getById(source.id)?.syncState)
+        assertEquals(SyncState.SYNCED, db.timeEntryDao().getById("server-copy")?.syncState)
+        assertNull(db.timeEntryDao().getById(localCopy.id))
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+    }
+
+    @Test fun retried_duplicate_adopts_only_a_matching_entry_created_after_its_baseline() = runTest {
+        val source = TimeEntry(
+            id = "server-source",
+            userId = "u1",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "meeting",
+        )
+        val createdWhileResponseWasLost = source.copy(id = "server-copy")
+        val localCopy = source.copy(id = "local-copy")
+        db.timeEntryDao().upsert(source.toEntity(updatedAt = 1L, syncState = SyncState.SYNCED))
+        db.timeEntryDao().upsert(localCopy.toEntity(updatedAt = 2L, syncState = SyncState.PENDING))
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.CREATE,
+                organizationId = "org1",
+                timeEntryId = localCopy.id,
+                createdAtMs = 2L,
+                payloadJson = json.encodeToString(
+                    CreatePayload(
+                        memberId = "m1",
+                        userId = source.userId,
+                        start = source.start,
+                        end = source.end!!,
+                        description = source.description!!,
+                        projectId = null,
+                        taskId = null,
+                        billable = false,
+                        tagIds = emptyList(),
+                        recoveryBaselineEntryIds = listOf(source.id),
+                    ),
+                ),
+            ),
+        )
+        remote.entries = listOf(source, createdWhileResponseWasLost)
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+        assertTrue("Retry should adopt the committed response instead of posting twice", remote.created.isEmpty())
+        assertEquals(SyncState.SYNCED, db.timeEntryDao().getById(source.id)?.syncState)
+        assertEquals(SyncState.SYNCED, db.timeEntryDao().getById(createdWhileResponseWasLost.id)?.syncState)
+        assertNull(db.timeEntryDao().getById(localCopy.id))
+        assertTrue(db.outboxDao().peekAll().isEmpty())
     }
 
     @Test fun successful_drain_stamps_push_timestamp() = runTest {
@@ -185,7 +275,7 @@ class SyncWorkerTest {
     }
 
     @Test fun timeout_rate_limit_and_server_errors_remain_retryable() = runTest {
-        listOf(408, 429, 503).forEachIndexed { index, code ->
+        listOf(408 to 1, 429 to 0, 503 to 1).forEachIndexed { index, (code, expectedAttempts) ->
             remote.writeError = httpException(code, """{"message":"temporary"}""")
             val entryId = "server-$index"
             db.outboxDao().insert(
@@ -200,10 +290,86 @@ class SyncWorkerTest {
 
             assertEquals(ListenableWorker.Result.retry(), buildWorker().doWork())
             val stored = db.outboxDao().peekAll().single { it.timeEntryId == entryId }
-            assertEquals(1, stored.attemptCount)
+            assertEquals(expectedAttempts, stored.attemptCount)
             assertEquals(false, stored.deadLettered)
             db.outboxDao().delete(stored)
         }
+    }
+
+    @Test fun repeated_rate_limits_never_dead_letter_the_change() = runTest {
+        remote.writeError = httpException(429, """{"message":"Too Many Attempts."}""")
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.DELETE,
+                organizationId = "org1",
+                timeEntryId = "server-rate-limited",
+                createdAtMs = 1L,
+                payloadJson = "{}",
+            ),
+        )
+
+        repeat(SyncWorker.MAX_ATTEMPTS + 1) {
+            assertEquals(ListenableWorker.Result.retry(), buildWorker().doWork())
+        }
+
+        val stored = db.outboxDao().peekAll().single()
+        assertFalse(stored.deadLettered)
+        assertTrue(db.outboxDao().peekPending().contains(stored))
+    }
+
+    @Test fun repeated_rate_limits_during_conflict_preflight_never_dead_letter_the_change() = runTest {
+        val local = TimeEntry(
+            id = "server-rate-limited-preflight",
+            userId = "u1",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T09:00:00Z",
+            description = "edited locally",
+        )
+        db.timeEntryDao().upsert(local.toEntity(updatedAt = 1L, syncState = SyncState.PENDING))
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = local.organizationId,
+                timeEntryId = local.id,
+                createdAtMs = 1L,
+                payloadJson = json.encodeToString(
+                    UpdatePayload(
+                        userId = local.userId,
+                        start = local.start,
+                        end = local.end,
+                        description = local.description,
+                        projectId = null,
+                        taskId = null,
+                        billable = false,
+                        tagIds = emptyList(),
+                    ),
+                ),
+                baseSnapshotJson = json.encodeToString(
+                    ConflictSnapshot.of(
+                        start = local.start,
+                        end = local.end,
+                        description = "before",
+                        projectId = null,
+                        taskId = null,
+                        billable = false,
+                        tagIds = emptyList(),
+                    ),
+                ),
+            ),
+        )
+        remote.memberships = listOf(Membership("m1", "member", Organization("org1", "Org", "USD")))
+        remote.timeEntriesQueryValidator = {
+            httpException(429, """{"message":"Too Many Attempts."}""")
+        }
+
+        repeat(SyncWorker.MAX_ATTEMPTS + 1) {
+            assertEquals(ListenableWorker.Result.retry(), buildWorker().doWork())
+        }
+
+        val stored = db.outboxDao().peekAll().single()
+        assertFalse(stored.deadLettered)
+        assertTrue(db.outboxDao().peekPending().contains(stored))
     }
 
     private fun httpException(code: Int, body: String): HttpException = HttpException(

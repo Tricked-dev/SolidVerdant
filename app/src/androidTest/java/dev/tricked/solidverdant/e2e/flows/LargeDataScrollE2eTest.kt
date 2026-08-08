@@ -4,6 +4,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+@file:OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
+
 package dev.tricked.solidverdant.e2e.flows
 
 import androidx.compose.ui.test.hasScrollAction
@@ -14,6 +16,7 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.test.waitUntilAtLeastOneExists
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidTest
@@ -36,7 +39,7 @@ class LargeDataScrollE2eTest {
     fun largeDatasetScrollsAcrossPrimaryScreens() {
         // Calendar uses the device clock, so keep the stress window in the current week instead
         // of relying on the old fixed fixture date.
-        e2e.mockServer.presetStressWorld(newest = Instant.now())
+        e2e.requireMockBackend().presetStressWorld(newest = Instant.now())
         e2e.seedTemplates()
         e2e.launchApp()
 
@@ -75,17 +78,17 @@ class LargeDataScrollE2eTest {
 }
 
 private fun ComposeTestRule.waitForTag(tag: String) {
-    waitUntil(30_000) { onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+    waitUntilAtLeastOneExists(hasTestTag(tag), 30_000)
 }
 
 private fun ComposeTestRule.tapTag(tag: String) {
     val matcher = hasTestTag(tag) and isEnabled()
-    waitUntil(30_000) { onAllNodes(matcher, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+    waitUntilAtLeastOneExists(matcher, 30_000)
     onAllNodes(matcher, useUnmergedTree = true).onFirst().performClick()
 }
 
 private fun ComposeTestRule.waitForScrollable() {
-    waitUntil(30_000) { onAllNodes(hasScrollAction(), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+    waitUntilAtLeastOneExists(hasScrollAction(), 30_000)
 }
 
 private fun ComposeTestRule.swipeScrollable(times: Int) {

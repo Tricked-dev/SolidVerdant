@@ -9,8 +9,8 @@ package dev.tricked.solidverdant.ui.statistics
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.domain.time.parseTimeEntryInstant
 import java.time.DayOfWeek
-import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -241,8 +241,8 @@ object StatisticsAggregator {
      * [zone]) and splits the overlapping seconds across every local day it spans.
      *
      * Returns null when the entry cannot be resolved to a finite interval (unparseable start, or an
-     * active entry with neither duration nor end) or has no overlap with the range. The end is taken
-     * from [TimeEntry.duration] when present (start + duration), otherwise from [TimeEntry.end].
+     * active entry with neither duration nor end) or has no overlap with the range. An explicit end
+     * is authoritative; duration is only a fallback for older cached completed entries.
      * A zero-length entry whose instant falls inside the range yields a single 0-second day so it
      * still counts and attributes to the correct project/day. The returned per-day seconds sum to
      * the entry's total in-range contribution.
@@ -254,18 +254,10 @@ object StatisticsAggregator {
         rangeStart: LocalDate,
         rangeEnd: LocalDate,
     ): List<Pair<LocalDate, Long>>? {
-        val startInstant = try {
-            Instant.parse(e.start)
-        } catch (t: Throwable) {
-            return null
-        }
+        val startInstant = parseTimeEntryInstant(e.start) ?: return null
         val endInstant = when {
-            e.duration != null -> startInstant.plusSeconds(e.duration.toLong().coerceAtLeast(0))
-            e.end != null -> try {
-                Instant.parse(e.end)
-            } catch (t: Throwable) {
-                return null
-            }
+            e.end != null -> parseTimeEntryInstant(e.end) ?: return null
+            e.duration != null && e.duration > 0 -> startInstant.plusSeconds(e.duration.toLong())
             else -> return null
         }
 

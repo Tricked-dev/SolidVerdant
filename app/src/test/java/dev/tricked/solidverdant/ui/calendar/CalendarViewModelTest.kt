@@ -117,6 +117,40 @@ class CalendarViewModelTest {
     }
 
     @Test
+    fun `multi-day entry is clipped into every local day bucket`() = runTest {
+        val model = vm(
+            FakeReader(
+                listOf(
+                    TimeEntry(
+                        id = "multi-day",
+                        userId = "u",
+                        start = "2026-07-06T23:00:00Z",
+                        end = "2026-07-08T01:00:00Z",
+                        duration = null,
+                        organizationId = "org1",
+                    ),
+                ),
+            ),
+            temporalPolicyProvider = policyProvider(
+                TemporalPolicy(java.time.ZoneOffset.UTC, java.time.DayOfWeek.MONDAY),
+            ),
+        )
+
+        model.setOrganization("org1")
+        val loaded = model.uiState.first { state ->
+            listOf(6, 7, 8).all { day -> LocalDate.of(2026, 7, day) in state.bucketsByDate }
+        }
+
+        assertEquals(3_600L, loaded.bucketsByDate.getValue(LocalDate.of(2026, 7, 6)).totalSeconds)
+        assertEquals(86_400L, loaded.bucketsByDate.getValue(LocalDate.of(2026, 7, 7)).totalSeconds)
+        assertEquals(3_600L, loaded.bucketsByDate.getValue(LocalDate.of(2026, 7, 8)).totalSeconds)
+        assertEquals(
+            setOf("multi-day"),
+            loaded.bucketsByDate.getValue(LocalDate.of(2026, 7, 7)).entries.map { it.id }.toSet(),
+        )
+    }
+
+    @Test
     fun monthNavigationMovesVisibleMonth() = runTest {
         val model = vm(FakeReader(emptyList()))
         model.setOrganization("org1")

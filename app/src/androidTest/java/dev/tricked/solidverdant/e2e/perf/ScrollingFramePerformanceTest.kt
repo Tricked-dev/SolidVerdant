@@ -39,7 +39,7 @@ class ScrollingFramePerformanceTest {
 
     @Test
     fun largeHistoryAndTabSwitchesStayWithinFrameBudget() {
-        e2e.mockServer.presetStressWorld()
+        e2e.requireMockBackend().presetStressWorld()
         e2e.seedTemplates()
         val launchStartMs = android.os.SystemClock.elapsedRealtime()
         val scenario = e2e.launchApp()

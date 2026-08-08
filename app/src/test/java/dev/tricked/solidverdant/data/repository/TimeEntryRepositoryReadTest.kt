@@ -19,10 +19,13 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.time.YearMonth
+import java.time.ZoneId
 
 @RunWith(RobolectricTestRunner::class)
 class TimeEntryRepositoryReadTest {
@@ -77,5 +80,27 @@ class TimeEntryRepositoryReadTest {
         clock.t = 1000L
         repo.refreshAll("org1", "member1")
         assertEquals("local", repo.observeTimeEntries("org1").first().first { it.id == "a" }.description)
+    }
+
+    @Test fun month_load_keeps_lower_start_unbounded_for_carry_in_entries() = runTest {
+        repo.loadMonth("org1", "member1", YearMonth.of(2026, 7), ZoneId.of("Europe/Amsterdam"))
+
+        val query = requireNotNull(remote.lastTimeEntriesQuery)
+        assertNull(query.start)
+        assertEquals("2026-07-31T22:00:00Z", query.end)
+    }
+
+    @Test fun tombstoning_accepts_server_id_sets_larger_than_sqlite_bind_limit() = runTest {
+        val missing = srv("missing")
+        db.timeEntryDao().upsert(missing.toEntity(updatedAt = 1L, syncState = SyncState.SYNCED))
+
+        db.timeEntryDao().tombstoneMissing(
+            orgId = "org1",
+            rangeStart = "2026-01-01T00:00:00Z",
+            rangeEnd = "2026-01-02T00:00:00Z",
+            serverIds = (1..1_200).map { "server-$it" },
+        )
+
+        assertNull(db.timeEntryDao().getById(missing.id))
     }
 }

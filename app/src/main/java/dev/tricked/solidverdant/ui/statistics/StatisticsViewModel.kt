@@ -189,7 +189,7 @@ class StatisticsViewModel @Inject constructor(
     ): Flow<RemoteEntries> = flow {
         emit(RemoteEntries(isLoading = true))
         val entries = mutableListOf<TimeEntry>()
-        val start = range.start.atStartOfDay(zone).toInstant().toString()
+        val start = statisticsFetchStart(range, zone)
         val end = range.endInclusive.plusDays(1).atStartOfDay(zone).toInstant().toString()
         val pageSize = REMOTE_PAGE_SIZE
         var offset = 0
@@ -477,6 +477,13 @@ class StatisticsViewModel @Inject constructor(
         return "solidverdant-timeentries-${start.format(fmt)}-${end.format(fmt)}"
     }
 }
+
+/**
+ * Solidtime's `start` query parameter filters by the entry's start timestamp, not interval
+ * intersection. This seam is kept explicit so a range fetch cannot silently drop carry-in entries.
+ */
+@Suppress("UNUSED_PARAMETER")
+internal fun statisticsFetchStart(range: ClosedRange<LocalDate>, zone: ZoneId): String? = null
 
 /**
  * Whether another page must be fetched after receiving one of [lastPageSize] entries.

@@ -10,6 +10,9 @@ captures
 solidtime-desktop
 da
 .kotlin
+.devenv
+.android
+!.envrc
 my-release-key.jks
 convert_svg_path.py
 LOGO.svg

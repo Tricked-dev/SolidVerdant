@@ -15,6 +15,9 @@ import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.domain.time.TemporalPolicy
 import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
+import dev.tricked.solidverdant.domain.time.clipTimeEntryToLocalDay
+import dev.tricked.solidverdant.domain.time.isCompletedTimeEntry
+import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.reminder.currentOrganizationIdOrNull
 import dev.tricked.solidverdant.sync.SyncScheduler
 import dev.tricked.solidverdant.util.Clock
@@ -117,24 +120,10 @@ class ReviewDayViewModel @Inject constructor(
     ): ReviewDayUiState {
         val nowInstant = Instant.ofEpochMilli(clock.nowMs())
         val today = nowInstant.atZone(zone).toLocalDate()
-        val nowSec = nowInstant.epochSecond
+        val dayFacts = buildDayFacts(entries, today, zone, nowInstant)
 
-        val todays = entries.filter { parseInstant(it.start)?.atZone(zone)?.toLocalDate() == today }
-
-        var total = 0L
-        var billable = 0L
-        val intervals = ArrayList<LongRange>(todays.size)
-        todays.forEach { e ->
-            val startSec = parseInstant(e.start)?.epochSecond ?: return@forEach
-            val endSec = e.end?.let { parseInstant(it)?.epochSecond } ?: nowSec
-            val duration = (endSec - startSec).coerceAtLeast(0L)
-            total += duration
-            if (e.billable) billable += duration
-            if (endSec >= startSec) intervals += startSec..endSec
-        }
-
-        val runningEntry = entries.firstOrNull { it.end == null }
-        val uncategorized = todays.filter { it.end != null && it.projectId.isNullOrBlank() }
+        val runningEntry = entries.firstOrNull(::isRunningTimeEntry)
+        val uncategorized = dayFacts.uncategorized
         val failed = syncOps.filter { it.status == TimeEntryRepository.EntrySyncStatus.FAILED }
             .distinctBy { it.entryId }
 
@@ -179,10 +168,10 @@ class ReviewDayViewModel @Inject constructor(
             hasOrganization = true,
             zone = zone,
             dateEpochDay = today.toEpochDay(),
-            totalTrackedSeconds = total,
-            billableSeconds = billable,
-            entryCount = todays.size,
-            largestGapSeconds = largestGap(intervals),
+            totalTrackedSeconds = dayFacts.totalSeconds,
+            billableSeconds = dayFacts.billableSeconds,
+            entryCount = dayFacts.entries.size,
+            largestGapSeconds = largestGap(dayFacts.intervals),
             uncategorizedCount = uncategorized.size,
             failedSyncCount = failed.size,
             items = items,
@@ -307,6 +296,31 @@ class ReviewDayViewModel @Inject constructor(
     companion object {
         private val ISO: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
+
+        internal data class DayFacts(
+            val entries: List<TimeEntry>,
+            val totalSeconds: Long,
+            val billableSeconds: Long,
+            val intervals: List<LongRange>,
+            val uncategorized: List<TimeEntry>,
+        )
+
+        /** Facts for one local day, clipped at its actual timezone-aware midnight boundaries. */
+        internal fun buildDayFacts(entries: List<TimeEntry>, day: LocalDate, zone: ZoneId, now: Instant): DayFacts {
+            val slices = entries.mapNotNull { entry ->
+                clipTimeEntryToLocalDay(entry, day, zone, now)?.let { slice -> entry to slice }
+            }
+            return DayFacts(
+                entries = slices.map { it.first },
+                totalSeconds = slices.sumOf { it.second.seconds },
+                billableSeconds = slices.sumOf { (entry, slice) ->
+                    if (entry.billable) slice.seconds else 0L
+                },
+                intervals = slices.map { (_, slice) -> slice.start.epochSecond..slice.endExclusive.epochSecond },
+                uncategorized = slices.map { it.first }
+                    .filter { isCompletedTimeEntry(it) && it.projectId.isNullOrBlank() },
+            )
+        }
 
         /**
          * Largest untracked gap (seconds) between merged intervals within the worked span — the

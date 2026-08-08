@@ -35,6 +35,12 @@ data class CreatePayload(
     val taskId: String?,
     val billable: Boolean,
     val tagIds: List<String>,
+    /**
+     * IDs of server entries that already matched this create before its first POST. A retry may
+     * adopt only a matching ID absent from this baseline, so duplicating an existing entry never
+     * mistakes the source entry for a response-lost copy.
+     */
+    val recoveryBaselineEntryIds: List<String>? = null,
 )
 
 @Serializable

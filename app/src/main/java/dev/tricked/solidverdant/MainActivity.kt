@@ -329,20 +329,8 @@ fun SolidVerdantApp(
                                 }
                             }
                         },
-                        onStopTracking = {
-                            authUiState.currentMembership?.let { membership ->
-                                authUiState.user?.let { user ->
-                                    trackingViewModel.stopTimeEntry(userId = user.id)
-                                }
-                            }
-                        },
-                        onPauseTracking = {
-                            authUiState.currentMembership?.let { membership ->
-                                authUiState.user?.let { user ->
-                                    trackingViewModel.pauseTimeEntry(userId = user.id)
-                                }
-                            }
-                        },
+                        onStopTracking = trackingViewModel::stopTimeEntry,
+                        onPauseTracking = trackingViewModel::pauseTimeEntry,
                         onResumeTracking = {
                             authUiState.currentMembership?.let { membership ->
                                 authUiState.user?.let { user ->

@@ -13,6 +13,7 @@ package dev.tricked.solidverdant.ui.tracking
  * These tags carry no user-facing text and add no visible chrome, so they are inert in production.
  */
 object TrackingTestTags {
+    const val PRIMARY_LIST = "track_primary_list"
     const val HISTORY_LIST = "track_history_list"
     const val ENTRY_ROW = "track_entry_row"
     const val START_BUTTON = "track_start_button"
@@ -25,6 +26,14 @@ object TrackingTestTags {
     const val CONTINUE_BUTTON = "track_continue_last"
     const val SHEET_DESCRIPTION_FIELD = "track_sheet_description"
     const val SHEET_SAVE_BUTTON = "track_sheet_save"
+    const val SHEET_DUPLICATE_BUTTON = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.DUPLICATE_BUTTON
     const val ELAPSED_TIMER = "track_elapsed_timer"
     const val SYNC_DETAILS_BUTTON = "track_sync_details"
+    const val FILTER_OPEN_BUTTON = "track_filter_open"
+    const val FILTER_SEARCH_FIELD = "track_filter_search"
+    const val FILTER_CLOSE_BUTTON = "track_filter_close"
+    const val SHEET_START_DATE = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.START_DATE
+    const val SHEET_END_DATE = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.END_DATE
+
+    fun entryTimeRange(entryId: String): String = "track_entry_time_range_$entryId"
 }
