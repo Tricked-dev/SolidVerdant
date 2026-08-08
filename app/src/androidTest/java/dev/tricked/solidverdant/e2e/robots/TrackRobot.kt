@@ -196,7 +196,7 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
             TestTags.TRACK_SHEET_CANCEL_BUTTON,
         ).forEach { tag ->
             waitUntilSheetTagExists(tag)
-            firstSheetNodeWithTag(tag).assertIsDisplayed()
+            firstSheetNodeWithTag(tag).performScrollTo().assertIsDisplayed()
         }
     }
 

@@ -76,7 +76,7 @@ Use the pinned development environment:
 devenv tasks run android:gate
 ```
 
-Devenv pins JDK 21 plus SDK platforms 36/37 and build-tools 35, so the JVM test and Roborazzi
+Devenv pins JDK 21 plus SDK platforms 36/37 and build-tools 36, so the JVM test and Roborazzi
 screenshot suites run on any machine with Devenv (on NixOS, point
 `android.aapt2FromMavenOverride` in `~/.gradle/gradle.properties` at the nix SDK's aapt2).
 

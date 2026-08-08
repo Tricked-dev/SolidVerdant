@@ -291,6 +291,9 @@ fun TrackingScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var longTimerSnoozedUntil by remember { mutableStateOf(0L) }
     val context = LocalContext.current
+    val templatesSavedMessage = stringResource(R.string.templates_saved)
+    val entryDeletedMessage = stringResource(R.string.entry_deleted)
+    val undoLabel = stringResource(R.string.undo)
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val wideHistoryListState = rememberLazyListState()
@@ -302,7 +305,7 @@ fun TrackingScreen(
     val templateState by templateViewModel.uiState.collectAsState()
     val onSaveTemplateFromForm: (TemplateDraft) -> Unit = { draft ->
         templateViewModel.saveNewTemplate(draft)
-        scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.templates_saved)) }
+        scope.launch { snackbarHostState.showSnackbar(templatesSavedMessage) }
     }
 
     LaunchedEffect(editActiveEntryRequested, uiState.currentTimeEntry) {
@@ -329,8 +332,8 @@ fun TrackingScreen(
     LaunchedEffect(deletedEntry) {
         val entry = deletedEntry ?: return@LaunchedEffect
         val result = snackbarHostState.showSnackbar(
-            message = context.getString(R.string.entry_deleted),
-            actionLabel = context.getString(R.string.undo),
+            message = entryDeletedMessage,
+            actionLabel = undoLabel,
             withDismissAction = true,
         )
         if (result == SnackbarResult.ActionPerformed) onUndoDelete(entry)

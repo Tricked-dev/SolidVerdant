@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -62,7 +63,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
-import java.util.Locale
 
 @Composable
 fun MonthCalendarView(
@@ -76,6 +76,7 @@ fun MonthCalendarView(
     modifier: Modifier = Modifier,
 ) {
     var monthExpanded by remember { mutableStateOf(true) }
+    val locale = LocalLocale.current.platformLocale
     val timelineInitialScroll = with(LocalDensity.current) { (CalendarHourHeight * INITIAL_SCROLL_HOURS).roundToPx() }
     val timelineScrollState = rememberScrollState(initial = timelineInitialScroll)
     Column(modifier = modifier.fillMaxWidth().padding(Dimens.Space12)) {
@@ -120,7 +121,7 @@ fun MonthCalendarView(
                         )
                     }
                     Text(
-                        text = "${state.visibleMonth.month.getDisplayName(TextStyle.FULL, Locale.getDefault())} ${state.visibleMonth.year}",
+                        text = "${state.visibleMonth.month.getDisplayName(TextStyle.FULL, locale)} ${state.visibleMonth.year}",
                         style = MaterialTheme.typography.titleMedium,
                     )
                     IconButton(onClick = onNextMonth) {

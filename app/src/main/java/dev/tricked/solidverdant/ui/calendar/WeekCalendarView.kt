@@ -41,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -128,7 +129,7 @@ private fun WeekCalendarContent(
     val zone = state.zone
     val today = remember(zone) { LocalDate.now(zone) }
     val now = remember { Instant.now() }
-    val locale = Locale.getDefault()
+    val locale = LocalLocale.current.platformLocale
 
     // Precompute the per-day layouts once per data change rather than inside the render loop.
     val timedByDay = remember(state.overlayEvents, days) {

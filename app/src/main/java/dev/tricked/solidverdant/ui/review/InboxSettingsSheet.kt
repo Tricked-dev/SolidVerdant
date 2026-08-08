@@ -43,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -51,7 +52,6 @@ import dev.tricked.solidverdant.domain.inbox.InboxCheckConfig
 import dev.tricked.solidverdant.domain.inbox.InboxSettingsDataStore.InboxCheck
 import java.time.DayOfWeek
 import java.time.format.TextStyle
-import java.util.Locale
 
 /**
  * Bottom sheet for the local Time Inbox configuration (gap analysis #17): working days/hours, the
@@ -63,6 +63,7 @@ import java.util.Locale
 fun InboxSettingsSheet(state: InboxUiState, viewModel: InboxViewModel, onDismiss: () -> Unit) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val config = state.config
+    val locale = LocalLocale.current.platformLocale
     var editingWindow by remember { mutableStateOf<WorkField?>(null) }
 
     ModalBottomSheet(
@@ -107,7 +108,7 @@ fun InboxSettingsSheet(state: InboxUiState, viewModel: InboxViewModel, onDismiss
                             val updated = if (selected) config.workDays - day else config.workDays + day
                             viewModel.setWorkDays(updated)
                         },
-                        label = { Text(day.getDisplayName(TextStyle.SHORT, Locale.getDefault())) },
+                        label = { Text(day.getDisplayName(TextStyle.SHORT, locale)) },
                     )
                 }
             }

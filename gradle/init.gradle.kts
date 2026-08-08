@@ -8,10 +8,10 @@
 // Spotless itself is not gradle configuration cache compliant.
 // Note that the init script needs to be run with the configuration cache turned off.
 
-val ktlintVersion = "0.44.0"
+val ktlintVersion = "1.5.0"
 
 initscript {
-    val spotlessVersion = "6.25.0"
+    val spotlessVersion = "8.9.0"
 
     repositories {
         mavenCentral()
@@ -29,7 +29,7 @@ rootProject {
             kotlin {
                 target("**/*.kt")
                 targetExclude("**/build/**/*.kt")
-                ktlint(ktlintVersion).userData(mapOf("android" to "true"))
+                ktlint(ktlintVersion).editorConfigOverride(mapOf("android" to "true"))
                 licenseHeaderFile(rootProject.file("spotless/copyright.kt"))
             }
             format("kts") {

@@ -47,7 +47,7 @@ in
   android = {
     enable = true;
     platforms.version = [ "36" "37" ];
-    buildTools.version = [ "35.0.0" ];
+    buildTools.version = [ "36.0.0" ];
     systemImageTypes = [ "google_apis_playstore" ];
     abis = [ "x86_64" ];
     emulator.enable = true;

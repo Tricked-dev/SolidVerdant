@@ -8,7 +8,6 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
     alias(libs.plugins.compose.compiler)
@@ -25,6 +24,7 @@ val appVersionCode: Int = appVersionName.split(".").let { (major, minor, patch) 
 android {
     namespace = "dev.tricked.solidverdant"
     compileSdk = libs.versions.compileSdk.get().toInt()
+    buildToolsVersion = "36.0.0"
 
     signingConfigs {
         create("release") {
@@ -51,7 +51,7 @@ android {
         getByName("debug") {
             applicationIdSuffix = ".dev"
             isMinifyEnabled = false
-            proguardFiles(getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
 
             // Override package name for debug builds
             resValue("string", "app_package_name", "dev.tricked.solidverdant.dev")
@@ -60,7 +60,7 @@ android {
         getByName("release") {
             isMinifyEnabled = true
             isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("release")
 
             // Override package name for release builds
@@ -121,6 +121,7 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        resValues = true
     }
 
     // Robolectric needs the merged Android resources/assets/manifest on the JVM classpath so it
@@ -192,7 +193,7 @@ tasks.named("check").configure {
     )
 }
 
-// AGP 8.13 can start test-source lint analysis while Hilt is still replacing its generated
+// AGP 9.3 can start test-source lint analysis while Hilt is still replacing its generated
 // component sources. That race intermittently leaves lint resolving a just-removed Java file or
 // half-built FIR superclass graph. The repository gate runs lint and Android-test assembly in one
 // invocation, so make the two test lint analyzers wait for the final Hilt Android-test sources.
