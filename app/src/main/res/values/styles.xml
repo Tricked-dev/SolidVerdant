@@ -20,7 +20,7 @@
         <item name="android:fitsSystemWindows">true</item>
     </style>
 
-    <style name="Base.AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
+    <style name="Base.AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
         <!-- Customize your theme here. -->
         <item name="android:windowBackground">@color/colorPrimaryDark</item>
         <item name="android:colorBackground">@color/colorPrimaryDark</item>
@@ -28,11 +28,9 @@
         <item name="android:navigationBarColor">@color/colorPrimaryDark</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
-        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
-        <item name="colorAccent">@color/colorAccent</item>
-        <!-- For Android sdk versions 26+. -->
-        <item name="android:fontFamily">@font/opensans_font</item>
-        <!-- Target Android sdk versions < 26 and > 14. -->
-        <item name="fontFamily">@font/opensans_font</item>
+        <item name="android:colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="android:colorAccent">@color/colorAccent</item>
+        <!-- Use the platform sans-serif family; Compose Material typography uses the same default. -->
+        <item name="android:fontFamily">sans-serif</item>
     </style>
 </resources>

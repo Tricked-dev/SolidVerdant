@@ -29,6 +29,8 @@ import dev.tricked.solidverdant.data.local.db.AppDatabase
 import dev.tricked.solidverdant.data.local.db.OutboxEntity
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
 import dev.tricked.solidverdant.data.local.db.TemplateEntity
+import dev.tricked.solidverdant.data.local.db.toModel
+import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.RemoteDataSource
 import dev.tricked.solidverdant.e2e.di.TestClock
@@ -221,6 +223,14 @@ class E2eRule(private val test: Any) : TestRule {
         val wm = WorkManager.getInstance(context)
         val infos = wm.getWorkInfosForUniqueWork(SyncScheduler.UNIQUE_NAME).get()
         infos.forEach { info -> testDriver?.setAllConstraintsMet(info.id) }
+    }
+
+    fun pendingOutboxCount(): Int = runBlocking { entryPoint.database().outboxDao().peekPending().size }
+
+    fun localEntry(handle: E2eFixtureHandle): TimeEntry? = runBlocking {
+        val id = handle.serverId ?: return@runBlocking null
+        val dao = entryPoint.database().timeEntryDao()
+        dao.getById(id)?.let { entity -> entity.toModel(dao.tagIdsFor(entity.id).map(::Tag)) }
     }
 
     /** Whether the optimistic local STOP has committed before the worker is allowed to run. */

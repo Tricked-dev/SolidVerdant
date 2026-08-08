@@ -43,8 +43,6 @@ android {
         versionCode = appVersionCode
         versionName = appVersionName
 
-        // Add package name as string resource for release
-        resValue("string", "app_package_name", "dev.tricked.solidverdant")
     }
 
     buildTypes {
@@ -53,8 +51,6 @@ android {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
 
-            // Override package name for debug builds
-            resValue("string", "app_package_name", "dev.tricked.solidverdant.dev")
         }
 
         getByName("release") {
@@ -63,8 +59,6 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("release")
 
-            // Override package name for release builds
-            resValue("string", "app_package_name", "dev.tricked.solidverdant")
         }
 
         // Release-signed, separately-installable test build for quick device testing of a
@@ -80,7 +74,6 @@ android {
             isShrinkResources = false
             signingConfig = signingConfigs.getByName("release")
 
-            resValue("string", "app_package_name", "dev.tricked.solidverdant.test")
         }
 
         // Release-representative build for performance measurement (perf/run_perf.sh): full R8 +
@@ -94,7 +87,6 @@ android {
             isShrinkResources = true
             signingConfig = signingConfigs.getByName("debug")
 
-            resValue("string", "app_package_name", "dev.tricked.solidverdant.bench")
         }
 
         // Instrumentable release-type build for frame-timing measurement. Release Compose (no
@@ -110,7 +102,6 @@ android {
             isShrinkResources = false
             signingConfig = signingConfigs.getByName("debug")
 
-            resValue("string", "app_package_name", "dev.tricked.solidverdant.perftest")
         }
     }
 
@@ -121,7 +112,6 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
-        resValues = true
     }
 
     // Robolectric needs the merged Android resources/assets/manifest on the JVM classpath so it
@@ -267,11 +257,8 @@ dependencies {
     implementation(libs.androidx.compose.material.iconsExtended)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.navigation.compose)
-    implementation(libs.androidx.compose.material3.windowSizeClass)
     implementation(libs.androidx.lifecycle.runtimeCompose)
     implementation(libs.androidx.lifecycle.viewModelCompose)
-    implementation(libs.accompanist.appcompat.theme)
-    implementation(libs.accompanist.swiperefresh)
 
     debugImplementation(composeBom)
     debugImplementation(libs.androidx.compose.ui.tooling.core)

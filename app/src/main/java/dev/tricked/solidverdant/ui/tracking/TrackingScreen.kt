@@ -116,7 +116,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
@@ -192,7 +192,7 @@ import dev.tricked.solidverdant.ui.templates.TemplateDraft
 import dev.tricked.solidverdant.ui.templates.TemplateResolver
 import dev.tricked.solidverdant.ui.templates.templateDisplayLabel
 import androidx.compose.runtime.collectAsState
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import dev.tricked.solidverdant.data.local.AppThemeMode
 import dev.tricked.solidverdant.ui.components.ProjectTaskDropdown as SharedProjectTaskDropdown
 import dev.tricked.solidverdant.ui.components.EntryDateFieldButton
@@ -2075,7 +2075,7 @@ private fun DescriptionFieldWithSuggestions(
             placeholder = { Text(stringResource(R.string.what_are_you_working_on)) },
             modifier = Modifier
                 .fillMaxWidth()
-                .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = enabled)
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable, enabled = enabled)
                 .onFocusChanged {
                     if (it.isFocused && enabled) expanded = true
                 },
@@ -2620,7 +2620,7 @@ private fun CompactTimeEntryRow(
                             .clip(CircleShape)
                             .background(projectColor ?: MaterialTheme.colorScheme.outline)
                     )
-                    val projectTaskText = remember(project?.name, task?.name) {
+                    val projectTaskText = remember(project.name, task?.name) {
                         buildString {
                             append(project.name)
                             task?.let { append(" · ${it.name}") }

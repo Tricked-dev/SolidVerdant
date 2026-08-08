@@ -71,12 +71,9 @@ private class HttpTokenRefresher(private val json: Json, private val client: OkH
 
         return try {
             client.newCall(request).execute().use { response ->
-                val body = response.body?.string()
+                val body = response.body.string()
                 when {
-                    response.isSuccessful ->
-                        body?.let { json.decodeFromString<TokenResponse>(it) }
-                            ?.let(RefreshResult::Success)
-                            ?: RefreshResult.Transient
+                    response.isSuccessful -> RefreshResult.Success(json.decodeFromString(body))
                     // 401, or 400 invalid_grant/invalid_client, means the refresh token is no longer
                     // usable: force logout. Other codes (e.g. 429, 5xx) are transient.
                     response.code == HTTP_UNAUTHORIZED || isDefinitiveRejection(response.code, body) -> {

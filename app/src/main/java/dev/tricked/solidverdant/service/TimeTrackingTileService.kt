@@ -737,6 +737,7 @@ class TimeTrackingTileService : TileService() {
         return Pair(projectName, taskName)
     }
 
+    @Suppress("DEPRECATION")
     @SuppressLint("StartActivityAndCollapseDeprecated")
     private fun showProjectSelection() {
         val intent = Intent(this, ProjectSelectionActivity::class.java)

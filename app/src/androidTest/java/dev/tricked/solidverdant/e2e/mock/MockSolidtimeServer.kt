@@ -36,6 +36,7 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import java.time.Instant
 import java.util.Collections
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -77,6 +78,9 @@ class MockSolidtimeServer {
 
     @Volatile
     var activeEntry: TimeEntry? = null
+
+    private var nextTimeEntriesResponseGate: CountDownLatch? = null
+    private val responseGate = ThreadLocal<CountDownLatch?>()
 
     /** Every request the app made, in order. Read from tests for assertions. */
     val recordedCalls: MutableList<RecordedCall> = Collections.synchronizedList(mutableListOf())
@@ -189,17 +193,32 @@ class MockSolidtimeServer {
 
     fun wasRequested(method: String, pathContains: String): Boolean = callsMatching(method, pathContains).isNotEmpty()
 
+    /** Hold one history response until the test has completed a concurrent local edit and sync. */
+    fun delayNextTimeEntriesResponseUntilReleased(): CountDownLatch = CountDownLatch(1).also { gate ->
+        synchronized(lock) { nextTimeEntriesResponseGate = gate }
+    }
+
     // ---- Dispatcher ---------------------------------------------------------------------------
 
     private val dispatcher = object : Dispatcher() {
-        override fun dispatch(request: RecordedRequest): MockResponse = synchronized(lock) {
-            val method = request.method ?: "GET"
-            val fullPath = request.path ?: "/"
-            val path = fullPath.substringBefore("?")
-            val body = runCatching { request.body.readUtf8() }.getOrDefault("")
-            recordedCalls += RecordedCall(method, fullPath, body)
+        override fun dispatch(request: RecordedRequest): MockResponse {
+            val response = synchronized(lock) {
+                val method = request.method ?: "GET"
+                val fullPath = request.path ?: "/"
+                val path = fullPath.substringBefore("?")
+                val body = runCatching { request.body.readUtf8() }.getOrDefault("")
+                recordedCalls += RecordedCall(method, fullPath, body)
 
-            route(method, path, fullPath, body)
+                route(method, path, fullPath, body)
+            }
+            responseGate.get()?.let { gate ->
+                try {
+                    gate.await()
+                } finally {
+                    responseGate.remove()
+                }
+            }
+            return response
         }
     }
 
@@ -268,7 +287,7 @@ class MockSolidtimeServer {
         val offset = params["offset"]?.toIntOrNull() ?: 0
         val sorted = timeEntries.sortedByDescending { it.start }
         val page = sorted.drop(offset).take(limit)
-        return ok(
+        val response = ok(
             json.encodeToString(
                 TimeEntriesResponse(
                     data = page,
@@ -281,6 +300,8 @@ class MockSolidtimeServer {
                 ),
             ),
         )
+        responseGate.set(nextTimeEntriesResponseGate.also { nextTimeEntriesResponseGate = null })
+        return response
     }
 
     private fun handleCreateOrStart(orgId: String, body: String): MockResponse {

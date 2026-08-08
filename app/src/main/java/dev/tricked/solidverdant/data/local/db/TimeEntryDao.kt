@@ -107,6 +107,7 @@ interface TimeEntryDao {
         tagIdsByEntry: Map<String, List<String>>,
         baseSnapshotsByEntry: Map<String, String> = emptyMap(),
         serverJsonByEntry: Map<String, String> = emptyMap(),
+        pullStartedAtMs: Long? = null,
     ) {
         entries.forEach { entity ->
             val local = getById(entity.id)
@@ -118,6 +119,17 @@ interface TimeEntryDao {
                 if (!sameServerSnapshot(local.conflictServerJson, entity, tagIds)) {
                     upsert(local.copy(conflictServerJson = serverJson))
                 }
+                return@forEach
+            }
+            if (
+                local != null &&
+                local.syncState == SyncState.SYNCED &&
+                !local.pendingDelete &&
+                pullStartedAtMs != null &&
+                local.updatedAt >= pullStartedAtMs
+            ) {
+                // This response was already in flight when the local row was last written.
+                // Keep the newer Room value; a later pull will observe the server copy.
                 return@forEach
             }
             if (local != null && (local.syncState == SyncState.PENDING || local.pendingDelete)) {

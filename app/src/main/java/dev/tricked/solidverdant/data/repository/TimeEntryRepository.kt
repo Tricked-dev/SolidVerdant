@@ -120,6 +120,7 @@ class TimeEntryRepository @Inject constructor(
 
     @Suppress("LoopWithTooManyJumpStatements")
     override suspend fun loadMonth(organizationId: String, memberId: String, month: YearMonth, zone: ZoneId) {
+        val pullStartedAtMs = clock.nowMs()
         val pageSize = MONTH_PAGE_SIZE
         var offset = 0
         val queryEnd = month.plusMonths(1).atDay(1).atStartOfDay(zone).toInstant().toString()
@@ -151,11 +152,12 @@ class TimeEntryRepository @Inject constructor(
             applyServerEntries(
                 response.data.map { it.toEntity(updatedAt = now, syncState = SyncState.SYNCED) },
                 response.data.associate { entry -> entry.id to entry.tags.map { it.id } },
+                pullStartedAtMs = pullStartedAtMs,
             )
             allServerIds += response.data.map { it.id }
             response.data.forEach { entry ->
-                if (minStart == null || entry.start < minStart!!) minStart = entry.start
-                if (maxStart == null || entry.start > maxStart!!) maxStart = entry.start
+                if (minStart == null || entry.start < minStart.orEmpty()) minStart = entry.start
+                if (maxStart == null || entry.start > maxStart.orEmpty()) maxStart = entry.start
             }
             if (response.data.isEmpty()) break
             offset += response.data.size
@@ -213,6 +215,7 @@ class TimeEntryRepository @Inject constructor(
 
     /** Pull the full first frame for an org and upsert into Room (last-write-wins). */
     suspend fun refreshAll(organizationId: String, memberId: String): Result<Unit> = try {
+        val pullStartedAtMs = clock.nowMs()
         val projects = remote.getProjects(organizationId).getOrThrow()
         val clients = remote.getClients(organizationId).getOrThrow()
         val tasks = remote.getTasks(organizationId).getOrThrow()
@@ -234,12 +237,13 @@ class TimeEntryRepository @Inject constructor(
         }
 
         val now = clock.nowMs()
-        // Single transaction; the pending-edit/soft-delete guard lives in applyServerEntries.
-        // (The previous `updatedAt > now` guard was dead code: updatedAt is always stamped in
-        // the past, so it never held and pending edits/deletes were silently overwritten.)
+        // Single transaction; the pending-edit/soft-delete and in-flight-pull guards live in
+        // applyServerEntries. The pull-start timestamp prevents a response that was already in
+        // flight from overwriting a newer successful local sync.
         applyServerEntries(
             entries.map { it.toEntity(updatedAt = now, syncState = SyncState.SYNCED) },
             entries.associate { entry -> entry.id to entry.tags.map { it.id } },
+            pullStartedAtMs = pullStartedAtMs,
         )
         // SV-020: propagate server-side deletions. This page's sort order isn't guaranteed, so
         // scope the tombstone strictly to the observed [minStart, maxStart] of what actually came
@@ -667,7 +671,6 @@ class TimeEntryRepository @Inject constructor(
             (!conflict.serverDeleted || memberId != null) &&
             (conflict.serverDeleted || conflict.server != null)
         if (!canResolve) return false
-        val local = current!!
         val serverBaseSnapshot = conflict.server?.let { server ->
             json.encodeToString(
                 ConflictSnapshot.of(
@@ -683,11 +686,11 @@ class TimeEntryRepository @Inject constructor(
         }
         val now = clock.nowMs()
         database.withTransaction {
-            outboxDao.deleteByTimeEntryId(local.id)
+            outboxDao.deleteByTimeEntryId(current.id)
             when {
-                conflict.serverDeleted -> enqueueRecreate(local, conflict, requireNotNull(memberId), now)
-                local.pendingDelete -> enqueueDelete(local, serverBaseSnapshot, now)
-                else -> enqueueUpdate(local, conflict, serverBaseSnapshot, now)
+                conflict.serverDeleted -> enqueueRecreate(current, conflict, requireNotNull(memberId), now)
+                current.pendingDelete -> enqueueDelete(current, serverBaseSnapshot, now)
+                else -> enqueueUpdate(current, conflict, serverBaseSnapshot, now)
             }
         }
         return true
@@ -784,7 +787,7 @@ class TimeEntryRepository @Inject constructor(
         if (!canResolve) return false
         val server = conflict.server
         return if (server == null) {
-            timeEntryDao.clearTagRefs(current!!.id)
+            timeEntryDao.clearTagRefs(current.id)
             timeEntryDao.deleteById(current.id)
             true
         } else {
@@ -792,7 +795,7 @@ class TimeEntryRepository @Inject constructor(
             database.withTransaction {
                 timeEntryDao.upsert(server.toEntity(updatedAt = now, syncState = SyncState.SYNCED))
                 timeEntryDao.replaceTagRefs(server.id, server.tags.map { it.id })
-                outboxDao.deleteByTimeEntryId(current!!.id)
+                outboxDao.deleteByTimeEntryId(current.id)
             }
             true
         }
@@ -828,7 +831,11 @@ class TimeEntryRepository @Inject constructor(
         )
     }
 
-    private suspend fun applyServerEntries(entries: List<TimeEntryEntity>, tagIdsByEntry: Map<String, List<String>>) {
+    private suspend fun applyServerEntries(
+        entries: List<TimeEntryEntity>,
+        tagIdsByEntry: Map<String, List<String>>,
+        pullStartedAtMs: Long,
+    ) {
         val bases = outboxDao.peekAll()
             .filter { it.baseSnapshotJson != null }
             .groupBy { it.timeEntryId }
@@ -857,6 +864,7 @@ class TimeEntryRepository @Inject constructor(
                 tagIdsByEntry = tagIdsByEntry,
                 baseSnapshotsByEntry = bases,
                 serverJsonByEntry = serverJsonByEntry,
+                pullStartedAtMs = pullStartedAtMs,
             )
             // Pull-side conflicts no longer have a meaningful queued write. Clear them in the
             // same transaction so Review immediately becomes the sole recovery surface.

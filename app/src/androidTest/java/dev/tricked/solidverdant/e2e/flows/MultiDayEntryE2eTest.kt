@@ -133,6 +133,103 @@ class MultiDayEntryE2eTest {
         assertEquals(24 * 60 * 60, persisted.duration)
     }
 
+    @BackendPortable
+    @Test
+    fun shorteningOneAndAHalfDayEntryToOneDayByDurationSyncsWithSolidtime() {
+        val zone = e2e.session.zone
+        val startDate = YearMonth.now(zone).atDay(1)
+        val start = startDate.atTime(10, 0).atZone(zone).toInstant()
+        val entry = TimeEntry(
+            id = ENTRY_ID,
+            description = "One-and-a-half-day deployment",
+            userId = e2e.session.userId,
+            start = start.toString(),
+            end = start.plusSeconds(36 * 60 * 60L).toString(),
+            duration = 36 * 60 * 60,
+            organizationId = e2e.session.organizationId,
+        )
+        val handle = e2e.prepare(E2eFixture.Completed(entry))
+        e2e.launchApp()
+
+        TrackRobot(e2e.composeRule)
+            .waitForHistory()
+            .assertEntryVisible(entry.description!!)
+            .tapFirstEntryEdit()
+            .replaceSheetDuration((24 * 60).toString())
+            .saveSheet()
+
+        val snapshot = e2e.awaitServer(WAIT_MS, driveSync = true) { current ->
+            current.entry(handle)?.let { persisted ->
+                persisted.start == start.toString() &&
+                    persisted.end == start.plusSeconds(24 * 60 * 60L).toString() &&
+                    persisted.duration == 24 * 60 * 60
+            } == true
+        }
+        val persisted = requireNotNull(snapshot.entry(handle))
+        assertEquals(start.toString(), persisted.start)
+        assertEquals(start.plusSeconds(24 * 60 * 60L).toString(), persisted.end)
+        assertEquals(24 * 60 * 60, persisted.duration)
+    }
+
+    @Test
+    fun delayedRefreshCannotRestoreTheOldDurationAfterEditSyncs() {
+        val mock = e2e.requireMockBackend()
+        val zone = e2e.session.zone
+        val startDate = YearMonth.now(zone).atDay(1)
+        val start = startDate.atTime(10, 0).atZone(zone).toInstant()
+        val oldEnd = start.plusSeconds(36 * 60 * 60L)
+        val newEnd = start.plusSeconds(24 * 60 * 60L)
+        val entry = TimeEntry(
+            id = ENTRY_ID,
+            description = "Refresh race deployment",
+            userId = e2e.session.userId,
+            start = start.toString(),
+            end = oldEnd.toString(),
+            duration = 36 * 60 * 60,
+            organizationId = e2e.session.organizationId,
+        )
+        val handle = e2e.prepare(E2eFixture.Completed(entry))
+        e2e.launchApp()
+        val robot = TrackRobot(e2e.composeRule)
+            .waitForHistory()
+            .assertEntryVisible(entry.description!!)
+
+        val historyCallsBeforeRefresh = mock.callsMatching("GET", "/time-entries").size
+        val delayedResponseGate = mock.delayNextTimeEntriesResponseUntilReleased()
+        try {
+            robot.tapRefresh()
+            e2e.composeRule.waitUntil(WAIT_MS) {
+                mock.callsMatching("GET", "/time-entries").size > historyCallsBeforeRefresh
+            }
+
+            robot.tapFirstEntryEdit()
+                .replaceSheetDuration((24 * 60).toString())
+                .saveSheet()
+
+            val snapshot = e2e.awaitServer(WAIT_MS, driveSync = true) { current ->
+                current.entry(handle)?.let { persisted ->
+                    persisted.end == newEnd.toString() && persisted.duration == 24 * 60 * 60
+                } == true
+            }
+            assertEquals(newEnd.toString(), snapshot.entry(handle)?.end)
+            e2e.composeRule.waitUntil(WAIT_MS) { e2e.pendingOutboxCount() == 0 }
+
+            // Release the deliberately stale response only after the server write has completed.
+            delayedResponseGate.countDown()
+            e2e.composeRule.waitUntil(WAIT_MS) {
+                e2e.localEntry(handle)?.end == newEnd.toString()
+            }
+            val newEndTime = newEnd.atZone(zone).format(DateTimeFormatter.ofPattern("HH:mm"))
+            e2e.composeRule.onAllNodes(
+                hasTestTag(TestTags.trackEntryTimeRange(requireNotNull(handle.serverId))) and
+                    hasText(newEndTime, substring = true),
+                useUnmergedTree = true,
+            ).onFirst().assertIsDisplayed()
+        } finally {
+            delayedResponseGate.countDown()
+        }
+    }
+
     private fun assertCalendarCellTotal(day: LocalDate, total: String) {
         // The clickable day cell merges its descendants into one semantics node on real devices.
         // Match that stable merged node directly instead of walking an unmerged ancestor chain,

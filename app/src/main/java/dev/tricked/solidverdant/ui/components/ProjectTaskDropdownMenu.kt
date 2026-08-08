@@ -19,10 +19,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -80,7 +80,7 @@ fun ProjectTaskDropdown(
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag(EditTimeEntryTestTags.PROJECT_TASK_SELECTOR)
-                .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled),
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled),
             enabled = enabled,
             shape = if (rounded) RoundedCornerShape(8.dp) else OutlinedTextFieldDefaultsShape,
         )

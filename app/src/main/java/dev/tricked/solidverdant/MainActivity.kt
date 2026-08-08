@@ -25,7 +25,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
@@ -89,7 +89,7 @@ open class MainActivity : ComponentActivity() {
             val initialTheme by startupTheme.collectAsState()
             val appTheme by trackingViewModel.appTheme.collectAsState(initial = initialTheme)
             val syncStatus by syncStatusReporter.status.collectAsState()
-            val resolvedTheme = appTheme ?: initialTheme
+            val resolvedTheme = appTheme
             SolidVerdantTheme(themeMode = resolvedTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
