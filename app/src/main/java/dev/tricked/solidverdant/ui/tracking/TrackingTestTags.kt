@@ -24,9 +24,20 @@ object TrackingTestTags {
     const val ENTRY_EDIT_BUTTON = "track_entry_edit"
     const val ENTRY_DELETE_BUTTON = "track_entry_delete"
     const val CONTINUE_BUTTON = "track_continue_last"
+    const val SHEET = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.SHEET
+    const val SHEET_PROJECT_TASK_SELECTOR = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.PROJECT_TASK_SELECTOR
+    const val SHEET_START_TIME = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.START_TIME
+    const val SHEET_END_TIME = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.END_TIME
     const val SHEET_DESCRIPTION_FIELD = "track_sheet_description"
+    const val SHEET_DURATION_FIELD = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.DURATION_FIELD
+    const val SHEET_BILLABLE = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.BILLABLE
+    const val SHEET_CANCEL_BUTTON = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.CANCEL_BUTTON
     const val SHEET_SAVE_BUTTON = "track_sheet_save"
     const val SHEET_DUPLICATE_BUTTON = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.DUPLICATE_BUTTON
+    const val SHEET_SPLIT_BUTTON = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.SPLIT_BUTTON
+    const val SHEET_SPLIT_TIME_PICKER = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.SPLIT_TIME_PICKER
+    const val SHEET_TIME_PICKER_CONFIRM = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.TIME_PICKER_CONFIRM
+    const val SHEET_VALIDATION_BANNER = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.VALIDATION_BANNER
     const val ELAPSED_TIMER = "track_elapsed_timer"
     const val SYNC_DETAILS_BUTTON = "track_sync_details"
     const val FILTER_OPEN_BUTTON = "track_filter_open"
@@ -36,4 +47,6 @@ object TrackingTestTags {
     const val SHEET_END_DATE = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.END_DATE
 
     fun entryTimeRange(entryId: String): String = "track_entry_time_range_$entryId"
+
+    fun sheetTagChip(tagId: String): String = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.tagChip(tagId)
 }

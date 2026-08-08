@@ -163,6 +163,9 @@ class E2eRule(private val test: Any) : TestRule {
 
     fun serverSnapshot(): E2eServerSnapshot = runBlocking { backend.snapshot() }
 
+    /** Read the selected account's project/task/tag catalogue before a metadata flow starts. */
+    fun catalogSnapshot(): E2eCatalog = runBlocking { backend.catalog() }
+
     /**
      * Poll server state at a bounded cadence outside Compose's tight [ComposeTestRule.waitUntil]
      * loop. The satisfying snapshot is returned so callers do not immediately spend another

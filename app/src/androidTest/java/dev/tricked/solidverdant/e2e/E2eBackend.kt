@@ -7,6 +7,9 @@
 package dev.tricked.solidverdant.e2e
 
 import android.content.Context
+import dev.tricked.solidverdant.data.model.Project
+import dev.tricked.solidverdant.data.model.Tag
+import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.RemoteDataSource
 import dev.tricked.solidverdant.data.remote.TimeEntriesQuery
@@ -31,6 +34,9 @@ data class E2eSession(
     val organizationId: String,
     val zone: ZoneId,
 )
+
+/** Catalogue records available to the selected Solidtime account for metadata-edit workflows. */
+data class E2eCatalog(val projects: List<Project>, val tasks: List<Task>, val tags: List<Tag>)
 
 /** A complete initial server world for one portable flow. */
 sealed interface E2eFixture {
@@ -72,6 +78,8 @@ internal interface E2eBackend : AutoCloseable {
 
     suspend fun prepare(fixture: E2eFixture): E2eFixtureHandle
 
+    suspend fun catalog(): E2eCatalog
+
     suspend fun snapshot(): E2eServerSnapshot
 
     suspend fun create(entry: TimeEntry): E2eFixtureHandle
@@ -90,6 +98,7 @@ internal class MockE2eBackend : E2eBackend {
 
     override fun open(): E2eSession {
         server.start()
+        presetTestCatalogue()
         return E2eSession(
             baseUrl = server.baseUrl(),
             accessToken = "test-access-token",
@@ -105,6 +114,7 @@ internal class MockE2eBackend : E2eBackend {
     override suspend fun prepare(fixture: E2eFixture): E2eFixtureHandle {
         server.presetLoggedInWorld(seededEntry = null)
         server.activeEntry = null
+        presetTestCatalogue()
         logicalToServerIds.clear()
         return when (fixture) {
             E2eFixture.Empty -> E2eFixtureHandle.Empty
@@ -112,6 +122,12 @@ internal class MockE2eBackend : E2eBackend {
             is E2eFixture.Active -> seed(fixture.entry.copy(end = null, duration = null), active = true)
         }
     }
+
+    override suspend fun catalog(): E2eCatalog = E2eCatalog(
+        projects = synchronized(server.projects) { server.projects.toList() },
+        tasks = synchronized(server.tasks) { server.tasks.toList() },
+        tags = synchronized(server.tags) { server.tags.toList() },
+    )
 
     override suspend fun snapshot(): E2eServerSnapshot {
         val entries = synchronized(server.timeEntries) { server.timeEntries.toList() }
@@ -150,6 +166,33 @@ internal class MockE2eBackend : E2eBackend {
         userId = session.userId,
         organizationId = session.organizationId,
     )
+
+    private fun presetTestCatalogue() {
+        server.projects.clear()
+        server.projects += Project(
+            id = TEST_PROJECT_ID,
+            name = "Live Test Project",
+            color = "#4F46E5",
+            isPublic = true,
+            isBillable = true,
+        )
+        server.tasks.clear()
+        server.tasks += Task(
+            id = TEST_TASK_ID,
+            name = "Live Test Task",
+            projectId = TEST_PROJECT_ID,
+            createdAt = "2026-01-01T00:00:00Z",
+            updatedAt = "2026-01-01T00:00:00Z",
+        )
+        server.tags.clear()
+        server.tags += Tag(TEST_TAG_ID, "Live Test Tag")
+    }
+
+    companion object {
+        private const val TEST_PROJECT_ID = "live-test-project"
+        private const val TEST_TASK_ID = "live-test-task"
+        private const val TEST_TAG_ID = "live-test-tag"
+    }
 }
 
 internal class RealSolidtimeE2eBackend(private val context: Context, private val remoteDataSource: RemoteDataSource) : E2eBackend {
@@ -168,6 +211,12 @@ internal class RealSolidtimeE2eBackend(private val context: Context, private val
             is E2eFixture.Active -> create(fixture.entry.copy(end = null, duration = null))
         }
     }
+
+    override suspend fun catalog(): E2eCatalog = E2eCatalog(
+        projects = controlCallRetrier.run { remoteDataSource.getProjects(session.organizationId) },
+        tasks = controlCallRetrier.run { remoteDataSource.getTasks(session.organizationId) },
+        tags = controlCallRetrier.run { remoteDataSource.getTags(session.organizationId) },
+    )
 
     override suspend fun snapshot(): E2eServerSnapshot = E2eServerSnapshot(
         entries = fetchAllEntries(),

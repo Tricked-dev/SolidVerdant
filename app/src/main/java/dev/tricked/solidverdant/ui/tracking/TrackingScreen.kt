@@ -2268,7 +2268,8 @@ internal fun TagsSelector(
                     label = { Text(tag.name) },
                     enabled = enabled,
                     border = null,
-                    shape = RoundedCornerShape(6.dp)
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier.testTag(EditTimeEntryTestTags.tagChip(tag.id)),
                 )
             }
         }
@@ -2778,6 +2779,7 @@ private fun TimeEntryFormSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        modifier = Modifier.testTag(TrackingTestTags.SHEET),
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     ) {
@@ -2890,13 +2892,13 @@ private fun TimeEntryFormSheet(
                         label = stringResource(R.string.start_time),
                         value = startTime,
                         onClick = { editingTime = TimeField.Start },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f).testTag(TrackingTestTags.SHEET_START_TIME)
                     )
                     TimeFieldButton(
                         label = stringResource(R.string.end_time),
                         value = endTime,
                         onClick = { editingTime = TimeField.End },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f).testTag(TrackingTestTags.SHEET_END_TIME)
                     )
                 }
 
@@ -2959,7 +2961,7 @@ private fun TimeEntryFormSheet(
                                 isError = !durationIsValid,
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1f).testTag(TrackingTestTags.SHEET_DURATION_FIELD),
                                 shape = RoundedCornerShape(12.dp)
                             )
                             FilledTonalIconButton(
@@ -3008,6 +3010,7 @@ private fun TimeEntryFormSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 48.dp)
+                        .testTag(TrackingTestTags.SHEET_BILLABLE)
                         .toggleable(
                             value = billable,
                             role = Role.Checkbox,
@@ -3052,6 +3055,7 @@ private fun TimeEntryFormSheet(
                         if (onSplit != null) {
                             OutlinedButton(
                                 onClick = { showSplitPicker = true },
+                                modifier = Modifier.testTag(EditTimeEntryTestTags.SPLIT_BUTTON),
                                 shape = RoundedCornerShape(8.dp),
                             ) {
                                 Text(stringResource(R.string.split_entry))
@@ -3067,6 +3071,7 @@ private fun TimeEntryFormSheet(
                 ) {
                     Button(
                         onClick = onDismiss,
+                        modifier = Modifier.testTag(EditTimeEntryTestTags.CANCEL_BUTTON),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color.Transparent,
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -3147,6 +3152,7 @@ private fun TimeEntryFormSheet(
         EntryTimePickerDialog(
             title = stringResource(R.string.split_entry_title),
             initial = midpoint,
+            testTag = EditTimeEntryTestTags.SPLIT_TIME_PICKER,
             onDismiss = { showSplitPicker = false },
             onConfirm = { hour, minute ->
                 showSplitPicker = false
@@ -3191,6 +3197,7 @@ private fun TimeFieldButton(
 private fun EntryTimePickerDialog(
     title: String,
     initial: ZonedDateTime,
+    testTag: String? = null,
     onDismiss: () -> Unit,
     onConfirm: (Int, Int) -> Unit
 ) {
@@ -3198,8 +3205,18 @@ private fun EntryTimePickerDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
-        text = { TimePicker(state = state) },
-        confirmButton = { Button(onClick = { onConfirm(state.hour, state.minute) }) { Text(stringResource(R.string.done)) } },
+        text = {
+            TimePicker(
+                state = state,
+                modifier = testTag?.let(Modifier::testTag) ?: Modifier,
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(state.hour, state.minute) },
+                modifier = Modifier.testTag(EditTimeEntryTestTags.TIME_PICKER_CONFIRM),
+            ) { Text(stringResource(R.string.done)) }
+        },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
     )
 }
@@ -3496,7 +3513,7 @@ internal fun EntryValidationBanner(result: EntryTimeValidator.Result, durationHo
         color = if (isError) MaterialTheme.colorScheme.errorContainer
         else MaterialTheme.colorScheme.secondaryContainer,
         shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth().testTag(dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.VALIDATION_BANNER)
     ) {
         val contentColor = if (isError) MaterialTheme.colorScheme.onErrorContainer
         else MaterialTheme.colorScheme.onSecondaryContainer

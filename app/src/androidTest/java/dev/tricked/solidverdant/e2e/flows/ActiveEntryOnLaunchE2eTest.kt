@@ -50,6 +50,7 @@ class ActiveEntryOnLaunchE2eTest {
 
         // Running state restored purely from the server's active entry.
         robot.assertStopButtonVisible()
+        robot.assertStartButtonGone()
 
         // And the remote timer is stoppable from this device.
         robot.tapStop()

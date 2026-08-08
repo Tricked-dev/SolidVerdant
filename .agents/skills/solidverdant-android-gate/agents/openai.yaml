@@ -1,0 +1,4 @@
+interface:
+  display_name: "SolidVerdant Android Gate"
+  short_description: "Run and report the pinned Android verification gate"
+  default_prompt: "Use $solidverdant-android-gate to verify this Solid Time change and report every gate result."

@@ -315,6 +315,7 @@ class MockSolidtimeServer {
             description = patch?.description ?: existing?.description,
             projectId = patch?.project_id ?: existing?.projectId,
             taskId = patch?.task_id ?: existing?.taskId,
+            tags = patch?.tags?.map { Tag(id = it) } ?: existing?.tags.orEmpty(),
             billable = patch?.billable ?: existing?.billable ?: false,
             duration = computeDuration(patch?.start ?: existing?.start, patch?.end ?: existing?.end),
         )
@@ -407,5 +408,6 @@ private data class PutBody(
     val description: String? = null,
     val project_id: String? = null,
     val task_id: String? = null,
+    val tags: List<String>? = null,
     val billable: Boolean? = null,
 )

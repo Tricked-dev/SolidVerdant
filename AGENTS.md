@@ -103,6 +103,11 @@ When Hilt modules or database providers change, perform at least one clean build
   that AGENTS.md's feature-completeness rules promise (undo, offline, recreation, cross-device
   state).
 
+- Live Solidtime setup, credentials, device requirements, and troubleshooting are documented in
+  `.agents/skills/solidverdant-android-gate/SKILL.md`; tester-facing commands are in `README.md`.
+- Keep portable E2E tests marked `@BackendPortable`, call `prepare(...)` before `launchApp()`, use
+  generated catalogue IDs from the E2E backend, and prove mutations with server snapshots.
+
 ## Performance
 
 - `./perf/run_perf.sh <label>` (run on the build machine with the test phone attached) measures

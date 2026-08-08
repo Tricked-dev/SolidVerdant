@@ -1,0 +1,4 @@
+interface:
+  display_name: "SolidVerdant UI Quality"
+  short_description: "Audit Compose consistency and accessibility"
+  default_prompt: "Use $solidverdant-ui-quality to audit this Solid Time UI change for design-system and accessibility drift."

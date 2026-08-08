@@ -79,7 +79,7 @@ fun ProjectTaskDropdown(
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("project_task_selector")
+                .testTag(EditTimeEntryTestTags.PROJECT_TASK_SELECTOR)
                 .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled),
             enabled = enabled,
             shape = if (rounded) RoundedCornerShape(8.dp) else OutlinedTextFieldDefaultsShape,
@@ -135,7 +135,7 @@ private fun ProjectTaskPickerDialog(
             tonalElevation = 6.dp,
         ) {
             androidx.compose.foundation.lazy.LazyColumn(
-                modifier = Modifier.padding(vertical = 12.dp).testTag("project_task_list"),
+                modifier = Modifier.padding(vertical = 12.dp).testTag(EditTimeEntryTestTags.PROJECT_TASK_LIST),
             ) {
                 item {
                     Text(

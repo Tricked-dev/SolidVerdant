@@ -1,0 +1,4 @@
+interface:
+  display_name: "SolidVerdant Feature Completeness"
+  short_description: "Check complete workflows and recovery states"
+  default_prompt: "Use $solidverdant-feature-completeness to audit this Solid Time feature against its full user workflow."

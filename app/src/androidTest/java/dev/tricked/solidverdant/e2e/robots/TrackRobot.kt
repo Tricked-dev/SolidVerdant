@@ -8,6 +8,7 @@ package dev.tricked.solidverdant.e2e.robots
 
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -93,6 +94,11 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
         firstNodeWithTag(TestTags.TRACK_STOP_BUTTON).performScrollTo().assertIsDisplayed()
     }
 
+    /** A running timer must not expose a second start action. */
+    fun assertStartButtonGone(): TrackRobot = apply {
+        waitUntilTagIsGone(TestTags.TRACK_START_BUTTON)
+    }
+
     fun openSettings(): TrackRobot = apply {
         waitUntilTagExists(TestTags.TRACK_SETTINGS_BUTTON)
         firstNodeWithTag(TestTags.TRACK_SETTINGS_BUTTON).performClick()
@@ -163,19 +169,90 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
     }
 
     fun duplicateOpenEntry(): TrackRobot = apply {
-        waitUntilEnabledTagExists(TestTags.TRACK_SHEET_DUPLICATE_BUTTON)
-        firstEnabledNodeWithTag(TestTags.TRACK_SHEET_DUPLICATE_BUTTON).performClick()
+        waitUntilSheetTagExists(TestTags.TRACK_SHEET_DUPLICATE_BUTTON)
+        firstSheetNodeWithTag(TestTags.TRACK_SHEET_DUPLICATE_BUTTON).performScrollTo().performClick()
+    }
+
+    fun tapSplitAndConfirm(): TrackRobot = apply {
+        waitUntilSheetTagExists(TestTags.TRACK_SHEET_SPLIT_BUTTON)
+        firstSheetNodeWithTag(TestTags.TRACK_SHEET_SPLIT_BUTTON).performScrollTo().performClick()
+        waitUntilTagExists(TestTags.TRACK_SHEET_SPLIT_TIME_PICKER)
+        waitUntilEnabledTagExists(TestTags.TRACK_SHEET_TIME_PICKER_CONFIRM)
+        firstEnabledNodeWithTag(TestTags.TRACK_SHEET_TIME_PICKER_CONFIRM).performClick()
+        waitUntilTagIsGone(TestTags.TRACK_SHEET_SPLIT_TIME_PICKER)
+    }
+
+    fun assertEditSettingsVisible(): TrackRobot = apply {
+        listOf(
+            TestTags.TRACK_SHEET_START_DATE,
+            TestTags.TRACK_SHEET_END_DATE,
+            TestTags.TRACK_SHEET_START_TIME,
+            TestTags.TRACK_SHEET_END_TIME,
+            TestTags.TRACK_SHEET_DURATION_FIELD,
+            TestTags.TRACK_SHEET_DESCRIPTION_FIELD,
+            TestTags.TRACK_SHEET_PROJECT_TASK_SELECTOR,
+            TestTags.TRACK_SHEET_BILLABLE,
+            TestTags.TRACK_SHEET_SAVE_BUTTON,
+            TestTags.TRACK_SHEET_CANCEL_BUTTON,
+        ).forEach { tag ->
+            waitUntilSheetTagExists(tag)
+            firstSheetNodeWithTag(tag).assertIsDisplayed()
+        }
     }
 
     /** Replace the description in the open edit sheet. */
     fun replaceSheetDescription(text: String): TrackRobot = apply {
-        waitUntilTagExists(TestTags.TRACK_SHEET_DESCRIPTION_FIELD)
-        firstNodeWithTag(TestTags.TRACK_SHEET_DESCRIPTION_FIELD).performTextClearance()
-        firstNodeWithTag(TestTags.TRACK_SHEET_DESCRIPTION_FIELD).performTextInput(text)
+        waitUntilSheetTagExists(TestTags.TRACK_SHEET_DESCRIPTION_FIELD)
+        firstSheetNodeWithTag(TestTags.TRACK_SHEET_DESCRIPTION_FIELD).performScrollTo().performTextClearance()
+        firstSheetNodeWithTag(TestTags.TRACK_SHEET_DESCRIPTION_FIELD).performTextInput(text)
+    }
+
+    fun selectSheetProjectTask(taskName: String): TrackRobot = apply {
+        firstSheetNodeWithTag(TestTags.TRACK_SHEET_PROJECT_TASK_SELECTOR).performScrollTo().performClick()
+        waitUntilTagExists(TestTags.TRACK_PROJECT_TASK_LIST)
+        composeRule.onAllNodes(hasText(taskName, substring = false), useUnmergedTree = true)
+            .onFirst()
+            .performClick()
+        waitUntilTagExists(TestTags.TRACK_SHEET_SAVE_BUTTON)
+    }
+
+    fun selectSheetTag(tagId: String): TrackRobot = apply {
+        val tag = TestTags.trackSheetTagChip(tagId)
+        waitUntilSheetTagExists(tag)
+        firstSheetNodeWithTag(tag).performScrollTo().performClick()
+    }
+
+    fun toggleSheetBillable(): TrackRobot = apply {
+        waitUntilSheetTagExists(TestTags.TRACK_SHEET_BILLABLE)
+        firstSheetNodeWithTag(TestTags.TRACK_SHEET_BILLABLE).performScrollTo().performClick()
+    }
+
+    fun replaceSheetDuration(minutes: String): TrackRobot = apply {
+        waitUntilSheetTagExists(TestTags.TRACK_SHEET_DURATION_FIELD)
+        firstSheetNodeWithTag(TestTags.TRACK_SHEET_DURATION_FIELD).performScrollTo().performTextClearance()
+        firstSheetNodeWithTag(TestTags.TRACK_SHEET_DURATION_FIELD).performTextInput(minutes)
+    }
+
+    fun assertSheetSaveDisabled(): TrackRobot = apply {
+        waitUntilSheetTagExists(TestTags.TRACK_SHEET_SAVE_BUTTON)
+        firstSheetNodeWithTag(TestTags.TRACK_SHEET_SAVE_BUTTON).assertIsNotEnabled()
+    }
+
+    fun assertValidationText(text: String): TrackRobot = apply {
+        waitUntilTextExists(text)
+        composeRule.onAllNodes(hasText(text, substring = true), useUnmergedTree = true)
+            .onFirst()
+            .assertIsDisplayed()
+    }
+
+    fun tapSheetCancel(): TrackRobot = apply {
+        waitUntilSheetTagExists(TestTags.TRACK_SHEET_CANCEL_BUTTON)
+        firstSheetNodeWithTag(TestTags.TRACK_SHEET_CANCEL_BUTTON).performScrollTo().performClick()
+        waitUntilTagIsGone(TestTags.TRACK_SHEET_SAVE_BUTTON)
     }
 
     fun changeSheetEndDate(date: LocalDate): TrackRobot = apply {
-        firstNodeWithTag(TestTags.TRACK_SHEET_END_DATE).performClick()
+        firstSheetNodeWithTag(TestTags.TRACK_SHEET_END_DATE).performScrollTo().performClick()
         waitUntilTagExists(TestTags.ENTRY_DATE_PICKER)
         val dayLabel = date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", Locale.getDefault()))
         val day = hasText(dayLabel) and hasAnyAncestor(hasTestTag(TestTags.ENTRY_DATE_PICKER))
@@ -187,8 +264,8 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
     fun saveSheet(): TrackRobot = apply {
         // The IME from typing can cover the save button; dismiss it before clicking.
         Espresso.closeSoftKeyboard()
-        waitUntilEnabledTagExists(TestTags.TRACK_SHEET_SAVE_BUTTON)
-        firstEnabledNodeWithTag(TestTags.TRACK_SHEET_SAVE_BUTTON)
+        waitUntilSheetTagExists(TestTags.TRACK_SHEET_SAVE_BUTTON)
+        firstSheetNodeWithTag(TestTags.TRACK_SHEET_SAVE_BUTTON)
             .performScrollTo()
             .assertIsDisplayed()
             .performClick()
@@ -232,4 +309,17 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
     private fun scrollHistoryTo(matcher: SemanticsMatcher) {
         firstNodeWithTag(TestTags.TRACK_HISTORY_LIST).performScrollToNode(matcher)
     }
+
+    private fun waitUntilSheetTagExists(tag: String, timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
+        composeRule.waitUntil(timeoutMs) {
+            sheetNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    private fun firstSheetNodeWithTag(tag: String) = sheetNodesWithTag(tag).onFirst()
+
+    private fun sheetNodesWithTag(tag: String) = composeRule.onAllNodes(
+        hasTestTag(tag) and hasAnyAncestor(hasTestTag(TestTags.TRACK_SHEET)),
+        useUnmergedTree = true,
+    )
 }

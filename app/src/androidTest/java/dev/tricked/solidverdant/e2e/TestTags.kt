@@ -31,9 +31,21 @@ object TestTags {
     const val TRACK_ENTRY_EDIT_BUTTON = TrackingTestTags.ENTRY_EDIT_BUTTON
     const val TRACK_ENTRY_DELETE_BUTTON = TrackingTestTags.ENTRY_DELETE_BUTTON
     const val TRACK_CONTINUE_BUTTON = TrackingTestTags.CONTINUE_BUTTON
+    const val TRACK_SHEET = TrackingTestTags.SHEET
+    const val TRACK_SHEET_PROJECT_TASK_SELECTOR = TrackingTestTags.SHEET_PROJECT_TASK_SELECTOR
+    const val TRACK_PROJECT_TASK_LIST = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.PROJECT_TASK_LIST
+    const val TRACK_SHEET_START_TIME = TrackingTestTags.SHEET_START_TIME
+    const val TRACK_SHEET_END_TIME = TrackingTestTags.SHEET_END_TIME
     const val TRACK_SHEET_DESCRIPTION_FIELD = TrackingTestTags.SHEET_DESCRIPTION_FIELD
+    const val TRACK_SHEET_DURATION_FIELD = TrackingTestTags.SHEET_DURATION_FIELD
+    const val TRACK_SHEET_BILLABLE = TrackingTestTags.SHEET_BILLABLE
+    const val TRACK_SHEET_CANCEL_BUTTON = TrackingTestTags.SHEET_CANCEL_BUTTON
     const val TRACK_SHEET_SAVE_BUTTON = TrackingTestTags.SHEET_SAVE_BUTTON
     const val TRACK_SHEET_DUPLICATE_BUTTON = TrackingTestTags.SHEET_DUPLICATE_BUTTON
+    const val TRACK_SHEET_SPLIT_BUTTON = TrackingTestTags.SHEET_SPLIT_BUTTON
+    const val TRACK_SHEET_SPLIT_TIME_PICKER = TrackingTestTags.SHEET_SPLIT_TIME_PICKER
+    const val TRACK_SHEET_TIME_PICKER_CONFIRM = TrackingTestTags.SHEET_TIME_PICKER_CONFIRM
+    const val TRACK_SHEET_VALIDATION_BANNER = TrackingTestTags.SHEET_VALIDATION_BANNER
     const val TRACK_SYNC_DETAILS_BUTTON = TrackingTestTags.SYNC_DETAILS_BUTTON
     const val TRACK_FILTER_OPEN_BUTTON = TrackingTestTags.FILTER_OPEN_BUTTON
     const val TRACK_FILTER_SEARCH_FIELD = TrackingTestTags.FILTER_SEARCH_FIELD
@@ -50,4 +62,6 @@ object TestTags {
     const val ENTRY_DATE_PICKER_CONFIRM = EditTimeEntryTestTags.DATE_PICKER_CONFIRM
 
     fun trackEntryTimeRange(entryId: String): String = TrackingTestTags.entryTimeRange(entryId)
+
+    fun trackSheetTagChip(tagId: String): String = TrackingTestTags.sheetTagChip(tagId)
 }

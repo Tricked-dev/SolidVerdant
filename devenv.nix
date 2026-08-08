@@ -232,6 +232,30 @@ in
       $user = App\Models\User::where("email", "solidverdant-e2e@example.test")->firstOrFail();
       $user->forceFill(["timezone" => "UTC"])->save();
       $member = App\Models\Member::where("user_id", $user->id)->firstOrFail();
+      $project = new App\Models\Project();
+      $project->forceFill([
+        "name" => "Live Test Project",
+        "color" => "#4F46E5",
+        "organization_id" => $member->organization_id,
+        "is_public" => true,
+        "is_billable" => true,
+        "billable_rate" => null,
+        "archived_at" => null,
+        "estimated_time" => null,
+      ])->save();
+      $task = new App\Models\Task();
+      $task->forceFill([
+        "name" => "Live Test Task",
+        "project_id" => $project->id,
+        "organization_id" => $member->organization_id,
+        "done_at" => null,
+        "estimated_time" => null,
+      ])->save();
+      $tag = new App\Models\Tag();
+      $tag->forceFill([
+        "name" => "Live Test Tag",
+        "organization_id" => $member->organization_id,
+      ])->save();
       $token = $user->createToken("SolidVerdant device E2E")->accessToken;
       echo "base_url=http://127.0.0.1:18080/\n";
       echo "access_token=".$token."\n";

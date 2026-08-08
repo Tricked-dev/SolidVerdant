@@ -162,6 +162,43 @@ Generate the README screenshots (pure JVM, no device/emulator — Roborazzi + Ro
 This renders every screen across a light/dark × phone/tablet matrix into `.github/screenshots/generated/`
 and writes the Neo-dark phone hero set to `.github/screenshots/readme/`.
 
+### Device and live Solidtime tests
+
+Use the pinned development environment for Android verification:
+
+```bash
+devenv tasks run android:gate
+devenv tasks run android:e2e:mock
+```
+
+The mock E2E task builds and installs the debug APKs and runs the device suite against a deterministic
+local backend. Live-portable tests can be run against an isolated local Solidtime server:
+
+```bash
+devenv up -d
+devenv tasks run solidtime:test
+```
+
+The live task starts the official Solidtime container with disposable PostgreSQL data, resets its
+test account, and runs only E2E tests marked `@BackendPortable`. It requires one authorized physical
+Android device; emulator serials are rejected. Set `ANDROID_SERIAL` if more than one physical device
+is connected. The task uses `adb reverse` and removes the temporary test session from the device
+afterward. Do not use a personal Solidtime account or print the generated session file.
+
+The reset removes all time entries from the disposable account and seeds `Live Test Project`, `Live
+Test Task`, and `Live Test Tag` for metadata-edit tests. It is also available explicitly with
+`devenv tasks run solidtime:reset`. `devenv tasks run android:e2e` is the mock-suite alias, and
+`devenv tasks run android:e2e:real` is the live-suite alias. The default container image is the
+stable `solidtime/solidtime:latest`; set `SOLIDTIME_IMAGE_TAG=main` only for an intentional upstream
+development compatibility run. The local API uses Solidtime's testing environment so the production
+per-user request throttle does not turn a rapid isolated suite into a false failure.
+
+If a restricted development environment reports read-only Podman state under `/run/user` or cannot
+open the Gradle distribution lock, rerun the same pinned `devenv` task with the approved elevated
+container/build permission. These errors are environment restrictions, not Solidtime test results.
+Read the JUnit instrumentation summary to determine pass/fail; do not rely on a task wrapper's shell
+exit code when it suppresses the instrumentation transcript.
+
 ## Verification
 
 You can verify the authenticity of SolidVerdant APKs using the signing certificate hash below. This works with [AppVerifier](https://github.com/soupslurpr/AppVerifier) or [Obtainium](https://github.com/ImranR98/Obtainium)'s built-in verification.
