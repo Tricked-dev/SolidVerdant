@@ -426,7 +426,14 @@ fun SolidVerdantApp(
                         onSplitEntry = trackingViewModel::splitTimeEntry,
                         onEntryToEditConsumed = trackingViewModel::consumeEntryToEdit,
                         onUndoDelete = trackingViewModel::undoDelete,
-                        onRetrySync = trackingViewModel::retrySync,
+                        onRetrySync = {
+                            val organizationId = authUiState.currentMembership?.organizationId
+                            if (organizationId != null) {
+                                trackingViewModel.retryAllSync(organizationId)
+                            } else {
+                                trackingViewModel.retrySync()
+                            }
+                        },
                         onRetrySyncEntry = trackingViewModel::retrySync,
                         onOpenSyncCenter = {
                             navController.navigate(SyncRoutes.SYNC_CENTER)

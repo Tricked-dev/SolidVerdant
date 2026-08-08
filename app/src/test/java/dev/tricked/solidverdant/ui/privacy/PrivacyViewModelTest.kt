@@ -7,15 +7,9 @@
 package dev.tricked.solidverdant.ui.privacy
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
-import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
-import dev.tricked.solidverdant.data.export.DiagnosticExporter
-import dev.tricked.solidverdant.data.local.AuthDataStore
-import dev.tricked.solidverdant.data.local.SettingsDataStore
-import dev.tricked.solidverdant.data.local.UserCacheCleaner
-import dev.tricked.solidverdant.data.local.db.AppDatabase
-import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -38,56 +32,62 @@ import java.io.File
 class PrivacyViewModelTest {
 
     private lateinit var context: Context
-    private lateinit var db: AppDatabase
-    private lateinit var settings: SettingsDataStore
-    private lateinit var authDataStore: AuthDataStore
-    private lateinit var cleaner: UserCacheCleaner
-    private lateinit var exporter: DiagnosticExporter
     private val dispatcher = UnconfinedTestDispatcher()
     private val viewModels = mutableListOf<PrivacyViewModel>()
-    private val clock = object : Clock {
-        override fun nowMs() = 1_000L
-    }
+    private var endpoint = "https://app.solidtime.io"
+    private var sessionPresent = false
+    private var cacheProbe: File? = null
+    private var clearCalls = 0
+    private var exportCalls = 0
+    private var shareIntentCalls = 0
+    private val exportedUri = Uri.parse("content://solidverdant.test/diagnostics.zip")
 
     @Before
     fun setup() {
         kotlinx.coroutines.Dispatchers.setMain(dispatcher)
         context = ApplicationProvider.getApplicationContext()
-        // Named on-disk DB so getDatabasePath("solidverdant.db") resolves to a real file to size.
-        db = Room.databaseBuilder(context, AppDatabase::class.java, "solidverdant.db")
-            .allowMainThreadQueries()
-            .build()
-        // Force the file into existence.
-        db.openHelper.writableDatabase.execSQL("PRAGMA user_version = 1")
-        settings = SettingsDataStore(context)
-        authDataStore = AuthDataStore(context)
-        cleaner = UserCacheCleaner(context, settings, db)
-        exporter = DiagnosticExporter(context, authDataStore, db.outboxDao(), db.syncMetaDao(), clock)
+        context.getDatabasePath("solidverdant.db").apply {
+            parentFile?.mkdirs()
+            writeBytes(ByteArray(1024))
+        }
     }
 
     @After
     fun teardown() {
         viewModels.forEach { it.cancelScopeForTest() }
         dispatcher.scheduler.advanceUntilIdle()
-        db.close()
-        context.getDatabasePath("solidverdant.db").delete()
+        cacheProbe?.delete()
+        val database = context.getDatabasePath("solidverdant.db")
+        listOf(database, File(database.path + "-wal"), File(database.path + "-shm"), File(database.path + "-journal"))
+            .forEach { it.delete() }
         kotlinx.coroutines.Dispatchers.resetMain()
     }
 
     private fun viewModel(): PrivacyViewModel = PrivacyViewModel(
         context = context,
-        settingsDataStore = settings,
-        authDataStore = authDataStore,
-        userCacheCleaner = cleaner,
-        diagnosticExporter = exporter,
+        readEndpoint = { endpoint },
+        readSessionPresent = { sessionPresent },
+        clearUserCache = {
+            clearCalls += 1
+            cacheProbe?.delete()
+        },
+        exportDiagnosticBundle = {
+            exportCalls += 1
+            exportedUri
+        },
+        buildShareIntent = { uri ->
+            shareIntentCalls += 1
+            Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_STREAM, uri)
+        },
+        storageDispatcher = dispatcher,
     ).also { viewModels += it }
 
     @Test
     fun `computes and exposes storage sizes off main thread`() = runTest(dispatcher.scheduler) {
-        val cacheFile = File(context.cacheDir, "probe.bin").apply { writeBytes(ByteArray(2048)) }
+        val cacheFile = File(context.cacheDir, "privacy-probe.bin").apply { writeBytes(ByteArray(2048)) }
+        cacheProbe = cacheFile
 
         val vm = viewModel()
-        vm.refreshStorage()
 
         val state = vm.state.first { !it.computingStorage && it.dbBytes > 0 }
         assertTrue("db bytes should be positive", state.dbBytes > 0)
@@ -97,17 +97,19 @@ class PrivacyViewModelTest {
 
     @Test
     fun `clearCache calls reused cleaner and re-reads storage`() = runTest(dispatcher.scheduler) {
-        // Seed cached account data so the cleaner has something to remove.
-        val cacheFile = File(context.cacheDir, "probe.bin").apply { writeBytes(ByteArray(4096)) }
+        val cacheFile = File(context.cacheDir, "privacy-probe.bin").apply { writeBytes(ByteArray(4096)) }
+        cacheProbe = cacheFile
         val vm = viewModel()
-        vm.state.first { !it.computingStorage }
+        val before = vm.state.first { !it.computingStorage }
 
         vm.clearCache()
 
-        // The cleaner wipes account tables; storage is re-read (not stuck computing).
-        val state = vm.state.first { !it.clearingCache && !it.computingStorage }
+        val state = vm.state.first {
+            !it.clearingCache && !it.computingStorage && it.cacheBytes < before.cacheBytes
+        }
+        assertEquals(1, clearCalls)
+        assertFalse(cacheFile.exists())
         assertFalse(state.computingStorage)
-        cacheFile.delete()
     }
 
     @Test
@@ -116,24 +118,33 @@ class PrivacyViewModelTest {
         var received: Uri? = null
         vm.exportDiagnostics { received = it }
 
-        // Wait for the export coroutine to settle.
         vm.state.first { !it.exporting }
+        assertEquals(1, exportCalls)
+        assertEquals(exportedUri, received)
         assertNotNull("exporter should produce a shareable uri", received)
     }
 
     @Test
-    fun `exposes whether a session is present`() = runTest(dispatcher.scheduler) {
+    fun `shareIntentFor delegates to the exporter intent builder`() {
         val vm = viewModel()
-        // No token saved in this test → no session (sessionPresent defaults false and stays false).
-        val state = vm.state.first { it.serverHost.isNotBlank() }
-        assertFalse(state.sessionPresent)
+
+        val intent = vm.shareIntentFor(exportedUri)
+
+        assertEquals(1, shareIntentCalls)
+        assertEquals(Intent.ACTION_SEND, intent.action)
+    }
+
+    @Test
+    fun `exposes whether a session is present`() = runTest(dispatcher.scheduler) {
+        sessionPresent = true
+        val vm = viewModel()
+        val state = vm.state.first { it.sessionPresent }
+        assertTrue(state.sessionPresent)
     }
 
     @Test
     fun `exposes the selected server host`() = runTest(dispatcher.scheduler) {
-        // Set an explicit endpoint so this assertion is independent of whatever another test may
-        // have persisted into the shared on-disk AuthDataStore (the DataStore file is process-wide).
-        authDataStore.saveOAuthConfig("https://sync.privacytest.example", "test-client")
+        endpoint = "https://sync.privacytest.example"
         val vm = viewModel()
         val state = vm.state.first { it.serverHost == "sync.privacytest.example" }
         assertEquals("sync.privacytest.example", state.serverHost)

@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Sync Center screen (#33). Plain-language, never raw HTTP/impl terms. -->
-    <string name="sync_center_title">Sync center</string>
-    <string name="sync_center_open">Open sync center</string>
+    <!-- Sync status and recovery screen (#33). Plain-language, never raw HTTP/impl terms. -->
+    <string name="sync_status_card_title">Sync status</string>
+    <string name="sync_center_title">Sync &amp; recovery</string>
+    <string name="sync_center_open">View sync details</string>
+    <string name="sync_center_description">See which changes are waiting for the server. You can retry failed changes or discard ones you no longer want to send.</string>
     <string name="sync_center_navigate_back">Back</string>
 
     <!-- Freshness section -->

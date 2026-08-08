@@ -59,6 +59,13 @@ interface OutboxDao {
     @Query("UPDATE outbox SET attemptCount = 0, lastError = NULL, deadLettered = 0 WHERE timeEntryId = :entryId")
     suspend fun resetForRetry(entryId: String): Int
 
+    /** Revive every terminal failure for one organization without disturbing active retries. */
+    @Query(
+        "UPDATE outbox SET attemptCount = 0, lastError = NULL, deadLettered = 0 " +
+            "WHERE organizationId = :organizationId AND deadLettered = 1",
+    )
+    suspend fun resetFailedForRetry(organizationId: String): Int
+
     /**
      * Mark every non-terminal operation for an entry as dead-lettered. Used to cascade a
      * permanently-failed CREATE/START to its dependent STOP/UPDATE/DELETE ops, which reference the

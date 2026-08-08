@@ -8,6 +8,7 @@ package dev.tricked.solidverdant.e2e
 
 import dev.tricked.solidverdant.ui.calendar.CalendarTestTags
 import dev.tricked.solidverdant.ui.login.LoginTestTags
+import dev.tricked.solidverdant.ui.sync.SyncCenterTestTags
 import dev.tricked.solidverdant.ui.tracking.TrackingTestTags
 
 /**
@@ -30,6 +31,9 @@ object TestTags {
     const val TRACK_CONTINUE_BUTTON = TrackingTestTags.CONTINUE_BUTTON
     const val TRACK_SHEET_DESCRIPTION_FIELD = TrackingTestTags.SHEET_DESCRIPTION_FIELD
     const val TRACK_SHEET_SAVE_BUTTON = TrackingTestTags.SHEET_SAVE_BUTTON
+    const val TRACK_SYNC_DETAILS_BUTTON = TrackingTestTags.SYNC_DETAILS_BUTTON
+    const val SYNC_STATUS_SCREEN = SyncCenterTestTags.SCREEN
+    const val SYNC_STATUS_BACK_BUTTON = SyncCenterTestTags.BACK_BUTTON
     const val LOGIN_BUTTON = LoginTestTags.LOGIN_BUTTON
     const val STATS_SCREEN = "stats_screen"
     const val CALENDAR_WEEK_GRID = CalendarTestTags.WEEK_GRID

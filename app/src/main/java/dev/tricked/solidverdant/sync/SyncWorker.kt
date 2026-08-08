@@ -31,6 +31,7 @@ import timber.log.Timber
 import java.io.IOException
 import java.time.Duration
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 
 @HiltWorker
 @Suppress("LongParameterList", "TooManyFunctions")
@@ -168,7 +169,7 @@ class SyncWorker @AssistedInject constructor(
     }
 
     private suspend fun process(op: OutboxEntity, conflictIndexes: Map<String, ConflictIndex>): Outcome = try {
-        if (timeEntryDao.getById(op.timeEntryId)?.syncState == SyncState.CONFLICT) {
+        if (timeEntryDao.getById(op.timeEntryId)?.syncState == SyncState.CONFLICT && op.opType != OutboxOpType.STOP) {
             outboxDao.deleteByTimeEntryId(op.timeEntryId)
             Outcome.Superseded
         } else {
@@ -268,7 +269,22 @@ class SyncWorker @AssistedInject constructor(
             payload.start,
             endTime = payload.end,
         ).getOrThrow()
-        persistSynced(server)
+        val current = timeEntryDao.getById(op.timeEntryId)
+        if (current?.syncState == SyncState.CONFLICT) {
+            // The user-confirmed stop must reach the server without silently choosing either side
+            // of an unrelated metadata conflict. Preserve the local side and refresh the server
+            // recovery copy with its now-completed state for the later conflict decision.
+            timeEntryDao.upsert(
+                current.copy(
+                    end = server.end,
+                    duration = server.duration,
+                    updatedAt = clock.nowMs(),
+                    conflictServerJson = json.encodeToString(server),
+                ),
+            )
+        } else {
+            persistSynced(server)
+        }
         return Outcome.Success()
     }
 
@@ -379,8 +395,15 @@ class SyncWorker @AssistedInject constructor(
         }
         if (instants.isEmpty()) return null to null
         val padding = Duration.ofDays(1).toMillis()
-        return Instant.ofEpochMilli(instants.min() - padding).toString() to
-            Instant.ofEpochMilli(maxOf(instants.max() + padding, clock.nowMs() + padding)).toString()
+
+        // Solidtime's time-entry filters require `Y-m-dTH:i:sZ` exactly. Instant.toString()
+        // includes a fractional component whenever the device clock has non-zero milliseconds,
+        // causing the conflict preflight GET to fail validation before STOP/UPDATE/DELETE can run.
+        fun wholeSecondUtc(epochMs: Long) = Instant.ofEpochMilli(epochMs)
+            .truncatedTo(ChronoUnit.SECONDS)
+            .toString()
+        return wholeSecondUtc(instants.min() - padding) to
+            wholeSecondUtc(maxOf(instants.max() + padding, clock.nowMs() + padding))
     }
 
     /**
@@ -431,6 +454,7 @@ class SyncWorker @AssistedInject constructor(
 
     private fun classify(e: Exception): Outcome = when {
         e is IOException -> Outcome.Retry
+        e is HttpException && e.code() == HTTP_REQUEST_TIMEOUT -> Outcome.Retry
         e is HttpException && e.code() == HTTP_TOO_MANY_REQUESTS -> Outcome.Retry
         e is HttpException && e.code() >= HTTP_SERVER_ERROR_START -> Outcome.Retry
         else -> Outcome.Fail
@@ -440,9 +464,15 @@ class SyncWorker @AssistedInject constructor(
         private const val PAGE_SIZE = 250
         private const val MAX_PAGE_SCAN = 15_000
         private const val HTTP_NOT_FOUND = 404
+        private const val HTTP_REQUEST_TIMEOUT = 408
         private const val HTTP_TOO_MANY_REQUESTS = 429
         private const val HTTP_SERVER_ERROR_START = 500
-        private val CONFLICT_CHECK_OPS = setOf(OutboxOpType.STOP, OutboxOpType.UPDATE, OutboxOpType.DELETE)
+
+        // STOP is intentionally excluded: its wire request only sets `end`, so it cannot overwrite
+        // server-side metadata and must remain available even when the history endpoint used for
+        // content conflict checks is temporarily unavailable. UPDATE/DELETE still require the
+        // preflight comparison.
+        private val CONFLICT_CHECK_OPS = setOf(OutboxOpType.UPDATE, OutboxOpType.DELETE)
 
         /** Cap on transient retries before an op is moved to the dead-letter state. */
         const val MAX_ATTEMPTS = 5

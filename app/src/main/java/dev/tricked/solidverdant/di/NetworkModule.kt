@@ -71,7 +71,7 @@ internal fun createLoggingInterceptor(
     redactHeader("Cookie")
     redactHeader("Set-Cookie")
     level = if (isDebug) {
-        HttpLoggingInterceptor.Level.BODY
+        HttpLoggingInterceptor.Level.HEADERS
     } else {
         HttpLoggingInterceptor.Level.NONE
     }

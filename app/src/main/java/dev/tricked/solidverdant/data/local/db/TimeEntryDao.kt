@@ -36,6 +36,9 @@ interface TimeEntryDao {
     @Query("SELECT * FROM time_entries WHERE id = :id")
     suspend fun getById(id: String): TimeEntryEntity?
 
+    @Query("SELECT * FROM time_entries WHERE organizationId = :orgId AND end IS NULL AND pendingDelete = 0 ORDER BY start DESC LIMIT 1")
+    suspend fun getActive(orgId: String): TimeEntryEntity?
+
     @Query("SELECT * FROM time_entries WHERE organizationId = :orgId AND syncState = 'CONFLICT' ORDER BY start DESC")
     fun observeConflicts(orgId: String): Flow<List<TimeEntryEntity>>
 

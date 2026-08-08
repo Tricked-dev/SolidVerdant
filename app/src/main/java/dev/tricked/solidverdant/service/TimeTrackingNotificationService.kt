@@ -77,16 +77,27 @@ class TimeTrackingNotificationService : Service() {
         Timber.d("NotificationService onStartCommand: action=${intent?.action}")
         when (intent?.action) {
             ACTION_START_TRACKING -> {
-                isTracking = true
-                startTime = Instant.ofEpochMilli(
+                val requestedStartTime = Instant.ofEpochMilli(
                     intent.getLongExtra(EXTRA_START_TIME, System.currentTimeMillis()),
                 )
+                // Active-entry refreshes also flow through this action to update notification
+                // metadata. Re-arming an already-due warning here creates an immediate
+                // WorkManager -> service -> refresh loop and also discards Keep Running snoozes.
+                val isSameEntryRefresh = isTracking && startTime == requestedStartTime
+
+                isTracking = true
+                startTime = requestedStartTime
                 projectName = intent.getStringExtra(EXTRA_PROJECT_NAME)
                 taskName = intent.getStringExtra(EXTRA_TASK_NAME)
                 description = intent.getStringExtra(EXTRA_DESCRIPTION)
 
+                if (!isSameEntryRefresh) {
+                    longTimerWarningVisible = false
+                }
                 publishNotification()
-                scheduleLongTimerWarning()
+                if (!isSameEntryRefresh) {
+                    scheduleLongTimerWarning()
+                }
             }
 
             ACTION_SHOW_IDLE -> {

@@ -12,6 +12,7 @@ import dev.tricked.solidverdant.data.model.Membership
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
+import dev.tricked.solidverdant.data.model.TimeEntriesMeta
 import dev.tricked.solidverdant.data.model.TimeEntriesResponse
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.UpdateTimeEntryRequest
@@ -34,6 +35,7 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
     companion object {
         private const val REDIRECT_URI = "solidtime://oauth/callback"
         private const val HTTP_NOT_FOUND = 404
+        private const val MAX_CATALOG_PAGES = 10_000
     }
 
     val isLoggedIn: Flow<Boolean> = authDataStore.isLoggedIn
@@ -307,6 +309,7 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
     /**
      * Stop the active time entry
      */
+    @Suppress("UnusedParameter")
     suspend fun stopTimeEntry(
         organizationId: String,
         timeEntryId: String,
@@ -325,11 +328,9 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
         val end = endIso?.takeIf { it.isNotBlank() }
             ?: java.time.ZonedDateTime.now().withZoneSameInstant(java.time.ZoneOffset.UTC).format(formatter)
 
-        val request = dev.tricked.solidverdant.data.model.StopTimeEntryRequest(
-            userId = userId,
-            start = startTime,
-            end = end,
-        )
+        // Stopping is a narrow command: only set the end timestamp. Re-sending the cached start
+        // could overwrite a correction made by another client while this device was offline.
+        val request = dev.tricked.solidverdant.data.model.StopTimeEntryRequest(end = end)
 
         val response = api.stopTimeEntry(organizationId, timeEntryId, request)
         Timber.d("Time entry stopped")
@@ -394,8 +395,12 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
     suspend fun getTags(organizationId: String): Result<List<Tag>> = try {
         val endpoint = authDataStore.getEndpoint()
         val api = apiClientFactory.createApi(endpoint)
-        val response = api.getTags(organizationId)
-        Result.success(response.data)
+        Result.success(
+            collectAllPages { page ->
+                val response = api.getTags(organizationId, page)
+                response.data to response.meta
+            },
+        )
     } catch (e: Exception) {
         Timber.e(e, "Failed to get tags")
         Result.failure(e)
@@ -407,15 +412,25 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
     suspend fun getProjects(organizationId: String): Result<List<Project>> = try {
         val endpoint = authDataStore.getEndpoint()
         val api = apiClientFactory.createApi(endpoint)
-        val response = api.getProjects(organizationId)
-        Result.success(response.data)
+        Result.success(
+            collectAllPages { page ->
+                val response = api.getProjects(organizationId, page)
+                response.data to response.meta
+            },
+        )
     } catch (e: Exception) {
         Timber.e(e, "Failed to get projects")
         Result.failure(e)
     }
 
     suspend fun getClients(organizationId: String): Result<List<Client>> = try {
-        Result.success(apiClientFactory.createApi(authDataStore.getEndpoint()).getClients(organizationId).data)
+        val api = apiClientFactory.createApi(authDataStore.getEndpoint())
+        Result.success(
+            collectAllPages { page ->
+                val response = api.getClients(organizationId, page)
+                response.data to response.meta
+            },
+        )
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -426,8 +441,12 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
     suspend fun getTasks(organizationId: String): Result<List<Task>> = try {
         val endpoint = authDataStore.getEndpoint()
         val api = apiClientFactory.createApi(endpoint)
-        val response = api.getTasks(organizationId)
-        Result.success(response.data)
+        Result.success(
+            collectAllPages { page ->
+                val response = api.getTasks(organizationId, page)
+                response.data to response.meta
+            },
+        )
     } catch (e: Exception) {
         Timber.e(e, "Failed to get tasks")
         Result.failure(e)
@@ -472,5 +491,21 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
     } catch (e: Exception) {
         Timber.e(e, "Failed to delete time entry")
         Result.failure(e)
+    }
+
+    private suspend fun <T> collectAllPages(fetch: suspend (Int) -> Pair<List<T>, TimeEntriesMeta?>): List<T> {
+        val collected = mutableListOf<T>()
+        var requestedPage = 1
+        repeat(MAX_CATALOG_PAGES) {
+            val (items, meta) = fetch(requestedPage)
+            val currentPage = meta?.currentPage ?: requestedPage
+            val lastPage = meta?.lastPage ?: currentPage
+            check(currentPage == requestedPage) { "Catalogue pagination returned an unexpected page" }
+            check(lastPage >= currentPage) { "Catalogue pagination returned an invalid last page" }
+            collected += items
+            if (items.isEmpty() || currentPage >= lastPage) return collected
+            requestedPage = currentPage + 1
+        }
+        error("Catalogue pagination exceeded the safety limit")
     }
 }

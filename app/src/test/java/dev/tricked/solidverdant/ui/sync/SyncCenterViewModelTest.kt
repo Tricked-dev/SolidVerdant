@@ -6,6 +6,7 @@
 
 package dev.tricked.solidverdant.ui.sync
 
+import android.os.Looper
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import dev.tricked.solidverdant.data.local.SettingsDataStore
@@ -35,6 +36,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -79,6 +81,8 @@ class SyncCenterViewModelTest {
         // resetMain, so no Main-bound continuation straggles into "Main is used concurrently".
         dispatcher.scheduler.advanceUntilIdle()
         db.close()
+        shadowOf(Looper.getMainLooper()).idle()
+        dispatcher.scheduler.advanceUntilIdle()
         kotlinx.coroutines.Dispatchers.resetMain()
     }
 
@@ -172,7 +176,7 @@ class SyncCenterViewModelTest {
     }
 
     @Test
-    fun `retryAll requests a sync`() = runTest(dispatcher.scheduler) {
+    fun `retryAll revives failed operations before requesting a sync`() = runTest(dispatcher.scheduler) {
         seedOrg()
         seedOp("e-failed", OutboxOpType.CREATE, deadLettered = true, error = "boom", attempts = 5)
         val vm = viewModel()
@@ -182,6 +186,9 @@ class SyncCenterViewModelTest {
         val before = syncRequests
         vm.retryAll()
         dispatcher.scheduler.advanceUntilIdle()
+
+        val state = vm.uiState.first { it.organizationId == ORG && it.failed.isEmpty() && it.pending.isNotEmpty() }
+        assertTrue(state.pending.any { it.entryId == "e-failed" })
         assertTrue(syncRequests > before)
     }
 

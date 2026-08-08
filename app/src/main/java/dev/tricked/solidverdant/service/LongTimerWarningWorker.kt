@@ -69,7 +69,7 @@ class LongTimerWarningWorker @AssistedInject constructor(
     }
 
     companion object {
-        private const val UNIQUE_WORK_NAME = "long-timer-warning"
+        internal const val UNIQUE_WORK_NAME = "long-timer-warning"
         private const val INPUT_ENTRY_START_EPOCH_MS = "entry_start_epoch_ms"
 
         /**

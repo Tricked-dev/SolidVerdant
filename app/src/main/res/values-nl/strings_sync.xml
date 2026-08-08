@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Sync Center-scherm (#33). Begrijpelijke taal, nooit ruwe HTTP-/technische termen. -->
-    <string name="sync_center_title">Synchronisatiecentrum</string>
-    <string name="sync_center_open">Synchronisatiecentrum openen</string>
+    <!-- Synchronisatiestatus en herstel (#33). Begrijpelijke taal, nooit ruwe HTTP-/technische termen. -->
+    <string name="sync_status_card_title">Synchronisatiestatus</string>
+    <string name="sync_center_title">Synchronisatie en herstel</string>
+    <string name="sync_center_open">Synchronisatiedetails bekijken</string>
+    <string name="sync_center_description">Bekijk welke wijzigingen nog op de server wachten. Je kunt mislukte wijzigingen opnieuw proberen of wijzigingen verwijderen die je niet meer wilt verzenden.</string>
     <string name="sync_center_navigate_back">Terug</string>
 
     <!-- Actualiteit -->

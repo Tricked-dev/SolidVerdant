@@ -19,6 +19,7 @@ import dev.tricked.solidverdant.data.export.DiagnosticExporter
 import dev.tricked.solidverdant.data.local.AuthDataStore
 import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.local.UserCacheCleaner
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,13 +43,34 @@ import javax.inject.Inject
  * the main thread. It is refreshed after a cache clear so the numbers reflect the wipe.
  */
 @HiltViewModel
-class PrivacyViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val settingsDataStore: SettingsDataStore,
-    private val authDataStore: AuthDataStore,
-    private val userCacheCleaner: UserCacheCleaner,
-    private val diagnosticExporter: DiagnosticExporter,
+class PrivacyViewModel internal constructor(
+    private val context: Context,
+    private val readEndpoint: suspend () -> String,
+    private val readSessionPresent: suspend () -> Boolean,
+    private val clearUserCache: suspend () -> Unit,
+    private val exportDiagnosticBundle: suspend () -> Uri,
+    private val buildShareIntent: (Uri) -> Intent,
+    private val storageDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
+
+    /** Production wiring; the internal constructor keeps unit tests off process-wide IO/DataStore. */
+    @Suppress("UNUSED_PARAMETER")
+    @Inject
+    constructor(
+        @ApplicationContext context: Context,
+        settingsDataStore: SettingsDataStore,
+        authDataStore: AuthDataStore,
+        userCacheCleaner: UserCacheCleaner,
+        diagnosticExporter: DiagnosticExporter,
+    ) : this(
+        context = context,
+        readEndpoint = { authDataStore.endpoint.first() },
+        readSessionPresent = { !authDataStore.accessToken.first().isNullOrEmpty() },
+        clearUserCache = { userCacheCleaner.clear() },
+        exportDiagnosticBundle = { diagnosticExporter.export() },
+        buildShareIntent = diagnosticExporter::shareIntent,
+        storageDispatcher = Dispatchers.IO,
+    )
 
     @Stable
     data class State(
@@ -68,11 +90,11 @@ class PrivacyViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            val endpoint = authDataStore.endpoint.first()
+            val endpoint = readEndpoint()
             _state.value = _state.value.copy(serverHost = hostOf(endpoint))
         }
         viewModelScope.launch {
-            val present = !authDataStore.accessToken.first().isNullOrEmpty()
+            val present = readSessionPresent()
             _state.value = _state.value.copy(sessionPresent = present)
         }
         refreshStorage()
@@ -81,16 +103,20 @@ class PrivacyViewModel @Inject constructor(
     /** Recompute the Room DB + cache directory sizes off the main thread. */
     fun refreshStorage() {
         viewModelScope.launch {
-            _state.value = _state.value.copy(computingStorage = true)
-            val (dbBytes, cacheBytes) = withContext(Dispatchers.IO) {
-                databaseBytes() to directoryBytes(context.cacheDir)
-            }
-            _state.value = _state.value.copy(
-                dbBytes = dbBytes,
-                cacheBytes = cacheBytes,
-                computingStorage = false,
-            )
+            refreshStorageNow()
         }
+    }
+
+    private suspend fun refreshStorageNow() {
+        _state.value = _state.value.copy(computingStorage = true)
+        val (dbBytes, cacheBytes) = withContext(storageDispatcher) {
+            databaseBytes() to directoryBytes(context.cacheDir)
+        }
+        _state.value = _state.value.copy(
+            dbBytes = dbBytes,
+            cacheBytes = cacheBytes,
+            computingStorage = false,
+        )
     }
 
     /**
@@ -100,10 +126,10 @@ class PrivacyViewModel @Inject constructor(
     fun clearCache() {
         viewModelScope.launch {
             _state.value = _state.value.copy(clearingCache = true)
-            runCatching { userCacheCleaner.clear() }
+            runCatching { clearUserCache() }
                 .onFailure { Timber.e(it, "Failed to clear cached data") }
+            refreshStorageNow()
             _state.value = _state.value.copy(clearingCache = false)
-            refreshStorage()
         }
     }
 
@@ -114,7 +140,7 @@ class PrivacyViewModel @Inject constructor(
     fun exportDiagnostics(onReady: (Uri) -> Unit) {
         viewModelScope.launch {
             _state.value = _state.value.copy(exporting = true)
-            runCatching { diagnosticExporter.export() }
+            runCatching { exportDiagnosticBundle() }
                 .onSuccess { onReady(it) }
                 .onFailure { Timber.e(it, "Failed to export diagnostics") }
             _state.value = _state.value.copy(exporting = false)
@@ -122,7 +148,7 @@ class PrivacyViewModel @Inject constructor(
     }
 
     /** Share-sheet intent for a diagnostic bundle [uri], delegating to the exporter (#49). */
-    fun shareIntentFor(uri: Uri): Intent = diagnosticExporter.shareIntent(uri)
+    fun shareIntentFor(uri: Uri): Intent = buildShareIntent(uri)
 
     /** Sum of the main Room DB file plus its `-wal`/`-shm`/`-journal` sidecars, if present. */
     private fun databaseBytes(): Long {

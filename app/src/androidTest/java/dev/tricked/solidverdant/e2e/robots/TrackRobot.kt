@@ -53,6 +53,18 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
         firstEnabledNodeWithTag(TestTags.TRACK_REFRESH_BUTTON).performClick()
     }
 
+    fun openSyncDetails(): TrackRobot = apply {
+        waitUntilEnabledTagExists(TestTags.TRACK_SYNC_DETAILS_BUTTON)
+        firstEnabledNodeWithTag(TestTags.TRACK_SYNC_DETAILS_BUTTON).performClick()
+        waitUntilTagExists(TestTags.SYNC_STATUS_SCREEN)
+    }
+
+    fun closeSyncDetails(): TrackRobot = apply {
+        waitUntilEnabledTagExists(TestTags.SYNC_STATUS_BACK_BUTTON)
+        firstEnabledNodeWithTag(TestTags.SYNC_STATUS_BACK_BUTTON).performClick()
+        waitUntilTagExists(TestTags.TRACK_HISTORY_LIST)
+    }
+
     fun assertStopButtonVisible(): TrackRobot = apply {
         waitUntilTagExists(TestTags.TRACK_STOP_BUTTON)
     }

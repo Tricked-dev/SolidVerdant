@@ -16,6 +16,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.local.AppThemeMode
 import dev.tricked.solidverdant.data.local.SettingsDataStore
+import dev.tricked.solidverdant.data.local.db.OutboxOpType
 import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
@@ -85,6 +86,25 @@ internal object HistoryWindow {
         }
     }
 }
+
+/** Preserve a server-missing active row only while its creating START has not reached the server. */
+internal fun shouldPreserveLocallyStartedEntry(entryId: String, operations: List<TimeEntryRepository.SyncOperation>): Boolean =
+    operations.any { operation ->
+        operation.entryId == entryId &&
+            operation.type == OutboxOpType.START &&
+            operation.status != TimeEntryRepository.EntrySyncStatus.SYNCED
+    }
+
+/** Do not resurrect the server's still-active copy while its local STOP is in flight. */
+internal fun shouldDeferServerActiveWhileStopping(entryId: String, operations: List<TimeEntryRepository.SyncOperation>): Boolean =
+    operations.any { operation ->
+        operation.entryId == entryId &&
+            operation.type == OutboxOpType.STOP &&
+            operation.status in setOf(
+                TimeEntryRepository.EntrySyncStatus.PENDING,
+                TimeEntryRepository.EntrySyncStatus.RETRYING,
+            )
+    }
 
 /**
  * UI state for tracking screen
@@ -483,11 +503,6 @@ class TrackingViewModel @Inject constructor(
      * Keep notification state in sync with timers started or stopped on another device while
      * this ViewModel is alive. Changing organizations replaces the old monitor immediately.
      */
-    /** True while [entryId] still has a queued/retrying/failed outbox operation. */
-    private fun hasUnsyncedOp(entryId: String): Boolean = _uiState.value.syncOperations.any {
-        it.entryId == entryId && it.status != TimeEntryRepository.EntrySyncStatus.SYNCED
-    }
-
     private fun startActiveEntryMonitoring(organizationId: String) {
         if (monitoredOrganizationId == organizationId && activeEntryMonitorJob?.isActive == true) {
             return
@@ -558,15 +573,20 @@ class TrackingViewModel @Inject constructor(
             .onSuccess { timeEntry ->
                 // The active-entry endpoint is account-wide. Only surface an entry for the
                 // organization currently selected in the app.
-                val currentTimeEntry = timeEntry?.takeIf {
-                    it.organizationId == organizationId
-                }
+                val currentTimeEntry = timeEntry
+                    ?.takeIf { it.organizationId == organizationId }
+                    ?.takeUnless {
+                        shouldDeferServerActiveWhileStopping(it.id, _uiState.value.syncOperations)
+                    }
                 // A locally started timer whose START/CREATE is still in the outbox does not
                 // exist on the server yet. A poll or foreground refresh answering "no active
                 // entry" must not clear it, or the user's running timer silently disappears
                 // until the next sync (found by TrackingLifecycleE2eTest recreation flow).
                 val local = _uiState.value.currentTimeEntry
-                if (currentTimeEntry == null && local != null && hasUnsyncedOp(local.id)) {
+                if (currentTimeEntry == null &&
+                    local != null &&
+                    shouldPreserveLocallyStartedEntry(local.id, _uiState.value.syncOperations)
+                ) {
                     return@onSuccess
                 }
                 if (onlyIfChanged &&
@@ -1401,6 +1421,13 @@ class TrackingViewModel @Inject constructor(
     }
 
     fun retrySync() = syncTrigger.requestSync()
+
+    fun retryAllSync(organizationId: String) {
+        viewModelScope.launch {
+            timeEntryRepository.prepareRetryAll(organizationId)
+            syncTrigger.requestSync()
+        }
+    }
 
     fun retrySync(entryId: String) {
         viewModelScope.launch {

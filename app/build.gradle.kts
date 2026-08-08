@@ -273,6 +273,7 @@ dependencies {
     testImplementation(libs.room.testing)
     testImplementation(libs.androidx.work.testing)
     testImplementation(libs.androidx.test.core.ktx)
+    testImplementation(libs.okhttp.mockwebserver)
 
     // Roborazzi + Compose screenshot testing on the JVM (no device/emulator).
     testImplementation(platform(libs.androidx.compose.bom))

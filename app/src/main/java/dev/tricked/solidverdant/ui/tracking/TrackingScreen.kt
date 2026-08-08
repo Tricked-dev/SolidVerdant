@@ -269,7 +269,7 @@ fun TrackingScreen(
     onUndoDelete: (TimeEntry) -> Unit,
     onRetrySync: () -> Unit,
     onRetrySyncEntry: (String) -> Unit,
-    onOpenSyncCenter: () -> Unit = {},
+    onOpenSyncCenter: () -> Unit,
     onOpenPrivacy: () -> Unit = {},
     onLoadMoreEntries: () -> Unit,
     onLoadNewerEntries: () -> Unit,
@@ -1006,7 +1006,7 @@ fun TrackingScreen(
                             primaryContent()
                             item { HistoryFilters(historyFilter, uiState) { historyFilter = it } }
                             if (uiState.syncOperations.isNotEmpty()) {
-                                item { SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry) }
+                                item { SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry, onOpenSyncCenter) }
                             }
                             trackingHistoryItems(
                                 uiState = uiState,
@@ -1334,7 +1334,7 @@ private fun SyncCenter(
     operations: List<TimeEntryRepository.SyncOperation>,
     onRetry: () -> Unit,
     onRetryEntry: (String) -> Unit,
-    onOpenSyncCenter: () -> Unit = {},
+    onOpenSyncCenter: () -> Unit,
 ) {
     val failed = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.FAILED }
     val retrying = operations.count { it.status == TimeEntryRepository.EntrySyncStatus.RETRYING }
@@ -1345,7 +1345,7 @@ private fun SyncCenter(
         retrying > 0 -> TimeEntryRepository.EntrySyncStatus.RETRYING
         else -> TimeEntryRepository.EntrySyncStatus.PENDING
     }
-    SectionCard(title = stringResource(R.string.sync_center)) {
+    SectionCard(title = stringResource(R.string.sync_status_card_title)) {
         Row(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -1390,7 +1390,10 @@ private fun SyncCenter(
             }
         }
         HorizontalDivider()
-        TextButton(onClick = onOpenSyncCenter, modifier = Modifier.fillMaxWidth()) {
+        TextButton(
+            onClick = onOpenSyncCenter,
+            modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.SYNC_DETAILS_BUTTON),
+        ) {
             Text(stringResource(R.string.sync_center_open))
         }
     }

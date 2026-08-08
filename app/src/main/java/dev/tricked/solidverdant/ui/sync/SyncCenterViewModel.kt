@@ -95,8 +95,14 @@ class SyncCenterViewModel @Inject constructor(
             ?.organizationId
     }
 
-    /** Retry every queued/failed change by requesting a sync drain (reuses the outbox worker). */
-    fun retryAll() = syncTrigger.requestSync()
+    /** Revive every terminal failure in the current organization, then request a sync drain. */
+    fun retryAll() {
+        val organizationId = uiState.value.organizationId ?: return
+        viewModelScope.launch {
+            repository.prepareRetryAll(organizationId)
+            syncTrigger.requestSync()
+        }
+    }
 
     /** Retry a single failed change: clear its dead-letter/attempt state, then request a sync. */
     fun retry(entryId: String) {

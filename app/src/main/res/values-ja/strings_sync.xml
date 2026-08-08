@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 同期センター画面 (#33)。生の HTTP/実装用語ではなく、わかりやすい言葉で。 -->
-    <string name="sync_center_title">同期センター</string>
-    <string name="sync_center_open">同期センターを開く</string>
+    <!-- 同期状態と復旧画面 (#33)。生の HTTP/実装用語ではなく、わかりやすい言葉で。 -->
+    <string name="sync_status_card_title">同期状態</string>
+    <string name="sync_center_title">同期と復旧</string>
+    <string name="sync_center_open">同期の詳細を表示</string>
+    <string name="sync_center_description">サーバーへの送信を待っている変更を確認できます。失敗した変更を再試行するか、送信しない変更を破棄できます。</string>
     <string name="sync_center_navigate_back">戻る</string>
 
     <!-- 最新状況 -->

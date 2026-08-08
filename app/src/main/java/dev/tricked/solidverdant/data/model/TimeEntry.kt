@@ -141,12 +141,7 @@ data class StartTimeEntryRequest(
  * Request to stop an active time entry
  */
 @Serializable
-data class StopTimeEntryRequest(
-    @SerialName("user_id")
-    val userId: String,
-    val start: String,
-    val end: String,
-)
+data class StopTimeEntryRequest(val end: String)
 
 /**
  * Project information
@@ -203,21 +198,21 @@ data class Task(
  * Response wrapper for projects API calls
  */
 @Serializable
-data class ProjectsResponse(val data: List<Project>)
+data class ProjectsResponse(val data: List<Project>, val meta: TimeEntriesMeta? = null)
 
-@Serializable data class ClientsResponse(val data: List<Client>)
+@Serializable data class ClientsResponse(val data: List<Client>, val meta: TimeEntriesMeta? = null)
 
 /**
  * Response wrapper for tasks API calls
  */
 @Serializable
-data class TasksResponse(val data: List<Task>)
+data class TasksResponse(val data: List<Task>, val meta: TimeEntriesMeta? = null)
 
 /**
  * Response wrapper for tags API calls
  */
 @Serializable
-data class TagsResponse(val data: List<Tag>)
+data class TagsResponse(val data: List<Tag>, val meta: TimeEntriesMeta? = null)
 
 /**
  * Response wrapper for multiple time entries

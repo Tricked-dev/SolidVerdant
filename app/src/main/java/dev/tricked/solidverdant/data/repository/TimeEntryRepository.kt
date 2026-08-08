@@ -183,8 +183,9 @@ class TimeEntryRepository @Inject constructor(
         outboxDao.observeAll(),
         timeEntryDao.observeConflicts(orgId),
     ) { operations, conflicts ->
-        val conflictIds = conflicts.map { it.id }.toSet()
-        val queued = operations.filter { it.organizationId == orgId && it.timeEntryId !in conflictIds }.map { op ->
+        val organizationOps = operations.filter { it.organizationId == orgId }
+        val queuedIds = organizationOps.map { it.timeEntryId }.toSet()
+        val queued = organizationOps.map { op ->
             SyncOperation(
                 entryId = op.timeEntryId,
                 type = op.opType,
@@ -197,7 +198,7 @@ class TimeEntryRepository @Inject constructor(
                 error = op.lastError,
             )
         }
-        queued + conflicts.map { conflict ->
+        queued + conflicts.filterNot { it.id in queuedIds }.map { conflict ->
             SyncOperation(
                 entryId = conflict.id,
                 type = OutboxOpType.UPDATE,
@@ -306,25 +307,48 @@ class TimeEntryRepository @Inject constructor(
         val now = clock.nowMs()
         val end = nowIso()
         database.withTransaction {
+            // START reconciliation replaces a local id with the server id. The UI can still hold
+            // the retired local snapshot for one frame and hand it back here. Resolve that narrow
+            // race to the matching active row so Stop cannot create an orphaned completed local
+            // row while leaving the server-owned row running.
             val current = timeEntryDao.getById(entry.id)
+                ?: timeEntryDao.getActive(entry.organizationId)?.takeIf {
+                    it.userId == entry.userId && it.start == entry.start
+                }
+            val targetId = current?.id ?: entry.id
+            val targetOrganizationId = current?.organizationId ?: entry.organizationId
+            val targetStart = current?.start ?: entry.start
             if (current?.syncState == SyncState.CONFLICT) {
                 // Stopping is the one mutation allowed on a conflicted row: time capture must not
-                // be blocked. Keep the row conflicted and preserve the server recovery copy.
+                // be blocked. Keep the row conflicted and preserve the server recovery copy, but
+                // still enqueue the narrow end-only STOP so the server timer actually ends.
                 timeEntryDao.upsert(
                     current.copy(end = end, updatedAt = now, pendingDelete = false),
                 )
+                outboxDao.insert(
+                    OutboxEntity(
+                        opType = OutboxOpType.STOP,
+                        organizationId = targetOrganizationId,
+                        timeEntryId = targetId,
+                        createdAtMs = now,
+                        clientId = newClientId(),
+                        payloadJson = json.encodeToString(StopPayload(userId, targetStart, end = end)),
+                    ),
+                )
                 return@withTransaction
             }
-            val base = captureBaseSnapshot(entry.id)
-            timeEntryDao.upsert(entry.copy(end = end).toEntity(updatedAt = now, syncState = SyncState.PENDING))
+            val base = captureBaseSnapshot(targetId)
+            val stopped = current?.copy(end = end, updatedAt = now, syncState = SyncState.PENDING)
+                ?: entry.copy(end = end).toEntity(updatedAt = now, syncState = SyncState.PENDING)
+            timeEntryDao.upsert(stopped)
             outboxDao.insert(
                 OutboxEntity(
                     opType = OutboxOpType.STOP,
-                    organizationId = entry.organizationId,
-                    timeEntryId = entry.id,
+                    organizationId = targetOrganizationId,
+                    timeEntryId = targetId,
                     createdAtMs = now,
                     clientId = newClientId(),
-                    payloadJson = json.encodeToString(StopPayload(userId, entry.start, end = end)),
+                    payloadJson = json.encodeToString(StopPayload(userId, targetStart, end = end)),
                     baseSnapshotJson = base,
                 ),
             )
@@ -617,6 +641,8 @@ class TimeEntryRepository @Inject constructor(
     }
 
     suspend fun prepareRetry(entryId: String): Boolean = outboxDao.resetForRetry(entryId) > 0
+
+    suspend fun prepareRetryAll(organizationId: String): Boolean = outboxDao.resetFailedForRetry(organizationId) > 0
 
     /**
      * SV-029: discard a dead-lettered (permanently failed) outbox operation without retrying it.

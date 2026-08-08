@@ -22,6 +22,7 @@ import dev.tricked.solidverdant.data.remote.FakeRemoteDataSource
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -30,17 +31,21 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import retrofit2.HttpException
+import retrofit2.Response
 
 @RunWith(RobolectricTestRunner::class)
 class SyncWorkerTest {
     private lateinit var db: AppDatabase
     private lateinit var remote: FakeRemoteDataSource
     private val json = Json { encodeDefaults = true }
+    private var nowMs = 1L
     private val clock = object : Clock {
-        override fun nowMs() = 1L
+        override fun nowMs() = nowMs
     }
 
     @Before fun setup() {
+        nowMs = 1L
         db = Room.inMemoryDatabaseBuilder(
             ApplicationProvider.getApplicationContext(),
             AppDatabase::class.java,
@@ -157,6 +162,54 @@ class SyncWorkerTest {
         assertTrue(remote.deleted.isEmpty())
     }
 
+    @Test fun solidtime_validation_and_domain_errors_are_dead_lettered() = runTest {
+        listOf(
+            400 to """{"error":true,"key":"overlapping_time_entry","message":"The time entry overlaps."}""",
+            422 to """{"message":"The given data was invalid.","errors":{"project_id":["Invalid project."]}}""",
+        ).forEachIndexed { index, (code, body) ->
+            remote.writeError = httpException(code, body)
+            val entryId = "server-$index"
+            db.outboxDao().insert(
+                OutboxEntity(
+                    opType = OutboxOpType.DELETE,
+                    organizationId = "org1",
+                    timeEntryId = entryId,
+                    createdAtMs = index.toLong() + 1,
+                    payloadJson = "{}",
+                ),
+            )
+
+            assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+            assertTrue(db.outboxDao().peekAll().single { it.timeEntryId == entryId }.deadLettered)
+        }
+    }
+
+    @Test fun timeout_rate_limit_and_server_errors_remain_retryable() = runTest {
+        listOf(408, 429, 503).forEachIndexed { index, code ->
+            remote.writeError = httpException(code, """{"message":"temporary"}""")
+            val entryId = "server-$index"
+            db.outboxDao().insert(
+                OutboxEntity(
+                    opType = OutboxOpType.DELETE,
+                    organizationId = "org1",
+                    timeEntryId = entryId,
+                    createdAtMs = index.toLong() + 1,
+                    payloadJson = "{}",
+                ),
+            )
+
+            assertEquals(ListenableWorker.Result.retry(), buildWorker().doWork())
+            val stored = db.outboxDao().peekAll().single { it.timeEntryId == entryId }
+            assertEquals(1, stored.attemptCount)
+            assertEquals(false, stored.deadLettered)
+            db.outboxDao().delete(stored)
+        }
+    }
+
+    private fun httpException(code: Int, body: String): HttpException = HttpException(
+        Response.error<Unit>(code, body.toResponseBody()),
+    )
+
     @Test fun transient_failures_are_dead_lettered_after_attempt_cap() = runTest {
         remote.failNextWrite = true // IOException -> RETRY
         db.outboxDao().insert(
@@ -263,6 +316,83 @@ class SyncWorkerTest {
         assertEquals(3600, stored?.duration)
     }
 
+    @Test fun stop_is_not_blocked_by_history_conflict_preflight() = runTest {
+        val serverBase = TimeEntry(
+            id = "server-1",
+            userId = "u1",
+            organizationId = "org1",
+            start = "2026-08-07T12:00:00Z",
+            end = null,
+        )
+        val stopped = serverBase.copy(end = "2026-08-08T12:00:00Z")
+        db.timeEntryDao().upsert(stopped.toEntity(updatedAt = 1L, syncState = SyncState.PENDING))
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.STOP,
+                organizationId = "org1",
+                timeEntryId = serverBase.id,
+                createdAtMs = 1L,
+                payloadJson = json.encodeToString(StopPayload("u1", serverBase.start, stopped.end!!)),
+                baseSnapshotJson = json.encodeToString(
+                    ConflictSnapshot.of(
+                        serverBase.start,
+                        serverBase.end,
+                        serverBase.description,
+                        serverBase.projectId,
+                        serverBase.taskId,
+                        serverBase.billable,
+                        emptyList(),
+                    ),
+                ),
+            ),
+        )
+        remote.timeEntriesQueryValidator = { java.io.IOException("history endpoint unavailable") }
+        remote.stopResult = { stopped }
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+        assertEquals(stopped.end, db.timeEntryDao().getById(serverBase.id)?.end)
+        assertNull(remote.lastTimeEntriesQuery)
+    }
+
+    @Test fun stop_reaches_server_without_discarding_existing_metadata_conflict() = runTest {
+        val localConflict = TimeEntry(
+            id = "server-1",
+            userId = "u1",
+            organizationId = "org1",
+            start = "2026-08-07T12:00:00Z",
+            end = "2026-08-08T12:00:00Z",
+            description = "mine",
+        )
+        db.timeEntryDao().upsert(
+            localConflict.toEntity(updatedAt = 1L, syncState = SyncState.CONFLICT).copy(
+                conflictServerJson = json.encodeToString(localConflict.copy(description = "theirs", end = null)),
+            ),
+        )
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.STOP,
+                organizationId = "org1",
+                timeEntryId = localConflict.id,
+                createdAtMs = 1L,
+                payloadJson = json.encodeToString(StopPayload("u1", localConflict.start, localConflict.end!!)),
+            ),
+        )
+        remote.stopResult = {
+            localConflict.copy(description = "theirs", end = localConflict.end, duration = 86_400)
+        }
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        val stored = db.timeEntryDao().getById(localConflict.id)
+        assertEquals(SyncState.CONFLICT, stored?.syncState)
+        assertEquals("mine", stored?.description)
+        val serverCopy = json.decodeFromString<TimeEntry>(stored!!.conflictServerJson!!)
+        assertEquals("theirs", serverCopy.description)
+        assertEquals(localConflict.end, serverCopy.end)
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+    }
+
     @Test fun update_conflict_preserves_mine_and_does_not_write_server() = runTest {
         val base = TimeEntry(
             id = "server-1",
@@ -367,6 +497,65 @@ class SyncWorkerTest {
         assertEquals(SyncState.SYNCED, db.timeEntryDao().getById(local.id)?.syncState)
         assertEquals("server ack", db.timeEntryDao().getById(local.id)?.description)
         assertTrue(db.outboxDao().peekAll().isEmpty())
+    }
+
+    @Test fun conflict_preflight_uses_solidtime_compatible_whole_second_timestamps() = runTest {
+        nowMs = java.time.Instant.parse("2026-08-08T10:00:00Z").toEpochMilli() + 123L
+        val base = TimeEntry(
+            id = "server-1",
+            userId = "u1",
+            organizationId = "org1",
+            start = "2026-07-01T08:00:00Z",
+            end = "2026-07-01T09:00:00Z",
+            description = "before",
+        )
+        remote.entries = listOf(base)
+        remote.memberships = listOf(Membership("m1", "member", Organization("org1", "Org", "USD")))
+        remote.timeEntriesQueryValidator = { query ->
+            val wholeSecondUtc = Regex("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z")
+            if (query.start?.matches(wholeSecondUtc) == true && query.end?.matches(wholeSecondUtc) == true) {
+                null
+            } else {
+                IllegalArgumentException("Solidtime rejects fractional-second time-entry filters")
+            }
+        }
+        val local = base.copy(description = "mine")
+        db.timeEntryDao().upsert(local.toEntity(2L, SyncState.PENDING))
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = "org1",
+                timeEntryId = local.id,
+                createdAtMs = 2L,
+                payloadJson = json.encodeToString(
+                    UpdatePayload(
+                        "u1",
+                        local.start,
+                        local.end,
+                        local.description,
+                        local.projectId,
+                        local.taskId,
+                        local.billable,
+                        emptyList(),
+                    ),
+                ),
+                baseSnapshotJson = json.encodeToString(
+                    ConflictSnapshot.of(
+                        base.start,
+                        base.end,
+                        base.description,
+                        base.projectId,
+                        base.taskId,
+                        base.billable,
+                        emptyList(),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+        assertEquals("mine", db.timeEntryDao().getById(local.id)?.description)
     }
 
     @Test fun absent_server_entry_becomes_deleted_conflict() = runTest {

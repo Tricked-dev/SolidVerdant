@@ -33,7 +33,10 @@ import retrofit2.http.Query
  */
 interface SolidtimeApi {
     @GET("api/v1/organizations/{organization}/clients")
-    suspend fun getClients(@Path("organization") organizationId: String): dev.tricked.solidverdant.data.model.ClientsResponse
+    suspend fun getClients(
+        @Path("organization") organizationId: String,
+        @Query("page") page: Int = 1,
+    ): dev.tricked.solidverdant.data.model.ClientsResponse
 
     /**
      * Exchange authorization code for access and refresh tokens
@@ -97,19 +100,19 @@ interface SolidtimeApi {
      * Get all projects for an organization
      */
     @GET("api/v1/organizations/{organization}/projects?archived=all")
-    suspend fun getProjects(@Path("organization") organizationId: String): ProjectsResponse
+    suspend fun getProjects(@Path("organization") organizationId: String, @Query("page") page: Int = 1): ProjectsResponse
 
     /**
      * Get all tasks for an organization
      */
     @GET("api/v1/organizations/{organization}/tasks?done=all")
-    suspend fun getTasks(@Path("organization") organizationId: String): TasksResponse
+    suspend fun getTasks(@Path("organization") organizationId: String, @Query("page") page: Int = 1): TasksResponse
 
     /**
      * Get all tags for an organization
      */
     @GET("api/v1/organizations/{organization}/tags")
-    suspend fun getTags(@Path("organization") organizationId: String): TagsResponse
+    suspend fun getTags(@Path("organization") organizationId: String, @Query("page") page: Int = 1): TagsResponse
 
     /**
      * Get time entries for an organization with optional filters

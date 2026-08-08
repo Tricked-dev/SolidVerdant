@@ -6,11 +6,14 @@
 
 package dev.tricked.solidverdant.ui.tracking
 
+import android.os.Looper
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import dev.tricked.solidverdant.data.local.AuthDataStore
 import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.local.db.AppDatabase
+import dev.tricked.solidverdant.data.local.db.OutboxEntity
+import dev.tricked.solidverdant.data.local.db.OutboxOpType
 import dev.tricked.solidverdant.data.remote.ApiClientFactory
 import dev.tricked.solidverdant.data.remote.FakeRemoteDataSource
 import dev.tricked.solidverdant.data.repository.AuthRepository
@@ -27,10 +30,13 @@ import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -61,6 +67,8 @@ class TrackingViewModelForegroundTest {
         viewModels.forEach { it.cancelScopeForTest() }
         dispatcher.scheduler.advanceUntilIdle()
         db.close()
+        shadowOf(Looper.getMainLooper()).idle()
+        dispatcher.scheduler.advanceUntilIdle()
         kotlinx.coroutines.Dispatchers.resetMain()
     }
 
@@ -124,6 +132,33 @@ class TrackingViewModelForegroundTest {
         dispatcher.scheduler.advanceUntilIdle()
 
         assertEquals(2, syncRequests)
+    }
+
+    @Test
+    fun `track aggregate retry revives failed operations before requesting sync`() = runTest(dispatcher.scheduler) {
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.STOP,
+                organizationId = ORG,
+                timeEntryId = "failed-entry",
+                payloadJson = "{}",
+                createdAtMs = 1L,
+                attemptCount = 5,
+                lastError = "Server rejected this change",
+                deadLettered = true,
+            ),
+        )
+        val vm = viewModel()
+        syncRequests = 0
+
+        vm.retryAllSync(ORG)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        val revived = db.outboxDao().peekAll().single()
+        assertFalse(revived.deadLettered)
+        assertEquals(0, revived.attemptCount)
+        assertNull(revived.lastError)
+        assertEquals(1, syncRequests)
     }
 
     private companion object {

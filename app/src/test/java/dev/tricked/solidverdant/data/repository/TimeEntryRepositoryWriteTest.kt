@@ -408,6 +408,27 @@ class TimeEntryRepositoryWriteTest {
         assertNull(base.endMs)
     }
 
+    @Test fun stop_resolves_a_stale_local_id_after_start_reconciliation() = runTest {
+        val staleUiEntry = TimeEntry(
+            id = "local-retired",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = null,
+            description = "running",
+        )
+        val reconciled = staleUiEntry.copy(id = "server-1")
+        db.timeEntryDao().upsert(reconciled.toEntity(1L, SyncState.SYNCED))
+
+        repo.stopEntry(staleUiEntry, "u")
+
+        assertNull(db.timeEntryDao().getById(staleUiEntry.id))
+        assertTrue(db.timeEntryDao().getById(reconciled.id)?.end != null)
+        val stop = db.outboxDao().peekAll().single()
+        assertEquals(OutboxOpType.STOP, stop.opType)
+        assertEquals(reconciled.id, stop.timeEntryId)
+    }
+
     @Test fun delete_captures_base_despite_pending_flag() = runTest {
         // SV-027 rule 3: softDeleteLocal flips syncState to PENDING before commitDelete enqueues the
         // DELETE op, but the base must still be the untouched (pre-delete) server-acked content.
@@ -645,7 +666,9 @@ class TimeEntryRepositoryWriteTest {
 
         assertEquals(SyncState.CONFLICT, db.timeEntryDao().getById(entry.id)?.syncState)
         assertTrue(db.timeEntryDao().getById(entry.id)?.end != null)
-        assertTrue(db.outboxDao().peekAll().isEmpty())
+        val stop = db.outboxDao().peekAll().single()
+        assertEquals(OutboxOpType.STOP, stop.opType)
+        assertNull(stop.baseSnapshotJson)
         runCatching { repo.updateEntry(entry.copy(description = "blocked"), emptyList()) }
             .onSuccess { error("Expected conflicted edit to be rejected") }
             .onFailure { assertTrue(it is IllegalStateException) }

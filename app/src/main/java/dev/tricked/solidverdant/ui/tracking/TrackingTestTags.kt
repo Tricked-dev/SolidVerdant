@@ -26,4 +26,5 @@ object TrackingTestTags {
     const val SHEET_DESCRIPTION_FIELD = "track_sheet_description"
     const val SHEET_SAVE_BUTTON = "track_sheet_save"
     const val ELAPSED_TIMER = "track_elapsed_timer"
+    const val SYNC_DETAILS_BUTTON = "track_sync_details"
 }

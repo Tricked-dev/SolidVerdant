@@ -38,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -62,11 +63,12 @@ import java.util.Date
 fun SyncCenterScreen(onBack: () -> Unit, viewModel: SyncCenterViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     Scaffold(
+        modifier = Modifier.testTag(SyncCenterTestTags.SCREEN),
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.sync_center_title)) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = onBack, modifier = Modifier.testTag(SyncCenterTestTags.BACK_BUTTON)) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                             contentDescription = stringResource(R.string.sync_center_navigate_back),
@@ -85,6 +87,11 @@ fun SyncCenterScreen(onBack: () -> Unit, viewModel: SyncCenterViewModel = hiltVi
             verticalArrangement = Arrangement.spacedBy(Dimens.Space12),
         ) {
             Spacer(Modifier.height(Dimens.Space4))
+            Text(
+                text = stringResource(R.string.sync_center_description),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             FreshnessSection(state = state, onSyncNow = viewModel::syncNow, nowMs = viewModel.nowMs())
             StatusSummarySection(state = state)
             if (state.pending.isNotEmpty()) {

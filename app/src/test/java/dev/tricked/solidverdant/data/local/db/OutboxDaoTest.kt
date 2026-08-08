@@ -11,6 +11,9 @@ import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -50,5 +53,39 @@ class OutboxDaoTest {
         dao.insert(op("local-1", OutboxOpType.STOP))
         dao.rekeyReferences("local-1", "server-1")
         assertEquals(listOf("server-1", "server-1"), dao.peekAll().map { it.timeEntryId })
+    }
+
+    @Test fun reset_failed_for_retry_only_revives_dead_letters_in_selected_organization() = runTest {
+        dao.insert(
+            op("failed-current").copy(
+                attemptCount = 5,
+                lastError = "Server rejected this change",
+                deadLettered = true,
+            ),
+        )
+        dao.insert(op("pending-current").copy(attemptCount = 2, lastError = "Temporary error"))
+        dao.insert(
+            op("failed-other").copy(
+                organizationId = "org2",
+                attemptCount = 5,
+                lastError = "Server rejected this change",
+                deadLettered = true,
+            ),
+        )
+
+        assertEquals(1, dao.resetFailedForRetry("org1"))
+
+        val rows = dao.peekAll().associateBy { it.timeEntryId }
+        rows.getValue("failed-current").let { revived ->
+            assertFalse(revived.deadLettered)
+            assertEquals(0, revived.attemptCount)
+            assertNull(revived.lastError)
+        }
+        rows.getValue("pending-current").let { pending ->
+            assertFalse(pending.deadLettered)
+            assertEquals(2, pending.attemptCount)
+            assertEquals("Temporary error", pending.lastError)
+        }
+        assertTrue(rows.getValue("failed-other").deadLettered)
     }
 }

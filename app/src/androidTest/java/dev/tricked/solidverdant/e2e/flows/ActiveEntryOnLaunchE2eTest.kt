@@ -12,6 +12,7 @@ import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.e2e.E2eRule
 import dev.tricked.solidverdant.e2e.mock.MockSolidtimeServer
 import dev.tricked.solidverdant.e2e.robots.TrackRobot
+import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -51,5 +52,17 @@ class ActiveEntryOnLaunchE2eTest {
 
         // And the remote timer is stoppable from this device.
         robot.tapStop().assertStartButtonVisible()
+
+        // The optimistic UI transition is not enough: the STOP must drain from the outbox and
+        // close the entry that was started by the other client.
+        e2e.composeRule.waitUntil(WAIT_MS) {
+            e2e.runPendingSync()
+            e2e.mockServer.timeEntries.singleOrNull { it.id == remoteActive.id }?.end != null
+        }
+        assertNull(e2e.mockServer.activeEntry)
+    }
+
+    companion object {
+        private const val WAIT_MS = 15_000L
     }
 }

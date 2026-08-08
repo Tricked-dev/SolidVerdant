@@ -25,6 +25,8 @@ import dev.tricked.solidverdant.MainActivity
 import dev.tricked.solidverdant.data.local.AuthDataStore
 import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.local.db.AppDatabase
+import dev.tricked.solidverdant.data.local.db.OutboxEntity
+import dev.tricked.solidverdant.data.local.db.OutboxOpType
 import dev.tricked.solidverdant.data.local.db.TemplateEntity
 import dev.tricked.solidverdant.e2e.di.TestClock
 import dev.tricked.solidverdant.e2e.mock.MockSolidtimeServer
@@ -172,6 +174,22 @@ class E2eRule(private val test: Any) : TestRule {
                     createdAtMs = index.toLong(),
                 )
             },
+        )
+    }
+
+    /** Seed one visible terminal sync failure without running a worker or touching the mock server. */
+    fun seedFailedSync(entryId: String = "failed-entry") = runBlocking {
+        entryPoint.database().outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = MockSolidtimeServer.DEFAULT_ORG_ID,
+                timeEntryId = entryId,
+                payloadJson = "{}",
+                createdAtMs = testClock.nowMs(),
+                attemptCount = 1,
+                lastError = "422 rejected",
+                deadLettered = true,
+            ),
         )
     }
 }

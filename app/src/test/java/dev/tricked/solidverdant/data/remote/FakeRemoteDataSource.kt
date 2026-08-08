@@ -35,9 +35,15 @@ class FakeRemoteDataSource(
     // Capture-time timestamps received on the last START/STOP call, for SV-017 assertions.
     var lastStartTime: String? = null
     var lastEndTime: String? = null
+    var timeEntriesQueryValidator: ((TimeEntriesQuery) -> Throwable?)? = null
+    var lastTimeEntriesQuery: TimeEntriesQuery? = null
     val deleted = mutableListOf<String>()
 
-    override suspend fun getTimeEntries(query: TimeEntriesQuery) = Result.success(TimeEntriesResponse(data = entries))
+    override suspend fun getTimeEntries(query: TimeEntriesQuery): Result<TimeEntriesResponse> {
+        lastTimeEntriesQuery = query
+        timeEntriesQueryValidator?.invoke(query)?.let { return Result.failure(it) }
+        return Result.success(TimeEntriesResponse(data = entries))
+    }
     override suspend fun getProjects(organizationId: String) = Result.success(projects)
     override suspend fun getClients(organizationId: String) = Result.success(clients)
     override suspend fun getTasks(organizationId: String) = Result.success(tasks)
