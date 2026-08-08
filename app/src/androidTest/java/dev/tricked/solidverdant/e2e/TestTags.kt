@@ -26,6 +26,7 @@ object TestTags {
     const val TRACK_START_BUTTON = TrackingTestTags.START_BUTTON
     const val TRACK_STOP_BUTTON = TrackingTestTags.STOP_BUTTON
     const val TRACK_SETTINGS_BUTTON = TrackingTestTags.SETTINGS_BUTTON
+    const val TRACK_LIVE_UPDATE_SWITCH = TrackingTestTags.LIVE_UPDATE_SWITCH
     const val TRACK_REFRESH_BUTTON = TrackingTestTags.REFRESH_BUTTON
     const val TRACK_LOGOUT_BUTTON = TrackingTestTags.LOGOUT_BUTTON
     const val TRACK_ENTRY_EDIT_BUTTON = TrackingTestTags.ENTRY_EDIT_BUTTON
@@ -46,6 +47,7 @@ object TestTags {
     const val TRACK_SHEET_SPLIT_TIME_PICKER = TrackingTestTags.SHEET_SPLIT_TIME_PICKER
     const val TRACK_SHEET_TIME_PICKER_CONFIRM = TrackingTestTags.SHEET_TIME_PICKER_CONFIRM
     const val TRACK_SHEET_VALIDATION_BANNER = TrackingTestTags.SHEET_VALIDATION_BANNER
+    const val TRACK_SYNC_STATUS_CARD = TrackingTestTags.SYNC_STATUS_CARD
     const val TRACK_SYNC_DETAILS_BUTTON = TrackingTestTags.SYNC_DETAILS_BUTTON
     const val TRACK_FILTER_OPEN_BUTTON = TrackingTestTags.FILTER_OPEN_BUTTON
     const val TRACK_FILTER_SEARCH_FIELD = TrackingTestTags.FILTER_SEARCH_FIELD

@@ -19,6 +19,7 @@ object TrackingTestTags {
     const val START_BUTTON = "track_start_button"
     const val STOP_BUTTON = "track_stop_button"
     const val SETTINGS_BUTTON = "track_settings_button"
+    const val LIVE_UPDATE_SWITCH = "track_live_update_switch"
     const val REFRESH_BUTTON = "track_refresh_button"
     const val LOGOUT_BUTTON = "track_logout_button"
     const val ENTRY_EDIT_BUTTON = "track_entry_edit"
@@ -39,6 +40,7 @@ object TrackingTestTags {
     const val SHEET_TIME_PICKER_CONFIRM = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.TIME_PICKER_CONFIRM
     const val SHEET_VALIDATION_BANNER = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.VALIDATION_BANNER
     const val ELAPSED_TIMER = "track_elapsed_timer"
+    const val SYNC_STATUS_CARD = "track_sync_status_card"
     const val SYNC_DETAILS_BUTTON = "track_sync_details"
     const val FILTER_OPEN_BUTTON = "track_filter_open"
     const val FILTER_SEARCH_FIELD = "track_filter_search"

@@ -105,6 +105,11 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
         waitUntilTagExists(TestTags.TRACK_LOGOUT_BUTTON)
     }
 
+    fun assertLiveUpdateSettingVisible(): TrackRobot = apply {
+        waitUntilTagExists(TestTags.TRACK_LIVE_UPDATE_SWITCH)
+        firstNodeWithTag(TestTags.TRACK_LIVE_UPDATE_SWITCH).performScrollTo().assertIsDisplayed()
+    }
+
     fun logout(): TrackRobot = apply {
         firstNodeWithTag(TestTags.TRACK_LOGOUT_BUTTON).performClick()
     }
@@ -256,6 +261,9 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
         waitUntilTagExists(TestTags.ENTRY_DATE_PICKER)
         val dayLabel = date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", Locale.getDefault()))
         val day = hasText(dayLabel) and hasAnyAncestor(hasTestTag(TestTags.ENTRY_DATE_PICKER))
+        composeRule.waitUntil(DEFAULT_TIMEOUT_MS) {
+            composeRule.onAllNodes(day, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
         composeRule.onAllNodes(day, useUnmergedTree = true).onFirst().performClick()
         firstEnabledNodeWithTag(TestTags.ENTRY_DATE_PICKER_CONFIRM).performClick()
         waitUntilTagExists(TestTags.TRACK_SHEET_SAVE_BUTTON)

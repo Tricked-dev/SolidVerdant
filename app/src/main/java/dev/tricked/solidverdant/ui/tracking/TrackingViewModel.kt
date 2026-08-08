@@ -67,6 +67,7 @@ private const val DEFAULT_RETRY_AFTER_SECONDS = 5
 private const val MILLIS_PER_SECOND = 1_000L
 private const val TIMER_TICK_INTERVAL_MS = 1_000L
 private const val HISTORY_PROGRESS_CAP = 0.9f
+internal const val SYNC_STATUS_REVEAL_DELAY_MS = 3_000L
 
 /** Which slice of history the user is currently looking at. */
 internal enum class HistoryWindowMode { RECENT, PAGINATED }
@@ -146,6 +147,7 @@ data class TrackingUiState(
     val editingTags: List<String> = emptyList(),
     val editingBillable: Boolean = false,
     val syncOperations: List<TimeEntryRepository.SyncOperation> = emptyList(),
+    val syncStatusVisible: Boolean = false,
     val conflictedEntryIds: Set<String> = emptySet(),
     /** Account temporal-policy zone; history filtering and new-entry pickers use it. */
     val zone: ZoneId = ZoneId.systemDefault(),
@@ -221,6 +223,7 @@ class TrackingViewModel @Inject constructor(
     val alwaysShowNotifications = settingsDataStore.alwaysShowNotification
     val appTheme = settingsDataStore.appTheme
     val optimisticRefresh = settingsDataStore.optimisticRefresh
+    val liveUpdateEnabled = settingsDataStore.liveUpdateEnabled
     val longTimerHours = settingsDataStore.longTimerHours
     private val _snapshotHydrated = MutableStateFlow(false)
     val snapshotHydrated: StateFlow<Boolean> = _snapshotHydrated.asStateFlow()
@@ -232,10 +235,13 @@ class TrackingViewModel @Inject constructor(
     val elapsedSeconds: StateFlow<Long> = _elapsedSeconds.asStateFlow()
     private var loadDataJob: Job? = null
     private var loadingOrganizationId: String? = null
+    private var userRefreshPending = false
     private var activeEntryMonitorJob: Job? = null
     private var monitoredOrganizationId: String? = null
     private var dataCollectorJob: Job? = null
     private var syncCollectorJob: Job? = null
+    private var syncVisibilityJob: Job? = null
+    private var latestSyncOperations: List<TimeEntryRepository.SyncOperation> = emptyList()
     private var firstFrameCacheJob: Job? = null
     private var hasCachedContinueEntry = false
     private var lastCachedContinueEntry: TimeEntry? = null
@@ -299,6 +305,10 @@ class TrackingViewModel @Inject constructor(
         viewModelScope.launch { settingsDataStore.setOptimisticRefresh(enabled) }
     }
 
+    fun setLiveUpdateEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setLiveUpdateEnabled(enabled) }
+    }
+
     fun setLongTimerHours(hours: Int) {
         viewModelScope.launch {
             settingsDataStore.setLongTimerHours(hours)
@@ -338,7 +348,17 @@ class TrackingViewModel @Inject constructor(
         // Refresh: pull fresh data from the network into Room in the background. The
         // collectors above surface the upserts automatically.
         if (loadDataJob?.isActive == true && loadingOrganizationId == organizationId) {
+            if (userInitiated) {
+                // The initial pull can expose its Room rows before its coroutine has finished.
+                // Do not drop an explicit refresh made in that window: queue one pull after the
+                // current request so a user asking for fresh server state gets fresh server state.
+                userRefreshPending = true
+                _uiState.value = _uiState.value.copy(isRefreshing = true, error = null)
+            }
             return
+        }
+        if (loadingOrganizationId != organizationId) {
+            userRefreshPending = false
         }
         loadDataJob?.cancel()
         loadingOrganizationId = organizationId
@@ -352,9 +372,15 @@ class TrackingViewModel @Inject constructor(
                     Timber.w(error, "Background refresh failed; showing cached data")
                     if (userInitiated) _uiState.value = _uiState.value.copy(error = error.message)
                 }
-            _uiState.value = _uiState.value.copy(isRefreshing = false)
-            if (loadingOrganizationId == organizationId) {
-                loadingOrganizationId = null
+            if (userRefreshPending && loadingOrganizationId == organizationId) {
+                userRefreshPending = false
+                loadDataJob = null
+                loadAllData(organizationId, memberId, userInitiated = true)
+            } else {
+                _uiState.value = _uiState.value.copy(isRefreshing = false)
+                if (loadingOrganizationId == organizationId) {
+                    loadingOrganizationId = null
+                }
             }
             startActiveEntryMonitoring(organizationId)
         }
@@ -367,7 +393,11 @@ class TrackingViewModel @Inject constructor(
         }
         dataCollectorJob?.cancel()
         syncCollectorJob?.cancel()
+        syncVisibilityJob?.cancel()
+        syncVisibilityJob = null
         firstFrameCacheJob?.cancel()
+        latestSyncOperations = emptyList()
+        _uiState.value = _uiState.value.copy(syncOperations = emptyList(), syncStatusVisible = false)
         collectingOrganizationId = organizationId
         lastCollectedActiveId = null
         historyLoadStage = 1
@@ -495,8 +525,53 @@ class TrackingViewModel @Inject constructor(
                             locallyStoppingEntryIds.remove(operation.entryId)
                         }
                     }
+                    latestSyncOperations = operations
+                    updateSyncStatusVisibility(operations)
                     _uiState.value = _uiState.value.copy(syncOperations = operations)
                 }
+        }
+    }
+
+    private fun updateSyncStatusVisibility(operations: List<TimeEntryRepository.SyncOperation>) {
+        val hasError = operations.any { operation ->
+            operation.status in setOf(
+                TimeEntryRepository.EntrySyncStatus.FAILED,
+                TimeEntryRepository.EntrySyncStatus.CONFLICT,
+            )
+        }
+        if (hasError) {
+            syncVisibilityJob?.cancel()
+            syncVisibilityJob = null
+            _uiState.value = _uiState.value.copy(syncStatusVisible = true)
+            return
+        }
+
+        val hasPendingWork = operations.any { operation ->
+            operation.status in setOf(
+                TimeEntryRepository.EntrySyncStatus.PENDING,
+                TimeEntryRepository.EntrySyncStatus.RETRYING,
+            )
+        }
+        if (!hasPendingWork) {
+            syncVisibilityJob?.cancel()
+            syncVisibilityJob = null
+            _uiState.value = _uiState.value.copy(syncStatusVisible = false)
+            return
+        }
+
+        if (_uiState.value.syncStatusVisible || syncVisibilityJob?.isActive == true) return
+        syncVisibilityJob = viewModelScope.launch {
+            delay(SYNC_STATUS_REVEAL_DELAY_MS)
+            if (latestSyncOperations.any { operation ->
+                    operation.status in setOf(
+                        TimeEntryRepository.EntrySyncStatus.PENDING,
+                        TimeEntryRepository.EntrySyncStatus.RETRYING,
+                    )
+                }
+            ) {
+                _uiState.value = _uiState.value.copy(syncStatusVisible = true)
+            }
+            syncVisibilityJob = null
         }
     }
 

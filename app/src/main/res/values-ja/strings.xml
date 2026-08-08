@@ -73,7 +73,7 @@
     <!-- Tracking Screen -->
     <string name="time_tracking">時間追跡</string>
     <string name="switch_organization">組織を切り替える</string>
-    <string name="refresh">更新</string>
+    <string name="refresh">更新</string><string name="syncing">同期中</string>
     <string name="logout">ログアウト</string>
     <string name="currently_tracking">追跡中</string>
     <string name="not_tracking">追跡していません</string>
@@ -171,6 +171,11 @@
     <string name="quick_start">クイックスタート</string>
     <string name="always_show_notifications">通知を常に表示</string>
     <string name="always_show_notifications_description">時間追跡中に継続的な通知を表示</string>
+    <string name="live_timer_updates">ライブタイマー更新</string>
+    <string name="live_timer_updates_description">対応端末でアクティブなタイマーをAndroidのライブ更新として表示します。通常の通知も利用できます。</string>
+    <string name="live_timer_updates_android_disabled">このアプリではAndroidのライブ更新が無効です。タイマーは通常の通知で表示されます。</string>
+    <string name="live_timer_updates_open_settings">Androidのライブ更新設定を開く</string>
+    <string name="live_timer_status_working">作業中</string>
     <string name="optimistic_refresh">楽観的な更新</string>
     <string name="optimistic_refresh_description">保存済みのアカウント情報ですぐに取得します。API 呼び出しが少し増えます</string>
     <string name="theme">テーマ</string>

@@ -326,4 +326,8 @@ in
     env -u LD_LIBRARY_PATH ./gradlew --no-daemon \
       spotlessCheck testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
   '';
+
+  tasks."android:gate:instrumentation".exec = ''
+    env -u LD_LIBRARY_PATH ./gradlew --no-daemon :app:connectedCheck --stacktrace
+  '';
 }

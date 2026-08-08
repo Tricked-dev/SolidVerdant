@@ -22,6 +22,7 @@ import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import dev.tricked.solidverdant.sync.SyncTrigger
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -32,6 +33,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -159,6 +161,53 @@ class TrackingViewModelForegroundTest {
         assertEquals(0, revived.attemptCount)
         assertNull(revived.lastError)
         assertEquals(1, syncRequests)
+    }
+
+    @Test
+    fun `routine pending sync stays hidden until it is slow`() = runTest(dispatcher.scheduler) {
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = ORG,
+                timeEntryId = "pending-entry",
+                payloadJson = "{}",
+                createdAtMs = 1L,
+            ),
+        )
+        val vm = viewModel()
+        vm.loadAllData(ORG, MEMBER)
+
+        vm.uiState.first { it.syncOperations.isNotEmpty() }
+        assertFalse(vm.uiState.value.syncStatusVisible)
+
+        dispatcher.scheduler.advanceTimeBy(SYNC_STATUS_REVEAL_DELAY_MS - 1)
+        dispatcher.scheduler.runCurrent()
+        assertFalse(vm.uiState.value.syncStatusVisible)
+
+        dispatcher.scheduler.advanceTimeBy(1)
+        dispatcher.scheduler.runCurrent()
+        assertTrue(vm.uiState.value.syncStatusVisible)
+    }
+
+    @Test
+    fun `failed sync is visible immediately`() = runTest(dispatcher.scheduler) {
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = ORG,
+                timeEntryId = "failed-entry",
+                payloadJson = "{}",
+                createdAtMs = 1L,
+                attemptCount = 1,
+                lastError = "Server rejected this change",
+                deadLettered = true,
+            ),
+        )
+        val vm = viewModel()
+        vm.loadAllData(ORG, MEMBER)
+
+        vm.uiState.first { it.syncOperations.isNotEmpty() }
+        assertTrue(vm.uiState.value.syncStatusVisible)
     }
 
     private companion object {

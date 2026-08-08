@@ -40,7 +40,10 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
-        
+
+      - name: Run host gate
+        run: ./gradlew --no-daemon spotlessCheck testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+
       - name: Run instrumentation tests
         uses: reactivecircus/android-emulator-runner@v2
         with:

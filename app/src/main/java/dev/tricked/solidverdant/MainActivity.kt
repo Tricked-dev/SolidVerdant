@@ -207,6 +207,7 @@ fun SolidVerdantApp(
     val alwaysShowNotifications by trackingViewModel.alwaysShowNotifications.collectAsState(initial = false)
     val appTheme by trackingViewModel.appTheme.collectAsState(initial = AppThemeMode.SYSTEM)
     val optimisticRefresh by trackingViewModel.optimisticRefresh.collectAsState(initial = true)
+    val liveUpdateEnabled by trackingViewModel.liveUpdateEnabled.collectAsState(initial = false)
     val longTimerHours by trackingViewModel.longTimerHours.collectAsState(initial = 4)
     val hasSnapshot by trackingViewModel.hasSnapshot.collectAsState()
     val snapshotHydrated by trackingViewModel.snapshotHydrated.collectAsState()
@@ -296,6 +297,7 @@ fun SolidVerdantApp(
                         alwaysShowNotifications = alwaysShowNotifications,
                         appTheme = appTheme,
                         optimisticRefresh = optimisticRefresh,
+                        liveUpdateEnabled = liveUpdateEnabled,
                         longTimerHours = longTimerHours,
                         editActiveEntryRequested = editActiveEntryRequested,
                         onEditActiveEntryConsumed = onEditActiveEntryConsumed,
@@ -304,6 +306,7 @@ fun SolidVerdantApp(
                         },
                         onAppThemeChange = trackingViewModel::setAppTheme,
                         onOptimisticRefreshChange = trackingViewModel::setOptimisticRefresh,
+                        onLiveUpdateEnabledChange = trackingViewModel::setLiveUpdateEnabled,
                         onLongTimerHoursChange = trackingViewModel::setLongTimerHours,
                         onRefresh = {
                             authUiState.currentMembership?.let { membership ->

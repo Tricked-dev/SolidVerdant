@@ -73,7 +73,7 @@
     <!-- Tracking Screen -->
     <string name="time_tracking">Tijdregistratie</string>
     <string name="switch_organization">Organisatie wisselen</string>
-    <string name="refresh">Vernieuwen</string>
+    <string name="refresh">Vernieuwen</string><string name="syncing">Synchroniseren</string>
     <string name="logout">Uitloggen</string>
     <string name="currently_tracking">Momenteel Aan Het Registreren</string>
     <string name="not_tracking">Niet Aan Het Registreren</string>
@@ -173,6 +173,11 @@
     <string name="quick_start">Snel Starten</string>
     <string name="always_show_notifications">Meldingen altijd tonen</string>
     <string name="always_show_notifications_description">Toon blijvende melding tijdens tijdregistratie</string>
+    <string name="live_timer_updates">Live timerupdates</string>
+    <string name="live_timer_updates_description">Toon de actieve timer als Android Live Update op ondersteunde apparaten. De gewone melding blijft beschikbaar.</string>
+    <string name="live_timer_updates_android_disabled">Android Live Updates zijn voor deze app uitgeschakeld. De timer gebruikt nog steeds een gewone melding.</string>
+    <string name="live_timer_updates_open_settings">Android Live Update-instellingen openen</string>
+    <string name="live_timer_status_working">Bezig</string>
     <string name="optimistic_refresh">Optimistisch vernieuwen</string>
     <string name="optimistic_refresh_description">Haal gegevens direct op met opgeslagen accountinformatie; gebruikt enkele extra API-aanroepen</string>
     <string name="theme">Thema</string>

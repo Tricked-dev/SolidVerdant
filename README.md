@@ -82,6 +82,18 @@ The shots below are generated on the JVM (no device) by the Roborazzi + Robolect
   <em>Rendered in the Neo dark theme.</em>
 </p>
 
+The Live activity shots below were captured on a connected Android 16 device.
+
+<p align="center">
+  <img src=".github/screenshots/readme/live-update-working.png" width="480" alt="SolidVerdant Android Live Update showing Working in the status bar" /><br />
+  <sub><b>Live activity</b><br />Promoted ongoing notification while tracking</sub>
+</p>
+
+<p align="center">
+  <img src=".github/screenshots/readme/live-update-pill.png" width="480" alt="SolidVerdant Android Live Update in its compact status bar form" /><br />
+  <sub><b>Compact live activity</b><br />Collapsed status bar presentation</sub>
+</p>
+
 ## Tech Stack
 
 ### Core Technologies
@@ -168,11 +180,14 @@ Use the pinned development environment for Android verification:
 
 ```bash
 devenv tasks run android:gate
+devenv tasks run android:gate:instrumentation
 devenv tasks run android:e2e:mock
 ```
 
-The mock E2E task builds and installs the debug APKs and runs the device suite against a deterministic
-local backend. Live-portable tests can be run against an isolated local Solidtime server:
+The host gate is device-free. The instrumentation gate mirrors the CI `connectedCheck` and requires
+an already-connected emulator or Android device. The mock E2E task builds and installs the debug APKs
+and runs the device suite against a deterministic local backend. Live-portable tests can be run against
+an isolated local Solidtime server:
 
 ```bash
 devenv up -d

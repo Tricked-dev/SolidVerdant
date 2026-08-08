@@ -186,6 +186,8 @@ import dev.tricked.solidverdant.domain.time.timeEntryLocalDaySlices
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.data.repository.EntryTemplate
 import dev.tricked.solidverdant.data.model.User
+import dev.tricked.solidverdant.service.LIVE_UPDATES_API_LEVEL
+import dev.tricked.solidverdant.service.ACTION_MANAGE_APP_PROMOTED_NOTIFICATIONS
 import dev.tricked.solidverdant.ui.templates.FavoriteTemplatesRow
 import dev.tricked.solidverdant.ui.templates.ManageTemplatesViewModel
 import dev.tricked.solidverdant.ui.templates.TemplateDraft
@@ -204,6 +206,7 @@ import dev.tricked.solidverdant.ui.theme.Dimens
 import dev.tricked.solidverdant.util.IsoTimes
 import dev.tricked.solidverdant.util.NotificationPermissionHelper
 import dev.tricked.solidverdant.service.TimeTrackingNotificationService
+import dev.tricked.solidverdant.service.canPostPromotedNotifications
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -246,12 +249,14 @@ fun TrackingScreen(
     alwaysShowNotifications: Boolean,
     appTheme: AppThemeMode,
     optimisticRefresh: Boolean,
+    liveUpdateEnabled: Boolean,
     longTimerHours: Int,
     editActiveEntryRequested: Boolean,
     onEditActiveEntryConsumed: () -> Unit,
     onAlwaysShowNotificationsChange: (Boolean) -> Unit,
     onAppThemeChange: (AppThemeMode) -> Unit,
     onOptimisticRefreshChange: (Boolean) -> Unit,
+    onLiveUpdateEnabledChange: (Boolean) -> Unit,
     onLongTimerHoursChange: (Int) -> Unit,
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
@@ -291,6 +296,21 @@ fun TrackingScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var longTimerSnoozedUntil by remember { mutableStateOf(0L) }
     val context = LocalContext.current
+    val liveUpdatesSupported = Build.VERSION.SDK_INT >= LIVE_UPDATES_API_LEVEL
+    var systemLiveUpdatesEnabled by remember(context, liveUpdatesSupported) {
+        mutableStateOf(canPostPromotedNotifications(context))
+    }
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(context, lifecycleOwner, liveUpdatesSupported) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                systemLiveUpdatesEnabled = canPostPromotedNotifications(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     val templatesSavedMessage = stringResource(R.string.templates_saved)
     val entryDeletedMessage = stringResource(R.string.entry_deleted)
     val undoLabel = stringResource(R.string.undo)
@@ -298,6 +318,10 @@ fun TrackingScreen(
     val scope = rememberCoroutineScope()
     val wideHistoryListState = rememberLazyListState()
     val compactListState = rememberLazyListState()
+    val routineSyncInProgress = uiState.isLoading || uiState.isRefreshing || uiState.syncOperations.any { operation ->
+        operation.status == TimeEntryRepository.EntrySyncStatus.PENDING ||
+            operation.status == TimeEntryRepository.EntrySyncStatus.RETRYING
+    }
 
     // Favorites & templates (gap analysis #1, #9). The template ViewModel resolves the current
     // organization itself; its catalogue includes archived/done items so availability can be shown.
@@ -635,6 +659,33 @@ fun TrackingScreen(
                             )
                         }
 
+                        if (liveUpdatesSupported) {
+                            HorizontalDivider()
+                            LiveUpdateSettingRow(
+                                enabled = liveUpdateEnabled,
+                                systemEnabled = systemLiveUpdatesEnabled,
+                                onEnabledChange = { enabled ->
+                                    if (enabled && !NotificationPermissionHelper.hasNotificationPermission(context)) {
+                                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    }
+                                    onLiveUpdateEnabledChange(enabled)
+                                },
+                                onOpenSystemSettings = {
+                                    val intent = Intent(ACTION_MANAGE_APP_PROMOTED_NOTIFICATIONS).apply {
+                                        putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                    }
+                                    runCatching { context.startActivity(intent) }.onFailure {
+                                        context.startActivity(
+                                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(
+                                                Settings.EXTRA_APP_PACKAGE,
+                                                context.packageName,
+                                            ),
+                                        )
+                                    }
+                                },
+                            )
+                        }
+
                         HorizontalDivider()
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
@@ -773,7 +824,7 @@ fun TrackingScreen(
                         val syncTransition = rememberInfiniteTransition(label = "sync")
                         val syncRotation by syncTransition.animateFloat(
                             initialValue = 0f,
-                            targetValue = if (uiState.isSyncing) FULL_ROTATION_DEGREES else 0f,
+                            targetValue = if (routineSyncInProgress) FULL_ROTATION_DEGREES else 0f,
                             animationSpec = infiniteRepeatable(tween(SYNC_ROTATION_DURATION_MS), RepeatMode.Restart),
                             label = "sync rotation"
                         )
@@ -783,7 +834,9 @@ fun TrackingScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Refresh,
-                                contentDescription = stringResource(R.string.refresh),
+                                contentDescription = stringResource(
+                                    if (routineSyncInProgress) R.string.syncing else R.string.refresh,
+                                ),
                                 modifier = Modifier.rotate(syncRotation)
                             )
                         }
@@ -851,8 +904,11 @@ fun TrackingScreen(
                 val historyListItems = preparedHistory.listItems
                 val historyProjectsById = remember(uiState.projects) { uiState.projects.associateBy { it.id } }
                 val historyTasksById = remember(uiState.tasks) { uiState.tasks.associateBy { it.id } }
-                val syncStatusByEntryId = remember(uiState.syncOperations) {
-                    uiState.syncOperations.groupBy { it.entryId }.mapValues { (_, operations) ->
+                val visibleSyncOperations = remember(uiState.syncOperations, uiState.syncStatusVisible) {
+                    if (uiState.syncStatusVisible) uiState.syncOperations else emptyList()
+                }
+                val syncStatusByEntryId = remember(visibleSyncOperations) {
+                    visibleSyncOperations.groupBy { it.entryId }.mapValues { (_, operations) ->
                         operations.last().status
                     }
                 }
@@ -984,8 +1040,10 @@ fun TrackingScreen(
                             ) {
                                 item { Spacer(Modifier.height(8.dp)) }
                                 item(key = "history_filters") { HistoryFilters(historyFilter, uiState) { historyFilter = it } }
-                                if (uiState.syncOperations.isNotEmpty()) {
-                                    item { SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry, onOpenSyncCenter) }
+                                if (uiState.syncStatusVisible && uiState.syncOperations.isNotEmpty()) {
+                                    item {
+                                        SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry, onOpenSyncCenter)
+                                    }
                                 }
                                 trackingHistoryItems(
                                     uiState = uiState,
@@ -1013,8 +1071,10 @@ fun TrackingScreen(
                         ) {
                             primaryContent()
                             item(key = "history_filters") { HistoryFilters(historyFilter, uiState) { historyFilter = it } }
-                            if (uiState.syncOperations.isNotEmpty()) {
-                                item { SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry, onOpenSyncCenter) }
+                            if (uiState.syncStatusVisible && uiState.syncOperations.isNotEmpty()) {
+                                item {
+                                    SyncCenter(uiState.syncOperations, onRetrySync, onRetrySyncEntry, onOpenSyncCenter)
+                                }
                             }
                             trackingHistoryItems(
                                 uiState = uiState,
@@ -1139,6 +1199,59 @@ fun TrackingScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            }
+        }
+    }
+}
+
+/** Settings control for Android 16+ promoted ongoing timer notifications. */
+@Composable
+internal fun LiveUpdateSettingRow(
+    enabled: Boolean,
+    systemEnabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+    onOpenSystemSettings: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.Space16, vertical = Dimens.Space8),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.live_timer_updates),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Text(
+                    text = stringResource(R.string.live_timer_updates_description),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = enabled,
+                onCheckedChange = onEnabledChange,
+                modifier = Modifier
+                    .testTag(TrackingTestTags.LIVE_UPDATE_SWITCH)
+                    .heightIn(min = Dimens.MinTouchTarget),
+            )
+        }
+        if (enabled && !systemEnabled) {
+            Text(
+                text = stringResource(R.string.live_timer_updates_android_disabled),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = Dimens.Space4),
+            )
+            TextButton(
+                onClick = onOpenSystemSettings,
+                modifier = Modifier.heightIn(min = Dimens.MinTouchTarget),
+            ) {
+                Text(stringResource(R.string.live_timer_updates_open_settings))
             }
         }
     }
@@ -1371,7 +1484,10 @@ private fun SyncCenter(
         retrying > 0 -> TimeEntryRepository.EntrySyncStatus.RETRYING
         else -> TimeEntryRepository.EntrySyncStatus.PENDING
     }
-    SectionCard(title = stringResource(R.string.sync_status_card_title)) {
+    SectionCard(
+        modifier = Modifier.testTag(TrackingTestTags.SYNC_STATUS_CARD),
+        title = stringResource(R.string.sync_status_card_title),
+    ) {
         Row(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,

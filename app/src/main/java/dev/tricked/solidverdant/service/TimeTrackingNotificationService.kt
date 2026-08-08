@@ -29,6 +29,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -61,6 +62,7 @@ class TimeTrackingNotificationService : Service() {
     private var pausedAt: Instant? = null
     private var elapsedBeforePauseSeconds: Long = 0
     private var mutationInProgress: Boolean = false
+    private var liveUpdateEnabled: Boolean = false
     private var longWarningJob: Job? = null
     private var longTimerWarningVisible = false
 
@@ -71,6 +73,15 @@ class TimeTrackingNotificationService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        serviceScope.launch {
+            settingsDataStore.liveUpdateEnabled.collect { enabled ->
+                val changed = liveUpdateEnabled != enabled
+                liveUpdateEnabled = enabled
+                if (changed && isTracking) {
+                    refreshNotificationIfVisible()
+                }
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -469,7 +480,10 @@ class TimeTrackingNotificationService : Service() {
     }
 
     private fun refreshNotificationIfVisible() {
-        if (isForeground) {
+        // The notification can remain posted after Android detaches the service from the
+        // foreground-service slot (for example after the dataSync timeout), so setting changes
+        // must refresh any active timer notification, not only an attached FGS notification.
+        if (isTracking) {
             notificationManager.notify(NOTIFICATION_ID, buildNotification())
         }
     }
@@ -576,6 +590,10 @@ class TimeTrackingNotificationService : Service() {
             builder.addAction(R.drawable.ic_timer, getString(R.string.pause), pausePendingIntent)
                 .addAction(R.drawable.ic_timer, getString(R.string.stop_tracking), stopPendingIntent)
         }
+        if (liveUpdateEnabled) {
+            builder.setShortCriticalText(getString(R.string.live_timer_status_working))
+        }
+        builder.setLiveUpdateRequested(liveUpdateEnabled)
         builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setPublicVersion(buildRedactedPublicNotification(R.string.notification_public_tracking_title))
         return builder.build()

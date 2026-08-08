@@ -85,6 +85,7 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         private val ALWAYS_SHOW_NOTIFICATION = booleanPreferencesKey("always_show_notification")
         private val APP_THEME = stringPreferencesKey("app_theme")
         private val OPTIMISTIC_REFRESH = booleanPreferencesKey("optimistic_refresh")
+        private val LIVE_UPDATE_ENABLED = booleanPreferencesKey("live_update_enabled")
         private val LONG_TIMER_HOURS = intPreferencesKey("long_timer_hours")
         private val LONG_TIMER_WARNING_DEADLINE_EPOCH_MS = longPreferencesKey("long_timer_warning_deadline_epoch_ms")
         private val LONG_TIMER_WARNING_ENTRY_START_EPOCH_MS = longPreferencesKey("long_timer_warning_entry_start_epoch_ms")
@@ -236,6 +237,11 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         preferences[OPTIMISTIC_REFRESH] ?: true
     }.distinctUntilChanged()
 
+    /** Whether active timer notifications may request Android 16+ Live Update promotion. */
+    val liveUpdateEnabled: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[LIVE_UPDATE_ENABLED] ?: false
+    }.distinctUntilChanged()
+
     val longTimerHours: Flow<Int> = dataStore.data.map { it[LONG_TIMER_HOURS] ?: DEFAULT_LONG_TIMER_HOURS }.distinctUntilChanged()
 
     /**
@@ -286,6 +292,10 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
 
     suspend fun setOptimisticRefresh(enabled: Boolean) {
         dataStore.edit { preferences -> preferences[OPTIMISTIC_REFRESH] = enabled }
+    }
+
+    suspend fun setLiveUpdateEnabled(enabled: Boolean) {
+        dataStore.edit { preferences -> preferences[LIVE_UPDATE_ENABLED] = enabled }
     }
 
     suspend fun setLongTimerHours(hours: Int) {

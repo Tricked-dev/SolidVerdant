@@ -76,7 +76,7 @@
     <string name="time_tracking">Time Tracking</string>
     <string name="switch_organization">Switch organization</string>
     <string name="organization">Organization</string>
-    <string name="refresh">Refresh</string>
+    <string name="refresh">Refresh</string><string name="syncing">Syncing</string>
     <string name="logout">Logout</string>
     <string name="currently_tracking">Currently Tracking</string>
     <string name="not_tracking">Not Tracking</string>
@@ -182,6 +182,11 @@
     <string name="quick_start">Quick Start</string>
     <string name="always_show_notifications">Always show notifications</string>
     <string name="always_show_notifications_description">Show persistent notification while tracking time</string>
+    <string name="live_timer_updates">Live timer updates</string>
+    <string name="live_timer_updates_description">Show the active timer as an Android Live Update on supported devices. The regular notification remains available.</string>
+    <string name="live_timer_updates_android_disabled">Android Live Updates are disabled for this app. The timer will still use a regular notification.</string>
+    <string name="live_timer_updates_open_settings">Open Android Live Update settings</string>
+    <string name="live_timer_status_working">Working</string>
     <string name="optimistic_refresh">Optimistic refresh</string>
     <string name="optimistic_refresh_description">Fetch data immediately using cached account info; uses a few extra API calls</string>
     <string name="theme">Theme</string>
