@@ -10,6 +10,7 @@ import dev.tricked.solidverdant.ui.calendar.CalendarTestTags
 import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
 import dev.tricked.solidverdant.ui.login.LoginTestTags
 import dev.tricked.solidverdant.ui.sync.SyncCenterTestTags
+import dev.tricked.solidverdant.ui.tile.ProjectSelectionTestTags
 import dev.tricked.solidverdant.ui.tracking.TrackingTestTags
 
 /**
@@ -55,6 +56,9 @@ object TestTags {
     const val SYNC_STATUS_SCREEN = SyncCenterTestTags.SCREEN
     const val SYNC_STATUS_BACK_BUTTON = SyncCenterTestTags.BACK_BUTTON
     const val LOGIN_BUTTON = LoginTestTags.LOGIN_BUTTON
+    const val TILE_PROJECT_SELECTION_SCREEN = ProjectSelectionTestTags.SCREEN
+    const val TILE_PROJECT_SELECTION_START_BUTTON = ProjectSelectionTestTags.START_BUTTON
+    const val TILE_PROJECT_SELECTION_CANCEL_BUTTON = ProjectSelectionTestTags.CANCEL_BUTTON
     const val STATS_SCREEN = "stats_screen"
     const val CALENDAR_WEEK_GRID = CalendarTestTags.WEEK_GRID
     const val CALENDAR_MODE_MONTH = CalendarTestTags.MODE_MONTH

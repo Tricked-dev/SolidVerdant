@@ -36,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dagger.hilt.android.AndroidEntryPoint
@@ -50,8 +51,8 @@ import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
 /**
  * Activity for selecting a project when starting time tracking from Quick Settings.
  *
- * This activity closes immediately after selection - the actual API call
- * happens in the TileService to survive the activity lifecycle.
+ * This activity closes immediately after selection; the foreground notification service owns the
+ * quick-start request so it survives the activity lifecycle.
  */
 @AndroidEntryPoint
 class ProjectSelectionActivity : ComponentActivity() {
@@ -89,6 +90,12 @@ class ProjectSelectionActivity : ComponentActivity() {
     }
 }
 
+object ProjectSelectionTestTags {
+    const val SCREEN = "tile_project_selection_screen"
+    const val START_BUTTON = "tile_project_selection_start_button"
+    const val CANCEL_BUTTON = "tile_project_selection_cancel_button"
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProjectSelectionContent(
@@ -110,7 +117,8 @@ fun ProjectSelectionContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surface)
-                .padding(24.dp),
+                .padding(24.dp)
+                .testTag(ProjectSelectionTestTags.SCREEN),
         ) {
             when {
                 uiState.isLoading && uiState.projects.isEmpty() -> {
@@ -228,7 +236,9 @@ fun StartTrackingForm(
     ) {
         OutlinedButton(
             onClick = onCancel,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .testTag(ProjectSelectionTestTags.CANCEL_BUTTON),
         ) {
             Text(stringResource(R.string.cancel))
         }
@@ -256,7 +266,9 @@ fun StartTrackingForm(
                     selected.taskName,
                 )
             },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .testTag(ProjectSelectionTestTags.START_BUTTON),
         ) {
             Text(stringResource(R.string.start))
         }

@@ -94,6 +94,17 @@ interface OutboxDao {
     suspend fun countNewerPending(entryId: String, afterId: Long): Int
 
     /**
+     * Newer operations that make an older UPDATE redundant. A later UPDATE replaces the same
+     * content and DELETE removes the row, but STOP is deliberately excluded: it only captures an
+     * end timestamp and must compose with metadata edited immediately before it.
+     */
+    @Query(
+        "SELECT COUNT(*) FROM outbox WHERE timeEntryId = :entryId AND id > :afterId " +
+            "AND deadLettered = 0 AND opType IN ('UPDATE', 'DELETE')",
+    )
+    suspend fun countNewerContentMutations(entryId: String, afterId: Long): Int
+
+    /**
      * Discard every queued operation for an entry that never reached the server (still on its
      * `local-` id). Used when deleting a never-synced entry (SV-008): the entry's own
      * START/CREATE, plus any dependent STOP/UPDATE, must be cancelled outright rather than

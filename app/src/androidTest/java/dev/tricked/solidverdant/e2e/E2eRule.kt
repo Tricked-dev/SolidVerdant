@@ -29,6 +29,7 @@ import dev.tricked.solidverdant.data.local.db.AppDatabase
 import dev.tricked.solidverdant.data.local.db.OutboxEntity
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
 import dev.tricked.solidverdant.data.local.db.TemplateEntity
+import dev.tricked.solidverdant.data.local.db.TimeEntryEntity
 import dev.tricked.solidverdant.data.local.db.toModel
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.TimeEntry
@@ -233,6 +234,22 @@ class E2eRule(private val test: Any) : TestRule {
         dao.getById(id)?.let { entity -> entity.toModel(dao.tagIdsFor(entity.id).map(::Tag)) }
     }
 
+    /** Poll the real Room row so cross-surface tests can prove eventual server -> DAO convergence. */
+    fun awaitLocalEntry(entryId: String, timeoutMs: Long, predicate: (TimeEntryEntity) -> Boolean): TimeEntryEntity = runBlocking {
+        require(timeoutMs > 0L) { "timeoutMs must be positive" }
+        val startedAt = System.nanoTime()
+        var last: TimeEntryEntity? = null
+        while ((System.nanoTime() - startedAt) / NANOS_PER_MILLISECOND <= timeoutMs) {
+            last = entryPoint.database().timeEntryDao().getById(entryId)
+            if (last != null && predicate(last)) return@runBlocking last
+            delay(LOCAL_ENTRY_POLL_DELAY_MS)
+        }
+        throw AssertionError(
+            "Local entry $entryId did not reach the expected state; " +
+                "present=${last != null}, syncState=${last?.syncState}, pendingDelete=${last?.pendingDelete}",
+        )
+    }
+
     /** Whether the optimistic local STOP has committed before the worker is allowed to run. */
     fun hasPendingStop(entryId: String): Boolean = runBlocking {
         entryPoint.database().outboxDao().peekAll().any {
@@ -282,6 +299,7 @@ class E2eRule(private val test: Any) : TestRule {
         private const val MOCK_BACKEND = "mock"
         private const val REAL_BACKEND = "real"
         private const val DEFAULT_SERVER_POLL_DELAY_MS = 500L
+        private const val LOCAL_ENTRY_POLL_DELAY_MS = 100L
         private const val NANOS_PER_MILLISECOND = 1_000_000L
     }
 }

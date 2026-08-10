@@ -72,6 +72,10 @@ class SyncWorker @AssistedInject constructor(
         // these get a fresh push timestamp; Superseded (never hit the server) and dead-letters
         // (failed) do not count as a push moment.
         val pushedOrgs = mutableSetOf<String>()
+        // Server ids whose Room rows were written by an earlier operation in this same drain.
+        // Their fresh updatedAt is not evidence that a later queued operation is stale: an
+        // offline START -> STOP -> UPDATE chain must apply all three in order.
+        val writtenEntryIds = mutableSetOf<String>()
         var retryResult: Result? = null
         ops.forEach { rawOp ->
             // A conflict can delete every queued operation for the entry. Re-read before acting
@@ -79,13 +83,14 @@ class SyncWorker @AssistedInject constructor(
             val stored = outboxDao.getById(rawOp.id) ?: return@forEach
             val op = stored.rekeyedWith(rekeyed)
             if (op.timeEntryId in failedEntryIds) return@forEach
-            when (val outcome = process(op, conflictIndexes)) {
+            when (val outcome = process(op, conflictIndexes, writtenEntryIds)) {
                 is Outcome.Success -> {
                     outboxDao.delete(op)
                     pushedOrgs += op.organizationId
                     // Record the rekey so every remaining op for this entry in this same drain
                     // (still holding the old id in its in-memory snapshot) is remapped before use.
                     outcome.rekeyedTo?.let { rekeyed[op.timeEntryId] = it }
+                    writtenEntryIds += outcome.rekeyedTo ?: op.timeEntryId
                 }
                 Outcome.Retry -> {
                     val attempts = op.attemptCount + 1
@@ -180,24 +185,25 @@ class SyncWorker @AssistedInject constructor(
         data object Superseded : Outcome()
     }
 
-    private suspend fun process(op: OutboxEntity, conflictIndexes: Map<String, ConflictIndex>): Outcome = try {
-        if (timeEntryDao.getById(op.timeEntryId)?.syncState == SyncState.CONFLICT && op.opType != OutboxOpType.STOP) {
-            outboxDao.deleteByTimeEntryId(op.timeEntryId)
-            Outcome.Superseded
-        } else {
-            checkConflict(op, conflictIndexes) ?: processOperation(op)
-        }
-    } catch (e: HttpException) {
-        if (e.code() == HTTP_NOT_FOUND && op.opType in CONFLICT_CHECK_OPS && op.baseSnapshotJson != null) {
-            markConflict(op.timeEntryId, ConflictSnapshot.DELETED_MARKER)
-            Outcome.Success()
-        } else {
+    private suspend fun process(op: OutboxEntity, conflictIndexes: Map<String, ConflictIndex>, writtenEntryIds: Set<String>): Outcome =
+        try {
+            if (timeEntryDao.getById(op.timeEntryId)?.syncState == SyncState.CONFLICT && op.opType != OutboxOpType.STOP) {
+                outboxDao.deleteByTimeEntryId(op.timeEntryId)
+                Outcome.Superseded
+            } else {
+                checkConflict(op, conflictIndexes) ?: processOperation(op, writtenEntryIds)
+            }
+        } catch (e: HttpException) {
+            if (e.code() == HTTP_NOT_FOUND && op.opType in CONFLICT_CHECK_OPS && op.baseSnapshotJson != null) {
+                markConflict(op.timeEntryId, ConflictSnapshot.DELETED_MARKER)
+                Outcome.Success()
+            } else {
+                classify(e)
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Outbox op ${op.id} failed")
             classify(e)
         }
-    } catch (e: Exception) {
-        Timber.w(e, "Outbox op ${op.id} failed")
-        classify(e)
-    }
 
     private suspend fun checkConflict(op: OutboxEntity, conflictIndexes: Map<String, ConflictIndex>): Outcome? {
         if (op.opType !in CONFLICT_CHECK_OPS || op.baseSnapshotJson == null) return null
@@ -223,11 +229,11 @@ class SyncWorker @AssistedInject constructor(
         }
     }
 
-    private suspend fun processOperation(op: OutboxEntity): Outcome = when (op.opType) {
+    private suspend fun processOperation(op: OutboxEntity, writtenEntryIds: Set<String>): Outcome = when (op.opType) {
         OutboxOpType.START -> processStart(op)
         OutboxOpType.CREATE -> processCreate(op)
         OutboxOpType.STOP -> processStop(op)
-        OutboxOpType.UPDATE -> processUpdate(op)
+        OutboxOpType.UPDATE -> processUpdate(op, writtenEntryIds)
         OutboxOpType.DELETE -> processDelete(op)
     }
 
@@ -314,11 +320,14 @@ class SyncWorker @AssistedInject constructor(
         return Outcome.Success()
     }
 
-    private suspend fun processUpdate(op: OutboxEntity): Outcome {
+    private suspend fun processUpdate(op: OutboxEntity, writtenEntryIds: Set<String>): Outcome {
         // A newer queued or already-synced write supersedes this stale operation.
-        val newerQueued = outboxDao.countNewerPending(op.timeEntryId, op.id) > 0
+        val newerQueued = outboxDao.countNewerContentMutations(op.timeEntryId, op.id) > 0
         val current = timeEntryDao.getById(op.timeEntryId)
-        val newerSynced = current != null && current.syncState == SyncState.SYNCED && current.updatedAt > op.createdAtMs
+        val newerSynced = op.timeEntryId !in writtenEntryIds &&
+            current != null &&
+            current.syncState == SyncState.SYNCED &&
+            current.updatedAt > op.createdAtMs
         if (newerQueued || newerSynced) return Outcome.Superseded
         val payload = json.decodeFromString<UpdatePayload>(op.payloadJson)
         val entry = TimeEntry(

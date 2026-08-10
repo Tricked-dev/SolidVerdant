@@ -69,6 +69,9 @@ class TimeTrackingNotificationService : Service() {
     private val notificationManager: NotificationManager by lazy {
         getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     }
+    private val statePreferences by lazy {
+        getSharedPreferences(STATE_PREFERENCES, MODE_PRIVATE)
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -100,12 +103,25 @@ class TimeTrackingNotificationService : Service() {
                 val requestedStartTime = Instant.ofEpochMilli(
                     intent.getLongExtra(EXTRA_START_TIME, System.currentTimeMillis()),
                 )
+                // An active-entry refresh may already be queued when Pause finishes its server
+                // mutation. Do not let that stale refresh resurrect the just-paused entry and
+                // replace its Resume notification. A genuinely new active entry has a different
+                // start timestamp and is still accepted below.
+                if (isPaused && startTime == requestedStartTime || isPersistedPausedStart(requestedStartTime)) {
+                    Timber.d("Ignoring stale active-entry refresh for the paused timer")
+                    isTracking = false
+                    isPaused = true
+                    publishNotification()
+                    return START_NOT_STICKY
+                }
                 // Active-entry refreshes also flow through this action to update notification
                 // metadata. Re-arming an already-due warning here creates an immediate
                 // WorkManager -> service -> refresh loop and also discards Keep Running snoozes.
                 val isSameEntryRefresh = isTracking && startTime == requestedStartTime
 
                 isTracking = true
+                isPaused = false
+                clearPersistedPausedStart()
                 startTime = requestedStartTime
                 projectName = intent.getStringExtra(EXTRA_PROJECT_NAME)
                 taskName = intent.getStringExtra(EXTRA_TASK_NAME)
@@ -121,11 +137,11 @@ class TimeTrackingNotificationService : Service() {
             }
 
             ACTION_SHOW_IDLE -> {
-                showIdleNotification()
+                if (!hasPersistedPausedStart()) showIdleNotification(startId)
             }
 
             ACTION_STOP_TRACKING -> {
-                handleStopTracking()
+                handleStopTracking(startId)
             }
 
             ACTION_PAUSE_TRACKING -> {
@@ -169,6 +185,7 @@ class TimeTrackingNotificationService : Service() {
     }
 
     private fun handleQuickStart(intent: Intent) {
+        clearPersistedPausedStart()
         isTracking = true
         isPaused = false
         startTime = Instant.now()
@@ -244,7 +261,7 @@ class TimeTrackingNotificationService : Service() {
         }
     }
 
-    private fun handleStopTracking() {
+    private fun handleStopTracking(startId: Int) {
         if (mutationInProgress) return
         val wasPaused = isPaused
         mutationInProgress = true
@@ -259,9 +276,10 @@ class TimeTrackingNotificationService : Service() {
             stopped.fold(
                 onSuccess = {
                     mutationInProgress = false
+                    clearPersistedPausedStart()
                     notificationManager.cancel(NOTIFICATION_ID_ERROR)
                     if (settingsDataStore.alwaysShowNotification.first()) {
-                        showIdleNotification()
+                        showIdleNotification(startId)
                     } else {
                         stopService()
                     }
@@ -318,6 +336,7 @@ class TimeTrackingNotificationService : Service() {
         elapsedBeforePauseSeconds = startTime?.let { now.epochSecond - it.epochSecond } ?: 0
         isPaused = true
         isTracking = false
+        persistPausedStart()
         publishNotification()
     }
 
@@ -353,16 +372,28 @@ class TimeTrackingNotificationService : Service() {
         val user = authRepository.getCurrentUser()
             .getOrElse { return Result.failure(it) }
 
-        return authRepository.stopTimeEntry(
+        val stopResult = authRepository.stopTimeEntry(
             organizationId = activeEntry.organizationId,
             timeEntryId = activeEntry.id,
             userId = user.id,
             startTime = activeEntry.start,
-        ).map { true }
+        )
+        if (stopResult.isSuccess) return Result.success(true)
+
+        // The remote update may have committed even if its response could not be decoded or the
+        // connection dropped while returning it. Confirm the authoritative state before showing
+        // a retry error: retrying an already-completed stop is both confusing and unnecessary.
+        val confirmedActiveEntry = authRepository.getActiveTimeEntry()
+        if (confirmedActiveEntry.isSuccess && confirmedActiveEntry.getOrNull() == null) {
+            Timber.d("Stop response failed, but the server confirms there is no active entry")
+            return Result.success(true)
+        }
+        return Result.failure(checkNotNull(stopResult.exceptionOrNull()))
     }
 
-    private fun showIdleNotification() {
+    private fun showIdleNotification(startId: Int) {
         cancelLongTimerWarning()
+        clearPersistedPausedStart()
         longTimerWarningVisible = false
         isTracking = false
         isPaused = false
@@ -384,12 +415,19 @@ class TimeTrackingNotificationService : Service() {
 
         // No timer is running, so nothing needs a live service. The notification persists
         // because it was posted via NotificationManager, not tied to the foreground lifecycle.
-        stopSelf()
+        // Only stop the service for the command that produced this idle state. A newer Pause or
+        // Start command may already be queued; plain stopSelf() would cancel that newer work and
+        // leave its previous tracking notification stranded.
+        stopSelfResult(startId)
     }
 
     private fun handlePauseTracking() {
         if (mutationInProgress) return
         mutationInProgress = true
+        // Reserve the paused surface before the remote mutation. The active-entry observer can
+        // see the server transition to idle before this coroutine resumes; without this marker it
+        // may hide/idle the service and cancel the successful action before Resume is published.
+        persistPausedStart()
         serviceScope.launch {
             stopActiveEntry().fold(
                 onSuccess = {
@@ -399,6 +437,10 @@ class TimeTrackingNotificationService : Service() {
                 },
                 onFailure = { error ->
                     mutationInProgress = false
+                    clearPersistedPausedStart()
+                    isPaused = false
+                    isTracking = true
+                    publishNotification()
                     Timber.e(error, "Failed to stop time entry during pause")
                     showMutationError(R.string.notification_pause_failed)
                 },
@@ -420,6 +462,7 @@ class TimeTrackingNotificationService : Service() {
         // Immediately show paused notification
         isPaused = true
         isTracking = false
+        persistPausedStart()
 
         publishNotification()
     }
@@ -447,6 +490,7 @@ class TimeTrackingNotificationService : Service() {
                     startTime = resumedAt
                     isPaused = false
                     isTracking = true
+                    clearPersistedPausedStart()
                     publishNotification()
                     scheduleLongTimerWarning()
                 },
@@ -508,6 +552,19 @@ class TimeTrackingNotificationService : Service() {
         if (isTracking) {
             notificationManager.notify(NOTIFICATION_ID, buildNotification())
         }
+    }
+
+    private fun persistPausedStart() {
+        startTime?.let { statePreferences.edit().putLong(PREF_PAUSED_START_EPOCH_MS, it.toEpochMilli()).apply() }
+    }
+
+    private fun isPersistedPausedStart(requestedStart: Instant): Boolean =
+        statePreferences.getLong(PREF_PAUSED_START_EPOCH_MS, Long.MIN_VALUE) == requestedStart.toEpochMilli()
+
+    private fun hasPersistedPausedStart(): Boolean = statePreferences.contains(PREF_PAUSED_START_EPOCH_MS)
+
+    private fun clearPersistedPausedStart() {
+        statePreferences.edit().remove(PREF_PAUSED_START_EPOCH_MS).apply()
     }
 
     private fun createNotificationChannel() = ensureChannels(this)
@@ -782,6 +839,8 @@ class TimeTrackingNotificationService : Service() {
         private const val CHANNEL_ID_ERROR = "time_tracking_error"
         private const val NOTIFICATION_ID = 1001
         private const val NOTIFICATION_ID_ERROR = 1002
+        private const val STATE_PREFERENCES = "time_tracking_notification_state"
+        private const val PREF_PAUSED_START_EPOCH_MS = "paused_start_epoch_ms"
         private const val ERROR_ACTION_REQUEST_CODE = 4
         private const val KEEP_RUNNING_REQUEST_CODE = 5
         private const val ADJUST_END_TIME_REQUEST_CODE = 6
@@ -1029,6 +1088,19 @@ class TimeTrackingNotificationService : Service() {
          * Hide the notification without changing any server-side timer state.
          */
         fun hide(context: Context) {
+            // Pausing intentionally leaves a Resume/Stop prompt after the server entry becomes
+            // inactive. The regular active-entry refresh observes that same server transition and
+            // calls hide(); preserve the paused surface until the user resumes, stops, or starts a
+            // genuinely new timer.
+            val pausedPromptVisible = context.getSharedPreferences(STATE_PREFERENCES, Context.MODE_PRIVATE)
+                .contains(PREF_PAUSED_START_EPOCH_MS)
+            if (pausedPromptVisible) {
+                // The service that executed Pause may have been recreated or stopped while the
+                // server transition was in flight. Reassert Resume instead of merely preserving
+                // whichever (possibly stale tracking) notification Android currently holds.
+                showPaused(context)
+                return
+            }
             context.stopService(Intent(context, TimeTrackingNotificationService::class.java))
         }
 

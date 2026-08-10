@@ -850,6 +850,141 @@ class SyncWorkerTest {
         assertEquals(SyncState.SYNCED, db.timeEntryDao().getById("server-42")?.syncState)
     }
 
+    // A common offline multi-action experience can enqueue START -> STOP -> UPDATE before the
+    // worker gets a network window. The final UPDATE must survive the intermediate synced writes
+    // produced while START and STOP are reconciled in this same drain.
+    @Test fun start_stop_update_in_one_drain_rekeys_every_op_and_keeps_the_latest_metadata() = runTest {
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.START,
+                organizationId = "org1",
+                timeEntryId = "local-1",
+                createdAtMs = 1L,
+                payloadJson = json.encodeToString(
+                    StartPayload("m1", "u1", null, null, "initial", emptyList(), start = "2020-01-01T09:00:00Z"),
+                ),
+            ),
+        )
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.STOP,
+                organizationId = "org1",
+                timeEntryId = "local-1",
+                createdAtMs = 2L,
+                payloadJson = json.encodeToString(
+                    StopPayload("u1", "2020-01-01T09:00:00Z", end = "2020-01-01T10:00:00Z"),
+                ),
+            ),
+        )
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = "org1",
+                timeEntryId = "local-1",
+                createdAtMs = 3L,
+                payloadJson = json.encodeToString(
+                    UpdatePayload(
+                        userId = "u1",
+                        start = "2020-01-01T09:00:00Z",
+                        end = "2020-01-01T10:00:00Z",
+                        description = "latest metadata",
+                        projectId = "project-2",
+                        taskId = "task-2",
+                        billable = true,
+                        tagIds = listOf("tag-2"),
+                    ),
+                ),
+            ),
+        )
+        remote.startResult = { it.copy(id = "server-42") }
+        // Make reconciliation timestamps newer than every queued op. Same-drain writes are not
+        // evidence that the later queued UPDATE was superseded.
+        nowMs = 100L
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+        assertNull(db.timeEntryDao().getById("local-1"))
+        val stored = requireNotNull(db.timeEntryDao().getById("server-42"))
+        assertEquals("latest metadata", stored.description)
+        assertEquals("project-2", stored.projectId)
+        assertEquals("task-2", stored.taskId)
+        assertTrue(stored.billable)
+        assertEquals(listOf("tag-2"), db.timeEntryDao().tagIdsFor(stored.id))
+        assertEquals(SyncState.SYNCED, stored.syncState)
+    }
+
+    // Editing a running timer and then stopping it is another common offline ordering. STOP only
+    // narrows the end timestamp, so it must not make the earlier metadata UPDATE redundant.
+    @Test fun start_update_stop_in_one_drain_applies_metadata_before_the_narrow_stop() = runTest {
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.START,
+                organizationId = "org1",
+                timeEntryId = "local-1",
+                createdAtMs = 1L,
+                payloadJson = json.encodeToString(
+                    StartPayload("m1", "u1", null, null, "initial", emptyList(), start = "2020-01-01T09:00:00Z"),
+                ),
+            ),
+        )
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = "org1",
+                timeEntryId = "local-1",
+                createdAtMs = 2L,
+                payloadJson = json.encodeToString(
+                    UpdatePayload(
+                        userId = "u1",
+                        start = "2020-01-01T09:00:00Z",
+                        end = null,
+                        description = "edited while running",
+                        projectId = "project-2",
+                        taskId = "task-2",
+                        billable = true,
+                        tagIds = listOf("tag-2"),
+                    ),
+                ),
+            ),
+        )
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.STOP,
+                organizationId = "org1",
+                timeEntryId = "local-1",
+                createdAtMs = 3L,
+                payloadJson = json.encodeToString(
+                    StopPayload("u1", "2020-01-01T09:00:00Z", end = "2020-01-01T10:00:00Z"),
+                ),
+            ),
+        )
+        remote.startResult = { it.copy(id = "server-42") }
+        var updateCalls = 0
+        remote.updateResult = {
+            updateCalls += 1
+            it
+        }
+        remote.stopResult = {
+            it.copy(
+                description = "edited while running",
+                projectId = "project-2",
+                taskId = "task-2",
+                billable = true,
+            )
+        }
+        nowMs = 100L
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        assertEquals(1, updateCalls)
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+        val stored = requireNotNull(db.timeEntryDao().getById("server-42"))
+        assertEquals("edited while running", stored.description)
+        assertEquals("2020-01-01T10:00:00Z", stored.end)
+        assertEquals(SyncState.SYNCED, stored.syncState)
+    }
+
     // SV-025: a dead-lettered UPDATE that is revived (deadLettered reset for retry) but has since
     // been superseded by a newer synced state for the same entry must be dropped as Outcome.Superseded
     // rather than replayed over the newer data.
