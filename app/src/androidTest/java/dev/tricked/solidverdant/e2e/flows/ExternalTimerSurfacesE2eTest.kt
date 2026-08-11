@@ -145,7 +145,7 @@ class ExternalTimerSurfacesE2eTest {
         val started = requireNotNull(
             e2e.awaitServer(TEST_TIMEOUT_MS, driveSync = true) { it.activeEntry != null }.activeEntry,
         )
-        assertEquals(0, e2e.pendingOutboxCount())
+        waitForPendingOutboxToDrain()
         e2e.awaitLocalEntry(started.id, TEST_TIMEOUT_MS) {
             it.end == null && it.syncState == SyncState.SYNCED
         }
@@ -159,7 +159,7 @@ class ExternalTimerSurfacesE2eTest {
         e2e.awaitLocalEntry(started.id, TEST_TIMEOUT_MS) {
             it.end != null && it.syncState == SyncState.SYNCED
         }
-        assertEquals(0, e2e.pendingOutboxCount())
+        waitForPendingOutboxToDrain()
 
         // Resume from the notification creates a different server timer. Pull it into Room, then
         // stop it from the actual Quick Settings tile and prove the DAO converges again.
@@ -185,7 +185,7 @@ class ExternalTimerSurfacesE2eTest {
         e2e.awaitLocalEntry(resumed.id, TEST_TIMEOUT_MS) {
             it.end != null && it.syncState == SyncState.SYNCED
         }
-        assertEquals(0, e2e.pendingOutboxCount())
+        waitForPendingOutboxToDrain()
     }
 
     private fun waitForNotificationAction(labelRes: Int): PendingIntent {
@@ -213,6 +213,14 @@ class ExternalTimerSurfacesE2eTest {
 
     private fun grantNotificationPermission() {
         shell("pm grant ${context.packageName} ${Manifest.permission.POST_NOTIFICATIONS}")
+    }
+
+    private fun waitForPendingOutboxToDrain() {
+        e2e.composeRule.waitUntil(TEST_TIMEOUT_MS) {
+            e2e.runPendingSync()
+            e2e.pendingOutboxCount() == 0
+        }
+        assertEquals(0, e2e.pendingOutboxCount())
     }
 
     private fun shell(command: String): String = device.executeShellCommand(command)

@@ -9,7 +9,6 @@
 package dev.tricked.solidverdant.e2e.flows
 
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onFirst
@@ -67,15 +66,16 @@ class MultiDayEntryE2eTest {
         val fixture = multiDayFixture(e2e.session.zone)
         val handle = e2e.prepare(E2eFixture.Completed(fixture.entry))
         e2e.launchApp()
-        TrackRobot(e2e.composeRule).waitForHistory().assertEntryVisible(fixture.entry.description!!)
+        val robot = TrackRobot(e2e.composeRule)
+            .waitForHistory()
+            .assertEntryVisible(fixture.entry.description!!)
 
         val formatter = DateTimeFormatter.ofPattern("EEE, d MMM yyyy", Locale.getDefault())
-        val range = e2e.composeRule.onAllNodes(
-            hasTestTag(TestTags.trackEntryTimeRange(requireNotNull(handle.serverId))),
-            useUnmergedTree = true,
-        ).onFirst()
-        range.assertTextContains(fixture.startDate.format(formatter), substring = true)
-        range.assertTextContains(fixture.startDate.plusDays(2).format(formatter), substring = true)
+        robot.assertEntryTimeRangeContains(
+            entryId = requireNotNull(handle.serverId),
+            startText = fixture.startDate.format(formatter),
+            endText = fixture.startDate.plusDays(2).format(formatter),
+        )
     }
 
     @Test

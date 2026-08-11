@@ -250,8 +250,29 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
 
     fun assertValidationText(text: String): TrackRobot = apply {
         waitUntilTextExists(text)
+        // The validation banner follows the catalogue controls in the scrollable sheet and can
+        // be composed but still be below the viewport on the small API-29 emulator.
+        waitUntilSheetTagExists(TestTags.TRACK_SHEET_VALIDATION_BANNER)
+        firstSheetNodeWithTag(TestTags.TRACK_SHEET_VALIDATION_BANNER)
+            .performScrollTo()
+            .assertIsDisplayed()
         composeRule.onAllNodes(hasText(text, substring = true), useUnmergedTree = true)
             .onFirst()
+            .assertIsDisplayed()
+    }
+
+    fun assertEntryTimeRangeContains(entryId: String, startText: String, endText: String): TrackRobot = apply {
+        val rangeMatcher = hasTestTag(TestTags.trackEntryTimeRange(entryId))
+        composeRule.waitUntil(DEFAULT_TIMEOUT_MS) {
+            runCatching {
+                firstNodeWithTag(TestTags.TRACK_HISTORY_LIST).performScrollToNode(rangeMatcher)
+                composeRule.onAllNodes(rangeMatcher, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+            }.getOrDefault(false)
+        }
+        composeRule.onAllNodes(rangeMatcher, useUnmergedTree = true)
+            .onFirst()
+            .assertTextContains(startText, substring = true)
+            .assertTextContains(endText, substring = true)
             .assertIsDisplayed()
     }
 
