@@ -21,6 +21,7 @@ object TrackingTestTags {
     const val SETTINGS_BUTTON = "track_settings_button"
     const val LIVE_UPDATE_SWITCH = "track_live_update_switch"
     const val REFRESH_BUTTON = "track_refresh_button"
+    const val ADD_ENTRY_BUTTON = "track_add_entry_button"
     const val LOGOUT_BUTTON = "track_logout_button"
     const val ENTRY_EDIT_BUTTON = "track_entry_edit"
     const val ENTRY_DELETE_BUTTON = "track_entry_delete"

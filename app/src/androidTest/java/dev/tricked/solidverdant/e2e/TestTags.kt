@@ -30,6 +30,7 @@ object TestTags {
     const val TRACK_SETTINGS_BUTTON = TrackingTestTags.SETTINGS_BUTTON
     const val TRACK_LIVE_UPDATE_SWITCH = TrackingTestTags.LIVE_UPDATE_SWITCH
     const val TRACK_REFRESH_BUTTON = TrackingTestTags.REFRESH_BUTTON
+    const val TRACK_ADD_ENTRY_BUTTON = TrackingTestTags.ADD_ENTRY_BUTTON
     const val TRACK_LOGOUT_BUTTON = TrackingTestTags.LOGOUT_BUTTON
     const val TRACK_ENTRY_EDIT_BUTTON = TrackingTestTags.ENTRY_EDIT_BUTTON
     const val TRACK_ENTRY_DELETE_BUTTON = TrackingTestTags.ENTRY_DELETE_BUTTON

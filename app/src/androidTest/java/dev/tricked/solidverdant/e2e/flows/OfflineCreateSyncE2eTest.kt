@@ -8,10 +8,13 @@ package dev.tricked.solidverdant.e2e.flows
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidTest
+import dev.tricked.solidverdant.data.local.db.SyncState
 import dev.tricked.solidverdant.e2e.BackendPortable
 import dev.tricked.solidverdant.e2e.E2eFixture
 import dev.tricked.solidverdant.e2e.E2eRule
 import dev.tricked.solidverdant.e2e.robots.TrackRobot
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -60,6 +63,31 @@ class OfflineCreateSyncE2eTest {
             "Expected the started entry to persist as the server's active timer",
             snapshot.activeEntry != null,
         )
+    }
+
+    @BackendPortable
+    @Test
+    fun completedEntryCreatedFromTrackIsPostedAndReconciledToRoom() {
+        e2e.prepare(E2eFixture.Empty)
+        e2e.launchApp()
+
+        val robot = TrackRobot(e2e.composeRule).waitForHistory()
+        robot.openAddEntry()
+            .replaceSheetDescription("Created completed work")
+            .saveSheet()
+            .assertEntryVisible("Created completed work")
+
+        val snapshot = e2e.awaitServer(WAIT_MS, driveSync = true) { current ->
+            current.entries.any { it.description == "Created completed work" && it.end != null }
+        }
+        val persisted = snapshot.entries.firstOrNull { it.description == "Created completed work" }
+        assertNotNull("The completed CREATE operation must reach Solidtime", persisted)
+        val serverEntry = requireNotNull(persisted)
+        assertTrue("The created entry must be completed, not a second active timer", serverEntry.end != null)
+        assertEquals("The CREATE outbox operation must be drained", 0, e2e.pendingOutboxCount())
+        e2e.awaitLocalEntry(serverEntry.id, WAIT_MS) {
+            it.end != null && it.syncState == SyncState.SYNCED
+        }
     }
 
     companion object {

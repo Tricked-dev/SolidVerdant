@@ -808,7 +808,10 @@ fun TrackingScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = { showAddDialog = true }) {
+                        IconButton(
+                            onClick = { showAddDialog = true },
+                            modifier = Modifier.testTag(TrackingTestTags.ADD_ENTRY_BUTTON),
+                        ) {
                             Icon(
                                 Icons.Default.Add,
                                 contentDescription = stringResource(R.string.add_time_entry)

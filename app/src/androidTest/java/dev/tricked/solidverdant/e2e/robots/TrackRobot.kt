@@ -81,6 +81,12 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
         firstEnabledNodeWithTag(TestTags.TRACK_REFRESH_BUTTON).performClick()
     }
 
+    fun openAddEntry(): TrackRobot = apply {
+        waitUntilEnabledTagExists(TestTags.TRACK_ADD_ENTRY_BUTTON)
+        firstEnabledNodeWithTag(TestTags.TRACK_ADD_ENTRY_BUTTON).performClick()
+        waitUntilSheetTagExists(TestTags.TRACK_SHEET_SAVE_BUTTON)
+    }
+
     fun openSyncDetails(): TrackRobot = apply {
         scrollHistoryTo(TestTags.TRACK_SYNC_DETAILS_BUTTON)
         waitUntilEnabledTagExists(TestTags.TRACK_SYNC_DETAILS_BUTTON)
