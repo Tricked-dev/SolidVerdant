@@ -8,18 +8,24 @@
 
 package dev.tricked.solidverdant.e2e.flows
 
+import android.app.NotificationManager
+import android.content.Context
+import android.content.Intent
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidTest
 import dev.tricked.solidverdant.e2e.BackendPortable
 import dev.tricked.solidverdant.e2e.E2eFixture
 import dev.tricked.solidverdant.e2e.E2eRule
 import dev.tricked.solidverdant.e2e.TestTags
-import dev.tricked.solidverdant.e2e.robots.TrackRobot
+import dev.tricked.solidverdant.service.TimeTrackingNotificationService
+import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -32,6 +38,14 @@ class CalendarRunningTimerE2eTest {
 
     @get:Rule
     val e2e = E2eRule(this)
+
+    private val context = ApplicationProvider.getApplicationContext<Context>()
+
+    @After
+    fun cleanRunningTimerSurface() {
+        context.stopService(Intent(context, TimeTrackingNotificationService::class.java))
+        context.getSystemService(NotificationManager::class.java).cancelAll()
+    }
 
     @BackendPortable
     @Test
@@ -53,7 +67,15 @@ class CalendarRunningTimerE2eTest {
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_ENTRY_ACTIONS), WAIT_MS)
         e2e.composeRule.onNodeWithTag(TestTags.CALENDAR_EDIT_START_TIME, useUnmergedTree = true).performClick()
 
-        TrackRobot(e2e.composeRule).assertRunningEditSettingsVisible().tapSheetCancel()
+        listOf(
+            EditTimeEntryTestTags.START_DATE,
+            EditTimeEntryTestTags.START_TIME,
+            EditTimeEntryTestTags.SAVE_BUTTON,
+            EditTimeEntryTestTags.CANCEL_BUTTON,
+        ).forEach { tag ->
+            e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(tag), WAIT_MS)
+        }
+        e2e.composeRule.onNodeWithTag(EditTimeEntryTestTags.CANCEL_BUTTON, useUnmergedTree = true).performClick()
         assertEquals(originalHandle.serverId, e2e.serverSnapshot().activeEntry?.id)
     }
 
