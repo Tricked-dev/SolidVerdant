@@ -5,6 +5,7 @@
  */
 
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.gradle.api.tasks.testing.Test
 
 plugins {
     alias(libs.plugins.android.application)
@@ -120,6 +121,18 @@ android {
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
+        }
+    }
+
+    // MockK uses Byte Buddy inline instrumentation. Some hosted macOS/Linux runners block the
+    // external self-attach fallback, which otherwise makes every MockK-backed unit test fail
+    // before the test body runs. Preload the transitive agent in the test worker so Byte Buddy can
+    // reuse an already-installed instrumentation instance on every supported runner.
+    tasks.withType<Test>().configureEach {
+        doFirst {
+            classpath.files
+                .firstOrNull { it.name.startsWith("byte-buddy-agent-") && it.name.endsWith(".jar") }
+                ?.let { jvmArgs("-javaagent:${it.absolutePath}") }
         }
     }
 

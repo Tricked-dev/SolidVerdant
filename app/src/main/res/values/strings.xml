@@ -41,6 +41,17 @@
     <string name="calendar_drag_to_create">Tap to create an entry, or drag to select a start and end time.</string>
     <string name="calendar_delete_entry_title">Delete time entry?</string>
     <string name="calendar_delete_entry_message">This entry will be removed from the calendar and queued for deletion.</string>
+    <string name="calendar_settings">Calendar settings</string>
+    <string name="calendar_settings_snap">Snap interval</string>
+    <string name="calendar_settings_visible_hours">Visible hours</string>
+    <string name="calendar_settings_start">Start</string>
+    <string name="calendar_settings_end">End</string>
+    <string name="calendar_settings_density">Grid size</string>
+    <string name="calendar_settings_density_compact">Compact</string>
+    <string name="calendar_settings_density_comfortable">Comfortable</string>
+    <string name="calendar_settings_density_spacious">Spacious</string>
+    <string name="calendar_settings_minutes">%1$d min</string>
+    <string name="calendar_settings_hour">%1$02d:00</string>
     <string name="long_timer_warning">Long-timer warning</string>
     <plurals name="long_timer_warning_description">
         <item quantity="one">Warn after %1$d hour. Stored only on this device.</item>

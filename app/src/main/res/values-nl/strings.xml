@@ -41,6 +41,17 @@
     <string name="calendar_drag_to_create">Tik om een boeking te maken of sleep om een start- en eindtijd te selecteren.</string>
     <string name="calendar_delete_entry_title">Tijdregistratie verwijderen?</string>
     <string name="calendar_delete_entry_message">Deze registratie wordt uit de kalender verwijderd en voor verwijdering klaargezet.</string>
+    <string name="calendar_settings">Kalenderinstellingen</string>
+    <string name="calendar_settings_snap">Rasterinterval</string>
+    <string name="calendar_settings_visible_hours">Zichtbare uren</string>
+    <string name="calendar_settings_start">Start</string>
+    <string name="calendar_settings_end">Einde</string>
+    <string name="calendar_settings_density">Rastergrootte</string>
+    <string name="calendar_settings_density_compact">Compact</string>
+    <string name="calendar_settings_density_comfortable">Comfortabel</string>
+    <string name="calendar_settings_density_spacious">Ruim</string>
+    <string name="calendar_settings_minutes">%1$d min</string>
+    <string name="calendar_settings_hour">%1$02d:00</string>
     <string name="long_timer_warning">Waarschuwing lange timer</string>
     <plurals name="long_timer_warning_description">
         <item quantity="one">Waarschuw na %1$d uur. Alleen op dit apparaat opgeslagen.</item>

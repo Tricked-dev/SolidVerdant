@@ -39,6 +39,17 @@
     <string name="calendar_drag_to_create">タップしてエントリーを作成するか、ドラッグして開始時刻と終了時刻を選択します。</string>
     <string name="calendar_delete_entry_title">時間エントリーを削除しますか？</string>
     <string name="calendar_delete_entry_message">このエントリーはカレンダーから削除され、削除待ちになります。</string>
+    <string name="calendar_settings">カレンダー設定</string>
+    <string name="calendar_settings_snap">スナップ間隔</string>
+    <string name="calendar_settings_visible_hours">表示する時間帯</string>
+    <string name="calendar_settings_start">開始</string>
+    <string name="calendar_settings_end">終了</string>
+    <string name="calendar_settings_density">グリッドサイズ</string>
+    <string name="calendar_settings_density_compact">コンパクト</string>
+    <string name="calendar_settings_density_comfortable">標準</string>
+    <string name="calendar_settings_density_spacious">広い</string>
+    <string name="calendar_settings_minutes">%1$d分</string>
+    <string name="calendar_settings_hour">%1$02d:00</string>
     <string name="long_timer_warning">長時間タイマーの警告</string>
     <plurals name="long_timer_warning_description">
         <item quantity="other">%1$d時間後に警告します。この端末にのみ保存されます。</item>

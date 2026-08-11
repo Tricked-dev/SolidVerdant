@@ -63,6 +63,7 @@ data class CalendarUiState(
     val visibleDays: List<LocalDate> = emptyList(),
     val bucketsByDate: Map<LocalDate, DayBucket> = emptyMap(),
     val isLoading: Boolean = true,
+    val calendarSettings: CalendarGridSettings = CalendarGridSettings(),
     // --- Device-calendar overlay ---
     val overlayEnabled: Boolean = false,
     val hasCalendarPermission: Boolean = false,
@@ -148,6 +149,24 @@ class CalendarViewModel @Inject constructor(
         viewModelScope.launch {
             overlaySettings.selectedCalendarIds.collect { ids ->
                 _uiState.update { it.copy(selectedCalendarIds = ids) }
+            }
+        }
+        viewModelScope.launch {
+            combine(
+                overlaySettings.calendarSnapMinutes,
+                overlaySettings.calendarStartHour,
+                overlaySettings.calendarEndHour,
+                overlaySettings.calendarDensity,
+            ) { snapMinutes, startHour, endHour, density ->
+                CalendarGridSettings(
+                    snapMinutes = snapMinutes,
+                    startHour = startHour,
+                    endHour = endHour,
+                    density = runCatching { CalendarGridDensity.valueOf(density) }
+                        .getOrDefault(CalendarGridDensity.COMFORTABLE),
+                ).normalized()
+            }.collect { settings ->
+                _uiState.update { it.copy(calendarSettings = settings) }
             }
         }
         // Load the picker's calendar list only while the overlay is on and permission is granted.
@@ -325,6 +344,16 @@ class CalendarViewModel @Inject constructor(
 
     fun retryOverlay() {
         retryCounter.update { it + 1 }
+    }
+
+    fun updateCalendarSettings(settings: CalendarGridSettings) {
+        val normalized = settings.normalized()
+        _uiState.update { it.copy(calendarSettings = normalized) }
+        viewModelScope.launch {
+            overlaySettings.setCalendarSnapMinutes(normalized.snapMinutes)
+            overlaySettings.setCalendarHours(normalized.startHour, normalized.endHour)
+            overlaySettings.setCalendarDensity(normalized.density.name)
+        }
     }
 
     private suspend fun refreshAvailableCalendars(): List<DeviceCalendar> = try {

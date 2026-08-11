@@ -48,6 +48,11 @@ object Dimens {
     val EntryPaddingHorizontal = 8.dp
     val EntryPaddingVertical = 4.dp
 
+    // --- Calendar grid density ---
+    val CalendarHourCompact = 32.dp
+    val CalendarHourComfortable = 48.dp
+    val CalendarHourSpacious = 64.dp
+
     // --- Accessibility ---
     val MinTouchTarget = 48.dp
     val ControlHeightLarge = 64.dp

@@ -22,29 +22,47 @@ data class CalendarEntryRange(val start: ZonedDateTime, val end: ZonedDateTime)
 enum class CalendarResizeEdge { START, END }
 
 /**
- * Convert a vertical drag in a 24-hour grid into a valid, quarter-hour range. The grid uses the
+ * Convert a vertical drag in a configurable grid into a valid, snapped range. The grid uses the
  * actual elapsed length of the local day, so a DST transition does not create an invalid instant.
  */
-fun calendarTimeRangeForDrag(day: LocalDate, startY: Float, endY: Float, gridHeightPx: Float, zone: ZoneId): CalendarTimeRange {
-    val secondsInDay = secondsInLocalDay(day, zone)
-    val maxStartSecond = (secondsInDay - SECONDS_PER_SLOT).coerceAtLeast(0L)
-    val lowSecond = calendarGridSecond(startY, gridHeightPx, secondsInDay)
-    val highSecond = calendarGridSecond(endY, gridHeightPx, secondsInDay)
-    val startSecond = snapToSlot(minOf(lowSecond, highSecond)).coerceIn(0L, maxStartSecond)
-    val endSecond = snapToSlot(maxOf(lowSecond, highSecond)).coerceIn(startSecond + SECONDS_PER_SLOT, secondsInDay)
-    val dayStart = day.atStartOfDay(zone).toInstant()
+fun calendarTimeRangeForDrag(
+    day: LocalDate,
+    startY: Float,
+    endY: Float,
+    gridHeightPx: Float,
+    zone: ZoneId,
+    settings: CalendarGridSettings = CalendarGridSettings(),
+): CalendarTimeRange {
+    val grid = calendarGridBounds(day, zone, settings)
+    val secondsInGrid = grid.seconds
+    val slotSeconds = settings.normalized().snapMinutes * SECONDS_PER_MINUTE
+    val maxStartSecond = (secondsInGrid - slotSeconds).coerceAtLeast(0L)
+    val lowSecond = calendarGridSecond(startY, gridHeightPx, secondsInGrid)
+    val highSecond = calendarGridSecond(endY, gridHeightPx, secondsInGrid)
+    val startSecond = snapToSlot(minOf(lowSecond, highSecond), slotSeconds).coerceIn(0L, maxStartSecond)
+    val endSecond = snapToSlot(maxOf(lowSecond, highSecond), slotSeconds)
+        .coerceIn(startSecond + slotSeconds, secondsInGrid)
     return CalendarTimeRange(
-        start = dayStart.plusSeconds(startSecond).atZone(zone),
-        end = dayStart.plusSeconds(endSecond).atZone(zone),
+        start = grid.start.plusSeconds(startSecond).atZone(zone),
+        end = grid.start.plusSeconds(endSecond).atZone(zone),
     )
 }
 
 /** Convert one vertical grid coordinate into the nearest valid calendar start time. */
-fun calendarTimeAtGridPosition(day: LocalDate, y: Float, gridHeightPx: Float, zone: ZoneId, allowDayEnd: Boolean = false): ZonedDateTime {
-    val secondsInDay = secondsInLocalDay(day, zone)
-    val maxSecond = if (allowDayEnd) secondsInDay else (secondsInDay - SECONDS_PER_SLOT).coerceAtLeast(0L)
-    val second = snapToSlot(calendarGridSecond(y, gridHeightPx, secondsInDay)).coerceIn(0L, maxSecond)
-    return day.atStartOfDay(zone).toInstant().plusSeconds(second).atZone(zone)
+fun calendarTimeAtGridPosition(
+    day: LocalDate,
+    y: Float,
+    gridHeightPx: Float,
+    zone: ZoneId,
+    allowDayEnd: Boolean = false,
+    settings: CalendarGridSettings = CalendarGridSettings(),
+): ZonedDateTime {
+    val normalized = settings.normalized()
+    val grid = calendarGridBounds(day, zone, normalized)
+    val slotSeconds = normalized.snapMinutes * SECONDS_PER_MINUTE
+    val maxSecond = if (allowDayEnd) grid.seconds else (grid.seconds - slotSeconds).coerceAtLeast(0L)
+    val second = snapToSlot(calendarGridSecond(y, gridHeightPx, grid.seconds), slotSeconds).coerceIn(0L, maxSecond)
+    return grid.start.plusSeconds(second).atZone(zone)
 }
 
 /** Preserve an entry's complete duration while moving its start across local calendar days. */
@@ -57,36 +75,46 @@ fun calendarEntryRangeAt(entry: TimeEntry, targetStart: ZonedDateTime): Calendar
 }
 
 /** Resize one boundary while preserving the other boundary and enforcing one visible grid slot. */
-fun calendarEntryResizeRangeAt(entry: TimeEntry, edge: CalendarResizeEdge, boundary: ZonedDateTime): CalendarEntryRange? {
+fun calendarEntryResizeRangeAt(
+    entry: TimeEntry,
+    edge: CalendarResizeEdge,
+    boundary: ZonedDateTime,
+    settings: CalendarGridSettings = CalendarGridSettings(),
+): CalendarEntryRange? {
     val originalStart = runCatching { ZonedDateTime.parse(entry.start) }.getOrNull() ?: return null
     val originalEnd = entry.end?.let { runCatching { ZonedDateTime.parse(it) }.getOrNull() } ?: return null
     val range = when (edge) {
         CalendarResizeEdge.START -> CalendarEntryRange(boundary, originalEnd)
         CalendarResizeEdge.END -> CalendarEntryRange(originalStart, boundary)
     }
-    return range.takeIf {
-        Duration.between(it.start, it.end) >= Duration.ofMinutes(SLOT_MINUTES)
-    }
+    return range.takeIf { Duration.between(it.start, it.end) >= Duration.ofMinutes(settings.normalized().snapMinutes.toLong()) }
 }
 
 /** A useful one-hour fallback for the toolbar's Add action when no drag range was selected. */
-fun defaultCalendarTimeRange(day: LocalDate, zone: ZoneId, now: ZonedDateTime = ZonedDateTime.now(zone)): CalendarTimeRange {
-    val start = if (day == now.toLocalDate()) {
-        now.truncatedTo(ChronoUnit.HOURS).minusHours(1)
+fun defaultCalendarTimeRange(
+    day: LocalDate,
+    zone: ZoneId,
+    now: ZonedDateTime = ZonedDateTime.now(zone),
+    settings: CalendarGridSettings = CalendarGridSettings(),
+): CalendarTimeRange {
+    val grid = calendarGridBounds(day, zone, settings)
+    val oneHour = 60L * SECONDS_PER_MINUTE
+    val available = grid.seconds.coerceAtLeast(1L)
+    val duration = minOf(oneHour, available)
+    val preferredStart = if (day == now.toLocalDate()) {
+        now.truncatedTo(ChronoUnit.HOURS).minusHours(1).toInstant()
     } else {
-        day.atTime(DEFAULT_START_HOUR, 0).atZone(zone)
+        grid.start
     }
-    return CalendarTimeRange(start = start, end = start.plusHours(1))
+    val start = preferredStart.coerceIn(grid.start, grid.end.minusSeconds(duration))
+    return CalendarTimeRange(start = start.atZone(zone), end = start.plusSeconds(duration).atZone(zone))
 }
 
-private fun calendarGridSecond(y: Float, gridHeightPx: Float, secondsInDay: Long): Long {
+private fun calendarGridSecond(y: Float, gridHeightPx: Float, secondsInGrid: Long): Long {
     if (gridHeightPx <= 0f) return 0L
-    return ((y / gridHeightPx).coerceIn(0f, 1f) * secondsInDay).toLong()
+    return ((y / gridHeightPx).coerceIn(0f, 1f) * secondsInGrid).toLong()
 }
 
-private fun snapToSlot(second: Long): Long = ((second + SECONDS_PER_SLOT / 2) / SECONDS_PER_SLOT) * SECONDS_PER_SLOT
+private fun snapToSlot(second: Long, slotSeconds: Long): Long = ((second + slotSeconds / 2) / slotSeconds) * slotSeconds
 
-private const val SLOT_MINUTES = 15L
 private const val SECONDS_PER_MINUTE = 60L
-private const val SECONDS_PER_SLOT = SLOT_MINUTES * SECONDS_PER_MINUTE
-private const val DEFAULT_START_HOUR = 9

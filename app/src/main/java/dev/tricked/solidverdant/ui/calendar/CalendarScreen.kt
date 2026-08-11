@@ -15,25 +15,32 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -55,6 +62,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -96,6 +104,8 @@ fun CalendarScreen(
     // persistent bar, so the default calendar keeps its full height for the grid.
     var showOverlaySheet by remember { mutableStateOf(false) }
     val overlaySheetState = rememberModalBottomSheetState()
+    var showSettingsSheet by remember { mutableStateOf(false) }
+    val settingsSheetState = rememberModalBottomSheetState()
 
     val context = LocalContext.current
     val activity = context as? Activity
@@ -158,8 +168,15 @@ fun CalendarScreen(
             CalendarToolbar(
                 state = state,
                 onModeSelected = viewModel::setViewMode,
-                onAddEntry = { creatingRange = defaultCalendarTimeRange(state.selectedDate, state.zone) },
+                onAddEntry = {
+                    creatingRange = defaultCalendarTimeRange(
+                        day = state.selectedDate,
+                        zone = state.zone,
+                        settings = state.calendarSettings,
+                    )
+                },
                 onOpenOverlay = { showOverlaySheet = true },
+                onOpenSettings = { showSettingsSheet = true },
             )
             CalendarBody(
                 state = state,
@@ -234,6 +251,15 @@ fun CalendarScreen(
         )
     }
 
+    if (showSettingsSheet) {
+        CalendarSettingsSheet(
+            settings = state.calendarSettings,
+            sheetState = settingsSheetState,
+            onSettingsChanged = viewModel::updateCalendarSettings,
+            onDismiss = { showSettingsSheet = false },
+        )
+    }
+
     deleteTarget?.let { entry ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
@@ -266,6 +292,7 @@ private fun CalendarToolbar(
     onModeSelected: (CalendarViewMode) -> Unit,
     onAddEntry: () -> Unit,
     onOpenOverlay: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val modes = remember {
         listOf(
@@ -303,6 +330,15 @@ private fun CalendarToolbar(
                 contentDescription = stringResource(R.string.add_time_entry),
             )
         }
+        IconButton(
+            onClick = onOpenSettings,
+            modifier = Modifier.testTag(CalendarTestTags.SETTINGS),
+        ) {
+            Icon(
+                Icons.Default.Settings,
+                contentDescription = stringResource(R.string.calendar_settings),
+            )
+        }
         if (state.viewMode != CalendarViewMode.MONTH) {
             IconButton(onClick = onOpenOverlay) {
                 Icon(
@@ -312,6 +348,123 @@ private fun CalendarToolbar(
                         MaterialTheme.colorScheme.primary
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CalendarSettingsSheet(
+    settings: CalendarGridSettings,
+    sheetState: androidx.compose.material3.SheetState,
+    onSettingsChanged: (CalendarGridSettings) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val snapOptions = CalendarGridSettings.SNAP_MINUTES.map { minutes ->
+        minutes to stringResource(R.string.calendar_settings_minutes, minutes)
+    }
+    val densityOptions = listOf(
+        CalendarGridDensity.COMPACT to R.string.calendar_settings_density_compact,
+        CalendarGridDensity.COMFORTABLE to R.string.calendar_settings_density_comfortable,
+        CalendarGridDensity.SPACIOUS to R.string.calendar_settings_density_spacious,
+    )
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Dimens.Space16)
+                .padding(bottom = Dimens.Space24),
+        ) {
+            Text(stringResource(R.string.calendar_settings), style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.heightIn(min = Dimens.Space8))
+            CalendarSettingDropdown(
+                label = stringResource(R.string.calendar_settings_snap),
+                value = stringResource(R.string.calendar_settings_minutes, settings.snapMinutes),
+                options = snapOptions,
+                onSelected = { minutes -> onSettingsChanged(settings.copy(snapMinutes = minutes)) },
+            )
+            Spacer(Modifier.heightIn(min = Dimens.Space12))
+            Text(
+                text = stringResource(R.string.calendar_settings_visible_hours),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                CalendarSettingDropdown(
+                    label = stringResource(R.string.calendar_settings_start),
+                    value = stringResource(R.string.calendar_settings_hour, settings.startHour),
+                    options = (CalendarGridSettings.MIN_START_HOUR until settings.endHour).map { hour ->
+                        hour to stringResource(R.string.calendar_settings_hour, hour)
+                    },
+                    onSelected = { hour ->
+                        onSettingsChanged(settings.copy(startHour = hour.coerceAtMost(settings.endHour - 1)))
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+                CalendarSettingDropdown(
+                    label = stringResource(R.string.calendar_settings_end),
+                    value = stringResource(R.string.calendar_settings_hour, settings.endHour),
+                    options = ((settings.startHour + 1)..CalendarGridSettings.MAX_END_HOUR).map { hour ->
+                        hour to stringResource(R.string.calendar_settings_hour, hour)
+                    },
+                    onSelected = { hour -> onSettingsChanged(settings.copy(endHour = hour)) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Spacer(Modifier.heightIn(min = Dimens.Space12))
+            Text(
+                text = stringResource(R.string.calendar_settings_density),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                densityOptions.forEachIndexed { index, (density, label) ->
+                    SegmentedButton(
+                        selected = settings.density == density,
+                        onClick = { onSettingsChanged(settings.copy(density = density)) },
+                        shape = SegmentedButtonDefaults.itemShape(index = index, count = densityOptions.size),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(stringResource(label), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalendarSettingDropdown(
+    label: String,
+    value: String,
+    options: List<Pair<Int, String>>,
+    onSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember(label) { mutableStateOf(false) }
+    Column(modifier = modifier) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.MinTouchTarget),
+        ) {
+            Column(horizontalAlignment = Alignment.Start) {
+                Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                Text(value, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { (option, optionLabel) ->
+                DropdownMenuItem(
+                    text = { Text(optionLabel) },
+                    onClick = {
+                        onSelected(option)
+                        expanded = false
                     },
                 )
             }

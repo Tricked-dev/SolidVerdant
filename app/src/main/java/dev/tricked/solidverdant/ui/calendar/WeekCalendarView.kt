@@ -69,8 +69,6 @@ import java.util.Locale
 private const val NARROW_CALENDAR_DAYS = 3
 private const val INITIAL_SCROLL_HOURS = 7
 private const val MAX_ALL_DAY_EVENTS = 3
-private const val FIRST_HOUR = 0
-private const val LAST_HOUR = 23
 
 /**
  * Google-Calendar-style multi-day time grid. Renders [CalendarUiState.visibleDays] as columns with
@@ -132,13 +130,14 @@ private fun WeekCalendarContent(
     projects: List<Project>,
 ) {
     val zone = state.zone
+    val settings = state.calendarSettings
     val today = remember(zone) { LocalDate.now(zone) }
     val now = remember { Instant.now() }
     val locale = LocalLocale.current.platformLocale
 
     // Precompute the per-day layouts once per data change rather than inside the render loop.
-    val timedByDay = remember(state.overlayEvents, days) {
-        days.associateWith { layoutTimedEvents(state.overlayEvents, it, zone) }
+    val timedByDay = remember(state.overlayEvents, days, settings) {
+        days.associateWith { layoutTimedEvents(state.overlayEvents, it, zone, settings) }
     }
     val allDayByDay = remember(state.overlayEvents, days) {
         days.associateWith { allDayEventsForDay(state.overlayEvents, it) }
@@ -199,6 +198,7 @@ private fun WeekCalendarContent(
                     today = today,
                     now = now,
                     zone = zone,
+                    settings = settings,
                     timedByDay = timedByDay,
                     state = state,
                     projects = projects,
@@ -217,6 +217,7 @@ private fun WeekGrid(
     today: LocalDate,
     now: Instant,
     zone: ZoneId,
+    settings: CalendarGridSettings,
     timedByDay: Map<LocalDate, List<EventBlock>>,
     state: CalendarUiState,
     projects: List<Project>,
@@ -224,7 +225,9 @@ private fun WeekGrid(
     onMoveEntry: (TimeEntry, String, String) -> Unit,
     onCreateRange: (CalendarTimeRange) -> Unit,
 ) {
-    val initialScroll = with(LocalDensity.current) { (CalendarHourHeight * INITIAL_SCROLL_HOURS).roundToPx() }
+    val initialScrollHours = (INITIAL_SCROLL_HOURS - settings.startHour)
+        .coerceIn(0, (settings.endHour - settings.startHour - 1).coerceAtLeast(0))
+    val initialScroll = with(LocalDensity.current) { (calendarHourHeight(settings) * initialScrollHours).roundToPx() }
     val scrollState = rememberScrollState(initial = initialScroll)
     Box(
         modifier = Modifier
@@ -232,14 +235,15 @@ private fun WeekGrid(
             .testTag(CalendarTestTags.WEEK_GRID)
             .verticalScroll(scrollState),
     ) {
-        Box(modifier = Modifier.fillMaxWidth().height(CalendarTotalHeight)) {
+        val totalHeight = calendarTotalHeight(settings)
+        Box(modifier = Modifier.fillMaxWidth().height(totalHeight)) {
             // Shared hour gutter + gridlines.
-            HourGridlines()
+            HourGridlines(settings = settings)
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(CalendarTotalHeight)
+                    .height(totalHeight)
                     .padding(start = CalendarGutterWidth),
             ) {
                 days.forEachIndexed { index, day ->
@@ -248,6 +252,7 @@ private fun WeekGrid(
                         isToday = day == today,
                         now = now,
                         zone = zone,
+                        settings = settings,
                         eventBlocks = timedByDay[day].orEmpty(),
                         entries = state.bucketsByDate[day]?.entries.orEmpty(),
                         projects = projects,
@@ -405,6 +410,7 @@ private fun DayColumn(
     zone: ZoneId,
     eventBlocks: List<EventBlock>,
     entries: List<TimeEntry>,
+    settings: CalendarGridSettings,
     projects: List<Project>,
     onEntryClick: (TimeEntry) -> Unit,
     onMoveEntry: (TimeEntry, String, String) -> Unit,
@@ -423,7 +429,8 @@ private fun DayColumn(
         val colWidth = maxWidth
         val density = LocalDensity.current
         val colWidthPx = with(density) { colWidth.toPx() }
-        val gridHeightPx = with(density) { CalendarTotalHeight.toPx() }
+        val totalHeight = calendarTotalHeight(settings)
+        val gridHeightPx = with(density) { totalHeight.toPx() }
 
         // Faded, read-only device-calendar events behind the tracked entries.
         eventBlocks.forEach { block ->
@@ -435,10 +442,10 @@ private fun DayColumn(
                 modifier = Modifier
                     .offset(
                         x = slotWidth * block.column,
-                        y = CalendarTotalHeight * block.startFraction,
+                        y = totalHeight * block.startFraction,
                     )
                     .width(slotWidth)
-                    .height((CalendarTotalHeight * block.heightFraction).coerceAtLeast(14.dp))
+                    .height((totalHeight * block.heightFraction).coerceAtLeast(14.dp))
                     .padding(0.5.dp)
                     .clip(MaterialTheme.shapes.extraSmall)
                     .background(base.copy(alpha = 0.14f))
@@ -459,12 +466,13 @@ private fun DayColumn(
         CalendarTimeSelectionLayer(
             day = day,
             zone = zone,
+            settings = settings,
             onSelectionComplete = onCreateRange,
             modifier = Modifier.fillMaxSize(),
         )
 
         // Tracked time entries drawn on top with the shared EntryBlock treatment.
-        layoutTrackedEntries(entries, day, now, zone).forEach { block ->
+        layoutTrackedEntries(entries, day, now, zone, settings).forEach { block ->
             val entry = block.entry
             val slotWidth = colWidth / block.columnCount.coerceAtLeast(1)
             val base = projects.firstOrNull { it.id == entry.projectId }?.color
@@ -476,7 +484,7 @@ private fun DayColumn(
                 modifier = Modifier
                     .offset(
                         x = slotWidth * block.column,
-                        y = CalendarTotalHeight * block.startFraction,
+                        y = totalHeight * block.startFraction,
                     )
                     .width(slotWidth)
                     .padding(horizontal = 0.5.dp),
@@ -487,10 +495,11 @@ private fun DayColumn(
                 dayCount = dayCount,
                 blockStartFraction = block.startFraction,
                 blockHeightPx = with(density) {
-                    (CalendarTotalHeight * block.heightFraction).coerceAtLeast(Dimens.EntryMinHeight).toPx()
+                    (totalHeight * block.heightFraction).coerceAtLeast(Dimens.EntryMinHeight).toPx()
                 },
                 gridHeightPx = gridHeightPx,
                 columnWidthPx = colWidthPx,
+                settings = settings,
                 onMoveEntry = onMoveEntry,
             )
             EntryBlock(
@@ -505,7 +514,7 @@ private fun DayColumn(
 
         // Current-time indicator on today's column.
         if (isToday) {
-            CurrentTimeMarker(now = now, day = day, zone = zone)
+            CurrentTimeMarker(now = now, day = day, zone = zone, settings = settings)
         }
     }
 }
@@ -516,23 +525,24 @@ private fun DayColumn(
  * across the full width. Used by both the week grid and the month day-timeline.
  */
 @Composable
-internal fun HourGridlines(modifier: Modifier = Modifier) {
+internal fun HourGridlines(settings: CalendarGridSettings = CalendarGridSettings(), modifier: Modifier = Modifier) {
     val lineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-    Box(modifier = modifier.fillMaxWidth().height(CalendarTotalHeight)) {
-        for (hour in FIRST_HOUR..LAST_HOUR) {
+    val hourHeight = calendarHourHeight(settings)
+    Box(modifier = modifier.fillMaxWidth().height(calendarTotalHeight(settings))) {
+        for (hour in settings.startHour until settings.endHour) {
             Text(
                 text = "%02d:00".format(hour),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
-                    .offset(y = CalendarHourHeight * hour)
+                    .offset(y = hourHeight * (hour - settings.startHour))
                     .width(CalendarGutterWidth)
                     .padding(end = Dimens.Space4),
                 textAlign = TextAlign.End,
             )
             Spacer(
                 modifier = Modifier
-                    .offset(x = CalendarGutterWidth, y = CalendarHourHeight * hour)
+                    .offset(x = CalendarGutterWidth, y = hourHeight * (hour - settings.startHour))
                     .fillMaxWidth()
                     .height(1.dp)
                     .background(lineColor),
@@ -547,13 +557,19 @@ internal fun HourGridlines(modifier: Modifier = Modifier) {
  * hour gutter in single-column layouts.
  */
 @Composable
-internal fun CurrentTimeMarker(now: Instant, day: LocalDate, zone: ZoneId, modifier: Modifier = Modifier) {
-    val fraction = (now.epochSecond - day.atStartOfDay(zone).toInstant().epochSecond)
-        .toFloat() / secondsInLocalDay(day, zone)
+internal fun CurrentTimeMarker(
+    now: Instant,
+    day: LocalDate,
+    zone: ZoneId,
+    settings: CalendarGridSettings = CalendarGridSettings(),
+    modifier: Modifier = Modifier,
+) {
+    val grid = calendarGridBounds(day, zone, settings)
+    val fraction = (now.epochSecond - grid.start.epochSecond).toFloat() / grid.seconds
     if (fraction in 0f..1f) {
         Box(
             modifier = modifier
-                .offset(y = CalendarTotalHeight * fraction)
+                .offset(y = calendarTotalHeight(settings) * fraction)
                 .fillMaxWidth()
                 .height(2.dp)
                 .background(MaterialTheme.colorScheme.error)

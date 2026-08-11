@@ -74,13 +74,31 @@ class CalendarViewModelTest {
     private class FakeOverlaySettings(enabled: Boolean = false, selected: Set<String> = emptySet()) : CalendarOverlaySettings {
         val enabledState = MutableStateFlow(enabled)
         val selectedState = MutableStateFlow(selected)
+        val snapState = MutableStateFlow(15)
+        val startHourState = MutableStateFlow(0)
+        val endHourState = MutableStateFlow(24)
+        val densityState = MutableStateFlow(CalendarGridDensity.COMFORTABLE.name)
         override val calendarOverlayEnabled: Flow<Boolean> = enabledState
         override val selectedCalendarIds: Flow<Set<String>> = selectedState
+        override val calendarSnapMinutes: Flow<Int> = snapState
+        override val calendarStartHour: Flow<Int> = startHourState
+        override val calendarEndHour: Flow<Int> = endHourState
+        override val calendarDensity: Flow<String> = densityState
         override suspend fun setCalendarOverlayEnabled(enabled: Boolean) {
             enabledState.value = enabled
         }
         override suspend fun setSelectedCalendarIds(ids: Set<String>) {
             selectedState.value = ids
+        }
+        override suspend fun setCalendarSnapMinutes(minutes: Int) {
+            snapState.value = minutes
+        }
+        override suspend fun setCalendarHours(startHour: Int, endHour: Int) {
+            startHourState.value = startHour
+            endHourState.value = endHour
+        }
+        override suspend fun setCalendarDensity(density: String) {
+            densityState.value = density
         }
     }
 
@@ -191,6 +209,26 @@ class CalendarViewModelTest {
         val model = vm(FakeReader(emptyList()))
         model.setViewMode(CalendarViewMode.DAY)
         assertEquals(1, model.uiState.value.visibleDays.size)
+    }
+
+    @Test
+    fun calendarSettingsArePersistedAndReflectedImmediately() = runTest {
+        val settings = FakeOverlaySettings()
+        val model = vm(FakeReader(emptyList()), settings = settings)
+        val requested = CalendarGridSettings(
+            snapMinutes = 30,
+            startHour = 8,
+            endHour = 18,
+            density = CalendarGridDensity.SPACIOUS,
+        )
+
+        model.updateCalendarSettings(requested)
+
+        assertEquals(requested, model.uiState.value.calendarSettings)
+        assertEquals(30, settings.snapState.value)
+        assertEquals(8, settings.startHourState.value)
+        assertEquals(18, settings.endHourState.value)
+        assertEquals(CalendarGridDensity.SPACIOUS.name, settings.densityState.value)
     }
 
     @Test

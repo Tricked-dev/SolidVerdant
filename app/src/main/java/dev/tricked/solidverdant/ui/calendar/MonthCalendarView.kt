@@ -80,7 +80,11 @@ fun MonthCalendarView(
 ) {
     var monthExpanded by remember { mutableStateOf(true) }
     val locale = LocalLocale.current.platformLocale
-    val timelineInitialScroll = with(LocalDensity.current) { (CalendarHourHeight * INITIAL_SCROLL_HOURS).roundToPx() }
+    val initialScrollHours = (INITIAL_SCROLL_HOURS - state.calendarSettings.startHour)
+        .coerceIn(0, (state.calendarSettings.endHour - state.calendarSettings.startHour - 1).coerceAtLeast(0))
+    val timelineInitialScroll = with(LocalDensity.current) {
+        (calendarHourHeight(state.calendarSettings) * initialScrollHours).roundToPx()
+    }
     val timelineScrollState = rememberScrollState(initial = timelineInitialScroll)
     Column(modifier = modifier.fillMaxWidth().padding(Dimens.Space12)) {
         if (!monthExpanded) {
@@ -129,6 +133,7 @@ fun MonthCalendarView(
             onEntryClick = onEntryClick,
             onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
+            settings = state.calendarSettings,
         )
     }
 }
@@ -262,6 +267,7 @@ private fun ColumnScope.SelectedDayEntries(
     onEntryClick: (TimeEntry) -> Unit,
     onMoveEntry: (TimeEntry, String, String) -> Unit,
     onCreateRange: (CalendarTimeRange) -> Unit,
+    settings: CalendarGridSettings = CalendarGridSettings(),
 ) {
     val entries = state.bucketsByDate[state.selectedDate]?.entries.orEmpty()
     if (monthExpanded) {
@@ -280,6 +286,7 @@ private fun ColumnScope.SelectedDayEntries(
             projects = projects,
             tasks = tasks,
             zone = state.zone,
+            settings = settings,
             scrollState = scrollState,
             fillViewport = true,
             onEntryClick = onEntryClick,
@@ -293,6 +300,7 @@ private fun ColumnScope.SelectedDayEntries(
             projects = projects,
             tasks = tasks,
             zone = state.zone,
+            settings = settings,
             scrollState = scrollState,
             fillViewport = true,
             onEntryClick = onEntryClick,
@@ -308,6 +316,7 @@ private fun ColumnScope.SelectedDayEntries(
                     projects = projects,
                     tasks = tasks,
                     zone = state.zone,
+                    settings = settings,
                     scrollState = scrollState,
                     onEntryClick = onEntryClick,
                     onMoveEntry = onMoveEntry,
@@ -332,6 +341,7 @@ fun DayTimeline(
     projects: List<Project>,
     tasks: List<Task>,
     zone: ZoneId,
+    settings: CalendarGridSettings = CalendarGridSettings(),
     onEntryClick: (TimeEntry) -> Unit,
     onMoveEntry: (TimeEntry, String, String) -> Unit = { _, _, _ -> },
     onCreateRange: (CalendarTimeRange) -> Unit = {},
@@ -342,7 +352,11 @@ fun DayTimeline(
     val now = remember { Instant.now() }
     val today = remember(zone) { LocalDate.now(zone) }
     val noDescription = stringResource(R.string.calendar_entry_untitled)
-    val initialScroll = with(LocalDensity.current) { (CalendarHourHeight * INITIAL_SCROLL_HOURS).roundToPx() }
+    val initialScrollHours = (INITIAL_SCROLL_HOURS - settings.startHour)
+        .coerceIn(0, (settings.endHour - settings.startHour - 1).coerceAtLeast(0))
+    val initialScroll = with(LocalDensity.current) {
+        (calendarHourHeight(settings) * initialScrollHours).roundToPx()
+    }
     val effectiveScrollState = scrollState ?: rememberScrollState(initial = initialScroll)
     Box(
         modifier = modifier
@@ -350,19 +364,23 @@ fun DayTimeline(
             .then(if (fillViewport) Modifier.fillMaxHeight() else Modifier.height(520.dp))
             .verticalScroll(effectiveScrollState),
     ) {
-        Box(modifier = Modifier.fillMaxWidth().height(CalendarTotalHeight)) {
-            HourGridlines()
+        val totalHeight = calendarTotalHeight(settings)
+        Box(modifier = Modifier.fillMaxWidth().height(totalHeight)) {
+            HourGridlines(settings = settings)
             CalendarTimeSelectionLayer(
                 day = day,
                 zone = zone,
+                settings = settings,
                 onSelectionComplete = onCreateRange,
                 modifier = Modifier.padding(start = CalendarGutterWidth),
             )
 
-            entries.forEach { entry ->
+            layoutTrackedEntries(entries, day, now, zone, settings).forEach { block ->
+                val entry = block.entry
                 val project = projects.find { it.id == entry.projectId }
                 val task = tasks.find { it.id == entry.taskId }
-                val (top, height) = timelineOffsets(entry, day, now, zone)
+                val top = block.startFraction
+                val height = block.heightFraction
                 val blockColor = project?.color?.let { hexToColor(it) }
                     ?: MaterialTheme.colorScheme.primary
                 val label = entry.description?.ifBlank { null } ?: noDescription
@@ -372,7 +390,7 @@ fun DayTimeline(
                 val entryModifier = calendarEntryDragModifier(
                     modifier = Modifier
                         .padding(start = CalendarGutterWidth, end = Dimens.Space2)
-                        .offset(y = CalendarTotalHeight * top),
+                        .offset(y = totalHeight * top),
                     entry = entry,
                     day = day,
                     zone = zone,
@@ -380,10 +398,11 @@ fun DayTimeline(
                     dayCount = 1,
                     blockStartFraction = top,
                     blockHeightPx = with(LocalDensity.current) {
-                        (CalendarTotalHeight * height).coerceAtLeast(Dimens.EntryMinHeight).toPx()
+                        (totalHeight * height).coerceAtLeast(Dimens.EntryMinHeight).toPx()
                     },
-                    gridHeightPx = with(LocalDensity.current) { CalendarTotalHeight.toPx() },
-                    columnWidthPx = with(LocalDensity.current) { CalendarTotalHeight.toPx() },
+                    gridHeightPx = with(LocalDensity.current) { totalHeight.toPx() },
+                    columnWidthPx = with(LocalDensity.current) { totalHeight.toPx() },
+                    settings = settings,
                     onMoveEntry = onMoveEntry,
                 )
                 EntryBlock(
@@ -402,6 +421,7 @@ fun DayTimeline(
                     now = now,
                     day = day,
                     zone = zone,
+                    settings = settings,
                     modifier = Modifier.padding(start = CalendarGutterWidth),
                 )
             }

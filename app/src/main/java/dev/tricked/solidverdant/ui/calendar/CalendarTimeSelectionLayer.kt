@@ -45,11 +45,12 @@ import kotlin.math.min
 internal fun CalendarTimeSelectionLayer(
     day: LocalDate,
     zone: ZoneId,
+    settings: CalendarGridSettings = CalendarGridSettings(),
     onSelectionComplete: (CalendarTimeRange) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
-    val gridHeightPx = with(density) { CalendarTotalHeight.toPx() }
+    val gridHeightPx = with(density) { calendarTotalHeight(settings).toPx() }
     val onSelectionCompleteState by rememberUpdatedState(onSelectionComplete)
     var dragStartY by remember(day, zone) { mutableStateOf<Float?>(null) }
     var dragCurrentY by remember(day, zone) { mutableStateOf<Float?>(null) }
@@ -63,7 +64,7 @@ internal fun CalendarTimeSelectionLayer(
             .fillMaxSize()
             .testTag(CalendarTestTags.selection(day))
             .semantics { contentDescription = dragHint }
-            .pointerInput(day, zone, gridHeightPx) {
+            .pointerInput(day, zone, gridHeightPx, settings) {
                 detectDragGestures(
                     onDragStart = { offset ->
                         dragStartY = offset.y
@@ -84,6 +85,7 @@ internal fun CalendarTimeSelectionLayer(
                                     endY = current,
                                     gridHeightPx = gridHeightPx,
                                     zone = zone,
+                                    settings = settings,
                                 ),
                             )
                         }
@@ -96,7 +98,7 @@ internal fun CalendarTimeSelectionLayer(
                     },
                 )
             }
-            .pointerInput(day, zone, gridHeightPx) {
+            .pointerInput(day, zone, gridHeightPx, settings) {
                 detectTapGestures { offset ->
                     onSelectionCompleteState(
                         calendarTimeRangeForDrag(
@@ -105,6 +107,7 @@ internal fun CalendarTimeSelectionLayer(
                             endY = offset.y,
                             gridHeightPx = gridHeightPx,
                             zone = zone,
+                            settings = settings,
                         ),
                     )
                 }

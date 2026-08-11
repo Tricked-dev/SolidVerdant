@@ -40,6 +40,7 @@ internal fun calendarEntryDragModifier(
     entry: TimeEntry,
     day: LocalDate,
     zone: ZoneId,
+    settings: CalendarGridSettings = CalendarGridSettings(),
     dayIndex: Int,
     dayCount: Int,
     blockStartFraction: Float,
@@ -58,9 +59,10 @@ internal fun calendarEntryDragModifier(
     val onResizeEntryState by rememberUpdatedState(onResizeEntry)
     val density = androidx.compose.ui.platform.LocalDensity.current
     val resizeHandleHeightPx = with(density) { Dimens.Space16.toPx() }
+    val gridSeconds = calendarGridBounds(day, zone, settings).seconds
     val minimumHeightPx = max(
         with(density) { Dimens.EntryMinHeight.toPx() },
-        gridHeightPx * (RESIZE_SLOT_MINUTES * SECONDS_PER_MINUTE).toFloat() / secondsInLocalDay(day, zone),
+        gridHeightPx * (settings.normalized().snapMinutes * SECONDS_PER_MINUTE).toFloat() / gridSeconds,
     )
     val baseTopPx = blockStartFraction * gridHeightPx
     var dragOffset by remember(entry.id, day) { mutableStateOf(Offset.Zero) }
@@ -83,7 +85,7 @@ internal fun calendarEntryDragModifier(
         .height(with(density) { renderedHeightPx.toDp() })
         .zIndex(if (isDragging) DRAGGED_ENTRY_Z_INDEX else 0f)
         .graphicsLayer { alpha = if (isDragging) DRAGGED_ENTRY_ALPHA else 1f }
-        .pointerInput(entry.id, day, dayIndex, dayCount, gridHeightPx, columnWidthPx, blockHeightPx) {
+        .pointerInput(entry.id, day, dayIndex, dayCount, gridHeightPx, columnWidthPx, blockHeightPx, settings) {
             var totalDrag = Offset.Zero
             fun reset() {
                 totalDrag = Offset.Zero
@@ -131,6 +133,7 @@ internal fun calendarEntryDragModifier(
                                     y = baseTopPx + totalDrag.y,
                                     gridHeightPx = gridHeightPx,
                                     zone = zone,
+                                    settings = settings,
                                 )
                                 calendarEntryRangeAt(entry, targetStart)?.let { range ->
                                     dispatchIfChanged(entry, range.start, range.end, onMoveEntryState)
@@ -150,6 +153,7 @@ internal fun calendarEntryDragModifier(
                                     gridHeightPx = gridHeightPx,
                                     zone = zone,
                                     allowDayEnd = mode == ManipulationMode.RESIZE_END,
+                                    settings = settings,
                                 )
                                 calendarEntryResizeRangeAt(
                                     entry = entry,
@@ -159,6 +163,7 @@ internal fun calendarEntryDragModifier(
                                         CalendarResizeEdge.END
                                     },
                                     boundary = targetBoundary,
+                                    settings = settings,
                                 )?.let { range ->
                                     dispatchIfChanged(entry, range.start, range.end, onResizeEntryState)
                                 }
@@ -200,5 +205,4 @@ private fun entryEndDate(entry: TimeEntry, zone: ZoneId): LocalDate? =
 private val ENTRY_TIME_FORMATTER = java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME
 private const val DRAGGED_ENTRY_ALPHA = 0.72f
 private const val DRAGGED_ENTRY_Z_INDEX = 2f
-private const val RESIZE_SLOT_MINUTES = 15L
 private const val SECONDS_PER_MINUTE = 60L

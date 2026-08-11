@@ -101,6 +101,10 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         private val END_OF_DAY_REVIEW_ENABLED = booleanPreferencesKey("end_of_day_review_enabled")
         private val CALENDAR_OVERLAY_ENABLED = booleanPreferencesKey("calendar_overlay_enabled")
         private val SELECTED_CALENDAR_IDS = stringSetPreferencesKey("selected_calendar_ids")
+        private val CALENDAR_SNAP_MINUTES = intPreferencesKey("calendar_snap_minutes")
+        private val CALENDAR_START_HOUR = intPreferencesKey("calendar_start_hour")
+        private val CALENDAR_END_HOUR = intPreferencesKey("calendar_end_hour")
+        private val CALENDAR_DENSITY = stringPreferencesKey("calendar_density")
 
         /** Default reminder time: 17:00 local, expressed as minutes since midnight. */
         const val DEFAULT_REMINDER_MINUTE_OF_DAY: Int = 17 * 60
@@ -330,6 +334,22 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         preferences[SELECTED_CALENDAR_IDS] ?: emptySet()
     }.distinctUntilChanged()
 
+    val calendarSnapMinutes: Flow<Int> = dataStore.data.map { preferences ->
+        preferences[CALENDAR_SNAP_MINUTES] ?: 15
+    }.distinctUntilChanged()
+
+    val calendarStartHour: Flow<Int> = dataStore.data.map { preferences ->
+        preferences[CALENDAR_START_HOUR] ?: 0
+    }.distinctUntilChanged()
+
+    val calendarEndHour: Flow<Int> = dataStore.data.map { preferences ->
+        preferences[CALENDAR_END_HOUR] ?: 24
+    }.distinctUntilChanged()
+
+    val calendarDensity: Flow<String> = dataStore.data.map { preferences ->
+        preferences[CALENDAR_DENSITY] ?: "COMFORTABLE"
+    }.distinctUntilChanged()
+
     suspend fun setReminderEnabled(enabled: Boolean) {
         dataStore.edit { it[REMINDER_ENABLED] = enabled }
     }
@@ -349,6 +369,24 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
 
     suspend fun setSelectedCalendarIds(ids: Set<String>) {
         dataStore.edit { it[SELECTED_CALENDAR_IDS] = ids }
+    }
+
+    suspend fun setCalendarSnapMinutes(minutes: Int) {
+        require(minutes in setOf(1, 5, 10, 15, 30, 60))
+        dataStore.edit { it[CALENDAR_SNAP_MINUTES] = minutes }
+    }
+
+    suspend fun setCalendarHours(startHour: Int, endHour: Int) {
+        require(startHour in 0..23 && endHour in 1..24 && startHour < endHour)
+        dataStore.edit {
+            it[CALENDAR_START_HOUR] = startHour
+            it[CALENDAR_END_HOUR] = endHour
+        }
+    }
+
+    suspend fun setCalendarDensity(density: String) {
+        require(density in setOf("COMPACT", "COMFORTABLE", "SPACIOUS"))
+        dataStore.edit { it[CALENDAR_DENSITY] = density }
     }
 
     /**

@@ -10,6 +10,7 @@ import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.data.calendar.DeviceCalendarEvent
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.domain.time.resolveTimeEntryInterval
+import dev.tricked.solidverdant.ui.theme.Dimens
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -31,7 +32,7 @@ const val MIN_ENTRY_HEIGHT_FRACTION: Float = 0.02f
 // align identically across views. Pick these over per-view magic numbers.
 
 /** Height of a single hour row in the timed grid. */
-val CalendarHourHeight = 48.dp
+val CalendarHourHeight = Dimens.CalendarHourComfortable
 
 /** Width of the leading gutter holding the hour labels (also the left inset for entry blocks). */
 val CalendarGutterWidth = 48.dp
@@ -39,19 +40,67 @@ val CalendarGutterWidth = 48.dp
 /** Full height of a 24h day column. */
 val CalendarTotalHeight = CalendarHourHeight * HOURS_PER_DAY
 
+fun calendarHourHeight(settings: CalendarGridSettings): androidx.compose.ui.unit.Dp = when (settings.density) {
+    CalendarGridDensity.COMPACT -> Dimens.CalendarHourCompact
+    CalendarGridDensity.COMFORTABLE -> Dimens.CalendarHourComfortable
+    CalendarGridDensity.SPACIOUS -> Dimens.CalendarHourSpacious
+}
+
+fun calendarTotalHeight(settings: CalendarGridSettings): androidx.compose.ui.unit.Dp =
+    calendarHourHeight(settings) * (settings.endHour - settings.startHour)
+
+data class CalendarGridBounds(val start: Instant, val end: Instant) {
+    val seconds: Long get() = end.epochSecond - start.epochSecond
+}
+
+fun calendarGridBounds(day: LocalDate, zone: ZoneId, settings: CalendarGridSettings = CalendarGridSettings()): CalendarGridBounds {
+    val normalized = settings.normalized()
+    val start = day.atTime(normalized.startHour, 0).atZone(zone).toInstant()
+    val end = if (normalized.endHour == HOURS_PER_DAY) {
+        day.plusDays(1).atStartOfDay(zone).toInstant()
+    } else {
+        day.atTime(normalized.endHour, 0).atZone(zone).toInstant()
+    }
+    return CalendarGridBounds(start, end)
+}
+
+fun clampToGridSeconds(
+    startMs: Long,
+    endMs: Long,
+    day: LocalDate,
+    zone: ZoneId,
+    settings: CalendarGridSettings = CalendarGridSettings(),
+): Pair<Long, Long>? {
+    val bounds = calendarGridBounds(day, zone, settings)
+    val gridStartMs = bounds.start.toEpochMilli()
+    val gridEndMs = bounds.end.toEpochMilli()
+    val clippedStart = maxOf(startMs, gridStartMs)
+    val clippedEnd = minOf(endMs, gridEndMs)
+    if (clippedEnd <= clippedStart) return null
+    return ((clippedStart - gridStartMs) / MILLIS_PER_SECOND) to
+        ((clippedEnd - gridStartMs) / MILLIS_PER_SECOND)
+}
+
 /**
  * Vertical placement of a tracked [entry] within [day], as `topFraction to heightFraction` of a
  * 24h column. Unparseable starts fall back to the day start; a running entry (no end) extends to
  * [now]. The height is floored at [MIN_ENTRY_HEIGHT_FRACTION] so very short entries stay visible.
  */
-fun timelineOffsets(entry: TimeEntry, day: LocalDate, now: Instant, zone: ZoneId): Pair<Float, Float> {
+fun timelineOffsets(
+    entry: TimeEntry,
+    day: LocalDate,
+    now: Instant,
+    zone: ZoneId,
+    settings: CalendarGridSettings = CalendarGridSettings(),
+): Pair<Float, Float> {
     val dayStart = day.atStartOfDay(zone).toInstant()
-    val secondsInDay = secondsInLocalDay(day, zone).toFloat()
+    val grid = calendarGridBounds(day, zone, settings)
+    val secondsInGrid = grid.seconds.toFloat()
     val (start, end) = resolveTimeEntryInterval(entry, now) ?: (dayStart to now)
-    val topSec = (start.epochSecond - dayStart.epochSecond).coerceIn(0, secondsInDay.toLong())
-    val endSec = (end.epochSecond - dayStart.epochSecond).coerceIn(0, secondsInDay.toLong())
-    val top = topSec / secondsInDay
-    val height = ((endSec - topSec) / secondsInDay).coerceAtLeast(MIN_ENTRY_HEIGHT_FRACTION)
+    val topSec = (start.epochSecond - grid.start.epochSecond).coerceIn(0, grid.seconds)
+    val endSec = (end.epochSecond - grid.start.epochSecond).coerceIn(0, grid.seconds)
+    val top = topSec / secondsInGrid
+    val height = ((endSec - topSec) / secondsInGrid).coerceAtLeast(MIN_ENTRY_HEIGHT_FRACTION)
     return top to height
 }
 
@@ -195,14 +244,19 @@ fun packOverlaps(intervals: List<Pair<Long, Long>>): List<Pair<Int, Int>> {
  * overlaps and flagging midnight continuations. Events are clipped to the day; all-day events are
  * excluded here and surfaced by [allDayEventsForDay].
  */
-fun layoutTimedEvents(events: List<DeviceCalendarEvent>, day: LocalDate, zone: ZoneId): List<EventBlock> {
+fun layoutTimedEvents(
+    events: List<DeviceCalendarEvent>,
+    day: LocalDate,
+    zone: ZoneId,
+    settings: CalendarGridSettings = CalendarGridSettings(),
+): List<EventBlock> {
     data class Clipped(val event: DeviceCalendarEvent, val startSec: Long, val endSec: Long)
 
     val clipped = events
         .asSequence()
         .filter { !it.allDay }
         .mapNotNull { event ->
-            clampToDaySeconds(event.startUtcMs, event.endUtcMs, day, zone)
+            clampToGridSeconds(event.startUtcMs, event.endUtcMs, day, zone, settings)
                 ?.let { (s, e) -> Clipped(event, s, e) }
         }
         // Stable order: earliest start first, then longest, then event id for determinism.
@@ -212,13 +266,14 @@ fun layoutTimedEvents(events: List<DeviceCalendarEvent>, day: LocalDate, zone: Z
     if (clipped.isEmpty()) return emptyList()
 
     val packing = packOverlaps(clipped.map { it.startSec to it.endSec })
-    val dayStartMs = day.atStartOfDay(zone).toInstant().toEpochMilli()
-    val dayEndMs = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
-    val secondsInDay = secondsInLocalDay(day, zone).toFloat()
+    val grid = calendarGridBounds(day, zone, settings)
+    val gridStartMs = grid.start.toEpochMilli()
+    val gridEndMs = grid.end.toEpochMilli()
+    val secondsInGrid = grid.seconds.toFloat()
 
     return clipped.mapIndexed { i, c ->
-        val startFraction = c.startSec.toFloat() / secondsInDay
-        val rawHeight = (c.endSec - c.startSec).toFloat() / secondsInDay
+        val startFraction = c.startSec.toFloat() / secondsInGrid
+        val rawHeight = (c.endSec - c.startSec).toFloat() / secondsInGrid
         val (col, colCount) = packing[i]
         EventBlock(
             event = c.event,
@@ -226,8 +281,8 @@ fun layoutTimedEvents(events: List<DeviceCalendarEvent>, day: LocalDate, zone: Z
             heightFraction = rawHeight.coerceIn(MIN_BLOCK_HEIGHT_FRACTION, 1f),
             column = col,
             columnCount = colCount,
-            continuesBefore = c.event.startUtcMs < dayStartMs,
-            continuesAfter = c.event.endUtcMs > dayEndMs,
+            continuesBefore = c.event.startUtcMs < gridStartMs,
+            continuesAfter = c.event.endUtcMs > gridEndMs,
         )
     }
 }
@@ -237,23 +292,29 @@ fun layoutTimedEvents(events: List<DeviceCalendarEvent>, day: LocalDate, zone: Z
  * entries in adjacent columns. Ordering is stable so the same input always produces the same
  * lanes, including after process recreation or an offline refresh.
  */
-fun layoutTrackedEntries(entries: List<TimeEntry>, day: LocalDate, now: Instant, zone: ZoneId): List<TrackedEntryBlock> {
+fun layoutTrackedEntries(
+    entries: List<TimeEntry>,
+    day: LocalDate,
+    now: Instant,
+    zone: ZoneId,
+    settings: CalendarGridSettings = CalendarGridSettings(),
+): List<TrackedEntryBlock> {
     data class Clipped(val entry: TimeEntry, val startSec: Long, val endSec: Long)
 
     val clipped = entries.mapNotNull { entry ->
         val (start, end) = resolveTimeEntryInterval(entry, now) ?: return@mapNotNull null
-        clampToDaySeconds(start.toEpochMilli(), end.toEpochMilli(), day, zone)
+        clampToGridSeconds(start.toEpochMilli(), end.toEpochMilli(), day, zone, settings)
             ?.let { (startSec, endSec) -> Clipped(entry, startSec, endSec) }
     }.sortedWith(compareBy({ it.startSec }, { -it.endSec }, { it.entry.id }))
 
     val packing = packOverlaps(clipped.map { it.startSec to it.endSec })
-    val secondsInDay = secondsInLocalDay(day, zone).toFloat()
+    val secondsInGrid = calendarGridBounds(day, zone, settings).seconds.toFloat()
     return clipped.mapIndexed { index, item ->
         val (column, columnCount) = packing[index]
         TrackedEntryBlock(
             entry = item.entry,
-            startFraction = item.startSec.toFloat() / secondsInDay,
-            heightFraction = ((item.endSec - item.startSec).toFloat() / secondsInDay)
+            startFraction = item.startSec.toFloat() / secondsInGrid,
+            heightFraction = ((item.endSec - item.startSec).toFloat() / secondsInGrid)
                 .coerceAtLeast(MIN_ENTRY_HEIGHT_FRACTION),
             column = column,
             columnCount = columnCount,
