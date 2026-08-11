@@ -216,9 +216,10 @@ interface TimeEntryDao {
     @Query(
         "SELECT id FROM time_entries WHERE organizationId = :orgId AND syncState = 'SYNCED' " +
             "AND pendingDelete = 0 AND start >= :rangeStart AND start <= :rangeEnd " +
+            "AND (:pullStartedAtMs IS NULL OR updatedAt < :pullStartedAtMs) " +
             "AND id NOT IN (SELECT timeEntryId FROM outbox)",
     )
-    suspend fun findTombstoneCandidates(orgId: String, rangeStart: String, rangeEnd: String): List<String>
+    suspend fun findTombstoneCandidates(orgId: String, rangeStart: String, rangeEnd: String, pullStartedAtMs: Long? = null): List<String>
 
     @Query("DELETE FROM time_entries WHERE id IN (:ids)")
     suspend fun deleteByIds(ids: List<String>)
@@ -230,12 +231,18 @@ interface TimeEntryDao {
      * [rangeStart, rangeEnd], still pending, or mid-flight in the outbox are never touched.
      */
     @Transaction
-    suspend fun tombstoneMissing(orgId: String, rangeStart: String, rangeEnd: String, serverIds: List<String>) {
+    suspend fun tombstoneMissing(
+        orgId: String,
+        rangeStart: String,
+        rangeEnd: String,
+        serverIds: List<String>,
+        pullStartedAtMs: Long? = null,
+    ) {
         // Keep the potentially multi-page server id set out of SQL: Android SQLite has a bounded
         // variable count, so one NOT IN list fails for large histories. Candidate rows are already
         // tightly scoped by organization, fetched start range, sync state and outbox ownership.
         val serverIdSet = serverIds.toHashSet()
-        findTombstoneCandidates(orgId, rangeStart, rangeEnd)
+        findTombstoneCandidates(orgId, rangeStart, rangeEnd, pullStartedAtMs)
             .asSequence()
             .filterNot(serverIdSet::contains)
             .chunked(SQLITE_SAFE_ID_CHUNK)

@@ -214,6 +214,23 @@ class TimeEntryDaoTest {
         assertEquals(newerLocal, dao.getById(newerLocal.id))
     }
 
+    @Test fun tombstone_does_not_remove_a_row_updated_after_the_pull_started() = runTest {
+        val oldRow = entry("old-row").copy(updatedAt = 50L)
+        val newerRow = entry("newer-row").copy(updatedAt = 150L)
+        dao.upsertAll(listOf(oldRow, newerRow))
+
+        dao.tombstoneMissing(
+            orgId = "org1",
+            rangeStart = "2026-01-01T00:00:00Z",
+            rangeEnd = "2026-01-02T00:00:00Z",
+            serverIds = emptyList(),
+            pullStartedAtMs = 100L,
+        )
+
+        assertNull(dao.getById(oldRow.id))
+        assertNotNull(dao.getById(newerRow.id))
+    }
+
     @Test fun tombstone_removes_only_missing_synced_rows_owned_by_the_fetched_window() = runTest {
         val insideMissing = entry("inside-missing").copy(start = "2026-01-05T09:00:00Z")
         val insidePresent = entry("inside-present").copy(start = "2026-01-06T09:00:00Z")

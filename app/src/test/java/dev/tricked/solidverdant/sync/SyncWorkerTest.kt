@@ -24,6 +24,9 @@ import dev.tricked.solidverdant.util.Clock
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import okhttp3.ResponseBody.Companion.toResponseBody
@@ -38,6 +41,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import retrofit2.HttpException
 import retrofit2.Response
+import java.io.IOException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 @RunWith(RobolectricTestRunner::class)
 class SyncWorkerTest {
@@ -100,6 +107,131 @@ class SyncWorkerTest {
         assertTrue(db.outboxDao().peekAll().isEmpty())
         // temp id row was rekeyed
         assertNull(db.timeEntryDao().getById("local-1"))
+    }
+
+    @Test fun intermittent_active_lookup_failure_retries_without_posting_a_duplicate_start() = runTest {
+        val server = TimeEntry(
+            id = "server-1",
+            userId = "u1",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = null,
+        )
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.START,
+                organizationId = "org1",
+                timeEntryId = "local-1",
+                createdAtMs = 1L,
+                payloadJson = json.encodeToString(
+                    StartPayload("m1", "u1", null, null, "work", emptyList(), start = server.start),
+                ),
+            ),
+        )
+        val syncRemote = mockk<RemoteDataSource>()
+        coEvery { syncRemote.getActiveTimeEntry() } returnsMany listOf(
+            Result.failure(IOException("network unavailable")),
+            Result.success(null),
+        )
+        coEvery {
+            syncRemote.startTimeEntry(any(), any(), any(), any(), any(), any(), any())
+        } returns Result.success(server)
+
+        assertEquals(ListenableWorker.Result.retry(), buildWorker(remoteDataSource = syncRemote).doWork())
+        assertEquals(1, db.outboxDao().peekAll().single().attemptCount)
+        coVerify(exactly = 0) {
+            syncRemote.startTimeEntry(any(), any(), any(), any(), any(), any(), any())
+        }
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker(remoteDataSource = syncRemote).doWork())
+        coVerify(exactly = 1) {
+            syncRemote.startTimeEntry(any(), any(), any(), any(), any(), any(), any())
+        }
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+    }
+
+    @Test fun start_does_not_adopt_an_active_entry_from_another_organization() = runTest {
+        val activeInOtherOrganization = TimeEntry(
+            id = "server-other",
+            userId = "u1",
+            organizationId = "org2",
+            start = "2026-07-07T08:00:00Z",
+            end = null,
+        )
+        val startedInCurrentOrganization = activeInOtherOrganization.copy(
+            id = "server-current",
+            organizationId = "org1",
+        )
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.START,
+                organizationId = "org1",
+                timeEntryId = "local-1",
+                createdAtMs = 1L,
+                payloadJson = json.encodeToString(
+                    StartPayload("m1", "u1", null, null, "work", emptyList(), start = activeInOtherOrganization.start),
+                ),
+            ),
+        )
+        val syncRemote = mockk<RemoteDataSource>()
+        coEvery { syncRemote.getActiveTimeEntry() } returns Result.success(activeInOtherOrganization)
+        coEvery {
+            syncRemote.startTimeEntry(any(), any(), any(), any(), any(), any(), any())
+        } returns Result.success(startedInCurrentOrganization)
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker(remoteDataSource = syncRemote).doWork())
+        coVerify(exactly = 1) {
+            syncRemote.startTimeEntry("org1", "m1", "u1", null, null, "work", activeInOtherOrganization.start)
+        }
+        assertEquals(SyncState.SYNCED, db.timeEntryDao().getById(startedInCurrentOrganization.id)?.syncState)
+        assertNull(db.timeEntryDao().getById(activeInOtherOrganization.id))
+    }
+
+    @Test fun concurrent_workers_post_one_outbox_start_only_once() = runTest {
+        val enteredStart = CountDownLatch(1)
+        val releaseStart = CountDownLatch(1)
+        val startCalls = AtomicInteger(0)
+        val server = TimeEntry(
+            id = "server-concurrent",
+            userId = "u1",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = null,
+        )
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.START,
+                organizationId = "org1",
+                timeEntryId = "local-1",
+                createdAtMs = 1L,
+                payloadJson = json.encodeToString(
+                    StartPayload("m1", "u1", null, null, "work", emptyList(), start = server.start),
+                ),
+            ),
+        )
+        val syncRemote = mockk<RemoteDataSource>()
+        coEvery { syncRemote.getActiveTimeEntry() } returns Result.success(null)
+        coEvery {
+            syncRemote.startTimeEntry(any(), any(), any(), any(), any(), any(), any())
+        } coAnswers {
+            startCalls.incrementAndGet()
+            enteredStart.countDown()
+            check(releaseStart.await(2, TimeUnit.SECONDS))
+            Result.success(server)
+        }
+
+        coroutineScope {
+            val first = async(Dispatchers.Default) { buildWorker(remoteDataSource = syncRemote).doWork() }
+            assertTrue(enteredStart.await(2, TimeUnit.SECONDS))
+            val second = async(Dispatchers.Default) { buildWorker(remoteDataSource = syncRemote).doWork() }
+            releaseStart.countDown()
+
+            assertEquals(ListenableWorker.Result.success(), first.await())
+            assertEquals(ListenableWorker.Result.success(), second.await())
+        }
+
+        assertEquals(1, startCalls.get())
+        assertTrue(db.outboxDao().peekAll().isEmpty())
     }
 
     @Test fun fresh_duplicate_create_does_not_adopt_the_identical_source_entry() = runTest {

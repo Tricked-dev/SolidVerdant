@@ -238,6 +238,7 @@ class TrackingViewModel @Inject constructor(
     private var userRefreshPending = false
     private var activeEntryMonitorJob: Job? = null
     private var monitoredOrganizationId: String? = null
+    private var activeEntryRequestGeneration = 0L
     private var dataCollectorJob: Job? = null
     private var syncCollectorJob: Job? = null
     private var syncVisibilityJob: Job? = null
@@ -661,8 +662,10 @@ class TrackingViewModel @Inject constructor(
      * Load the active time entry for the current user
      */
     private suspend fun loadActiveTimeEntry(organizationId: String, onlyIfChanged: Boolean = false) {
+        val requestGeneration = ++activeEntryRequestGeneration
         authRepository.getActiveTimeEntry()
             .onSuccess { timeEntry ->
+                if (requestGeneration != activeEntryRequestGeneration) return@onSuccess
                 // The active-entry endpoint is account-wide. Only surface an entry for the
                 // organization currently selected in the app.
                 val serverTimeEntry = timeEntry?.takeIf { it.organizationId == organizationId }
@@ -759,12 +762,14 @@ class TrackingViewModel @Inject constructor(
                 isInitialized = true
             }
             .onFailure { error ->
+                if (requestGeneration != activeEntryRequestGeneration) return@onFailure
                 Timber.e(error, "Failed to load active time entry")
+                // An intermittent poll failure must not turn a cached/running timer into an idle
+                // state. Keep the last trusted UI and notification surface; the next poll or
+                // foreground refresh can replace it when the network recovers.
                 _uiState.value = _uiState.value.copy(
-                    isTracking = false,
                     error = error.message ?: "Failed to load tracking state",
                 )
-                stopTimer()
 
                 // Mark as initialized even on failure
                 isInitialized = true
@@ -778,8 +783,11 @@ class TrackingViewModel @Inject constructor(
         val state = _uiState.value
         if (state.isLoadingMoreTimeEntries || !state.hasMoreTimeEntries) return
 
+        // Set the guard before launching. Two scroll callbacks can arrive in the same main-loop
+        // turn before the coroutine gets its first slice; setting it inside the coroutine lets
+        // both callbacks issue the same page request.
+        _uiState.value = state.copy(isLoadingMoreTimeEntries = true)
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoadingMoreTimeEntries = true)
             val (limit, offset) = when (historyLoadStage) {
                 0 -> FIRST_SCROLL_TOTAL to 0
                 1 -> MAX_PAGE_SIZE to 0
@@ -839,12 +847,12 @@ class TrackingViewModel @Inject constructor(
         val organizationId = historyOrganizationId ?: return
         val memberId = historyMemberId ?: return
         if (_uiState.value.isLoadingMoreTimeEntries) return
+        _uiState.value = _uiState.value.copy(
+            isLoadingMoreTimeEntries = true,
+            historyJumpTarget = date,
+            historyJumpProgress = 0f,
+        )
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                isLoadingMoreTimeEntries = true,
-                historyJumpTarget = date,
-                historyJumpProgress = 0f,
-            )
             val total = _uiState.value.totalTimeEntries ?: getHistoryPageWithRateLimit(
                 organizationId,
                 memberId,
@@ -959,8 +967,8 @@ class TrackingViewModel @Inject constructor(
         val organizationId = historyOrganizationId ?: return
         val memberId = historyMemberId ?: return
         if (_uiState.value.isLoadingMoreTimeEntries || historyWindowStartOffset <= 0) return
+        _uiState.value = _uiState.value.copy(isLoadingMoreTimeEntries = true)
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoadingMoreTimeEntries = true)
             val newStart = (historyWindowStartOffset - MAX_PAGE_SIZE).coerceAtLeast(0)
             authRepository.getTimeEntries(
                 organizationId,

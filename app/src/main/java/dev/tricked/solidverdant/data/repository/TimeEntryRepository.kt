@@ -166,7 +166,13 @@ class TimeEntryRepository @Inject constructor(
         val rangeStart = minStart
         val rangeEnd = maxStart
         if (rangeStart != null && rangeEnd != null) {
-            timeEntryDao.tombstoneMissing(organizationId, rangeStart, rangeEnd, allServerIds)
+            timeEntryDao.tombstoneMissing(
+                organizationId,
+                rangeStart,
+                rangeEnd,
+                allServerIds,
+                pullStartedAtMs = pullStartedAtMs,
+            )
         }
     }
 
@@ -257,6 +263,7 @@ class TimeEntryRepository @Inject constructor(
                 starts.min(),
                 starts.max(),
                 entries.map { it.id },
+                pullStartedAtMs = pullStartedAtMs,
             )
         }
         // Stamp the pull-refresh moment without clobbering the push timestamp (a concurrent

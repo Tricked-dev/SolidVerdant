@@ -23,6 +23,7 @@ import dev.tricked.solidverdant.sync.SyncTrigger
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -58,7 +59,7 @@ class TrackingViewModelForegroundTest {
 
     @Before
     fun setup() {
-        dispatcher = UnconfinedTestDispatcher()
+        dispatcher = UnconfinedTestDispatcher(TestCoroutineScheduler())
         kotlinx.coroutines.Dispatchers.setMain(dispatcher)
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
@@ -185,6 +186,7 @@ class TrackingViewModelForegroundTest {
         vm.loadAllData(ORG, MEMBER)
 
         vm.uiState.first { it.syncOperations.isNotEmpty() }
+        dispatcher.scheduler.runCurrent()
         assertFalse(vm.uiState.value.syncStatusVisible)
 
         dispatcher.scheduler.advanceTimeBy(SYNC_STATUS_REVEAL_DELAY_MS - 1)

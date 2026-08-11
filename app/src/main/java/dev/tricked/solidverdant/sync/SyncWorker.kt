@@ -27,6 +27,8 @@ import dev.tricked.solidverdant.data.remote.SolidtimeTimestamps
 import dev.tricked.solidverdant.data.remote.TimeEntriesQuery
 import dev.tricked.solidverdant.domain.time.parseTimeEntryInstant
 import dev.tricked.solidverdant.util.Clock
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import retrofit2.HttpException
 import timber.log.Timber
@@ -50,7 +52,11 @@ class SyncWorker @AssistedInject constructor(
     private val syncStatus: SyncStatusReporter,
 ) : CoroutineWorker(appContext, params) {
 
-    override suspend fun doWork(): Result {
+    override suspend fun doWork(): Result = drainMutex.withLock {
+        doWorkLocked()
+    }
+
+    private suspend fun doWorkLocked(): Result {
         syncStatus.set(SyncStatus.Syncing)
         // Drain across all organizations: a single background worker is responsible for flushing
         // the whole outbox, and each op already carries its own organizationId for the API call.
@@ -250,7 +256,12 @@ class SyncWorker @AssistedInject constructor(
     private suspend fun processStart(op: OutboxEntity): Outcome.Success {
         val payload = json.decodeFromString<StartPayload>(op.payloadJson)
         // Adopt an active entry if a prior request committed but its response was lost.
-        val adopted = remote.getActiveTimeEntry().getOrNull()?.takeIf { it.userId == payload.userId }
+        // A failed lookup is not evidence that the account is idle: posting in that window can
+        // duplicate a timer whose first response was lost. Also keep adoption scoped to the
+        // queued organization; the active endpoint is account-wide and may report another org.
+        val adopted = remote.getActiveTimeEntry().getOrThrow()?.takeIf {
+            it.userId == payload.userId && it.organizationId == op.organizationId
+        }
         val server = adopted ?: remote.startTimeEntry(
             op.organizationId,
             payload.memberId,
@@ -537,6 +548,10 @@ class SyncWorker @AssistedInject constructor(
 
         /** Cap on transient retries before an op is moved to the dead-letter state. */
         const val MAX_ATTEMPTS = 5
+
+        /** WorkManager normally serializes this unique work, but a restart/cancellation race can
+         * still construct two workers in one process. Never POST the same outbox snapshot twice. */
+        private val drainMutex = Mutex()
     }
 }
 
