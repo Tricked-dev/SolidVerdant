@@ -23,6 +23,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.zIndex
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.ui.tracking.EntryTrustRules
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.math.roundToInt
@@ -108,6 +110,22 @@ internal fun calendarEntryDragModifier(
                 }
             }
         }
+}
+
+/**
+ * Local overlap warning for a moved entry. This is deliberately advisory: Solidtime remains the
+ * authority for whether overlapping tracked time is allowed, but a drag should surface the same
+ * useful warning as the editor before the optimistic Room/outbox mutation is sent.
+ */
+internal fun calendarMoveOverlapsExisting(
+    entry: TimeEntry,
+    start: String,
+    end: String,
+    existingEntries: Iterable<TimeEntry>,
+    now: Instant = Instant.now(),
+): Boolean {
+    val moved = entry.copy(start = start, end = end)
+    return existingEntries.any { candidate -> EntryTrustRules.overlaps(moved, candidate, now) }
 }
 
 private fun dispatchIfChanged(

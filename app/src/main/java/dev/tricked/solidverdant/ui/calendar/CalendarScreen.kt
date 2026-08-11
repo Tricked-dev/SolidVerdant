@@ -62,6 +62,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -89,6 +90,7 @@ import dev.tricked.solidverdant.ui.components.EditTimeEntryDialog
 import dev.tricked.solidverdant.ui.components.ErrorState
 import dev.tricked.solidverdant.ui.components.SyncChip
 import dev.tricked.solidverdant.ui.theme.Dimens
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -143,6 +145,20 @@ fun CalendarScreen(
     var deleteTarget by remember { mutableStateOf<TimeEntry?>(null) }
     var deletedEntry by remember { mutableStateOf<TimeEntry?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+    val moveOverlapMessage = stringResource(R.string.entry_warning_overlap)
+    val calendarEntries = remember(state.bucketsByDate) {
+        state.bucketsByDate.values.asSequence()
+            .flatMap { it.entries.asSequence() }
+            .distinctBy { it.id }
+            .toList()
+    }
+    val moveEntryWithWarning: (TimeEntry, String, String) -> Unit = { entry, start, end ->
+        if (calendarMoveOverlapsExisting(entry, start, end, calendarEntries)) {
+            coroutineScope.launch { snackbarHostState.showSnackbar(moveOverlapMessage) }
+        }
+        onMoveEntry(entry, start, end)
+    }
     // Progressive disclosure: the overlay controls live behind an app-bar toggle instead of a
     // persistent bar, so the default calendar keeps its full height for the grid.
     var showOverlaySheet by remember { mutableStateOf(false) }
@@ -254,7 +270,7 @@ fun CalendarScreen(
                         onEntryClick = { editing = it },
                         onEntryLongPress = { contextEntry = it },
                         syncStatusByEntryId = syncOperationByEntryId.mapValues { (_, operation) -> operation.status },
-                        onMoveEntry = onMoveEntry,
+                        onMoveEntry = moveEntryWithWarning,
                         onCreateRange = { creatingRange = it },
                         modifier = Modifier.weight(1f),
                     )
