@@ -19,8 +19,6 @@ data class CalendarTimeRange(val start: ZonedDateTime, val end: ZonedDateTime)
 /** The complete interval produced when an existing entry is moved to a new start. */
 data class CalendarEntryRange(val start: ZonedDateTime, val end: ZonedDateTime)
 
-enum class CalendarResizeEdge { START, END }
-
 /**
  * Convert a vertical drag in a configurable grid into a valid, snapped range. The grid uses the
  * actual elapsed length of the local day, so a DST transition does not create an invalid instant.
@@ -72,22 +70,6 @@ fun calendarEntryRangeAt(entry: TimeEntry, targetStart: ZonedDateTime): Calendar
     val duration = Duration.between(originalStart, originalEnd)
     if (duration.isZero || duration.isNegative) return null
     return CalendarEntryRange(start = targetStart, end = targetStart.plus(duration))
-}
-
-/** Resize one boundary while preserving the other boundary and enforcing one visible grid slot. */
-fun calendarEntryResizeRangeAt(
-    entry: TimeEntry,
-    edge: CalendarResizeEdge,
-    boundary: ZonedDateTime,
-    settings: CalendarGridSettings = CalendarGridSettings(),
-): CalendarEntryRange? {
-    val originalStart = runCatching { ZonedDateTime.parse(entry.start) }.getOrNull() ?: return null
-    val originalEnd = entry.end?.let { runCatching { ZonedDateTime.parse(it) }.getOrNull() } ?: return null
-    val range = when (edge) {
-        CalendarResizeEdge.START -> CalendarEntryRange(boundary, originalEnd)
-        CalendarResizeEdge.END -> CalendarEntryRange(originalStart, boundary)
-    }
-    return range.takeIf { Duration.between(it.start, it.end) >= Duration.ofMinutes(settings.normalized().snapMinutes.toLong()) }
 }
 
 /** A useful one-hour fallback for the toolbar's Add action when no drag range was selected. */

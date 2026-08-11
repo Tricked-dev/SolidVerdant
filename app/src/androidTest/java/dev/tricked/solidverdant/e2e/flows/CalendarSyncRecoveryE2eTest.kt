@@ -51,7 +51,9 @@ class CalendarSyncRecoveryE2eTest {
         // Seed after the initial pull so the calendar observes a durable failure on the already
         // rendered Room entry instead of allowing the first refresh to race the fixture setup.
         e2e.seedFailedSync(serverId)
+        e2e.composeRule.waitForIdle()
         e2e.composeRule.onNodeWithTag(entryTag, useUnmergedTree = true).performTouchInput { longClick() }
+        e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_ENTRY_ACTIONS), WAIT_MS)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_ENTRY_SYNC_STATUS), WAIT_MS)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_ENTRY_SYNC_DISCARD), WAIT_MS)
 

@@ -67,6 +67,7 @@ object TestTags {
     const val CALENDAR_ADD_ENTRY = CalendarTestTags.ADD_ENTRY
     const val CALENDAR_ADD_BREAK = CalendarTestTags.ADD_BREAK
     const val CALENDAR_ADD_BREAK_MENU = CalendarTestTags.ADD_BREAK_MENU
+    const val CALENDAR_ENTRY_ACTIONS = CalendarTestTags.ENTRY_ACTIONS
     const val CALENDAR_ENTRY_SYNC_STATUS = CalendarTestTags.SYNC_STATUS
     const val CALENDAR_ENTRY_SYNC_RETRY = CalendarTestTags.SYNC_RETRY
     const val CALENDAR_ENTRY_SYNC_DISCARD = CalendarTestTags.SYNC_DISCARD

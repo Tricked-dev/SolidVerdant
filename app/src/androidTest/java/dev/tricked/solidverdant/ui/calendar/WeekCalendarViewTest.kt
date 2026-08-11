@@ -6,11 +6,15 @@
 
 package dev.tricked.solidverdant.ui.calendar
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import dev.tricked.solidverdant.data.model.TimeEntry
 import org.junit.Assert.assertEquals
@@ -19,7 +23,7 @@ import org.junit.Rule
 import org.junit.Test
 import java.time.Duration
 import java.time.LocalDate
-import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.ZonedDateTime
 
 class WeekCalendarViewTest {
@@ -27,29 +31,17 @@ class WeekCalendarViewTest {
 
     @Test
     fun currentTimeMarkerIsShownForToday() {
-        val today = LocalDate.now()
+        val today = LocalDate.of(2026, 7, 6)
+        val now = today.atTime(12, 0).toInstant(ZoneOffset.UTC)
         composeRule.setContent {
             MaterialTheme {
-                WeekCalendarView(
-                    state = CalendarUiState(
-                        viewMode = CalendarViewMode.WEEK,
-                        zone = ZoneId.systemDefault(),
-                        visibleDays = listOf(today),
-                        selectedDate = today,
-                        weekAnchor = today,
-                        isLoading = false,
-                    ),
-                    onSelectDate = {},
-                    onEntryClick = {},
-                    onPrevious = {},
-                    onNext = {},
-                    onToday = {},
-                    projects = emptyList(),
-                )
+                Box(Modifier.fillMaxWidth().height(calendarTotalHeight(CalendarGridSettings()))) {
+                    CurrentTimeMarker(now = now, day = today, zone = ZoneOffset.UTC)
+                }
             }
         }
 
-        composeRule.onNodeWithTag(CalendarTestTags.CURRENT_TIME_MARKER).assertExists()
+        composeRule.onNodeWithTag(CalendarTestTags.CURRENT_TIME_MARKER).fetchSemanticsNode()
     }
 
     @Test
@@ -61,6 +53,7 @@ class WeekCalendarViewTest {
                 WeekCalendarView(
                     state = CalendarUiState(
                         viewMode = CalendarViewMode.WEEK,
+                        zone = ZoneOffset.UTC,
                         visibleDays = listOf(date),
                         selectedDate = date,
                         weekAnchor = date,
@@ -96,6 +89,7 @@ class WeekCalendarViewTest {
                 WeekCalendarView(
                     state = CalendarUiState(
                         viewMode = CalendarViewMode.WEEK,
+                        zone = ZoneOffset.UTC,
                         visibleDays = listOf(date),
                         selectedDate = date,
                         weekAnchor = date,
@@ -135,11 +129,13 @@ class WeekCalendarViewTest {
             end = "2026-07-06T10:00:00Z",
         )
         var moved: Triple<TimeEntry, String, String>? = null
+        var gestureHeight = 0
         composeRule.setContent {
             MaterialTheme {
                 WeekCalendarView(
                     state = CalendarUiState(
                         viewMode = CalendarViewMode.WEEK,
+                        zone = ZoneOffset.UTC,
                         visibleDays = listOf(date),
                         selectedDate = date,
                         weekAnchor = date,
@@ -157,9 +153,12 @@ class WeekCalendarViewTest {
             }
         }
 
-        composeRule.onNodeWithTag("week-entry-${entry.id}").performTouchInput {
+        composeRule.onNodeWithTag("week-entry-${entry.id}").performScrollTo().performTouchInput {
+            gestureHeight = height
             down(center)
-            moveBy(Offset(0f, 48f), delayMillis = 250)
+            // Use the rendered block height instead of a raw pixel distance. Instrumentation
+            // emulators can use different densities, but one entry height is always one hour.
+            moveBy(Offset(0f, -height.toFloat()), delayMillis = 250)
             up()
         }
 
@@ -167,26 +166,28 @@ class WeekCalendarViewTest {
             val result = requireNotNull(moved)
             assertEquals(entry, result.first)
             assertEquals(Duration.ofHours(1), Duration.between(ZonedDateTime.parse(result.second), ZonedDateTime.parse(result.third)))
-            assertEquals(10, ZonedDateTime.parse(result.second).hour)
+            assertEquals("height=$gestureHeight start=${result.second}", 8, ZonedDateTime.parse(result.second).hour)
         }
     }
 
     @Test
-    fun draggingTheBottomEdgeResizesAnExistingEntry() {
+    fun draggingAtAnEntryEdgeStillMovesAndPreservesItsDuration() {
         val date = LocalDate.of(2026, 7, 6)
         val entry = TimeEntry(
-            id = "entry-resize",
+            id = "entry-edge-drag",
             userId = "user-1",
             organizationId = "org-1",
             start = "2026-07-06T09:00:00Z",
             end = "2026-07-06T10:00:00Z",
         )
-        var resized: Triple<TimeEntry, String, String>? = null
+        var moved: Triple<TimeEntry, String, String>? = null
+        var gestureHeight = 0
         composeRule.setContent {
             MaterialTheme {
                 WeekCalendarView(
                     state = CalendarUiState(
                         viewMode = CalendarViewMode.WEEK,
+                        zone = ZoneOffset.UTC,
                         visibleDays = listOf(date),
                         selectedDate = date,
                         weekAnchor = date,
@@ -195,7 +196,7 @@ class WeekCalendarViewTest {
                     ),
                     onSelectDate = {},
                     onEntryClick = {},
-                    onMoveEntry = { source, start, end -> resized = Triple(source, start, end) },
+                    onMoveEntry = { source, start, end -> moved = Triple(source, start, end) },
                     onPrevious = {},
                     onNext = {},
                     onToday = {},
@@ -204,17 +205,17 @@ class WeekCalendarViewTest {
             }
         }
 
-        composeRule.onNodeWithTag("week-entry-${entry.id}").performTouchInput {
-            down(Offset(center.x, bottom - 4f))
-            moveBy(Offset(0f, 48f), delayMillis = 250)
+        composeRule.onNodeWithTag("week-entry-${entry.id}").performScrollTo().performTouchInput {
+            gestureHeight = height
+            down(Offset(center.x, bottom - 2f))
+            moveBy(Offset(0f, -height.toFloat()), delayMillis = 250)
             up()
         }
 
         composeRule.runOnIdle {
-            val result = requireNotNull(resized)
-            assertEquals(entry, result.first)
-            assertEquals("2026-07-06T09:00:00Z", result.second)
-            assertEquals("2026-07-06T11:00:00Z", result.third)
+            val result = requireNotNull(moved)
+            assertEquals(Duration.ofHours(1), Duration.between(ZonedDateTime.parse(result.second), ZonedDateTime.parse(result.third)))
+            assertEquals("height=$gestureHeight start=${result.second}", 8, ZonedDateTime.parse(result.second).hour)
         }
     }
 

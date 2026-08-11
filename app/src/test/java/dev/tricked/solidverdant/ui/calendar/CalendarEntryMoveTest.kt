@@ -63,49 +63,4 @@ class CalendarEntryMoveTest {
 
         assertEquals(Duration.ofHours(2), Duration.between(moved.start, moved.end))
     }
-
-    @Test
-    fun resizingStartKeepsTheEndBoundary() {
-        val entry = TimeEntry(
-            id = "entry-start",
-            userId = "user-1",
-            organizationId = "org-1",
-            start = "2026-08-11T09:00:00Z",
-            end = "2026-08-11T10:00:00Z",
-        )
-
-        val resized = calendarEntryResizeRangeAt(
-            entry = entry,
-            edge = CalendarResizeEdge.START,
-            boundary = ZonedDateTime.parse("2026-08-11T09:30:00Z"),
-        )
-
-        assertEquals("2026-08-11T09:30:00Z", resized?.start?.toInstant().toString())
-        assertEquals("2026-08-11T10:00:00Z", resized?.end?.toInstant().toString())
-    }
-
-    @Test
-    fun resizingEndAllowsTheLocalDayBoundaryButRejectsTooShortRanges() {
-        val entry = TimeEntry(
-            id = "entry-end",
-            userId = "user-1",
-            organizationId = "org-1",
-            start = "2026-08-11T23:00:00Z",
-            end = "2026-08-12T00:00:00Z",
-        )
-
-        val resized = calendarEntryResizeRangeAt(
-            entry = entry,
-            edge = CalendarResizeEdge.END,
-            boundary = ZonedDateTime.parse("2026-08-12T01:00:00Z"),
-        )
-        val tooShort = calendarEntryResizeRangeAt(
-            entry = entry,
-            edge = CalendarResizeEdge.END,
-            boundary = ZonedDateTime.parse("2026-08-11T23:10:00Z"),
-        )
-
-        assertEquals("2026-08-12T01:00:00Z", resized?.end?.toInstant().toString())
-        assertEquals(null, tooShort)
-    }
 }

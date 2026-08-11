@@ -46,7 +46,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -603,7 +602,6 @@ internal fun CurrentTimeMarker(
                 .fillMaxWidth()
                 .height(2.dp)
                 .background(MaterialTheme.colorScheme.error)
-                .clearAndSetSemantics { }
                 .testTag(CalendarTestTags.CURRENT_TIME_MARKER),
         )
     }
