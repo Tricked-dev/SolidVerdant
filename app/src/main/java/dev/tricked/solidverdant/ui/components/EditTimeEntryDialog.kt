@@ -440,6 +440,7 @@ fun EditTimeEntryDialog(
                 }
                 Button(
                     onClick = onDismiss,
+                    modifier = Modifier.testTag(EditTimeEntryTestTags.CANCEL_BUTTON),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color.Transparent,
                         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
