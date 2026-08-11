@@ -81,7 +81,7 @@ class ExternalTimerSurfacesE2eTest {
         shell("cmd statusbar remove-tile $tileComponent")
         shell("cmd statusbar add-tile $tileComponent")
 
-        var lastTileClickAt = Long.MIN_VALUE
+        var lastTileClickAt = 0L
         e2e.composeRule.waitUntil(TEST_TIMEOUT_MS) {
             // Opening the tile's separate ProjectSelectionActivity briefly removes the main
             // activity's Compose root. Treat that transition as a retryable state instead of
