@@ -15,6 +15,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -64,7 +65,9 @@ class CalendarRunningTimerE2eTest {
         val entryTag = "week-entry-${requireNotNull(originalHandle.serverId)}"
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(entryTag), WAIT_MS)
         e2e.composeRule.waitForIdle()
-        e2e.composeRule.onNodeWithTag(entryTag, useUnmergedTree = true).performTouchInput { longClick() }
+        e2e.composeRule.onNodeWithTag(entryTag, useUnmergedTree = true)
+            .performScrollTo()
+            .performTouchInput { longClick() }
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_ENTRY_ACTIONS), WAIT_MS)
         e2e.composeRule.onNodeWithTag(TestTags.CALENDAR_EDIT_START_TIME, useUnmergedTree = true).performClick()
 
