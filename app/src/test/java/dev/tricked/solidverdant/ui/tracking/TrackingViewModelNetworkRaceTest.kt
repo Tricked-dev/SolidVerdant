@@ -12,6 +12,8 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.local.db.AppDatabase
+import dev.tricked.solidverdant.data.local.db.toEntity
+import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.TimeEntriesMeta
 import dev.tricked.solidverdant.data.model.TimeEntriesResponse
 import dev.tricked.solidverdant.data.model.TimeEntry
@@ -25,6 +27,7 @@ import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.TestDispatcher
@@ -32,6 +35,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -107,6 +111,66 @@ class TrackingViewModelNetworkRaceTest {
         assertTrue(viewModel.uiState.value.isTracking)
         assertEquals(active.id, viewModel.uiState.value.currentTimeEntry?.id)
         assertTrue(viewModel.uiState.value.error?.contains("offline") == true)
+        viewModel.cancelScopeForTest()
+    }
+
+    @Test
+    fun late_active_response_after_backgrounding_cannot_clear_the_cached_timer() = runTest(dispatcher.scheduler) {
+        val active = entry("cached-active")
+        val settings = SettingsDataStore(context)
+        settings.cacheTrackingState(
+            SettingsDataStore.CachedTrackingState(
+                organizationId = ORG,
+                timeEntries = listOf(active),
+                projects = emptyList(),
+                tasks = emptyList(),
+                tags = emptyList(),
+                activeEntry = active,
+            ),
+        )
+        val response = CompletableDeferred<Result<TimeEntry?>>()
+        val authRepository = mockk<AuthRepository>(relaxed = true)
+        coEvery { authRepository.getActiveTimeEntry() } coAnswers {
+            withContext(NonCancellable) { response.await() }
+        }
+        val viewModel = viewModel(authRepository, settings)
+
+        viewModel.onAppForegrounded(ORG, MEMBER, refreshAll = false)
+        viewModel.onAppBackgrounded()
+        response.complete(Result.success(null))
+        dispatcher.scheduler.runCurrent()
+
+        assertTrue(viewModel.uiState.value.isTracking)
+        assertEquals(active.id, viewModel.uiState.value.currentTimeEntry?.id)
+        viewModel.cancelScopeForTest()
+    }
+
+    @Test
+    fun externally_polled_timer_survives_a_later_room_emission() = runTest(dispatcher.scheduler) {
+        val active = entry("other-active", organizationId = OTHER_ORG)
+        val authRepository = mockk<AuthRepository>(relaxed = true)
+        coEvery { authRepository.getActiveTimeEntry() } returns Result.success(active)
+        val viewModel = viewModel(
+            authRepository = authRepository,
+            settings = SettingsDataStore(context),
+        )
+
+        viewModel.loadAllData(OTHER_ORG, MEMBER)
+        viewModel.uiState.first { it.hasLoadedTimeEntries }
+        viewModel.onAppForegrounded(OTHER_ORG, MEMBER, refreshAll = false)
+        dispatcher.scheduler.runCurrent()
+        assertEquals(active.id, viewModel.uiState.value.currentTimeEntry?.id)
+
+        // A catalog emission is enough to re-run the combined Room collector while its active
+        // query still has the old empty snapshot.
+        db.catalogDao().upsertProjects(
+            listOf(
+                Project(id = "project-refresh", name = "Refresh", color = "#123456").toEntity(OTHER_ORG),
+            ),
+        )
+        dispatcher.scheduler.runCurrent()
+
+        assertEquals(active.id, viewModel.uiState.value.currentTimeEntry?.id)
         viewModel.cancelScopeForTest()
     }
 
@@ -204,17 +268,19 @@ class TrackingViewModelNetworkRaceTest {
         ).also { viewModels += it }
     }
 
-    private fun entry(id: String, description: String = "work", start: String = "2026-07-07T08:00:00Z") = TimeEntry(
-        id = id,
-        userId = "user-1",
-        organizationId = ORG,
-        start = start,
-        end = null,
-        description = description,
-    )
+    private fun entry(id: String, description: String = "work", start: String = "2026-07-07T08:00:00Z", organizationId: String = ORG) =
+        TimeEntry(
+            id = id,
+            userId = "user-1",
+            organizationId = organizationId,
+            start = start,
+            end = null,
+            description = description,
+        )
 
     private companion object {
         const val ORG = "org1"
+        const val OTHER_ORG = "org2"
         const val MEMBER = "member1"
         const val HISTORY_LIMIT = 250
         const val IMMEDIATE_CACHE = "immediate_ui_cache"

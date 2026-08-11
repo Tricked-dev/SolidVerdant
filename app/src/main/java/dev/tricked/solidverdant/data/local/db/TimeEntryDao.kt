@@ -135,10 +135,12 @@ interface TimeEntryDao {
                 local.syncState == SyncState.SYNCED &&
                 !local.pendingDelete &&
                 pullStartedAtMs != null &&
-                local.updatedAt >= pullStartedAtMs
+                local.updatedAt > pullStartedAtMs
             ) {
                 // This response was already in flight when the local row was last written.
-                // Keep the newer Room value; a later pull will observe the server copy.
+                // Keep the newer Room value; a later pull will observe the server copy. Equality
+                // belongs to the previous pull's completion, which may share a millisecond with
+                // this pull's start on fast or deterministic clocks.
                 return@forEach
             }
             if (local != null && (local.syncState == SyncState.PENDING || local.pendingDelete)) {

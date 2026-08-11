@@ -38,7 +38,9 @@ import dev.tricked.solidverdant.widget.TimeTrackingWidget
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -248,6 +250,13 @@ class TrackingViewModel @Inject constructor(
     private var lastCachedContinueEntry: TimeEntry? = null
     private var collectingOrganizationId: String? = null
     private var lastCollectedActiveId: String? = null
+
+    // The active endpoint can learn about a timer before the Room history pull does. Keep that
+    // trusted response above an older Room emission; otherwise the collector can immediately
+    // erase an externally started timer with its stale "no active row" snapshot.
+    private var hasActivePollOverride = false
+    private var activePollOverrideOrganizationId: String? = null
+    private var activePollOverride: TimeEntry? = null
     private val locallyStoppingEntryIds = mutableSetOf<String>()
     private var historyOrganizationId: String? = null
     private var historyMemberId: String? = null
@@ -340,6 +349,10 @@ class TrackingViewModel @Inject constructor(
      * Load all data needed for the tracking screen
      */
     fun loadAllData(organizationId: String, memberId: String, userInitiated: Boolean = false) {
+        // A refresh can overlap an active poll. Invalidate that response before switching the
+        // selected account or starting another refresh; a slow/non-cooperative HTTP call must not
+        // write stale tracking state into the next screen.
+        activeEntryRequestGeneration++
         historyOrganizationId = organizationId
         historyMemberId = memberId
 
@@ -368,11 +381,16 @@ class TrackingViewModel @Inject constructor(
                 isRefreshing = userInitiated,
                 error = null,
             )
-            timeEntryRepository.refreshAll(organizationId, memberId)
+            val refreshResult = timeEntryRepository.refreshAll(organizationId, memberId)
+            // Refresh implementations and test doubles may finish after cancellation. Do not let
+            // that stale completion start a monitor or clear a newer screen's refresh state.
+            currentCoroutineContext().ensureActive()
+            refreshResult
                 .onFailure { error ->
                     Timber.w(error, "Background refresh failed; showing cached data")
                     if (userInitiated) _uiState.value = _uiState.value.copy(error = error.message)
                 }
+            currentCoroutineContext().ensureActive()
             if (userRefreshPending && loadingOrganizationId == organizationId) {
                 userRefreshPending = false
                 loadDataJob = null
@@ -405,6 +423,7 @@ class TrackingViewModel @Inject constructor(
         historyWindowStartOffset = 0
         historyOffset = 0
         historyWindowMode = HistoryWindowMode.RECENT
+        clearActivePollOverride()
         dataCollectorJob = viewModelScope.launch {
             combine(
                 combine(
@@ -441,7 +460,8 @@ class TrackingViewModel @Inject constructor(
                         .maxByOrNull { it.start },
                 )
             }.flowOn(Dispatchers.Default).conflate().collect { (data, overlapCount, continueEntry) ->
-                val activeChanged = data.active?.id != lastCollectedActiveId
+                val active = activePollOverrideFor(organizationId, data.active)
+                val activeChanged = active?.id != lastCollectedActiveId
                 val currentState = _uiState.value
                 val mode = historyWindowMode
                 // Single source of truth: the collector only owns the displayed list (and the
@@ -460,8 +480,8 @@ class TrackingViewModel @Inject constructor(
                     tags = data.tags,
                     clients = data.clients,
                     conflictedEntryIds = data.conflictedEntryIds,
-                    currentTimeEntry = data.active,
-                    isTracking = data.active != null,
+                    currentTimeEntry = active,
+                    isTracking = active != null,
                     hasLoadedTimeEntries = true,
                     // Heuristic: if we filled the refresh window there may be older history
                     // to page in from the network (see loadMoreTimeEntries). Preserve the flag
@@ -475,11 +495,11 @@ class TrackingViewModel @Inject constructor(
                     isLoading = false,
                     // Only reset in-progress edits when the active entry itself changes,
                     // so a user's typing is not clobbered by a background emission.
-                    editingDescription = if (activeChanged) data.active?.description.orEmpty() else currentState.editingDescription,
-                    editingProjectId = if (activeChanged) data.active?.projectId else currentState.editingProjectId,
-                    editingTaskId = if (activeChanged) data.active?.taskId else currentState.editingTaskId,
-                    editingTags = if (activeChanged) data.active?.tags?.map { it.id }.orEmpty() else currentState.editingTags,
-                    editingBillable = if (activeChanged) (data.active?.billable ?: false) else currentState.editingBillable,
+                    editingDescription = if (activeChanged) active?.description.orEmpty() else currentState.editingDescription,
+                    editingProjectId = if (activeChanged) active?.projectId else currentState.editingProjectId,
+                    editingTaskId = if (activeChanged) active?.taskId else currentState.editingTaskId,
+                    editingTags = if (activeChanged) active?.tags?.map { it.id }.orEmpty() else currentState.editingTags,
+                    editingBillable = if (activeChanged) (active?.billable ?: false) else currentState.editingBillable,
                 )
                 // Both caches JSON-encode sizable object graphs; keep that (and the
                 // SharedPreferences write) off the main thread, and skip no-op continue writes.
@@ -501,15 +521,15 @@ class TrackingViewModel @Inject constructor(
                             clients = data.clients,
                             tasks = data.tasks,
                             tags = data.tags,
-                            activeEntry = data.active,
+                            activeEntry = active,
                             overlapCount = overlapCount,
                         ),
                     )
                     _hasSnapshot.value = true
                 }
                 if (activeChanged) {
-                    lastCollectedActiveId = data.active?.id
-                    if (data.active != null) startTimer(data.active.start) else stopTimer()
+                    lastCollectedActiveId = active?.id
+                    if (active != null) startTimer(active.start) else stopTimer()
                 }
             }
         }
@@ -532,6 +552,28 @@ class TrackingViewModel @Inject constructor(
                 }
         }
     }
+
+    private fun clearActivePollOverride() {
+        // A local timer mutation supersedes any request that was started before the mutation. A
+        // late response from that request must not restore the pre-mutation server timer.
+        activeEntryRequestGeneration++
+        hasActivePollOverride = false
+        activePollOverrideOrganizationId = null
+        activePollOverride = null
+    }
+
+    private fun setActivePollOverride(organizationId: String, active: TimeEntry?) {
+        hasActivePollOverride = true
+        activePollOverrideOrganizationId = organizationId
+        activePollOverride = active
+    }
+
+    private fun activePollOverrideFor(organizationId: String, roomActive: TimeEntry?): TimeEntry? =
+        if (hasActivePollOverride && activePollOverrideOrganizationId == organizationId) {
+            activePollOverride
+        } else {
+            roomActive
+        }
 
     private fun updateSyncStatusVisibility(operations: List<TimeEntryRepository.SyncOperation>) {
         val hasError = operations.any { operation ->
@@ -610,6 +652,10 @@ class TrackingViewModel @Inject constructor(
 
     /** Pause network polling while the app is not visible. */
     fun onAppBackgrounded() {
+        // Invalidate one-shot foreground lookups as well as the repeating monitor. The lookup is
+        // intentionally not cancelled here because an HTTP implementation may ignore coroutine
+        // cancellation; its late result is still stale once the screen is backgrounded.
+        activeEntryRequestGeneration++
         activeEntryMonitorJob?.cancel()
         activeEntryMonitorJob = null
     }
@@ -686,6 +732,7 @@ class TrackingViewModel @Inject constructor(
                 ) {
                     return@onSuccess
                 }
+                setActivePollOverride(organizationId, currentTimeEntry)
                 if (onlyIfChanged &&
                     currentTimeEntry?.id == _uiState.value.currentTimeEntry?.id
                 ) {
@@ -1143,6 +1190,7 @@ class TrackingViewModel @Inject constructor(
      * Start a new time entry with current editing state
      */
     fun startTimeEntry(organizationId: String, memberId: String, userId: String) {
+        clearActivePollOverride()
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
@@ -1198,6 +1246,7 @@ class TrackingViewModel @Inject constructor(
             return
         }
 
+        clearActivePollOverride()
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
@@ -1278,6 +1327,7 @@ class TrackingViewModel @Inject constructor(
         // Active polling can complete between the local STOP transaction and the outbox observer
         // emission. Suppress that exact server id synchronously while the STOP is being queued.
         locallyStoppingEntryIds += currentEntry.id
+        clearActivePollOverride()
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
@@ -1322,6 +1372,7 @@ class TrackingViewModel @Inject constructor(
             return
         }
 
+        clearActivePollOverride()
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
@@ -1352,6 +1403,7 @@ class TrackingViewModel @Inject constructor(
      * Resume tracking after pause - starts a new time entry with the same project/task/description
      */
     fun resumeTimeEntry(organizationId: String, memberId: String, userId: String) {
+        clearActivePollOverride()
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null, isPaused = false)
 

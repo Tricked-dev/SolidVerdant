@@ -50,12 +50,14 @@ class ExternalTimerSurfacesE2eTest {
     private val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
     private val notificationManager = context.getSystemService(NotificationManager::class.java)
     private val tileComponent = ComponentName(context, TimeTrackingTileService::class.java).flattenToString()
-    private val notificationComponent = ComponentName(context, TimeTrackingNotificationService::class.java).flattenToString()
 
     @Before
     fun resetExternalSurfaces() {
         shell("cmd statusbar remove-tile $tileComponent")
-        shell("am stopservice $notificationComponent")
+        // The service is intentionally non-exported, so shell `am stopservice` is denied on the
+        // device. Stop it through the app context or a previous test can leak its coroutine scope
+        // and notification action state into this test.
+        context.stopService(Intent(context, TimeTrackingNotificationService::class.java))
         notificationManager.cancelAll()
         context.getSharedPreferences(NOTIFICATION_STATE_PREFERENCES, Context.MODE_PRIVATE).edit().clear().commit()
     }

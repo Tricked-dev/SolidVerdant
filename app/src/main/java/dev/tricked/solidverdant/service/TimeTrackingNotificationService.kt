@@ -447,7 +447,7 @@ class TimeTrackingNotificationService : Service() {
             ?: return Result.success(false)
         if (expectedStart != null) {
             val activeStart = runCatching { Instant.parse(activeEntry.start) }.getOrNull()
-            if (activeStart != expectedStart) {
+            if (activeStart?.toEpochMilli() != expectedStart.toEpochMilli()) {
                 Timber.d("Ignoring stale notification action for a replaced active timer")
                 return Result.success(false)
             }

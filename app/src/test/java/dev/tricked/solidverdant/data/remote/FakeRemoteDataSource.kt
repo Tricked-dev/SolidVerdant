@@ -13,7 +13,7 @@ import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntriesResponse
 import dev.tricked.solidverdant.data.model.TimeEntry
-
+import kotlinx.coroutines.CompletableDeferred
 @Suppress("LongParameterList")
 class FakeRemoteDataSource(
     var entries: List<TimeEntry> = emptyList(),
@@ -29,6 +29,7 @@ class FakeRemoteDataSource(
     var startResult: (TimeEntry) -> TimeEntry = { it },
     var stopResult: (TimeEntry) -> TimeEntry = { it },
     var updateResult: (TimeEntry) -> TimeEntry = { it },
+    var projectsGate: CompletableDeferred<Unit>? = null,
 ) : RemoteDataSource {
     val started = mutableListOf<Triple<String, String?, String?>>()
     val created = mutableListOf<TimeEntry>()
@@ -45,7 +46,10 @@ class FakeRemoteDataSource(
         timeEntriesQueryValidator?.invoke(query)?.let { return Result.failure(it) }
         return Result.success(TimeEntriesResponse(data = entries))
     }
-    override suspend fun getProjects(organizationId: String) = Result.success(projects)
+    override suspend fun getProjects(organizationId: String): Result<List<Project>> {
+        projectsGate?.await()
+        return Result.success(projects)
+    }
     override suspend fun getClients(organizationId: String) = Result.success(clients)
     override suspend fun getTasks(organizationId: String) = Result.success(tasks)
     override suspend fun getTags(organizationId: String) = Result.success(tags)

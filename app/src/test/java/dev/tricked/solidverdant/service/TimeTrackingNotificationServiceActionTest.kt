@@ -626,6 +626,41 @@ class TimeTrackingNotificationServiceActionTest {
     }
 
     @Test
+    fun pause_accepts_server_start_precision_beyond_notification_epoch_millis() {
+        val preciseEntry = activeEntry.copy(start = "2026-08-10T08:00:00.123456Z")
+        val authRepository = mockk<AuthRepository>(relaxed = true) {
+            coEvery { getActiveTimeEntry() } returns Result.success(preciseEntry)
+            coEvery { getCurrentUser() } returns Result.success(user)
+            coEvery { stopTimeEntry(any(), any(), any(), any()) } returns Result.success(
+                preciseEntry.copy(end = "2026-08-10T09:00:00Z"),
+            )
+        }
+        val service = createService(authRepository)
+        val startIntent = startTrackingIntent().apply {
+            putExtra(
+                TimeTrackingNotificationService.EXTRA_START_TIME,
+                Instant.parse(preciseEntry.start).toEpochMilli(),
+            )
+        }
+        service.onStartCommand(startIntent, 0, 1)
+        val pauseIntent = notificationActionIntent(
+            checkNotNull(shadowOf(service).lastForegroundNotification),
+            R.string.pause,
+        )
+
+        service.onStartCommand(pauseIntent, 0, 2)
+
+        coVerify(exactly = 1) {
+            authRepository.stopTimeEntry(
+                organizationId = organization.id,
+                timeEntryId = preciseEntry.id,
+                userId = user.id,
+                startTime = preciseEntry.start,
+            )
+        }
+    }
+
+    @Test
     fun queued_refresh_for_the_just_paused_entry_does_not_replace_the_resume_notification() {
         val authRepository = mockk<AuthRepository>(relaxed = true) {
             coEvery { getActiveTimeEntry() } returns Result.success(activeEntry)

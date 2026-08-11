@@ -27,6 +27,7 @@ import dev.tricked.solidverdant.data.remote.SolidtimeTimestamps
 import dev.tricked.solidverdant.data.remote.TimeEntriesQuery
 import dev.tricked.solidverdant.domain.time.parseTimeEntryInstant
 import dev.tricked.solidverdant.util.Clock
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
@@ -216,6 +217,8 @@ class SyncWorker @AssistedInject constructor(
             } else {
                 classify(e)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.w(e, "Outbox op ${op.id} failed")
             classify(e)
@@ -416,6 +419,7 @@ class SyncWorker @AssistedInject constructor(
                 }
                 ConflictIndex.Ready(entries.associateBy { it.id })
             }.getOrElse { error ->
+                if (error is CancellationException) throw error
                 Timber.w(error, "Could not fetch conflict comparison data")
                 ConflictIndex.Failed(rateLimited = error is HttpException && error.code() == HTTP_TOO_MANY_REQUESTS)
             }

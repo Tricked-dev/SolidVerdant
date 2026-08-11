@@ -33,6 +33,7 @@ import dev.tricked.solidverdant.sync.StartPayload
 import dev.tricked.solidverdant.sync.StopPayload
 import dev.tricked.solidverdant.sync.UpdatePayload
 import dev.tricked.solidverdant.util.Clock
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -270,6 +271,8 @@ class TimeEntryRepository @Inject constructor(
         // SyncWorker flush may have written lastPushAtMs); stampFullSync updates that column alone.
         syncMetaDao.stampFullSync(organizationId, now)
         Result.success(Unit)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Timber.e(e, "refreshAll failed")
         Result.failure(e)
@@ -474,25 +477,31 @@ class TimeEntryRepository @Inject constructor(
      * (duplicating an open timer would create a second running timer), and a CONFLICT entry is
      * edit-locked (SV-027) until resolved in Review.
      */
-    suspend fun duplicateEntry(entryId: String, memberId: String): Result<TimeEntry> = runCatching {
+    suspend fun duplicateEntry(entryId: String, memberId: String): Result<TimeEntry> = try {
         val source = timeEntryDao.getById(entryId)
             ?: error("Entry not found")
         check(source.syncState != SyncState.CONFLICT) {
             "Resolve the sync conflict in Review before duplicating this entry"
         }
         val end = completedEndIso(source) ?: error("Cannot duplicate a running entry")
-        createCompletedEntry(
-            organizationId = source.organizationId,
-            memberId = memberId,
-            userId = source.userId,
-            description = source.description ?: "",
-            projectId = source.projectId,
-            taskId = source.taskId,
-            tagIds = timeEntryDao.tagIdsFor(entryId),
-            billable = source.billable,
-            start = source.start,
-            end = end,
+        Result.success(
+            createCompletedEntry(
+                organizationId = source.organizationId,
+                memberId = memberId,
+                userId = source.userId,
+                description = source.description ?: "",
+                projectId = source.projectId,
+                taskId = source.taskId,
+                tagIds = timeEntryDao.tagIdsFor(entryId),
+                billable = source.billable,
+                start = source.start,
+                end = end,
+            ),
         )
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Result.failure(e)
     }
 
     /**
@@ -505,7 +514,7 @@ class TimeEntryRepository @Inject constructor(
      * `at == start` or `at == end` is rejected. Running and CONFLICT (SV-027) entries cannot split.
      * Returns the new second-half entry id so the caller can open it for immediate editing.
      */
-    suspend fun splitEntry(entryId: String, atIso: String, memberId: String): Result<String> = runCatching {
+    suspend fun splitEntry(entryId: String, atIso: String, memberId: String): Result<String> = try {
         val source = timeEntryDao.getById(entryId)
             ?: error("Entry not found")
         check(source.syncState != SyncState.CONFLICT) {
@@ -524,18 +533,24 @@ class TimeEntryRepository @Inject constructor(
         // First half: shorten the original to end at `at` (keeps its id, tags and base snapshot).
         updateEntry(original.copy(end = atIso), tagIds)
         // Second half: [at, originalEnd] as a brand-new completed entry with identical metadata.
-        createCompletedEntry(
-            organizationId = source.organizationId,
-            memberId = memberId,
-            userId = source.userId,
-            description = source.description ?: "",
-            projectId = source.projectId,
-            taskId = source.taskId,
-            tagIds = tagIds,
-            billable = source.billable,
-            start = atIso,
-            end = end,
-        ).id
+        Result.success(
+            createCompletedEntry(
+                organizationId = source.organizationId,
+                memberId = memberId,
+                userId = source.userId,
+                description = source.description ?: "",
+                projectId = source.projectId,
+                taskId = source.taskId,
+                tagIds = tagIds,
+                billable = source.billable,
+                start = atIso,
+                end = end,
+            ).id,
+        )
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Result.failure(e)
     }
 
     /**

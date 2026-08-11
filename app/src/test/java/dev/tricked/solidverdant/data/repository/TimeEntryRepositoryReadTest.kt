@@ -14,12 +14,16 @@ import dev.tricked.solidverdant.data.local.db.toEntity
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.FakeRemoteDataSource
 import dev.tricked.solidverdant.util.Clock
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -80,6 +84,28 @@ class TimeEntryRepositoryReadTest {
         clock.t = 1000L
         repo.refreshAll("org1", "member1")
         assertEquals("local", repo.observeTimeEntries("org1").first().first { it.id == "a" }.description)
+    }
+
+    @Test fun refresh_applies_server_edit_when_pulls_share_a_timestamp() = runTest {
+        remote.entries = listOf(srv("a").copy(description = "before"))
+        repo.refreshAll("org1", "member1")
+
+        // A fast second pull can start in the same millisecond as the first pull completed. That
+        // cached server row must not be mistaken for a newer local write.
+        remote.entries = listOf(srv("a").copy(description = "after"))
+        repo.refreshAll("org1", "member1")
+
+        assertEquals("after", repo.observeTimeEntries("org1").first().single().description)
+    }
+
+    @Test fun refresh_propagates_cancellation_during_a_network_call() = runTest {
+        remote.projectsGate = CompletableDeferred()
+
+        val failure = runCatching {
+            withTimeout(100L) { repo.refreshAll("org1", "member1") }
+        }.exceptionOrNull()
+
+        assertTrue(failure is TimeoutCancellationException)
     }
 
     @Test fun month_load_keeps_lower_start_unbounded_for_carry_in_entries() = runTest {

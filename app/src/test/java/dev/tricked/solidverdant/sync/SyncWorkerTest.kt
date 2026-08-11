@@ -24,10 +24,13 @@ import dev.tricked.solidverdant.util.Clock
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.After
@@ -148,6 +151,29 @@ class SyncWorkerTest {
             syncRemote.startTimeEntry(any(), any(), any(), any(), any(), any(), any())
         }
         assertTrue(db.outboxDao().peekAll().isEmpty())
+    }
+
+    @Test fun cancellation_during_active_lookup_is_not_converted_to_a_retry_result() = runTest {
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.START,
+                organizationId = "org1",
+                timeEntryId = "local-1",
+                createdAtMs = 1L,
+                payloadJson = json.encodeToString(
+                    StartPayload("m1", "u1", null, null, "work", emptyList()),
+                ),
+            ),
+        )
+        val lookupGate = CompletableDeferred<Result<TimeEntry?>>()
+        val syncRemote = mockk<RemoteDataSource>()
+        coEvery { syncRemote.getActiveTimeEntry() } coAnswers { lookupGate.await() }
+
+        val failure = runCatching {
+            withTimeout(100L) { buildWorker(remoteDataSource = syncRemote).doWork() }
+        }.exceptionOrNull()
+        assertTrue(failure is TimeoutCancellationException)
+        assertEquals(0, db.outboxDao().peekAll().single().attemptCount)
     }
 
     @Test fun start_does_not_adopt_an_active_entry_from_another_organization() = runTest {
