@@ -51,17 +51,20 @@ internal fun calendarEntryDragModifier(
     onMoveEntry: (TimeEntry, String, String) -> Unit,
 ): Modifier {
     val canMove = entry.end != null && entryStartDate(entry, zone) == day
-    if (!canMove || columnWidthPx <= 0f || gridHeightPx <= 0f) return modifier
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val sizedModifier = modifier.height(with(density) { blockHeightPx.toDp() })
+    // Running and cross-day entries are not movable, but they still need the measured timeline
+    // height. Returning the caller's un-sized modifier made a running block collapse to its text
+    // content instead of growing with elapsed time.
+    if (!canMove || columnWidthPx <= 0f || gridHeightPx <= 0f || blockHeightPx <= 0f) return sizedModifier
 
     val onMoveEntryState by rememberUpdatedState(onMoveEntry)
-    val density = androidx.compose.ui.platform.LocalDensity.current
     val baseTopPx = blockStartFraction * gridHeightPx
     var dragOffset by remember(entry.id, day) { mutableStateOf(Offset.Zero) }
     var isDragging by remember(entry.id, day) { mutableStateOf(false) }
 
-    return modifier
+    return sizedModifier
         .offset { IntOffset(dragOffset.x.roundToInt(), dragOffset.y.roundToInt()) }
-        .height(with(density) { blockHeightPx.toDp() })
         .zIndex(if (isDragging) DRAGGED_ENTRY_Z_INDEX else 0f)
         .graphicsLayer { alpha = if (isDragging) DRAGGED_ENTRY_ALPHA else 1f }
         .pointerInput(entry.id, day, dayIndex, dayCount, gridHeightPx, columnWidthPx, blockHeightPx, settings) {

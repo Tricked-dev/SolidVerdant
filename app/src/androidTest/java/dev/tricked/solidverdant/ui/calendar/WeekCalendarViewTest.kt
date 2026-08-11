@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
@@ -171,6 +172,46 @@ class WeekCalendarViewTest {
         composeRule.onNodeWithTag("week-entry-${entry.id}").performScrollTo()
         composeRule.onNodeWithText("Client · Project · Task").assertIsDisplayed()
         composeRule.onNodeWithText("1h 00m").assertExists()
+    }
+
+    @Test
+    fun runningEntryKeepsCalculatedTimelineHeightWithoutDrag() {
+        val running = TimeEntry(
+            id = "entry-running-height",
+            userId = "user-1",
+            organizationId = "org-1",
+            start = "2026-07-06T09:00:00Z",
+            end = null,
+        )
+        composeRule.setContent {
+            MaterialTheme {
+                Box(
+                    modifier = Modifier
+                        .testTag("running-entry-height")
+                        .then(
+                            calendarEntryDragModifier(
+                                modifier = Modifier.fillMaxWidth(),
+                                entry = running,
+                                day = LocalDate.of(2026, 7, 6),
+                                zone = ZoneOffset.UTC,
+                                dayIndex = 0,
+                                dayCount = 1,
+                                blockStartFraction = 0.375f,
+                                blockHeightPx = 240f,
+                                gridHeightPx = 640f,
+                                columnWidthPx = 100f,
+                                onMoveEntry = { _, _, _ -> },
+                            ),
+                        ),
+                )
+            }
+        }
+
+        assertEquals(
+            240f,
+            composeRule.onNodeWithTag("running-entry-height").fetchSemanticsNode().boundsInRoot.height,
+            1f,
+        )
     }
 
     @Test
