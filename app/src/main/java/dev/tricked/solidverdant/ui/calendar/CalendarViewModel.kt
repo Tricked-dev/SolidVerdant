@@ -242,7 +242,7 @@ class CalendarViewModel @Inject constructor(
                             )
                         }
                 }
-                _uiState.update { it.copy(bucketsByDate = buckets, isLoading = false) }
+                _uiState.update { it.copy(bucketsByDate = buckets) }
             }
         }
         syncOperationsJob = viewModelScope.launch {

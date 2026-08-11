@@ -52,13 +52,14 @@ class CalendarViewModelTest {
     private class FakeReader(
         private val entries: List<TimeEntry>,
         private val syncOperations: Flow<List<TimeEntryRepository.SyncOperation>> = flowOf(emptyList()),
+        private val entriesFlow: Flow<List<TimeEntry>> = flowOf(entries),
     ) : TimeEntryReader {
         val loadGates = mutableListOf<CompletableDeferred<Unit>>()
         val loadedMonths = mutableListOf<YearMonth>()
         var loadCalls = 0
         var loadFailure: Throwable? = null
 
-        override fun observeTimeEntries(organizationId: String): Flow<List<TimeEntry>> = flowOf(entries)
+        override fun observeTimeEntries(organizationId: String): Flow<List<TimeEntry>> = entriesFlow
 
         override fun observeSyncOperations(organizationId: String): Flow<List<TimeEntryRepository.SyncOperation>> = syncOperations
 
@@ -353,6 +354,50 @@ class CalendarViewModelTest {
         assertTrue("The replacement page is still loading", model.uiState.value.isLoading)
 
         secondLoad.complete(Unit)
+        assertFalse(model.uiState.value.isLoading)
+    }
+
+    @Test
+    fun `late room emission does not clear an active replacement load`() = runTest {
+        val roomEntries = MutableStateFlow(listOf(entry("cached", "2026-07-06T09:00:00Z", 3600)))
+        val reader = FakeReader(emptyList(), entriesFlow = roomEntries)
+        val firstLoad = CompletableDeferred<Unit>()
+        val secondLoad = CompletableDeferred<Unit>()
+        reader.loadGates += firstLoad
+        reader.loadGates += secondLoad
+        val model = vm(reader)
+        model.setViewMode(CalendarViewMode.DAY)
+
+        model.setOrganization("org1")
+        model.pageForward()
+        roomEntries.value = emptyList()
+
+        assertTrue("A Room update must not hide the replacement page loading state", model.uiState.value.isLoading)
+        firstLoad.complete(Unit)
+        assertTrue(model.uiState.value.isLoading)
+
+        secondLoad.complete(Unit)
+        assertFalse(model.uiState.value.isLoading)
+    }
+
+    @Test
+    fun `cross-month page stays loading until every visible month finishes`() = runTest {
+        val reader = FakeReader(emptyList())
+        val firstMonth = CompletableDeferred<Unit>()
+        val secondMonth = CompletableDeferred<Unit>()
+        reader.loadGates += firstMonth
+        reader.loadGates += secondMonth
+        val model = vm(reader)
+        model.selectDate(LocalDate.of(2026, 8, 31))
+
+        model.setOrganization("org1")
+        assertEquals(1, reader.loadCalls)
+
+        firstMonth.complete(Unit)
+        assertEquals(2, reader.loadCalls)
+        assertTrue(model.uiState.value.isLoading)
+
+        secondMonth.complete(Unit)
         assertFalse(model.uiState.value.isLoading)
     }
 
