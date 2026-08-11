@@ -15,6 +15,7 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,7 +24,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -32,7 +37,10 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -42,6 +50,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -68,12 +77,20 @@ fun CalendarScreen(
     projects: List<Project>,
     tasks: List<Task>,
     tags: List<Tag>,
-    onSaveEntry: (TimeEntry, String?, String?, String?, List<String>, Boolean, String, String) -> Unit,
+    onSaveEntry: (TimeEntry, String?, String?, String?, List<String>, Boolean, String, String?) -> Unit,
+    onCreateEntry: (String?, String?, String?, List<String>, Boolean, String, String) -> Unit = { _, _, _, _, _, _, _ -> },
+    onDeleteEntry: (TimeEntry) -> Unit = {},
+    onUndoDelete: (TimeEntry) -> Unit = {},
+    preventOverlap: Boolean = false,
     viewModel: CalendarViewModel = hiltViewModel(),
 ) {
     LaunchedEffect(organizationId, memberId) { viewModel.setOrganization(organizationId, memberId) }
     val state by viewModel.uiState.collectAsState()
     var editing by remember { mutableStateOf<TimeEntry?>(null) }
+    var creatingRange by remember { mutableStateOf<CalendarTimeRange?>(null) }
+    var deleteTarget by remember { mutableStateOf<TimeEntry?>(null) }
+    var deletedEntry by remember { mutableStateOf<TimeEntry?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
     // Progressive disclosure: the overlay controls live behind an app-bar toggle instead of a
     // persistent bar, so the default calendar keeps its full height for the grid.
     var showOverlaySheet by remember { mutableStateOf(false) }
@@ -122,19 +139,40 @@ fun CalendarScreen(
         if (want && !hasCalendarPermission(context)) requestPermission()
     }
 
-    Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
-        CalendarToolbar(
-            state = state,
-            onModeSelected = viewModel::setViewMode,
-            onOpenOverlay = { showOverlaySheet = true },
+    val entryDeletedMessage = stringResource(R.string.entry_deleted)
+    val undoLabel = stringResource(R.string.undo)
+    LaunchedEffect(deletedEntry) {
+        val entry = deletedEntry ?: return@LaunchedEffect
+        val result = snackbarHostState.showSnackbar(
+            message = entryDeletedMessage,
+            actionLabel = undoLabel,
+            withDismissAction = true,
         )
-        CalendarBody(
-            state = state,
-            viewModel = viewModel,
-            projects = projects,
-            tasks = tasks,
-            onEntryClick = { editing = it },
-            modifier = Modifier.weight(1f),
+        if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) onUndoDelete(entry)
+        deletedEntry = null
+    }
+
+    Box(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            CalendarToolbar(
+                state = state,
+                onModeSelected = viewModel::setViewMode,
+                onAddEntry = { creatingRange = defaultCalendarTimeRange(state.selectedDate, state.zone) },
+                onOpenOverlay = { showOverlaySheet = true },
+            )
+            CalendarBody(
+                state = state,
+                viewModel = viewModel,
+                projects = projects,
+                tasks = tasks,
+                onEntryClick = { editing = it },
+                onCreateRange = { creatingRange = it },
+                modifier = Modifier.weight(1f),
+            )
+        }
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(Dimens.Space16),
         )
     }
 
@@ -149,6 +187,33 @@ fun CalendarScreen(
             onSave = { desc, projectId, taskId, tagIds, billable, start, end ->
                 onSaveEntry(entry, desc, projectId, taskId, tagIds, billable, start, end)
                 editing = null
+            },
+            existingEntries = state.bucketsByDate.values.flatMap { it.entries }.distinctBy { it.id },
+            preventOverlap = preventOverlap,
+            onDelete = {
+                editing = null
+                deleteTarget = entry
+            },
+        )
+    }
+
+    creatingRange?.let { range ->
+        EditTimeEntryDialog(
+            entry = null,
+            zone = state.zone,
+            projects = projects,
+            tasks = tasks,
+            tags = tags,
+            suggestedStart = range.start,
+            suggestedEnd = range.end,
+            existingEntries = state.bucketsByDate.values.flatMap { it.entries }.distinctBy { it.id },
+            preventOverlap = preventOverlap,
+            onDismiss = { creatingRange = null },
+            onSave = { desc, projectId, taskId, tagIds, billable, start, end ->
+                end?.let {
+                    onCreateEntry(desc, projectId, taskId, tagIds, billable, start, it)
+                    creatingRange = null
+                }
             },
         )
     }
@@ -166,10 +231,40 @@ fun CalendarScreen(
             onRetry = viewModel::retryOverlay,
         )
     }
+
+    deleteTarget?.let { entry ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text(stringResource(R.string.calendar_delete_entry_title)) },
+            text = { Text(stringResource(R.string.calendar_delete_entry_message)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteEntry(entry)
+                        deletedEntry = entry
+                        deleteTarget = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                ) {
+                    Text(stringResource(R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
 }
 
 @Composable
-private fun CalendarToolbar(state: CalendarUiState, onModeSelected: (CalendarViewMode) -> Unit, onOpenOverlay: () -> Unit) {
+private fun CalendarToolbar(
+    state: CalendarUiState,
+    onModeSelected: (CalendarViewMode) -> Unit,
+    onAddEntry: () -> Unit,
+    onOpenOverlay: () -> Unit,
+) {
     val modes = remember {
         listOf(
             CalendarViewMode.MONTH to R.string.calendar_view_month,
@@ -197,6 +292,15 @@ private fun CalendarToolbar(state: CalendarUiState, onModeSelected: (CalendarVie
                 }
             }
         }
+        IconButton(
+            onClick = onAddEntry,
+            modifier = Modifier.testTag(CalendarTestTags.ADD_ENTRY),
+        ) {
+            Icon(
+                Icons.Default.Add,
+                contentDescription = stringResource(R.string.add_time_entry),
+            )
+        }
         if (state.viewMode != CalendarViewMode.MONTH) {
             IconButton(onClick = onOpenOverlay) {
                 Icon(
@@ -220,6 +324,7 @@ private fun CalendarBody(
     projects: List<Project>,
     tasks: List<Task>,
     onEntryClick: (TimeEntry) -> Unit,
+    onCreateRange: (CalendarTimeRange) -> Unit,
     modifier: Modifier,
 ) {
     when (state.viewMode) {
@@ -229,6 +334,7 @@ private fun CalendarBody(
             onPreviousMonth = viewModel::previousMonth,
             onNextMonth = viewModel::nextMonth,
             onEntryClick = onEntryClick,
+            onCreateRange = onCreateRange,
             projects = projects,
             tasks = tasks,
             modifier = modifier.fillMaxWidth(),
@@ -247,6 +353,7 @@ private fun CalendarBody(
                 state = state,
                 onSelectDate = viewModel::selectDate,
                 onEntryClick = onEntryClick,
+                onCreateRange = onCreateRange,
                 onPrevious = viewModel::pageBackward,
                 onNext = viewModel::pageForward,
                 onToday = viewModel::jumpToToday,

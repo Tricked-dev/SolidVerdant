@@ -358,7 +358,7 @@ class InboxViewModel @Inject constructor(
         tags: List<String>,
         billable: Boolean,
         start: String,
-        end: String,
+        end: String?,
     ) {
         viewModelScope.launch {
             val updated = entry.copy(

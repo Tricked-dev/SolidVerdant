@@ -12,6 +12,7 @@ import dev.tricked.solidverdant.ui.login.LoginTestTags
 import dev.tricked.solidverdant.ui.sync.SyncCenterTestTags
 import dev.tricked.solidverdant.ui.tile.ProjectSelectionTestTags
 import dev.tricked.solidverdant.ui.tracking.TrackingTestTags
+import java.time.LocalDate
 
 /**
  * Central registry of stable Compose testTags used by the E2E robots.
@@ -62,6 +63,7 @@ object TestTags {
     const val STATS_SCREEN = "stats_screen"
     const val CALENDAR_WEEK_GRID = CalendarTestTags.WEEK_GRID
     const val CALENDAR_MODE_MONTH = CalendarTestTags.MODE_MONTH
+    const val CALENDAR_ADD_ENTRY = CalendarTestTags.ADD_ENTRY
     const val TRACK_SHEET_START_DATE = TrackingTestTags.SHEET_START_DATE
     const val TRACK_SHEET_END_DATE = TrackingTestTags.SHEET_END_DATE
     const val ENTRY_DATE_PICKER = EditTimeEntryTestTags.DATE_PICKER
@@ -70,4 +72,6 @@ object TestTags {
     fun trackEntryTimeRange(entryId: String): String = TrackingTestTags.entryTimeRange(entryId)
 
     fun trackSheetTagChip(tagId: String): String = TrackingTestTags.sheetTagChip(tagId)
+
+    fun calendarSelection(day: LocalDate): String = CalendarTestTags.selection(day)
 }

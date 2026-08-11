@@ -55,6 +55,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -65,6 +66,7 @@ import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.ui.theme.Dimens
 import dev.tricked.solidverdant.ui.tracking.EntryTimeValidator
 import dev.tricked.solidverdant.ui.tracking.EntryTrustRules
@@ -79,52 +81,77 @@ import dev.tricked.solidverdant.ui.tracking.ProjectTaskDropdown as TrackingProje
 @Composable
 @Suppress("LongMethod")
 fun EditTimeEntryDialog(
-    entry: TimeEntry,
+    entry: TimeEntry?,
     zone: ZoneId,
     projects: List<Project>,
     tasks: List<Task>,
     tags: List<Tag>,
     onDismiss: () -> Unit,
-    onSave: (String?, String?, String?, List<String>, Boolean, String, String) -> Unit,
+    onSave: (String?, String?, String?, List<String>, Boolean, String, String?) -> Unit,
     existingEntries: List<TimeEntry> = emptyList(),
     preventOverlap: Boolean = false,
     inlinePresentation: Boolean = false,
+    suggestedStart: ZonedDateTime? = null,
+    suggestedEnd: ZonedDateTime? = null,
+    onDelete: (() -> Unit)? = null,
 ) {
-    var description by remember { mutableStateOf(entry.description ?: "") }
-    var projectId by remember { mutableStateOf(entry.projectId) }
-    var taskId by remember { mutableStateOf(entry.taskId) }
-    var selectedTags by remember { mutableStateOf(entry.tags.map { it.id }) }
-    var billable by remember { mutableStateOf(entry.billable) }
-    val originalStart = remember(entry.id, zone) {
-        ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME).withZoneSameInstant(zone)
+    var description by remember(entry?.id) { mutableStateOf(entry?.description ?: "") }
+    var projectId by remember(entry?.id) { mutableStateOf(entry?.projectId) }
+    var taskId by remember(entry?.id) { mutableStateOf(entry?.taskId) }
+    var selectedTags by remember(entry?.id) { mutableStateOf(entry?.tags?.map { it.id }.orEmpty()) }
+    var billable by remember(entry?.id) { mutableStateOf(entry?.billable ?: false) }
+    val isRunningEntry = remember(entry?.id, entry?.end, entry?.duration) {
+        entry?.let(::isRunningTimeEntry) == true
     }
-    val originalEnd = remember(entry.id, zone) {
-        entry.end?.let { ZonedDateTime.parse(it, DateTimeFormatter.ISO_DATE_TIME).withZoneSameInstant(zone) }
-            ?: originalStart.plusSeconds((entry.duration ?: 0).toLong())
+    val originalStart = remember(entry?.id, suggestedStart, zone) {
+        entry?.let { ZonedDateTime.parse(it.start, DateTimeFormatter.ISO_DATE_TIME).withZoneSameInstant(zone) }
+            ?: (suggestedStart ?: ZonedDateTime.now(zone).minusHours(1))
+                .withSecond(0).withNano(0)
     }
-    var startTime by remember(entry.id, zone) { mutableStateOf(originalStart) }
-    var endTime by remember(entry.id, zone) { mutableStateOf(originalEnd) }
-    var durationMinutes by remember(entry.id, zone) {
+    val originalEnd = remember(entry?.id, suggestedEnd, suggestedStart, zone) {
+        when {
+            suggestedEnd != null -> suggestedEnd.withZoneSameInstant(zone)
+            entry?.end != null -> ZonedDateTime.parse(entry.end, DateTimeFormatter.ISO_DATE_TIME).withZoneSameInstant(zone)
+            entry != null -> originalStart.plusSeconds((entry.duration ?: 0).toLong())
+            else -> ZonedDateTime.now(originalStart.zone).withSecond(0).withNano(0)
+                .let { if (it.isAfter(originalStart)) it else originalStart.plusMinutes(1) }
+        }
+    }
+    var startTime by remember(entry?.id, suggestedStart, zone) { mutableStateOf(originalStart) }
+    var endTime by remember(entry?.id, suggestedEnd, suggestedStart, zone) { mutableStateOf(originalEnd) }
+    var durationMinutes by remember(entry?.id, suggestedStart, suggestedEnd, zone) {
         mutableStateOf(java.time.Duration.between(originalStart, originalEnd).toMinutes().coerceAtLeast(1).toString())
     }
     var editingTime by remember { mutableStateOf<TimeField?>(null) }
     var editingDate by remember { mutableStateOf<TimeField?>(null) }
-    val durationIsValid = durationMinutes.toLongOrNull()?.let { it > 0 } == true
+    val durationIsValid = isRunningEntry || durationMinutes.toLongOrNull()?.let { it > 0 } == true
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    val overlaps = remember(startTime, endTime, existingEntries) {
-        if (existingEntries.isEmpty()) {
+    val overlaps = remember(startTime, endTime, existingEntries, isRunningEntry) {
+        if (isRunningEntry || existingEntries.isEmpty()) {
             false
         } else {
-            val candidate = entry.copy(
+            val candidate = (
+                entry ?: TimeEntry(
+                    id = "",
+                    userId = "",
+                    start = startTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                    end = endTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                    organizationId = existingEntries.firstOrNull()?.organizationId.orEmpty(),
+                )
+                ).copy(
                 start = startTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
                 end = endTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
             )
             existingEntries.any { it.id != candidate.id && EntryTrustRules.overlaps(candidate, it) }
         }
     }
-    val validation = remember(startTime, endTime, overlaps, preventOverlap) {
-        EntryTimeValidator.evaluate(startTime, endTime, overlaps, preventOverlap)
+    val validation = remember(startTime, endTime, overlaps, preventOverlap, isRunningEntry) {
+        if (isRunningEntry) {
+            EntryTimeValidator.Result(error = null, warnings = emptyList())
+        } else {
+            EntryTimeValidator.evaluate(startTime, endTime, overlaps, preventOverlap)
+        }
     }
     val durationHours = remember(startTime, endTime) {
         java.time.Duration.between(startTime, endTime).toHours().coerceAtLeast(0)
@@ -148,7 +175,7 @@ fun EditTimeEntryDialog(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                text = stringResource(R.string.edit_time_entry),
+                text = stringResource(if (entry == null) R.string.add_time_entry else R.string.edit_time_entry),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -167,16 +194,18 @@ fun EditTimeEntryDialog(
                     label = stringResource(R.string.start_date),
                     date = startTime.toLocalDate(),
                     onClick = { editingDate = TimeField.Start },
-                    modifier = Modifier.weight(1f),
+                    modifier = if (isRunningEntry) Modifier.fillMaxWidth() else Modifier.weight(1f),
                     testTag = EditTimeEntryTestTags.START_DATE,
                 )
-                EntryDateFieldButton(
-                    label = stringResource(R.string.end_date),
-                    date = endTime.toLocalDate(),
-                    onClick = { editingDate = TimeField.End },
-                    modifier = Modifier.weight(1f),
-                    testTag = EditTimeEntryTestTags.END_DATE,
-                )
+                if (!isRunningEntry) {
+                    EntryDateFieldButton(
+                        label = stringResource(R.string.end_date),
+                        date = endTime.toLocalDate(),
+                        onClick = { editingDate = TimeField.End },
+                        modifier = Modifier.weight(1f),
+                        testTag = EditTimeEntryTestTags.END_DATE,
+                    )
+                }
             }
 
             Row(
@@ -187,82 +216,99 @@ fun EditTimeEntryDialog(
                     label = stringResource(R.string.start_time),
                     value = startTime,
                     onClick = { editingTime = TimeField.Start },
-                    modifier = Modifier.weight(1f),
+                    modifier = (if (isRunningEntry) Modifier.fillMaxWidth() else Modifier.weight(1f))
+                        .testTag(EditTimeEntryTestTags.START_TIME),
                 )
-                TimeFieldButton(
-                    label = stringResource(R.string.end_time),
-                    value = endTime,
-                    onClick = { editingTime = TimeField.End },
-                    modifier = Modifier.weight(1f),
-                )
+                if (!isRunningEntry) {
+                    TimeFieldButton(
+                        label = stringResource(R.string.end_time),
+                        value = endTime,
+                        onClick = { editingTime = TimeField.End },
+                        modifier = Modifier.weight(1f).testTag(EditTimeEntryTestTags.END_TIME),
+                    )
+                }
             }
 
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = RoundedCornerShape(16.dp),
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+            if (isRunningEntry) {
+                Text(
+                    text = stringResource(R.string.running_entry_start_edit_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(16.dp),
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Text(
-                            text = stringResource(R.string.total_time),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = formatEditableDuration(durationMinutes.toLongOrNull() ?: 0),
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        FilledTonalIconButton(
-                            onClick = { setDuration((durationMinutes.toLongOrNull() ?: MINIMUM_DURATION_MINUTES) - DURATION_STEP_MINUTES) },
-                            modifier = Modifier.size(48.dp),
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
-                            Icon(
-                                Icons.Default.Remove,
-                                contentDescription = stringResource(R.string.decrease_15_minutes),
+                            Text(
+                                text = stringResource(R.string.total_time),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = formatEditableDuration(durationMinutes.toLongOrNull() ?: 0),
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
                             )
                         }
-                        OutlinedTextField(
-                            value = durationMinutes,
-                            onValueChange = { value ->
-                                if (value.all(Char::isDigit)) {
-                                    durationMinutes = value
-                                    value.toLongOrNull()
-                                        ?.takeIf { it >= MINIMUM_DURATION_MINUTES }
-                                        ?.let { endTime = startTime.plusMinutes(it) }
-                                }
-                            },
-                            label = { Text(stringResource(R.string.minutes)) },
-                            suffix = { Text(stringResource(R.string.minutes_short)) },
-                            isError = !durationIsValid,
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                        )
-                        FilledTonalIconButton(
-                            onClick = { setDuration((durationMinutes.toLongOrNull() ?: 0) + DURATION_STEP_MINUTES) },
-                            modifier = Modifier.size(48.dp),
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = stringResource(R.string.increase_15_minutes),
+                            FilledTonalIconButton(
+                                onClick = {
+                                    setDuration(
+                                        (durationMinutes.toLongOrNull() ?: MINIMUM_DURATION_MINUTES) - DURATION_STEP_MINUTES,
+                                    )
+                                },
+                                modifier = Modifier.size(48.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.Remove,
+                                    contentDescription = stringResource(
+                                        R.string.decrease_15_minutes,
+                                    ),
+                                )
+                            }
+                            OutlinedTextField(
+                                value = durationMinutes,
+                                onValueChange = { value ->
+                                    if (value.all(Char::isDigit)) {
+                                        durationMinutes = value
+                                        value.toLongOrNull()
+                                            ?.takeIf { it >= MINIMUM_DURATION_MINUTES }
+                                            ?.let { endTime = startTime.plusMinutes(it) }
+                                    }
+                                },
+                                label = { Text(stringResource(R.string.minutes)) },
+                                suffix = { Text(stringResource(R.string.minutes_short)) },
+                                isError = !durationIsValid,
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
                             )
+                            FilledTonalIconButton(
+                                onClick = { setDuration((durationMinutes.toLongOrNull() ?: 0) + DURATION_STEP_MINUTES) },
+                                modifier = Modifier.size(48.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.Add,
+                                    contentDescription = stringResource(R.string.increase_15_minutes),
+                                )
+                            }
                         }
                     }
                 }
@@ -318,13 +364,28 @@ fun EditTimeEntryDialog(
                 )
             }
 
-            EntryValidationBanner(result = validation, durationHours = durationHours)
+            if (!isRunningEntry) {
+                EntryValidationBanner(result = validation, durationHours = durationHours)
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = if (onDelete != null) Arrangement.Start else Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (onDelete != null) {
+                    Button(
+                        onClick = onDelete,
+                        modifier = Modifier.testTag(EditTimeEntryTestTags.DELETE_BUTTON),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.Transparent,
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                    ) {
+                        Text(stringResource(R.string.delete))
+                    }
+                    Spacer(Modifier.weight(1f))
+                }
                 Button(
                     onClick = onDismiss,
                     colors = ButtonDefaults.buttonColors(
@@ -344,7 +405,7 @@ fun EditTimeEntryDialog(
                             selectedTags,
                             billable,
                             startTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
-                            endTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                            endTime.takeUnless { isRunningEntry }?.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
                         )
                     },
                     enabled = durationIsValid && validation.canSave,
@@ -390,9 +451,11 @@ fun EditTimeEntryDialog(
             onDismiss = { editingTime = null },
             onConfirm = { hour, minute ->
                 if (field == TimeField.Start) {
-                    val minutes = durationMinutes.toLongOrNull() ?: 1
                     startTime = startTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
-                    endTime = startTime.plusMinutes(minutes)
+                    if (!isRunningEntry) {
+                        val minutes = durationMinutes.toLongOrNull() ?: 1
+                        endTime = startTime.plusMinutes(minutes)
+                    }
                 } else {
                     val sameDayEnd = endTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
                     // Do not silently roll an earlier clock-time into a ~24h entry: only a plausible
@@ -413,9 +476,11 @@ fun EditTimeEntryDialog(
             onDismiss = { editingDate = null },
             onConfirm = { date ->
                 if (field == TimeField.Start) {
-                    val minutes = durationMinutes.toLongOrNull() ?: 1
                     startTime = startTime.with(date)
-                    endTime = startTime.plusMinutes(minutes)
+                    if (!isRunningEntry) {
+                        val minutes = durationMinutes.toLongOrNull() ?: 1
+                        endTime = startTime.plusMinutes(minutes)
+                    }
                 } else {
                     endTime = endTime.with(date)
                     durationMinutes = java.time.Duration.between(startTime, endTime).toMinutes().toString()

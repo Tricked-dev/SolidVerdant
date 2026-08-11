@@ -17,6 +17,7 @@ import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import dev.tricked.solidverdant.sync.SyncTrigger
 import dev.tricked.solidverdant.util.Clock
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestCoroutineScheduler
@@ -108,6 +109,48 @@ class TrackingViewModelMutationTest {
 
         assertFalse(viewModel.uiState.value.isLoading)
         assertEquals("network disappeared", viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun editing_a_running_entry_changes_its_start_without_stopping_it() = runTest(dispatcher.scheduler) {
+        val active = TimeEntry(
+            id = "active",
+            userId = "user",
+            organizationId = "org",
+            start = "2026-08-10T08:00:00Z",
+            description = "work",
+        )
+        val repository = mockk<TimeEntryRepository>(relaxed = true)
+        settings.cacheTrackingState(
+            SettingsDataStore.CachedTrackingState(
+                organizationId = "org",
+                timeEntries = listOf(active),
+                projects = emptyList(),
+                clients = emptyList(),
+                tasks = emptyList(),
+                tags = emptyList(),
+                activeEntry = active,
+            ),
+        )
+        val viewModel = viewModel(repository)
+        val newStart = "2026-08-10T07:30:00Z"
+
+        viewModel.updatePastTimeEntry(
+            timeEntry = active,
+            description = active.description,
+            projectId = active.projectId,
+            taskId = active.taskId,
+            tags = emptyList(),
+            billable = active.billable,
+            start = newStart,
+            end = null,
+        )
+        dispatcher.scheduler.runCurrent()
+
+        coVerify(exactly = 1) {
+            repository.updateEntry(match { it.start == newStart && it.end == null }, emptyList())
+        }
+        assertFalse(viewModel.uiState.value.isLoading)
     }
 
     private fun viewModel(repository: TimeEntryRepository): TrackingViewModel = TrackingViewModel(

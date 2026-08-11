@@ -186,6 +186,7 @@ import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.domain.time.clipTimeEntryToLocalDay
 import dev.tricked.solidverdant.domain.time.isCompletedTimeEntry
+import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.domain.time.timeEntryLocalDaySlices
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.data.repository.EntryTemplate
@@ -277,7 +278,7 @@ fun TrackingScreen(
     onTagsChange: (List<String>) -> Unit,
     onBillableChange: (Boolean) -> Unit,
     onUpdateCurrentEntry: () -> Unit,
-    onUpdatePastEntry: (TimeEntry, String?, String?, String?, List<String>, Boolean, String, String) -> Unit,
+    onUpdatePastEntry: (TimeEntry, String?, String?, String?, List<String>, Boolean, String, String?) -> Unit,
     onCreateEntry: (String?, String?, String?, List<String>, Boolean, String, String) -> Unit,
     onDeleteEntry: (String) -> Unit,
     onDuplicateEntry: (String) -> Unit,
@@ -1147,8 +1148,10 @@ fun TrackingScreen(
             preventOverlap = currentMembership?.organization?.preventOverlappingTimeEntries == true,
             onDismiss = { showAddDialog = false },
             onSave = { description, projectId, taskId, tagIds, billable, start, end ->
-                onCreateEntry(description, projectId, taskId, tagIds, billable, start, end)
-                showAddDialog = false
+                end?.let {
+                    onCreateEntry(description, projectId, taskId, tagIds, billable, start, it)
+                    showAddDialog = false
+                }
             },
             templates = templateState.templates,
             onSaveAsTemplate = onSaveTemplateFromForm,
@@ -2836,7 +2839,7 @@ private fun TimeEntryFormSheet(
     tasks: List<Task>,
     tags: List<Tag>,
     onDismiss: () -> Unit,
-    onSave: (String?, String?, String?, List<String>, Boolean, String, String) -> Unit,
+    onSave: (String?, String?, String?, List<String>, Boolean, String, String?) -> Unit,
     existingEntries: List<TimeEntry> = emptyList(),
     preventOverlap: Boolean = false,
     templates: List<EntryTemplate> = emptyList(),
@@ -2850,6 +2853,9 @@ private fun TimeEntryFormSheet(
     var taskId by remember { mutableStateOf(entry?.taskId) }
     var selectedTags by remember { mutableStateOf(entry?.tags?.map { it.id } ?: emptyList<String>()) }
     var billable by remember { mutableStateOf(entry?.billable ?: false) }
+    val isRunningEntry = remember(entry?.id, entry?.end, entry?.duration) {
+        entry?.let(::isRunningTimeEntry) == true
+    }
     var templateMenuExpanded by remember { mutableStateOf(false) }
     val originalStart = remember(entry?.id, zone) {
         entry?.let { ZonedDateTime.parse(it.start, DateTimeFormatter.ISO_DATE_TIME).withZoneSameInstant(zone) }
@@ -2872,12 +2878,12 @@ private fun TimeEntryFormSheet(
     var editingTime by remember { mutableStateOf<TimeField?>(null) }
     var editingDate by remember { mutableStateOf<TimeField?>(null) }
     var showSplitPicker by remember { mutableStateOf(false) }
-    val durationIsValid = durationMinutes.toLongOrNull()?.let { it > 0 } == true
+    val durationIsValid = isRunningEntry || durationMinutes.toLongOrNull()?.let { it > 0 } == true
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    val overlaps = remember(startTime, endTime, existingEntries, entry) {
+    val overlaps = remember(startTime, endTime, existingEntries, entry, isRunningEntry) {
         val org = entry?.organizationId ?: existingEntries.firstOrNull()?.organizationId
-        if (org == null || existingEntries.isEmpty()) {
+        if (isRunningEntry || org == null || existingEntries.isEmpty()) {
             false
         } else {
             val candidate = TimeEntry(
@@ -2890,8 +2896,12 @@ private fun TimeEntryFormSheet(
             existingEntries.any { it.id != candidate.id && EntryTrustRules.overlaps(candidate, it) }
         }
     }
-    val validation = remember(startTime, endTime, overlaps, preventOverlap) {
-        EntryTimeValidator.evaluate(startTime, endTime, overlaps, preventOverlap)
+    val validation = remember(startTime, endTime, overlaps, preventOverlap, isRunningEntry) {
+        if (isRunningEntry) {
+            EntryTimeValidator.Result(error = null, warnings = emptyList())
+        } else {
+            EntryTimeValidator.evaluate(startTime, endTime, overlaps, preventOverlap)
+        }
     }
     val durationHours = remember(startTime, endTime) {
         java.time.Duration.between(startTime, endTime).toHours().coerceAtLeast(0)
@@ -2998,16 +3008,18 @@ private fun TimeEntryFormSheet(
                         label = stringResource(R.string.start_date),
                         date = startTime.toLocalDate(),
                         onClick = { editingDate = TimeField.Start },
-                        modifier = Modifier.weight(1f),
+                        modifier = if (isRunningEntry) Modifier.fillMaxWidth() else Modifier.weight(1f),
                         testTag = TrackingTestTags.SHEET_START_DATE,
                     )
-                    EntryDateFieldButton(
-                        label = stringResource(R.string.end_date),
-                        date = endTime.toLocalDate(),
-                        onClick = { editingDate = TimeField.End },
-                        modifier = Modifier.weight(1f),
-                        testTag = TrackingTestTags.SHEET_END_DATE,
-                    )
+                    if (!isRunningEntry) {
+                        EntryDateFieldButton(
+                            label = stringResource(R.string.end_date),
+                            date = endTime.toLocalDate(),
+                            onClick = { editingDate = TimeField.End },
+                            modifier = Modifier.weight(1f),
+                            testTag = TrackingTestTags.SHEET_END_DATE,
+                        )
+                    }
                 }
 
                 Row(
@@ -3018,17 +3030,26 @@ private fun TimeEntryFormSheet(
                         label = stringResource(R.string.start_time),
                         value = startTime,
                         onClick = { editingTime = TimeField.Start },
-                        modifier = Modifier.weight(1f).testTag(TrackingTestTags.SHEET_START_TIME)
+                        modifier = (if (isRunningEntry) Modifier.fillMaxWidth() else Modifier.weight(1f))
+                            .testTag(TrackingTestTags.SHEET_START_TIME)
                     )
-                    TimeFieldButton(
-                        label = stringResource(R.string.end_time),
-                        value = endTime,
-                        onClick = { editingTime = TimeField.End },
-                        modifier = Modifier.weight(1f).testTag(TrackingTestTags.SHEET_END_TIME)
-                    )
+                    if (!isRunningEntry) {
+                        TimeFieldButton(
+                            label = stringResource(R.string.end_time),
+                            value = endTime,
+                            onClick = { editingTime = TimeField.End },
+                            modifier = Modifier.weight(1f).testTag(TrackingTestTags.SHEET_END_TIME)
+                        )
+                    }
                 }
 
-                Surface(
+                if (isRunningEntry) {
+                    Text(
+                        text = stringResource(R.string.running_entry_start_edit_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = MaterialTheme.colorScheme.surfaceVariant,
                     shape = RoundedCornerShape(16.dp)
@@ -3154,7 +3175,9 @@ private fun TimeEntryFormSheet(
                     )
                 }
 
-                EntryValidationBanner(result = validation, durationHours = durationHours)
+                if (!isRunningEntry) {
+                    EntryValidationBanner(result = validation, durationHours = durationHours)
+                }
 
                 if (!saveEnabled) {
                     Text(
@@ -3215,7 +3238,7 @@ private fun TimeEntryFormSheet(
                                 selectedTags,
                                 billable,
                                 startTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
-                                endTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                                endTime.takeUnless { isRunningEntry }?.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
                             )
                         },
                         enabled = saveEnabled && durationIsValid && validation.canSave,
@@ -3236,9 +3259,11 @@ private fun TimeEntryFormSheet(
             onDismiss = { editingTime = null },
             onConfirm = { hour, minute ->
                 if (field == TimeField.Start) {
-                    val minutes = durationMinutes.toLongOrNull() ?: 1
                     startTime = startTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
-                    endTime = startTime.plusMinutes(minutes)
+                    if (!isRunningEntry) {
+                        val minutes = durationMinutes.toLongOrNull() ?: 1
+                        endTime = startTime.plusMinutes(minutes)
+                    }
                 } else {
                     val sameDayEnd = endTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
                     // Do not silently roll an earlier clock-time into a ~24h entry: only a plausible
@@ -3259,9 +3284,11 @@ private fun TimeEntryFormSheet(
             onDismiss = { editingDate = null },
             onConfirm = { date ->
                 if (field == TimeField.Start) {
-                    val minutes = durationMinutes.toLongOrNull() ?: 1
                     startTime = startTime.with(date)
-                    endTime = startTime.plusMinutes(minutes)
+                    if (!isRunningEntry) {
+                        val minutes = durationMinutes.toLongOrNull() ?: 1
+                        endTime = startTime.plusMinutes(minutes)
+                    }
                 } else {
                     endTime = endTime.with(date)
                     durationMinutes = java.time.Duration.between(startTime, endTime).toMinutes().toString()

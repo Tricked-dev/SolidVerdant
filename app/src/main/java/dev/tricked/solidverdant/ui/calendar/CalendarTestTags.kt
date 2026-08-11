@@ -6,8 +6,13 @@
 
 package dev.tricked.solidverdant.ui.calendar
 
+import java.time.LocalDate
+
 /** Stable semantics owned by the calendar UI and consumed by on-device tests. */
 object CalendarTestTags {
     const val WEEK_GRID = "calendar_week_grid"
     const val MODE_MONTH = "calendar_mode_month"
+    const val ADD_ENTRY = "calendar_add_entry"
+
+    fun selection(day: LocalDate): String = "calendar-selection-$day"
 }

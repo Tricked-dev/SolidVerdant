@@ -38,6 +38,9 @@
         <item quantity="other">Collapse %1$d entries</item>
     </plurals>
     <string name="stats_empty">No tracked time in this range.</string><string name="stats_by_project">By project</string><string name="stats_trend">Trend</string><string name="stats_last_7_days">Last 7 days</string><string name="stats_last_week">Last week</string><string name="stats_this_week">This week</string><string name="stats_this_month">This month</string><string name="stats_previous_month">Previous month</string><string name="stats_custom">Custom</string><string name="apply">Apply</string><string name="stats_total">Total</string><string name="stats_entries">Entries</string><string name="stats_average_day">Avg / day</string><string name="calendar_show_month">Show month</string><string name="calendar_previous_month">Previous month</string><string name="calendar_next_month">Next month</string>
+    <string name="calendar_drag_to_create">Tap to create an entry, or drag to select a start and end time.</string>
+    <string name="calendar_delete_entry_title">Delete time entry?</string>
+    <string name="calendar_delete_entry_message">This entry will be removed from the calendar and queued for deletion.</string>
     <string name="long_timer_warning">Long-timer warning</string>
     <plurals name="long_timer_warning_description">
         <item quantity="one">Warn after %1$d hour. Stored only on this device.</item>
@@ -162,6 +165,7 @@
     <string name="today">Today</string>
     <string name="yesterday">Yesterday</string>
     <string name="time_and_duration">Time and duration</string>
+    <string name="running_entry_start_edit_hint">This timer is still running. Changing the start time updates its elapsed time.</string>
     <string name="start_time">Start time</string>
     <string name="end_time">End time</string>
     <string name="start_date">Start date</string>

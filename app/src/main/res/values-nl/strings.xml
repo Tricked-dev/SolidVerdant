@@ -38,6 +38,9 @@
         <item quantity="other">%1$d boekingen inklappen</item>
     </plurals>
     <string name="stats_empty">Geen geregistreerde tijd in deze periode.</string><string name="stats_by_project">Per project</string><string name="stats_trend">Trend</string><string name="stats_last_7_days">Afgelopen 7 dagen</string><string name="stats_last_week">Vorige week</string><string name="stats_this_week">Deze week</string><string name="stats_this_month">Deze maand</string><string name="stats_previous_month">Vorige maand</string><string name="stats_custom">Aangepast</string><string name="apply">Toepassen</string><string name="stats_total">Totaal</string><string name="stats_entries">Boekingen</string><string name="stats_average_day">Gem. / dag</string><string name="calendar_show_month">Maand tonen</string><string name="calendar_previous_month">Vorige maand</string><string name="calendar_next_month">Volgende maand</string>
+    <string name="calendar_drag_to_create">Tik om een boeking te maken of sleep om een start- en eindtijd te selecteren.</string>
+    <string name="calendar_delete_entry_title">Tijdregistratie verwijderen?</string>
+    <string name="calendar_delete_entry_message">Deze registratie wordt uit de kalender verwijderd en voor verwijdering klaargezet.</string>
     <string name="long_timer_warning">Waarschuwing lange timer</string>
     <plurals name="long_timer_warning_description">
         <item quantity="one">Waarschuw na %1$d uur. Alleen op dit apparaat opgeslagen.</item>
@@ -154,6 +157,7 @@
     <string name="today">Vandaag</string>
     <string name="yesterday">Gisteren</string>
     <string name="time_and_duration">Tijd en duur</string>
+    <string name="running_entry_start_edit_hint">Deze timer loopt nog. Als je de starttijd wijzigt, wordt de verstreken tijd bijgewerkt.</string>
     <string name="start_time">Starttijd</string>
     <string name="end_time">Eindtijd</string>
     <string name="start_date">Startdatum</string>

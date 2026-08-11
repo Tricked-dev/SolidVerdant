@@ -55,7 +55,6 @@ import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.calendar.DeviceCalendarEvent
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.TimeEntry
-import dev.tricked.solidverdant.ui.components.EmptyState
 import dev.tricked.solidverdant.ui.components.EntryBlock
 import dev.tricked.solidverdant.ui.components.LoadingState
 import dev.tricked.solidverdant.ui.statistics.hexToColor
@@ -88,6 +87,7 @@ fun WeekCalendarView(
     state: CalendarUiState,
     onSelectDate: (LocalDate) -> Unit,
     onEntryClick: (TimeEntry) -> Unit,
+    onCreateRange: (CalendarTimeRange) -> Unit = {},
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onToday: () -> Unit,
@@ -107,6 +107,7 @@ fun WeekCalendarView(
             days = days,
             onSelectDate = onSelectDate,
             onEntryClick = onEntryClick,
+            onCreateRange = onCreateRange,
             onPrevious = onPrevious,
             onNext = onNext,
             onToday = onToday,
@@ -121,6 +122,7 @@ private fun WeekCalendarContent(
     days: List<LocalDate>,
     onSelectDate: (LocalDate) -> Unit,
     onEntryClick: (TimeEntry) -> Unit,
+    onCreateRange: (CalendarTimeRange) -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onToday: () -> Unit,
@@ -189,12 +191,6 @@ private fun WeekCalendarContent(
                         label = stringResource(R.string.calendar_loading_entries),
                     )
 
-                !hasContent ->
-                    EmptyState(
-                        text = stringResource(R.string.calendar_no_entries),
-                        modifier = Modifier.align(Alignment.Center),
-                    )
-
                 else -> WeekGrid(
                     days = days,
                     today = today,
@@ -204,6 +200,7 @@ private fun WeekCalendarContent(
                     state = state,
                     projects = projects,
                     onEntryClick = onEntryClick,
+                    onCreateRange = onCreateRange,
                 )
             }
         }
@@ -220,6 +217,7 @@ private fun WeekGrid(
     state: CalendarUiState,
     projects: List<Project>,
     onEntryClick: (TimeEntry) -> Unit,
+    onCreateRange: (CalendarTimeRange) -> Unit,
 ) {
     val initialScroll = with(LocalDensity.current) { (CalendarHourHeight * INITIAL_SCROLL_HOURS).roundToPx() }
     val scrollState = rememberScrollState(initial = initialScroll)
@@ -249,6 +247,7 @@ private fun WeekGrid(
                         entries = state.bucketsByDate[day]?.entries.orEmpty(),
                         projects = projects,
                         onEntryClick = onEntryClick,
+                        onCreateRange = onCreateRange,
                         modifier = Modifier.weight(1f).fillMaxHeight(),
                     )
                 }
@@ -400,6 +399,7 @@ private fun DayColumn(
     entries: List<TimeEntry>,
     projects: List<Project>,
     onEntryClick: (TimeEntry) -> Unit,
+    onCreateRange: (CalendarTimeRange) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val untitled = stringResource(R.string.calendar_overlay_event_untitled)
@@ -441,6 +441,13 @@ private fun DayColumn(
                 )
             }
         }
+
+        CalendarTimeSelectionLayer(
+            day = day,
+            zone = zone,
+            onSelectionComplete = onCreateRange,
+            modifier = Modifier.fillMaxSize(),
+        )
 
         // Tracked time entries drawn on top with the shared EntryBlock treatment.
         layoutTrackedEntries(entries, day, now, zone).forEach { block ->

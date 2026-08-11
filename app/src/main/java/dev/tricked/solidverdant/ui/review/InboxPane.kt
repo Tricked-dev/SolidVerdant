@@ -181,7 +181,7 @@ fun InboxPane() {
             onDismiss = { editTarget = null },
             onSave = { description, projectId, taskId, tags, billable, start, end ->
                 if (target.isGap) {
-                    viewModel.fillGap(description, projectId, taskId, tags, billable, start, end)
+                    end?.let { viewModel.fillGap(description, projectId, taskId, tags, billable, start, it) }
                 } else {
                     viewModel.resolveEntryEdit(target.entry, description, projectId, taskId, tags, billable, start, end)
                 }

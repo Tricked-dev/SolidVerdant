@@ -55,7 +55,6 @@ import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
-import dev.tricked.solidverdant.ui.components.EmptyState
 import dev.tricked.solidverdant.ui.components.EntryBlock
 import dev.tricked.solidverdant.ui.components.LoadingState
 import dev.tricked.solidverdant.ui.statistics.hexToColor
@@ -73,6 +72,7 @@ fun MonthCalendarView(
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
     onEntryClick: (TimeEntry) -> Unit,
+    onCreateRange: (CalendarTimeRange) -> Unit = {},
     modifier: Modifier = Modifier,
     projects: List<Project> = emptyList(),
     tasks: List<Task> = emptyList(),
@@ -126,6 +126,7 @@ fun MonthCalendarView(
             tasks = tasks,
             scrollState = timelineScrollState,
             onEntryClick = onEntryClick,
+            onCreateRange = onCreateRange,
         )
     }
 }
@@ -257,6 +258,7 @@ private fun ColumnScope.SelectedDayEntries(
     tasks: List<Task>,
     scrollState: ScrollState,
     onEntryClick: (TimeEntry) -> Unit,
+    onCreateRange: (CalendarTimeRange) -> Unit,
 ) {
     val entries = state.bucketsByDate[state.selectedDate]?.entries.orEmpty()
     if (monthExpanded) {
@@ -269,7 +271,18 @@ private fun ColumnScope.SelectedDayEntries(
     }
     when {
         entries.isEmpty() && state.isLoading -> LoadingState(label = stringResource(R.string.calendar_loading_entries))
-        entries.isEmpty() -> EmptyState(text = stringResource(R.string.calendar_no_entries))
+        entries.isEmpty() -> DayTimeline(
+            day = state.selectedDate,
+            entries = emptyList(),
+            projects = projects,
+            tasks = tasks,
+            zone = state.zone,
+            scrollState = scrollState,
+            fillViewport = true,
+            onEntryClick = onEntryClick,
+            onCreateRange = onCreateRange,
+            modifier = Modifier.weight(1f),
+        )
         !monthExpanded -> DayTimeline(
             day = state.selectedDate,
             entries = entries,
@@ -279,6 +292,7 @@ private fun ColumnScope.SelectedDayEntries(
             scrollState = scrollState,
             fillViewport = true,
             onEntryClick = onEntryClick,
+            onCreateRange = onCreateRange,
             modifier = Modifier.weight(1f),
         )
         else -> LazyColumn(modifier = Modifier.fillMaxWidth()) {
@@ -291,6 +305,7 @@ private fun ColumnScope.SelectedDayEntries(
                     zone = state.zone,
                     scrollState = scrollState,
                     onEntryClick = onEntryClick,
+                    onCreateRange = onCreateRange,
                 )
             }
         }
@@ -312,6 +327,7 @@ fun DayTimeline(
     tasks: List<Task>,
     zone: ZoneId,
     onEntryClick: (TimeEntry) -> Unit,
+    onCreateRange: (CalendarTimeRange) -> Unit = {},
     modifier: Modifier = Modifier,
     scrollState: ScrollState? = null,
     fillViewport: Boolean = false,
@@ -329,6 +345,12 @@ fun DayTimeline(
     ) {
         Box(modifier = Modifier.fillMaxWidth().height(CalendarTotalHeight)) {
             HourGridlines()
+            CalendarTimeSelectionLayer(
+                day = day,
+                zone = zone,
+                onSelectionComplete = onCreateRange,
+                modifier = Modifier.padding(start = CalendarGutterWidth),
+            )
 
             entries.forEach { entry ->
                 val project = projects.find { it.id == entry.projectId }

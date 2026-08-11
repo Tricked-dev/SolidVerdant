@@ -17,6 +17,7 @@ import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.FakeRemoteDataSource
 import dev.tricked.solidverdant.sync.ConflictSnapshot
+import dev.tricked.solidverdant.sync.UpdatePayload
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -404,6 +405,29 @@ class TimeEntryRepositoryWriteTest {
         repo.updateEntry(entry, tagIds = emptyList())
 
         assertEquals(26 * 3_600, db.timeEntryDao().getById(entry.id)?.duration)
+    }
+
+    @Test fun updating_running_entry_keeps_it_open_and_queues_the_new_start() = runTest {
+        val entry = TimeEntry(
+            id = "server-running",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = null,
+            duration = null,
+        )
+        val newStart = "2026-07-07T07:30:00Z"
+        db.timeEntryDao().upsert(entry.toEntity(1L, SyncState.SYNCED))
+
+        repo.updateEntry(entry.copy(start = newStart), tagIds = emptyList())
+
+        val stored = db.timeEntryDao().getById(entry.id)
+        assertEquals(newStart, stored?.start)
+        assertNull(stored?.end)
+        assertNull(stored?.duration)
+        val payload = Json.decodeFromString<UpdatePayload>(db.outboxDao().peekAll().single().payloadJson)
+        assertEquals(newStart, payload.start)
+        assertNull(payload.end)
     }
 
     @Test fun create_completed_entry_is_immediately_visible_with_derived_multi_day_duration() = runTest {

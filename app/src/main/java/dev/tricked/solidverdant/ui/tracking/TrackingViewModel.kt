@@ -472,8 +472,8 @@ class TrackingViewModel @Inject constructor(
                 )
             }.flowOn(Dispatchers.Default).conflate().collect { (data, overlapCount, continueEntry) ->
                 val active = activePollOverrideFor(organizationId, data.active)
-                val activeChanged = active?.id != lastCollectedActiveId
                 val currentState = _uiState.value
+                val activeChanged = active?.id != lastCollectedActiveId || active?.start != currentState.currentTimeEntry?.start
                 val mode = historyWindowMode
                 // Single source of truth: the collector only owns the displayed list (and the
                 // paging offset) while the recent slice is on screen. Once the user has paged or
@@ -1557,37 +1557,29 @@ class TrackingViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
-                authRepository.createTimeEntry(
+                val created = timeEntryRepository.createCompletedEntry(
                     organizationId = organizationId,
                     memberId = memberId,
                     userId = userId,
-                    start = start,
-                    end = end,
                     description = description ?: "",
                     projectId = projectId,
                     taskId = taskId,
-                    tags = tags,
+                    tagIds = tags,
                     billable = billable,
+                    start = start,
+                    end = end,
                 )
-                    .onSuccess { created ->
-                        // Insert into the loaded history, keeping newest-first order.
-                        // Parse instead of string-sorting: starts mix "Z" and "+02:00" offsets.
-                        val updatedList = (_uiState.value.timeEntries + created)
-                            .sortedByDescending { java.time.OffsetDateTime.parse(it.start) }
-                        _uiState.value = _uiState.value.copy(
-                            isLoading = false,
-                            timeEntries = updatedList,
-                        )
-                        timeEntryRepository.refreshAll(organizationId, memberId)
-                        Timber.d("Manual time entry created successfully")
-                    }
-                    .onFailure { error ->
-                        Timber.e(error, "Failed to create manual time entry")
-                        _uiState.value = _uiState.value.copy(
-                            isLoading = false,
-                            error = error.message ?: "Failed to create entry",
-                        )
-                    }
+                syncTrigger.requestSync()
+                // The Room collector will reconcile this row in the normal path. Updating the
+                // cached list here also keeps the history responsive before its next emission.
+                val updatedList = (_uiState.value.timeEntries + created)
+                    .distinctBy { it.id }
+                    .sortedByDescending { java.time.OffsetDateTime.parse(it.start) }
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    timeEntries = updatedList,
+                )
+                Timber.d("Manual time entry created successfully")
             } catch (e: Exception) {
                 handleMutationFailure(e, "Failed to create entry")
             }
@@ -1605,8 +1597,10 @@ class TrackingViewModel @Inject constructor(
         tags: List<String>,
         billable: Boolean,
         start: String,
-        end: String,
+        end: String?,
     ) {
+        val keepRunning = isRunningTimeEntry(timeEntry)
+        if (keepRunning) clearActivePollOverride()
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
@@ -1616,15 +1610,44 @@ class TrackingViewModel @Inject constructor(
                     taskId = taskId,
                     billable = billable,
                     start = start,
-                    end = end,
+                    end = if (keepRunning) {
+                        null
+                    } else {
+                        requireNotNull(end) {
+                            "A completed time entry must have an end time"
+                        }
+                    },
                     tags = tags.map { Tag(it) },
                 )
 
                 // Optimistic local update + outbox enqueue; the collector refreshes the list.
                 timeEntryRepository.updateEntry(updatedEntry, tags)
                 syncTrigger.requestSync()
-
                 _uiState.value = _uiState.value.copy(isLoading = false)
+
+                if (keepRunning) {
+                    val projectName = _uiState.value.projects.find { it.id == updatedEntry.projectId }?.name
+                    val taskName = _uiState.value.tasks.find { it.id == updatedEntry.taskId }?.name
+                    TimeTrackingNotificationService.startTracking(
+                        context = context,
+                        startTime = Instant.parse(updatedEntry.start),
+                        projectName = projectName,
+                        taskName = taskName,
+                        description = updatedEntry.description,
+                        projectId = updatedEntry.projectId,
+                        taskId = updatedEntry.taskId,
+                        organizationId = updatedEntry.organizationId,
+                    )
+                    settingsDataStore.setWidgetTrackingState(
+                        isTracking = true,
+                        startTimeEpochMillis = Instant.parse(updatedEntry.start).toEpochMilli(),
+                        projectName = projectName,
+                        taskName = taskName,
+                        description = updatedEntry.description,
+                    )
+                    TimeTrackingWidget.requestUpdate(context)
+                }
+
                 Timber.d("Time entry updated successfully (optimistic)")
             } catch (e: Exception) {
                 handleMutationFailure(e, "Failed to update time entry")
@@ -1688,32 +1711,39 @@ class TrackingViewModel @Inject constructor(
      */
     fun deleteTimeEntry(timeEntryId: String) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-
             val entry = _uiState.value.timeEntries.firstOrNull { it.id == timeEntryId }
                 ?: _uiState.value.currentTimeEntry?.takeIf { it.id == timeEntryId }
             if (entry == null) {
                 Timber.w("No time entry found to delete: $timeEntryId")
-                _uiState.value = _uiState.value.copy(isLoading = false)
                 return@launch
             }
-
-            // Optimistic local-only soft-delete; the collector removes it from the list. No
-            // outbox op exists yet, so there is nothing here for the sync worker to act on.
-            timeEntryRepository.softDeleteLocal(entry)
-
-            pendingDeleteCommitJobs.remove(timeEntryId)?.cancel()
-            pendingDeleteCommitJobs[timeEntryId] = viewModelScope.launch {
-                // Give the Snackbar undo action a real cancellation window before committing.
-                delay(DELETE_UNDO_WINDOW_MS)
-                timeEntryRepository.commitDelete(entry)
-                pendingDeleteCommitJobs.remove(timeEntryId)
-                syncTrigger.requestSync()
-            }
-
-            _uiState.value = _uiState.value.copy(isLoading = false)
-            Timber.d("Time entry soft-deleted successfully (optimistic)")
+            deleteTimeEntryInternal(entry)
         }
+    }
+
+    /** Delete an entry supplied by a calendar/history surface that may be outside the recent window. */
+    fun deleteTimeEntry(entry: TimeEntry) {
+        viewModelScope.launch { deleteTimeEntryInternal(entry) }
+    }
+
+    private suspend fun deleteTimeEntryInternal(entry: TimeEntry) {
+        _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+
+        // Optimistic local-only soft-delete; the collector removes it from the list. No outbox op
+        // exists yet, so there is nothing here for the sync worker to act on.
+        timeEntryRepository.softDeleteLocal(entry)
+
+        pendingDeleteCommitJobs.remove(entry.id)?.cancel()
+        pendingDeleteCommitJobs[entry.id] = viewModelScope.launch {
+            // Give the Snackbar undo action a real cancellation window before committing.
+            delay(DELETE_UNDO_WINDOW_MS)
+            timeEntryRepository.commitDelete(entry)
+            pendingDeleteCommitJobs.remove(entry.id)
+            syncTrigger.requestSync()
+        }
+
+        _uiState.value = _uiState.value.copy(isLoading = false)
+        Timber.d("Time entry soft-deleted successfully (optimistic)")
     }
 
     fun undoDelete(entry: TimeEntry) {

@@ -372,7 +372,7 @@ fun SolidVerdantApp(
                                 tags: List<String>,
                                 billable: Boolean,
                                 start: String,
-                                end: String,
+                                end: String?,
                             ->
                             trackingViewModel.updatePastTimeEntry(
                                 timeEntry = entry,
@@ -459,6 +459,25 @@ fun SolidVerdantApp(
                                     end = end,
                                 )
                             },
+                            onCreateEntry = { description, projectId, taskId, entryTags, billable, start, end ->
+                                authUiState.user?.let { user ->
+                                    trackingViewModel.createManualTimeEntry(
+                                        organizationId = currentMembership.organizationId,
+                                        memberId = currentMembership.id,
+                                        userId = user.id,
+                                        description = description,
+                                        projectId = projectId,
+                                        taskId = taskId,
+                                        tags = entryTags,
+                                        billable = billable,
+                                        start = start,
+                                        end = end,
+                                    )
+                                }
+                            },
+                            onDeleteEntry = trackingViewModel::deleteTimeEntry,
+                            onUndoDelete = trackingViewModel::undoDelete,
+                            preventOverlap = currentMembership.organization.preventOverlappingTimeEntries,
                         )
                     }
                 },

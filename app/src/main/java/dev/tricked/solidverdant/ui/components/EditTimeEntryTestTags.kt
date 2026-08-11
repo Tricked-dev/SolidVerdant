@@ -17,6 +17,7 @@ object EditTimeEntryTestTags {
     const val DURATION_FIELD = "entry_duration"
     const val BILLABLE = "entry_billable"
     const val CANCEL_BUTTON = "entry_cancel"
+    const val DELETE_BUTTON = "entry_delete"
     const val VALIDATION_BANNER = "entry_validation"
     const val DUPLICATE_BUTTON = "entry_duplicate"
     const val SPLIT_BUTTON = "entry_split"
