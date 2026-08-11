@@ -8,6 +8,7 @@ package dev.tricked.solidverdant.ui.calendar
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
@@ -18,10 +19,38 @@ import org.junit.Rule
 import org.junit.Test
 import java.time.Duration
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.ZonedDateTime
 
 class WeekCalendarViewTest {
     @get:Rule val composeRule = createComposeRule()
+
+    @Test
+    fun currentTimeMarkerIsShownForToday() {
+        val today = LocalDate.now()
+        composeRule.setContent {
+            MaterialTheme {
+                WeekCalendarView(
+                    state = CalendarUiState(
+                        viewMode = CalendarViewMode.WEEK,
+                        zone = ZoneId.systemDefault(),
+                        visibleDays = listOf(today),
+                        selectedDate = today,
+                        weekAnchor = today,
+                        isLoading = false,
+                    ),
+                    onSelectDate = {},
+                    onEntryClick = {},
+                    onPrevious = {},
+                    onNext = {},
+                    onToday = {},
+                    projects = emptyList(),
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(CalendarTestTags.CURRENT_TIME_MARKER).assertExists()
+    }
 
     @Test
     fun draggingOnAnEmptyDayOpensASelectedRange() {

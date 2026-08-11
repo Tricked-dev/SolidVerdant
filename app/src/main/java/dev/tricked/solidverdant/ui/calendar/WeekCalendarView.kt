@@ -71,7 +71,6 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 private const val NARROW_CALENDAR_DAYS = 3
-private const val INITIAL_SCROLL_HOURS = 7
 private const val MAX_ALL_DAY_EVENTS = 3
 
 /**
@@ -141,8 +140,8 @@ private fun WeekCalendarContent(
 ) {
     val zone = state.zone
     val settings = state.calendarSettings
-    val today = remember(zone) { LocalDate.now(zone) }
-    val now = remember { Instant.now() }
+    val now = rememberCalendarNow()
+    val today = now.atZone(zone).toLocalDate()
     val locale = LocalLocale.current.platformLocale
 
     // Precompute the per-day layouts once per data change rather than inside the render loop.
@@ -239,8 +238,7 @@ private fun WeekGrid(
     onCreateRange: (CalendarTimeRange) -> Unit,
     syncStatusByEntryId: Map<String, EntrySyncStatus>,
 ) {
-    val initialScrollHours = (INITIAL_SCROLL_HOURS - settings.startHour)
-        .coerceIn(0, (settings.endHour - settings.startHour - 1).coerceAtLeast(0))
+    val initialScrollHours = calendarInitialScrollHours(now, zone, settings).toFloat()
     val initialScroll = with(LocalDensity.current) { (calendarHourHeight(settings) * initialScrollHours).roundToPx() }
     val scrollState = rememberScrollState(initial = initialScroll)
     Box(
@@ -605,7 +603,8 @@ internal fun CurrentTimeMarker(
                 .fillMaxWidth()
                 .height(2.dp)
                 .background(MaterialTheme.colorScheme.error)
-                .clearAndSetSemantics { },
+                .clearAndSetSemantics { }
+                .testTag(CalendarTestTags.CURRENT_TIME_MARKER),
         )
     }
 }

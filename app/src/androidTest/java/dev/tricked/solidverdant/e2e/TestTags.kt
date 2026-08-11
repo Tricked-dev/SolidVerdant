@@ -62,6 +62,7 @@ object TestTags {
     const val TILE_PROJECT_SELECTION_CANCEL_BUTTON = ProjectSelectionTestTags.CANCEL_BUTTON
     const val STATS_SCREEN = "stats_screen"
     const val CALENDAR_WEEK_GRID = CalendarTestTags.WEEK_GRID
+    const val CALENDAR_CURRENT_TIME_MARKER = CalendarTestTags.CURRENT_TIME_MARKER
     const val CALENDAR_MODE_MONTH = CalendarTestTags.MODE_MONTH
     const val CALENDAR_ADD_ENTRY = CalendarTestTags.ADD_ENTRY
     const val CALENDAR_ADD_BREAK = CalendarTestTags.ADD_BREAK

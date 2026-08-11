@@ -86,8 +86,8 @@ fun MonthCalendarView(
 ) {
     var monthExpanded by remember { mutableStateOf(true) }
     val locale = LocalLocale.current.platformLocale
-    val initialScrollHours = (INITIAL_SCROLL_HOURS - state.calendarSettings.startHour)
-        .coerceIn(0, (state.calendarSettings.endHour - state.calendarSettings.startHour - 1).coerceAtLeast(0))
+    val now = rememberCalendarNow()
+    val initialScrollHours = calendarInitialScrollHours(now, state.zone, state.calendarSettings).toFloat()
     val timelineInitialScroll = with(LocalDensity.current) {
         (calendarHourHeight(state.calendarSettings) * initialScrollHours).roundToPx()
     }
@@ -141,6 +141,7 @@ fun MonthCalendarView(
             syncStatusByEntryId = syncStatusByEntryId,
             onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
+            now = now,
             settings = state.calendarSettings,
         )
     }
@@ -277,6 +278,7 @@ private fun ColumnScope.SelectedDayEntries(
     syncStatusByEntryId: Map<String, EntrySyncStatus>,
     onMoveEntry: (TimeEntry, String, String) -> Unit,
     onCreateRange: (CalendarTimeRange) -> Unit,
+    now: Instant,
     settings: CalendarGridSettings = CalendarGridSettings(),
 ) {
     val entries = state.bucketsByDate[state.selectedDate]?.entries.orEmpty()
@@ -304,6 +306,7 @@ private fun ColumnScope.SelectedDayEntries(
             syncStatusByEntryId = syncStatusByEntryId,
             onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
+            now = now,
             modifier = Modifier.weight(1f),
         )
         !monthExpanded -> DayTimeline(
@@ -320,6 +323,7 @@ private fun ColumnScope.SelectedDayEntries(
             syncStatusByEntryId = syncStatusByEntryId,
             onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
+            now = now,
             modifier = Modifier.weight(1f),
         )
         else -> LazyColumn(modifier = Modifier.fillMaxWidth()) {
@@ -337,13 +341,12 @@ private fun ColumnScope.SelectedDayEntries(
                     syncStatusByEntryId = syncStatusByEntryId,
                     onMoveEntry = onMoveEntry,
                     onCreateRange = onCreateRange,
+                    now = now,
                 )
             }
         }
     }
 }
-
-private const val INITIAL_SCROLL_HOURS = 8
 
 /**
  * Single-day vertical timeline for the selected day. Shares the week grid's hour gutter/gridlines
@@ -358,6 +361,7 @@ fun DayTimeline(
     projects: List<Project>,
     tasks: List<Task>,
     zone: ZoneId,
+    now: Instant,
     settings: CalendarGridSettings = CalendarGridSettings(),
     onEntryClick: (TimeEntry) -> Unit,
     onEntryLongPress: (TimeEntry) -> Unit = {},
@@ -368,11 +372,9 @@ fun DayTimeline(
     scrollState: ScrollState? = null,
     fillViewport: Boolean = false,
 ) {
-    val now = remember { Instant.now() }
-    val today = remember(zone) { LocalDate.now(zone) }
+    val today = now.atZone(zone).toLocalDate()
     val noDescription = stringResource(R.string.calendar_entry_untitled)
-    val initialScrollHours = (INITIAL_SCROLL_HOURS - settings.startHour)
-        .coerceIn(0, (settings.endHour - settings.startHour - 1).coerceAtLeast(0))
+    val initialScrollHours = calendarInitialScrollHours(now, zone, settings).toFloat()
     val initialScroll = with(LocalDensity.current) {
         (calendarHourHeight(settings) * initialScrollHours).roundToPx()
     }

@@ -11,6 +11,7 @@ import java.time.LocalDate
 /** Stable semantics owned by the calendar UI and consumed by on-device tests. */
 object CalendarTestTags {
     const val WEEK_GRID = "calendar_week_grid"
+    const val CURRENT_TIME_MARKER = "calendar_current_time_marker"
     const val MODE_MONTH = "calendar_mode_month"
     const val ADD_ENTRY = "calendar_add_entry"
     const val ADD_BREAK = "calendar_add_break"
