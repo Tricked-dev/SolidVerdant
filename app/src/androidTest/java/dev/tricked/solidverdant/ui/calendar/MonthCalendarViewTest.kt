@@ -8,6 +8,7 @@ package dev.tricked.solidverdant.ui.calendar
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -83,11 +84,7 @@ class MonthCalendarViewTest {
             )
         }
         composeRule.onNodeWithTag("day-cell-2026-07-06").performClick()
-        composeRule.onNodeWithTag("entry-row-${entry.id}").performScrollTo().performTouchInput {
-            down(center)
-            advanceEventTime(600)
-            up()
-        }
+        composeRule.onNodeWithTag("entry-row-${entry.id}").performScrollTo().performTouchInput { longClick() }
 
         composeRule.runOnIdle { assertEquals(entry.id, longPressed) }
     }

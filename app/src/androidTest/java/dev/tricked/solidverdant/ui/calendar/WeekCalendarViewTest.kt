@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
@@ -306,11 +307,7 @@ class WeekCalendarViewTest {
             }
         }
 
-        composeRule.onNodeWithTag("week-entry-${entry.id}").performTouchInput {
-            down(center)
-            advanceEventTime(600)
-            up()
-        }
+        composeRule.onNodeWithTag("week-entry-${entry.id}").performTouchInput { longClick() }
 
         composeRule.runOnIdle { assertEquals(entry.id, longPressed) }
     }
