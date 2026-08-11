@@ -615,11 +615,23 @@ private fun CalendarEntryActionsSheet(
                 actionTestTag = if (running) CalendarTestTags.EDIT_START_TIME else null,
             )
             if (running) {
-                CalendarEntryActionButton(stringResource(R.string.stop_tracking), onStop)
+                CalendarEntryActionButton(
+                    label = stringResource(R.string.stop_tracking),
+                    onClick = onStop,
+                    actionTestTag = CalendarTestTags.STOP_ENTRY,
+                )
             }
             if (!running && isCompletedTimeEntry(entry)) {
-                CalendarEntryActionButton(stringResource(R.string.duplicate_entry), onDuplicate)
-                CalendarEntryActionButton(stringResource(R.string.split_entry), onSplit)
+                CalendarEntryActionButton(
+                    label = stringResource(R.string.duplicate_entry),
+                    onClick = onDuplicate,
+                    actionTestTag = CalendarTestTags.DUPLICATE_ENTRY,
+                )
+                CalendarEntryActionButton(
+                    label = stringResource(R.string.split_entry),
+                    onClick = onSplit,
+                    actionTestTag = CalendarTestTags.SPLIT_ENTRY,
+                )
             }
             CalendarEntryActionButton(
                 label = stringResource(if (unsynced) R.string.calendar_action_discard else R.string.delete),
@@ -799,12 +811,16 @@ private fun CalendarSplitDialog(entry: TimeEntry, zone: java.time.ZoneId, onDism
                         invalid = true
                     }
                 },
+                modifier = Modifier.testTag(CalendarTestTags.SPLIT_CONFIRM),
             ) {
                 Text(stringResource(R.string.done))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testTag(CalendarTestTags.SPLIT_CANCEL),
+            ) {
                 Text(stringResource(R.string.cancel))
             }
         },

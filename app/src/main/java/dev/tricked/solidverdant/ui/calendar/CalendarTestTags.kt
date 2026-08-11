@@ -30,6 +30,9 @@ object CalendarTestTags {
     const val SETTINGS_DENSITY_SPACIOUS = "calendar_settings_density_spacious"
     const val ENTRY_ACTIONS = "calendar_entry_actions"
     const val EDIT_START_TIME = "calendar_edit_start_time"
+    const val STOP_ENTRY = "calendar_stop_entry"
+    const val DUPLICATE_ENTRY = "calendar_duplicate_entry"
+    const val SPLIT_ENTRY = "calendar_split_entry"
     const val DELETE_ENTRY = "calendar_delete_entry"
     const val DELETE_CONFIRM = "calendar_delete_confirm"
     const val DELETE_CANCEL = "calendar_delete_cancel"
@@ -38,6 +41,8 @@ object CalendarTestTags {
     const val SYNC_DISCARD = "calendar_entry_sync_discard"
     const val LOAD_ERROR = "calendar_load_error"
     const val SPLIT_PICKER = "calendar_split_picker"
+    const val SPLIT_CONFIRM = "calendar_split_confirm"
+    const val SPLIT_CANCEL = "calendar_split_cancel"
 
     fun selection(day: LocalDate): String = "calendar-selection-$day"
 
