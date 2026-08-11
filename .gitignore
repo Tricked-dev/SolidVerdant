@@ -13,6 +13,15 @@ da
 .devenv
 .android
 !.envrc
+/agents.local.md
+.tmp/
+# Local Android development wrappers
+/scripts/_android.zsh
+/scripts/adb
+/scripts/android-build-install
+/scripts/android-install
+/scripts/android-instrument
+/scripts/gradle
 my-release-key.jks
 convert_svg_path.py
 LOGO.svg
