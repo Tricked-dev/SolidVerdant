@@ -23,6 +23,7 @@ import dev.tricked.solidverdant.data.remote.ConnectionTestCode
 import dev.tricked.solidverdant.data.remote.ConnectionTester
 import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.data.repository.TemplateRepository
+import dev.tricked.solidverdant.service.TimeTrackingNotificationService
 import dev.tricked.solidverdant.sync.SyncScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -330,6 +331,8 @@ class AuthViewModel @Inject constructor(
             // re-insert the outgoing account's rows into the just-cleared database.
             // Unsynced changes are cancelled by the scheduler before account data is cleared.
             syncScheduler.cancelSync()
+            settingsDataStore.clearLongTimerWarningDeadline()
+            TimeTrackingNotificationService.clearForLogout(context)
             userCacheCleaner.clear()
             // Clear account-owned data before changing auth state. Once auth is cleared,
             // navigation can dispose this ViewModel and cancel any remaining work.

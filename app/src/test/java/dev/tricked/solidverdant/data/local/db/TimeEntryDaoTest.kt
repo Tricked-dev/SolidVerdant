@@ -100,6 +100,20 @@ class TimeEntryDaoTest {
         assertEquals(setOf("tag-1", "tag-2"), dao.tagIdsFor("server-1").toSet())
     }
 
+    @Test fun rekey_merges_an_optimistic_row_when_the_authoritative_id_already_exists() = runTest {
+        dao.upsert(entry("local-1").copy(description = "optimistic", syncState = SyncState.PENDING))
+        dao.upsert(entry("server-1").copy(description = "already pulled"))
+        dao.replaceTagRefs("local-1", listOf("local-tag"))
+        dao.replaceTagRefs("server-1", listOf("server-tag"))
+
+        dao.rekey("local-1", "server-1")
+
+        assertNull(dao.getById("local-1"))
+        assertEquals("already pulled", dao.getById("server-1")?.description)
+        assertTrue(dao.tagIdsFor("local-1").isEmpty())
+        assertEquals(listOf("server-tag"), dao.tagIdsFor("server-1"))
+    }
+
     @Test fun server_pull_replaces_synced_row_and_its_tag_set() = runTest {
         dao.upsert(entry("server-1").copy(description = "cached"))
         dao.replaceTagRefs("server-1", listOf("old-tag"))
@@ -230,5 +244,22 @@ class TimeEntryDaoTest {
         listOf(insidePresent, pending, pendingDelete, outboxOwned, outside, otherOrg).forEach {
             assertNotNull("${it.id} must be preserved", dao.getById(it.id))
         }
+    }
+
+    @Test fun tombstone_chunks_more_than_sqlites_bind_limit_without_leaving_missing_rows() = runTest {
+        val entries = (0..1_000).map { index ->
+            entry("entry-$index").copy(start = "2026-01-05T09:00:00Z")
+        }
+        dao.upsertAll(entries)
+        val retained = entries.last()
+
+        dao.tombstoneMissing(
+            orgId = "org1",
+            rangeStart = "2026-01-01T00:00:00Z",
+            rangeEnd = "2026-01-31T23:59:59Z",
+            serverIds = listOf(retained.id),
+        )
+
+        assertEquals(listOf(retained.id), dao.observeEntries("org1").first().map { it.id })
     }
 }

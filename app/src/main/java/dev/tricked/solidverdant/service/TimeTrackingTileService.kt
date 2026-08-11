@@ -269,6 +269,9 @@ class TimeTrackingTileService : TileService() {
                         projectName = projectName,
                         taskName = taskName,
                         description = description.takeIf { it.isNotBlank() },
+                        projectId = entry.projectId,
+                        taskId = entry.taskId,
+                        organizationId = entry.organizationId,
                     )
 
                     refreshTile()
@@ -471,6 +474,9 @@ class TimeTrackingTileService : TileService() {
                                 projectName = projectName,
                                 taskName = taskName,
                                 description = activeEntry.description,
+                                projectId = activeEntry.projectId,
+                                taskId = activeEntry.taskId,
+                                organizationId = activeEntry.organizationId,
                             )
                         } else if (cachedId != null) {
                             // Network succeeded, no active entry - stopped externally

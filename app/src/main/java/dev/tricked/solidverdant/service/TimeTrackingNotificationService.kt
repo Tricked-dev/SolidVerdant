@@ -53,6 +53,9 @@ class TimeTrackingNotificationService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private var startTime: Instant? = null
+    private var organizationId: String? = null
+    private var projectId: String? = null
+    private var taskId: String? = null
     private var projectName: String? = null
     private var taskName: String? = null
     private var description: String? = null
@@ -65,6 +68,7 @@ class TimeTrackingNotificationService : Service() {
     private var liveUpdateEnabled: Boolean = false
     private var longWarningJob: Job? = null
     private var longTimerWarningVisible = false
+    private var stateGeneration = 0L
 
     private val notificationManager: NotificationManager by lazy {
         getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -89,13 +93,23 @@ class TimeTrackingNotificationService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Timber.d("NotificationService onStartCommand: action=${intent?.action}")
+        if (intent != null && isStaleNotificationAction(intent)) {
+            Timber.d("Ignoring notification action for a replaced timer")
+            refreshNotificationIfVisible()
+            return START_NOT_STICKY
+        }
         if (intent != null && intent.action in FOREGROUND_ACTIONS) {
             restoreEntryState(intent)
             if (!isForeground) {
                 // Notification actions can relaunch this service after Android has reclaimed the
                 // detached paused-service process. Promote it before starting any live API work so
                 // the action coroutine is not cancelled while the service is in the background.
-                startForegroundCompat(buildNotification())
+                val bootstrapNotification = if (intent.action == ACTION_SHOW_LONG_TIMER_WARNING) {
+                    buildRestoringTrackingNotification()
+                } else {
+                    buildNotification()
+                }
+                startForegroundCompat(bootstrapNotification)
             }
         }
         when (intent?.action) {
@@ -119,10 +133,14 @@ class TimeTrackingNotificationService : Service() {
                 // WorkManager -> service -> refresh loop and also discards Keep Running snoozes.
                 val isSameEntryRefresh = isTracking && startTime == requestedStartTime
 
+                stateGeneration += 1
                 isTracking = true
                 isPaused = false
                 clearPersistedPausedStart()
                 startTime = requestedStartTime
+                organizationId = intent.getStringExtra(EXTRA_ORGANIZATION_ID)
+                projectId = intent.getStringExtra(EXTRA_PROJECT_ID)
+                taskId = intent.getStringExtra(EXTRA_TASK_ID)
                 projectName = intent.getStringExtra(EXTRA_PROJECT_NAME)
                 taskName = intent.getStringExtra(EXTRA_TASK_NAME)
                 description = intent.getStringExtra(EXTRA_DESCRIPTION)
@@ -184,11 +202,30 @@ class TimeTrackingNotificationService : Service() {
         return START_NOT_STICKY
     }
 
+    /**
+     * A PendingIntent from an already-replaced notification can still be delivered after the new
+     * timer is visible. Reject it before [restoreEntryState] can overwrite the current surface.
+     * Process-restored actions remain valid because there is no in-memory timer to compare yet.
+     */
+    private fun isStaleNotificationAction(intent: Intent): Boolean {
+        if (intent.action !in ENTRY_MUTATION_ACTIONS || !intent.hasExtra(EXTRA_START_TIME)) return false
+        val currentStart = startTime ?: return false
+        if (!isTracking && !isPaused) return false
+        val requestedStart = Instant.ofEpochMilli(intent.getLongExtra(EXTRA_START_TIME, 0L))
+        return requestedStart != currentStart
+    }
+
     private fun handleQuickStart(intent: Intent) {
+        if (mutationInProgress) return
+        mutationInProgress = true
+        stateGeneration += 1
+        val quickStartGeneration = stateGeneration
         clearPersistedPausedStart()
         isTracking = true
         isPaused = false
         startTime = Instant.now()
+        projectId = intent.getStringExtra(EXTRA_PROJECT_ID)
+        taskId = intent.getStringExtra(EXTRA_TASK_ID)
         projectName = intent.getStringExtra(EXTRA_PROJECT_NAME)
         taskName = intent.getStringExtra(EXTRA_TASK_NAME)
         description = intent.getStringExtra(EXTRA_DESCRIPTION)
@@ -199,10 +236,18 @@ class TimeTrackingNotificationService : Service() {
             val membership = authRepository.getCurrentMembership()
             val user = authRepository.getCurrentUser().getOrNull()
             if (membership == null || user == null) {
+                mutationInProgress = false
                 Timber.e("Quick start failed: missing membership or user")
-                stopService()
+                if (stateGeneration == quickStartGeneration) stopService()
                 return@launch
             }
+            if (stateGeneration != quickStartGeneration) {
+                // An authoritative external-timer refresh replaced this optimistic Quick Start
+                // while authentication was loading. Do not POST a second active timer.
+                mutationInProgress = false
+                return@launch
+            }
+            organizationId = membership.organizationId
 
             authRepository.startTimeEntry(
                 organizationId = membership.organizationId,
@@ -212,11 +257,16 @@ class TimeTrackingNotificationService : Service() {
                 taskId = intent.getStringExtra(EXTRA_TASK_ID),
                 description = description.orEmpty(),
             ).onSuccess { entry ->
-                startTime = Instant.parse(entry.start)
-                refreshNotificationIfVisible()
+                mutationInProgress = false
+                if (stateGeneration == quickStartGeneration) {
+                    organizationId = entry.organizationId
+                    startTime = Instant.parse(entry.start)
+                    refreshNotificationIfVisible()
+                }
             }.onFailure { error ->
+                mutationInProgress = false
                 Timber.e(error, "Quick start failed")
-                stopService()
+                if (stateGeneration == quickStartGeneration) stopService()
             }
         }
     }
@@ -243,6 +293,7 @@ class TimeTrackingNotificationService : Service() {
             val activeEntry = authRepository.getActiveTimeEntry().getOrNull()
             if (activeEntry == null) {
                 Timber.d("Long timer warning skipped: no active entry")
+                stopService()
                 return@launch
             }
             val activeStart = runCatching { Instant.parse(activeEntry.start) }.getOrNull()
@@ -250,11 +301,15 @@ class TimeTrackingNotificationService : Service() {
                 (entryStartEpochMs >= 0 && activeStart.toEpochMilli() != entryStartEpochMs)
             ) {
                 Timber.d("Long timer warning skipped: active entry no longer matches")
+                stopService()
                 return@launch
             }
 
             isTracking = true
             startTime = activeStart
+            organizationId = activeEntry.organizationId
+            projectId = activeEntry.projectId
+            taskId = activeEntry.taskId
             description = activeEntry.description
             longTimerWarningVisible = true
             publishNotification()
@@ -264,30 +319,36 @@ class TimeTrackingNotificationService : Service() {
     private fun handleStopTracking(startId: Int) {
         if (mutationInProgress) return
         val wasPaused = isPaused
+        val stopTargetStart = startTime
+        val stopGeneration = stateGeneration
         mutationInProgress = true
 
         serviceScope.launch {
             val stopped = if (wasPaused) {
                 Result.success(false)
             } else {
-                stopActiveEntry()
+                stopActiveEntry(stopTargetStart)
             }
 
             stopped.fold(
                 onSuccess = {
                     mutationInProgress = false
-                    clearPersistedPausedStart()
                     notificationManager.cancel(NOTIFICATION_ID_ERROR)
-                    if (settingsDataStore.alwaysShowNotification.first()) {
-                        showIdleNotification(startId)
-                    } else {
-                        stopService()
+                    if (stateGeneration == stopGeneration) {
+                        clearPersistedPausedStart()
+                        if (settingsDataStore.alwaysShowNotification.first()) {
+                            showIdleNotification(startId)
+                        } else {
+                            stopService()
+                        }
                     }
                 },
                 onFailure = { error ->
                     mutationInProgress = false
                     Timber.e(error, "Failed to stop time entry from notification")
-                    showMutationError(R.string.notification_stop_failed)
+                    if (stateGeneration == stopGeneration) {
+                        showMutationError(R.string.notification_stop_failed)
+                    }
                 },
             )
         }
@@ -319,6 +380,9 @@ class TimeTrackingNotificationService : Service() {
         intent.getStringExtra(EXTRA_PROJECT_NAME)?.let { projectName = it }
         intent.getStringExtra(EXTRA_TASK_NAME)?.let { taskName = it }
         intent.getStringExtra(EXTRA_DESCRIPTION)?.let { description = it }
+        intent.getStringExtra(EXTRA_PROJECT_ID)?.let { projectId = it }
+        intent.getStringExtra(EXTRA_TASK_ID)?.let { taskId = it }
+        intent.getStringExtra(EXTRA_ORGANIZATION_ID)?.let { organizationId = it }
         if (intent.hasExtra(EXTRA_START_TIME)) {
             startTime = Instant.ofEpochMilli(intent.getLongExtra(EXTRA_START_TIME, 0L))
         }
@@ -341,6 +405,9 @@ class TimeTrackingNotificationService : Service() {
     }
 
     private suspend fun resumeActiveEntry(
+        requestedOrganizationId: String?,
+        requestedProjectId: String?,
+        requestedTaskId: String?,
         requestedProjectName: String?,
         requestedTaskName: String?,
         requestedDescription: String?,
@@ -348,27 +415,43 @@ class TimeTrackingNotificationService : Service() {
         val user = authRepository.getCurrentUser().getOrThrow()
         val membership = authRepository.getCurrentMembership()
             ?: error("No current membership")
-        val projects = authRepository.getProjects(membership.organizationId).getOrThrow()
-        val tasks = authRepository.getTasks(membership.organizationId).getOrThrow()
-        val projectId = projects.find { it.name == requestedProjectName }?.id
-        val taskId = tasks.find { it.name == requestedTaskName }?.id
+        check(requestedOrganizationId == null || membership.organizationId == requestedOrganizationId) {
+            "The paused timer belongs to a different organization"
+        }
+        // Exact IDs survive duplicate names and catalogue renames. Name lookup remains only for
+        // notification PendingIntents created by an older app version before IDs were included.
+        val resolvedProjectId = requestedProjectId ?: authRepository.getProjects(membership.organizationId)
+            .getOrThrow()
+            .find { it.name == requestedProjectName }
+            ?.id
+        val resolvedTaskId = requestedTaskId ?: authRepository.getTasks(membership.organizationId)
+            .getOrThrow()
+            .find { it.name == requestedTaskName }
+            ?.id
 
         val entry = authRepository.startTimeEntry(
             organizationId = membership.organizationId,
             memberId = membership.id,
             userId = user.id,
-            projectId = projectId,
-            taskId = taskId,
+            projectId = resolvedProjectId,
+            taskId = resolvedTaskId,
             description = requestedDescription.orEmpty(),
         ).getOrThrow()
         Instant.parse(entry.start)
     }
 
     /** Stop the account-wide active entry. Used only by explicit notification actions. */
-    private suspend fun stopActiveEntry(): Result<Boolean> {
+    private suspend fun stopActiveEntry(expectedStart: Instant?): Result<Boolean> {
         val activeEntry = authRepository.getActiveTimeEntry()
             .getOrElse { return Result.failure(it) }
             ?: return Result.success(false)
+        if (expectedStart != null) {
+            val activeStart = runCatching { Instant.parse(activeEntry.start) }.getOrNull()
+            if (activeStart != expectedStart) {
+                Timber.d("Ignoring stale notification action for a replaced active timer")
+                return Result.success(false)
+            }
+        }
         val user = authRepository.getCurrentUser()
             .getOrElse { return Result.failure(it) }
 
@@ -398,6 +481,9 @@ class TimeTrackingNotificationService : Service() {
         isTracking = false
         isPaused = false
         startTime = null
+        organizationId = null
+        projectId = null
+        taskId = null
         projectName = null
         taskName = null
         description = null
@@ -423,26 +509,33 @@ class TimeTrackingNotificationService : Service() {
 
     private fun handlePauseTracking() {
         if (mutationInProgress) return
+        val pauseTargetStart = startTime
+        val pauseGeneration = stateGeneration
         mutationInProgress = true
         // Reserve the paused surface before the remote mutation. The active-entry observer can
         // see the server transition to idle before this coroutine resumes; without this marker it
         // may hide/idle the service and cancel the successful action before Resume is published.
         persistPausedStart()
         serviceScope.launch {
-            stopActiveEntry().fold(
+            stopActiveEntry(pauseTargetStart).fold(
                 onSuccess = {
                     mutationInProgress = false
                     notificationManager.cancel(NOTIFICATION_ID_ERROR)
-                    confirmPausedState()
+                    // A different timer may have appeared externally while the old stop request
+                    // was in flight. Its refresh owns the notification now; do not turn that new
+                    // running timer into a false paused surface when the old request completes.
+                    if (stateGeneration == pauseGeneration) confirmPausedState()
                 },
                 onFailure = { error ->
                     mutationInProgress = false
-                    clearPersistedPausedStart()
-                    isPaused = false
-                    isTracking = true
-                    publishNotification()
                     Timber.e(error, "Failed to stop time entry during pause")
-                    showMutationError(R.string.notification_pause_failed)
+                    if (stateGeneration == pauseGeneration) {
+                        clearPersistedPausedStart()
+                        isPaused = false
+                        isTracking = true
+                        publishNotification()
+                        showMutationError(R.string.notification_pause_failed)
+                    }
                 },
             )
         }
@@ -473,10 +566,17 @@ class TimeTrackingNotificationService : Service() {
         val requestedProjectName = intent.getStringExtra(EXTRA_PROJECT_NAME) ?: projectName
         val requestedTaskName = intent.getStringExtra(EXTRA_TASK_NAME) ?: taskName
         val requestedDescription = intent.getStringExtra(EXTRA_DESCRIPTION) ?: description
+        val requestedOrganizationId = intent.getStringExtra(EXTRA_ORGANIZATION_ID) ?: organizationId
+        val requestedProjectId = intent.getStringExtra(EXTRA_PROJECT_ID) ?: projectId
+        val requestedTaskId = intent.getStringExtra(EXTRA_TASK_ID) ?: taskId
+        val resumeGeneration = stateGeneration
 
         mutationInProgress = true
         serviceScope.launch {
             resumeActiveEntry(
+                requestedOrganizationId,
+                requestedProjectId,
+                requestedTaskId,
                 requestedProjectName,
                 requestedTaskName,
                 requestedDescription,
@@ -484,20 +584,27 @@ class TimeTrackingNotificationService : Service() {
                 onSuccess = { resumedAt ->
                     mutationInProgress = false
                     notificationManager.cancel(NOTIFICATION_ID_ERROR)
-                    projectName = requestedProjectName
-                    taskName = requestedTaskName
-                    description = requestedDescription
-                    startTime = resumedAt
-                    isPaused = false
-                    isTracking = true
-                    clearPersistedPausedStart()
-                    publishNotification()
-                    scheduleLongTimerWarning()
+                    if (stateGeneration == resumeGeneration) {
+                        organizationId = requestedOrganizationId
+                        projectId = requestedProjectId
+                        taskId = requestedTaskId
+                        projectName = requestedProjectName
+                        taskName = requestedTaskName
+                        description = requestedDescription
+                        startTime = resumedAt
+                        isPaused = false
+                        isTracking = true
+                        clearPersistedPausedStart()
+                        publishNotification()
+                        scheduleLongTimerWarning()
+                    }
                 },
                 onFailure = { error ->
                     mutationInProgress = false
                     Timber.e(error, "Failed to start time entry during resume")
-                    showMutationError(R.string.notification_resume_failed)
+                    if (stateGeneration == resumeGeneration) {
+                        showMutationError(R.string.notification_resume_failed)
+                    }
                 },
             )
         }
@@ -678,6 +785,19 @@ class TimeTrackingNotificationService : Service() {
         .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
         .build()
 
+    /** Privacy-safe placeholder shown only while a worker-triggered warning validates the timer. */
+    private fun buildRestoringTrackingNotification(): Notification = NotificationCompat.Builder(this, CHANNEL_ID_ACTIVE)
+        .setContentTitle(getString(R.string.time_tracking_notification_title))
+        .setContentText(getString(R.string.notification_tracking_default))
+        .setSmallIcon(R.drawable.ic_timer)
+        .setOngoing(true)
+        .setOnlyAlertOnce(true)
+        .setCategory(NotificationCompat.CATEGORY_STATUS)
+        .setPriority(NotificationCompat.PRIORITY_LOW)
+        .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+        .setPublicVersion(buildRedactedPublicNotification(R.string.notification_public_tracking_title))
+        .build()
+
     /**
      * Persists the next warning deadline and schedules it with WorkManager so the warning survives
      * process death (a plain in-process `delay()` does not: this service can be killed and returns
@@ -792,6 +912,9 @@ class TimeTrackingNotificationService : Service() {
             this.action = action
             putExtra(EXTRA_PAUSED, isPaused)
             startTime?.let { putExtra(EXTRA_START_TIME, it.toEpochMilli()) }
+            organizationId?.let { putExtra(EXTRA_ORGANIZATION_ID, it) }
+            projectId?.let { putExtra(EXTRA_PROJECT_ID, it) }
+            taskId?.let { putExtra(EXTRA_TASK_ID, it) }
             projectName?.let { putExtra(EXTRA_PROJECT_NAME, it) }
             taskName?.let { putExtra(EXTRA_TASK_NAME, it) }
             description?.let { putExtra(EXTRA_DESCRIPTION, it) }
@@ -875,12 +998,20 @@ class TimeTrackingNotificationService : Service() {
         const val EXTRA_DESCRIPTION = "description"
         const val EXTRA_PROJECT_ID = "project_id"
         const val EXTRA_TASK_ID = "task_id"
+        const val EXTRA_ORGANIZATION_ID = "organization_id"
         private const val EXTRA_PAUSED = "paused"
 
         /** Epoch millis of the entry's start time the warning was scheduled for; see [ACTION_SHOW_LONG_TIMER_WARNING]. */
         const val EXTRA_ENTRY_START_EPOCH_MS = "entry_start_epoch_ms"
 
         private val FOREGROUND_ACTIONS = setOf(
+            ACTION_STOP_TRACKING,
+            ACTION_PAUSE_TRACKING,
+            ACTION_RESUME_TRACKING,
+            ACTION_KEEP_RUNNING,
+            ACTION_SHOW_LONG_TIMER_WARNING,
+        )
+        private val ENTRY_MUTATION_ACTIONS = setOf(
             ACTION_STOP_TRACKING,
             ACTION_PAUSE_TRACKING,
             ACTION_RESUME_TRACKING,
@@ -1063,10 +1194,16 @@ class TimeTrackingNotificationService : Service() {
             projectName: String? = null,
             taskName: String? = null,
             description: String? = null,
+            projectId: String? = null,
+            taskId: String? = null,
+            organizationId: String? = null,
         ) {
             val intent = Intent(context, TimeTrackingNotificationService::class.java).apply {
                 action = ACTION_START_TRACKING
                 putExtra(EXTRA_START_TIME, startTime.toEpochMilli())
+                putExtra(EXTRA_ORGANIZATION_ID, organizationId)
+                putExtra(EXTRA_PROJECT_ID, projectId)
+                putExtra(EXTRA_TASK_ID, taskId)
                 putExtra(EXTRA_PROJECT_NAME, projectName)
                 putExtra(EXTRA_TASK_NAME, taskName)
                 putExtra(EXTRA_DESCRIPTION, description)
@@ -1100,6 +1237,21 @@ class TimeTrackingNotificationService : Service() {
                 // whichever (possibly stale tracking) notification Android currently holds.
                 showPaused(context)
                 return
+            }
+            context.stopService(Intent(context, TimeTrackingNotificationService::class.java))
+        }
+
+        /** Remove every account-owned timer surface before logout switches or clears the account. */
+        fun clearForLogout(context: Context) {
+            context.getSharedPreferences(STATE_PREFERENCES, Context.MODE_PRIVATE)
+                .edit()
+                .clear()
+                .commit()
+            runCatching { LongTimerWarningWorker.cancel(context) }
+                .onFailure { Timber.w(it, "Could not cancel long timer warning during logout") }
+            context.getSystemService(NotificationManager::class.java)?.let { manager ->
+                manager.cancel(NOTIFICATION_ID)
+                manager.cancel(NOTIFICATION_ID_ERROR)
             }
             context.stopService(Intent(context, TimeTrackingNotificationService::class.java))
         }

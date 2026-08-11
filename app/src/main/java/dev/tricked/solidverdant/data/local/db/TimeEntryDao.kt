@@ -59,8 +59,17 @@ interface TimeEntryDao {
 
     @Transaction
     suspend fun rekey(oldId: String, newId: String) {
-        updateId(oldId, newId)
-        updateTagRefEntryId(oldId, newId)
+        if (oldId == newId) return
+        if (getById(newId) == null) {
+            updateId(oldId, newId)
+            updateTagRefEntryId(oldId, newId)
+        } else {
+            // A pull can insert the authoritative server row before a queued START/CREATE adopts
+            // that same id. Merge by dropping the obsolete optimistic row; reconcile immediately
+            // overwrites the target row and its tag set with the authoritative response.
+            clearTagRefs(oldId)
+            deleteById(oldId)
+        }
     }
 
     @Query("SELECT tagId FROM time_entry_tag_cross_ref WHERE timeEntryId = :entryId")

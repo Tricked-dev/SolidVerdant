@@ -19,7 +19,11 @@ import dev.tricked.solidverdant.data.model.Membership
 import dev.tricked.solidverdant.data.model.Organization
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.FakeRemoteDataSource
+import dev.tricked.solidverdant.data.remote.RemoteDataSource
 import dev.tricked.solidverdant.util.Clock
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import okhttp3.ResponseBody.Companion.toResponseBody
@@ -56,7 +60,7 @@ class SyncWorkerTest {
 
     @After fun teardown() = db.close()
 
-    private fun buildWorker(status: SyncStatusReporter = SyncStatusReporter()) =
+    private fun buildWorker(status: SyncStatusReporter = SyncStatusReporter(), remoteDataSource: RemoteDataSource = remote) =
         TestListenableWorkerBuilder<SyncWorker>(ApplicationProvider.getApplicationContext())
             .setWorkerFactory(object : androidx.work.WorkerFactory() {
                 override fun createWorker(
@@ -70,7 +74,7 @@ class SyncWorkerTest {
                     db.timeEntryDao(),
                     db.syncMetaDao(),
                     db,
-                    remote,
+                    remoteDataSource,
                     json,
                     clock,
                     status,
@@ -983,6 +987,241 @@ class SyncWorkerTest {
         assertEquals("edited while running", stored.description)
         assertEquals("2020-01-01T10:00:00Z", stored.end)
         assertEquals(SyncState.SYNCED, stored.syncState)
+    }
+
+    @Test fun transient_start_failure_defers_its_stop_and_update_but_not_independent_work() = runTest {
+        val local = TimeEntry(
+            id = "local-1",
+            userId = "u1",
+            organizationId = "org1",
+            start = "2020-01-01T09:00:00Z",
+            end = "2020-01-01T10:00:00Z",
+            description = "edited offline",
+        )
+        db.timeEntryDao().upsert(local.toEntity(updatedAt = 4L, syncState = SyncState.PENDING))
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.START,
+                organizationId = "org1",
+                timeEntryId = local.id,
+                createdAtMs = 1L,
+                payloadJson = json.encodeToString(
+                    StartPayload("m1", "u1", null, null, "initial", emptyList(), start = local.start),
+                ),
+            ),
+        )
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.STOP,
+                organizationId = "org1",
+                timeEntryId = local.id,
+                createdAtMs = 2L,
+                payloadJson = json.encodeToString(StopPayload("u1", local.start, end = checkNotNull(local.end))),
+            ),
+        )
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = "org1",
+                timeEntryId = local.id,
+                createdAtMs = 3L,
+                payloadJson = json.encodeToString(
+                    UpdatePayload("u1", local.start, local.end, local.description.orEmpty(), null, null, true, emptyList()),
+                ),
+            ),
+        )
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.DELETE,
+                organizationId = "org1",
+                timeEntryId = "independent-server-entry",
+                createdAtMs = 4L,
+                payloadJson = "{}",
+            ),
+        )
+        val server = local.copy(id = "server-42", end = null, description = "initial")
+        val syncRemote = mockk<RemoteDataSource>()
+        coEvery { syncRemote.getActiveTimeEntry() } returns Result.success(null)
+        coEvery {
+            syncRemote.startTimeEntry(any(), any(), any(), any(), any(), any(), any())
+        } returnsMany listOf(Result.failure(java.io.IOException("offline")), Result.success(server))
+        coEvery { syncRemote.stopTimeEntry(any(), any(), any(), any(), any()) } returns Result.success(
+            server.copy(end = local.end),
+        )
+        coEvery { syncRemote.updateTimeEntry(any(), any(), any()) } coAnswers {
+            Result.success(secondArg())
+        }
+        coEvery { syncRemote.deleteTimeEntry(any(), any()) } returns Result.success(Unit)
+
+        assertEquals(ListenableWorker.Result.retry(), buildWorker(remoteDataSource = syncRemote).doWork())
+
+        val deferred = db.outboxDao().peekAll()
+        assertEquals(listOf(OutboxOpType.START, OutboxOpType.STOP, OutboxOpType.UPDATE), deferred.map { it.opType })
+        assertEquals(listOf(1, 0, 0), deferred.map { it.attemptCount })
+        coVerify(exactly = 0) { syncRemote.stopTimeEntry(any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { syncRemote.updateTimeEntry(any(), any(), any()) }
+        coVerify(exactly = 1) { syncRemote.deleteTimeEntry("org1", "independent-server-entry") }
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker(remoteDataSource = syncRemote).doWork())
+
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+        coVerify(exactly = 2) { syncRemote.startTimeEntry(any(), any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 1) { syncRemote.stopTimeEntry(any(), "server-42", any(), any(), any()) }
+        coVerify(exactly = 1) { syncRemote.updateTimeEntry("org1", match { it.id == "server-42" }, any()) }
+        val stored = requireNotNull(db.timeEntryDao().getById("server-42"))
+        assertEquals("edited offline", stored.description)
+        assertTrue(stored.billable)
+        assertEquals(SyncState.SYNCED, stored.syncState)
+    }
+
+    @Test fun rate_limited_start_preserves_its_retry_budget_and_defers_the_dependent_stop() = runTest {
+        val start = "2020-01-01T09:00:00Z"
+        val end = "2020-01-01T10:00:00Z"
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.START,
+                organizationId = "org1",
+                timeEntryId = "local-rate-limited",
+                createdAtMs = 1L,
+                payloadJson = json.encodeToString(
+                    StartPayload("m1", "u1", null, null, "work", emptyList(), start = start),
+                ),
+            ),
+        )
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.STOP,
+                organizationId = "org1",
+                timeEntryId = "local-rate-limited",
+                createdAtMs = 2L,
+                payloadJson = json.encodeToString(StopPayload("u1", start, end)),
+            ),
+        )
+        val server = TimeEntry(
+            id = "server-rate-limited",
+            userId = "u1",
+            organizationId = "org1",
+            start = start,
+            end = null,
+        )
+        val syncRemote = mockk<RemoteDataSource>()
+        coEvery { syncRemote.getActiveTimeEntry() } returns Result.success(null)
+        coEvery {
+            syncRemote.startTimeEntry(any(), any(), any(), any(), any(), any(), any())
+        } returnsMany listOf(
+            Result.failure(httpException(429, "rate limited")),
+            Result.success(server),
+        )
+        coEvery { syncRemote.stopTimeEntry(any(), any(), any(), any(), any()) } returns Result.success(server.copy(end = end))
+
+        assertEquals(ListenableWorker.Result.retry(), buildWorker(remoteDataSource = syncRemote).doWork())
+
+        val deferred = db.outboxDao().peekAll()
+        assertEquals(listOf(OutboxOpType.START, OutboxOpType.STOP), deferred.map { it.opType })
+        assertEquals(listOf(0, 0), deferred.map { it.attemptCount })
+        assertTrue(deferred.first().lastError?.contains("Rate limited") == true)
+        coVerify(exactly = 0) { syncRemote.stopTimeEntry(any(), any(), any(), any(), any()) }
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker(remoteDataSource = syncRemote).doWork())
+
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+        coVerify(exactly = 1) { syncRemote.stopTimeEntry(any(), "server-rate-limited", any(), any(), end) }
+        assertEquals(end, db.timeEntryDao().getById(server.id)?.end)
+    }
+
+    @Test fun exhausted_start_retry_budget_dead_letters_its_chain_without_blocking_other_entries() = runTest {
+        val start = "2020-01-01T09:00:00Z"
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.START,
+                organizationId = "org1",
+                timeEntryId = "local-exhausted",
+                createdAtMs = 1L,
+                attemptCount = SyncWorker.MAX_ATTEMPTS - 1,
+                payloadJson = json.encodeToString(
+                    StartPayload("m1", "u1", null, null, "work", emptyList(), start = start),
+                ),
+            ),
+        )
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.STOP,
+                organizationId = "org1",
+                timeEntryId = "local-exhausted",
+                createdAtMs = 2L,
+                payloadJson = json.encodeToString(StopPayload("u1", start, "2020-01-01T10:00:00Z")),
+            ),
+        )
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.UPDATE,
+                organizationId = "org1",
+                timeEntryId = "local-exhausted",
+                createdAtMs = 3L,
+                payloadJson = json.encodeToString(
+                    UpdatePayload("u1", start, null, "latest", null, null, false, emptyList()),
+                ),
+            ),
+        )
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.DELETE,
+                organizationId = "org1",
+                timeEntryId = "independent-server-entry",
+                createdAtMs = 4L,
+                payloadJson = "{}",
+            ),
+        )
+        val syncRemote = mockk<RemoteDataSource>()
+        coEvery { syncRemote.getActiveTimeEntry() } returns Result.success(null)
+        coEvery {
+            syncRemote.startTimeEntry(any(), any(), any(), any(), any(), any(), any())
+        } returns Result.failure(java.io.IOException("still offline"))
+        coEvery { syncRemote.deleteTimeEntry(any(), any()) } returns Result.success(Unit)
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker(remoteDataSource = syncRemote).doWork())
+
+        val failedChain = db.outboxDao().peekAll()
+        assertEquals(3, failedChain.size)
+        assertTrue(failedChain.all { it.timeEntryId == "local-exhausted" && it.deadLettered })
+        coVerify(exactly = 0) { syncRemote.stopTimeEntry(any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { syncRemote.updateTimeEntry(any(), any(), any()) }
+        coVerify(exactly = 1) { syncRemote.deleteTimeEntry("org1", "independent-server-entry") }
+    }
+
+    @Test fun adopted_start_merges_when_the_server_row_was_already_pulled_into_room() = runTest {
+        val local = TimeEntry(
+            id = "local-1",
+            userId = "u1",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = null,
+            description = "local optimistic timer",
+        )
+        val server = local.copy(id = "server-9", description = "server timer")
+        db.timeEntryDao().upsert(local.toEntity(updatedAt = 2L, syncState = SyncState.PENDING))
+        db.timeEntryDao().upsert(server.toEntity(updatedAt = 3L, syncState = SyncState.SYNCED))
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.START,
+                organizationId = "org1",
+                timeEntryId = local.id,
+                createdAtMs = 1L,
+                payloadJson = json.encodeToString(
+                    StartPayload("m1", "u1", null, null, local.description.orEmpty(), emptyList(), start = local.start),
+                ),
+            ),
+        )
+        remote.active = server
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        assertTrue("The adopted operation must not be dead-lettered by a primary-key collision", db.outboxDao().peekAll().isEmpty())
+        assertNull(db.timeEntryDao().getById(local.id))
+        val stored = requireNotNull(db.timeEntryDao().getById(server.id))
+        assertEquals(server.description, stored.description)
+        assertEquals(SyncState.SYNCED, stored.syncState)
+        assertTrue("Adopting an already-known active entry must not POST a duplicate", remote.started.isEmpty())
     }
 
     // SV-025: a dead-lettered UPDATE that is revived (deadLettered reset for retry) but has since

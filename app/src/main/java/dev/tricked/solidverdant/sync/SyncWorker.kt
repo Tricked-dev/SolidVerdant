@@ -61,6 +61,10 @@ class SyncWorker @AssistedInject constructor(
         // Entries whose creating op has been dead-lettered in this run; their dependent ops
         // (still referencing the local- id) can never succeed and are skipped/cascaded.
         val failedEntryIds = mutableSetOf<String>()
+        // A transiently failed START/CREATE is a prerequisite for every later operation carrying
+        // the same local id. Keep those dependants untouched for the next worker run instead of
+        // attempting STOP/UPDATE/DELETE against an id the server has never received.
+        val deferredEntryIds = mutableSetOf<String>()
         // A previous op in this same drain may rekey an entry's id (local- id -> server id) after a
         // successful START/CREATE. The `ops` list above is a snapshot taken once at the top of the
         // run, so later entries in that list still hold the dead local id in memory even though
@@ -82,7 +86,7 @@ class SyncWorker @AssistedInject constructor(
             // so a stale snapshot from the initial drain cannot write after the conflict was saved.
             val stored = outboxDao.getById(rawOp.id) ?: return@forEach
             val op = stored.rekeyedWith(rekeyed)
-            if (op.timeEntryId in failedEntryIds) return@forEach
+            if (op.timeEntryId in failedEntryIds || op.timeEntryId in deferredEntryIds) return@forEach
             when (val outcome = process(op, conflictIndexes, writtenEntryIds)) {
                 is Outcome.Success -> {
                     outboxDao.delete(op)
@@ -108,6 +112,9 @@ class SyncWorker @AssistedInject constructor(
                         // remaining independent ops and only ask WorkManager to retry this run
                         // (which will re-attempt the failed op) once the rest have been tried.
                         retryResult = Result.retry()
+                        if (op.opType == OutboxOpType.START || op.opType == OutboxOpType.CREATE) {
+                            deferredEntryIds += op.timeEntryId
+                        }
                     }
                 }
                 Outcome.RateLimited -> {
@@ -118,6 +125,9 @@ class SyncWorker @AssistedInject constructor(
                         op.copy(lastError = "Rate limited; retry scheduled"),
                     )
                     retryResult = Result.retry()
+                    if (op.opType == OutboxOpType.START || op.opType == OutboxOpType.CREATE) {
+                        deferredEntryIds += op.timeEntryId
+                    }
                 }
                 Outcome.Fail -> {
                     // Server rejected the change: this will never succeed, so dead-letter it now.
@@ -478,18 +488,22 @@ class SyncWorker @AssistedInject constructor(
     }
 
     private suspend fun reconcile(localId: String, server: TimeEntry, fallbackTagIds: List<String>? = null): Outcome.Success {
-        val rekeyedTo = if (localId != server.id) {
-            timeEntryDao.rekey(localId, server.id)
-            outboxDao.rekeyReferences(localId, server.id)
-            server.id
-        } else {
-            null
+        var rekeyedTo: String? = null
+        database.withTransaction {
+            if (localId != server.id) {
+                // The authoritative row may already have arrived through a pull while this local
+                // START/CREATE was waiting. TimeEntryDao.rekey merges that collision safely; then
+                // every dependent outbox operation moves to the authoritative id atomically.
+                timeEntryDao.rekey(localId, server.id)
+                outboxDao.rekeyReferences(localId, server.id)
+                rekeyedTo = server.id
+            }
+            timeEntryDao.upsert(server.toEntity(updatedAt = clock.nowMs(), syncState = SyncState.SYNCED))
+            // Preserve the server's authoritative tag set; only fall back to the queued tags when
+            // the server returned none (avoids clobbering a server-side tag merge).
+            val tagIds = server.tags.map { it.id }.ifEmpty { fallbackTagIds.orEmpty() }
+            timeEntryDao.replaceTagRefs(server.id, tagIds)
         }
-        timeEntryDao.upsert(server.toEntity(updatedAt = clock.nowMs(), syncState = SyncState.SYNCED))
-        // Preserve the server's authoritative tag set; only fall back to the queued tags when the
-        // server returned none (avoids clobbering a server-side tag merge).
-        val tagIds = server.tags.map { it.id }.ifEmpty { fallbackTagIds.orEmpty() }
-        timeEntryDao.replaceTagRefs(server.id, tagIds)
         return Outcome.Success(rekeyedTo)
     }
 

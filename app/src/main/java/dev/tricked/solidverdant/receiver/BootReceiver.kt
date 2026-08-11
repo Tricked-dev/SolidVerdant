@@ -75,6 +75,9 @@ class BootReceiver : BroadcastReceiver() {
                                 projectName = null, // Will be updated when app loads
                                 taskName = null,
                                 description = timeEntry.description,
+                                projectId = timeEntry.projectId,
+                                taskId = timeEntry.taskId,
+                                organizationId = timeEntry.organizationId,
                             )
                         } catch (e: Exception) {
                             Timber.e(e, "Could not start tracking service after boot; showing resume prompt")

@@ -692,6 +692,9 @@ class TrackingViewModel @Inject constructor(
                             taskName = _uiState.value.tasks
                                 .find { it.id == currentTimeEntry.taskId }?.name,
                             description = currentTimeEntry.description,
+                            projectId = currentTimeEntry.projectId,
+                            taskId = currentTimeEntry.taskId,
+                            organizationId = currentTimeEntry.organizationId,
                         )
                     } else {
                         updateNotificationState()
@@ -721,6 +724,9 @@ class TrackingViewModel @Inject constructor(
                         projectName = projectName,
                         taskName = taskName,
                         description = currentTimeEntry.description,
+                        projectId = currentTimeEntry.projectId,
+                        taskId = currentTimeEntry.taskId,
+                        organizationId = currentTimeEntry.organizationId,
                     )
                     settingsDataStore.setWidgetTrackingState(
                         isTracking = true,
@@ -1152,6 +1158,9 @@ class TrackingViewModel @Inject constructor(
                 projectName = projectName,
                 taskName = taskName,
                 description = timeEntry.description,
+                projectId = timeEntry.projectId,
+                taskId = timeEntry.taskId,
+                organizationId = timeEntry.organizationId,
             )
 
             settingsDataStore.setWidgetTrackingState(
@@ -1203,6 +1212,9 @@ class TrackingViewModel @Inject constructor(
                     projectName = projectName,
                     taskName = taskName,
                     description = updatedEntry.description,
+                    projectId = updatedEntry.projectId,
+                    taskId = updatedEntry.taskId,
+                    organizationId = updatedEntry.organizationId,
                 )
                 settingsDataStore.setWidgetTrackingState(
                     isTracking = true,
@@ -1353,6 +1365,9 @@ class TrackingViewModel @Inject constructor(
                 projectName = projectName,
                 taskName = taskName,
                 description = timeEntry.description,
+                projectId = timeEntry.projectId,
+                taskId = timeEntry.taskId,
+                organizationId = timeEntry.organizationId,
             )
 
             settingsDataStore.setWidgetTrackingState(
