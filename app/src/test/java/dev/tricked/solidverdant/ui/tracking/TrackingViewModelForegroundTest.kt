@@ -194,7 +194,9 @@ class TrackingViewModelForegroundTest {
         assertFalse(vm.uiState.value.syncStatusVisible)
 
         dispatcher.scheduler.advanceTimeBy(1)
-        dispatcher.scheduler.runCurrent()
+        // Flush work scheduled exactly at the reveal boundary; a Room emission can enqueue the
+        // visibility continuation behind the timer callback on the same virtual timestamp.
+        dispatcher.scheduler.advanceUntilIdle()
         assertTrue(vm.uiState.value.syncStatusVisible)
     }
 
