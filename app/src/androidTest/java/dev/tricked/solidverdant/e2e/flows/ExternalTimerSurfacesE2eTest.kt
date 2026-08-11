@@ -12,6 +12,7 @@ import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -80,11 +81,20 @@ class ExternalTimerSurfacesE2eTest {
         shell("cmd statusbar remove-tile $tileComponent")
         shell("cmd statusbar add-tile $tileComponent")
 
+        var lastTileClickAt = Long.MIN_VALUE
         e2e.composeRule.waitUntil(TEST_TIMEOUT_MS) {
-            val pickerVisible = e2e.composeRule.onAllNodesWithTag(TestTags.TILE_PROJECT_SELECTION_START_BUTTON)
-                .fetchSemanticsNodes()
-                .isNotEmpty()
-            if (!pickerVisible) shell("cmd statusbar click-tile $tileComponent")
+            // Opening the tile's separate ProjectSelectionActivity briefly removes the main
+            // activity's Compose root. Treat that transition as a retryable state instead of
+            // failing the whole E2E run, and avoid hammering the shell command while it settles.
+            val pickerVisible = runCatching {
+                e2e.composeRule.onAllNodesWithTag(TestTags.TILE_PROJECT_SELECTION_START_BUTTON)
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
+            }.getOrDefault(false)
+            if (!pickerVisible && SystemClock.uptimeMillis() - lastTileClickAt >= TILE_CLICK_RETRY_MS) {
+                shell("cmd statusbar click-tile $tileComponent")
+                lastTileClickAt = SystemClock.uptimeMillis()
+            }
             pickerVisible
         }
         e2e.composeRule.onNodeWithTag(TestTags.TILE_PROJECT_SELECTION_START_BUTTON).performClick()
@@ -227,6 +237,7 @@ class ExternalTimerSurfacesE2eTest {
 
     private companion object {
         const val TEST_TIMEOUT_MS = 15_000L
+        const val TILE_CLICK_RETRY_MS = 500L
         const val NOTIFICATION_STATE_PREFERENCES = "time_tracking_notification_state"
     }
 }
