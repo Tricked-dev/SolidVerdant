@@ -8,7 +8,6 @@ package dev.tricked.solidverdant.ui.login
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.browser.customtabs.CustomTabsIntent
@@ -45,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.ui.auth.AuthUiState
 import dev.tricked.solidverdant.ui.auth.OAuthConfigState
@@ -198,7 +198,7 @@ private fun ErrorCard(error: String) {
  * switch language before signing in.
  */
 private fun openAppLanguageSettings(context: Context) {
-    val appUri = Uri.parse("package:${context.packageName}")
+    val appUri = "package:${context.packageName}".toUri()
     val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         Intent(Settings.ACTION_APP_LOCALE_SETTINGS, appUri)
     } else {
@@ -217,5 +217,5 @@ private fun launchCustomTab(context: Context, url: String) {
     val customTabsIntent = CustomTabsIntent.Builder()
         .setShowTitle(true)
         .build()
-    customTabsIntent.launchUrl(context, android.net.Uri.parse(url))
+    customTabsIntent.launchUrl(context, url.toUri())
 }

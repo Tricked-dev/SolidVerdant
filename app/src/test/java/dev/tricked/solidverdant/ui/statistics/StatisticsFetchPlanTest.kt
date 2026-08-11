@@ -8,14 +8,10 @@ package dev.tricked.solidverdant.ui.statistics
 
 import org.junit.Assert.assertNull
 import org.junit.Test
-import java.time.LocalDate
-import java.time.ZoneOffset
 
 class StatisticsFetchPlanTest {
     @Test
     fun `server query does not exclude entries that started before the selected range`() {
-        val range = LocalDate.of(2026, 7, 6)..LocalDate.of(2026, 7, 12)
-
-        assertNull(statisticsFetchStart(range, ZoneOffset.UTC))
+        assertNull(statisticsFetchStart)
     }
 }

@@ -190,6 +190,7 @@ open class MainActivity : ComponentActivity() {
  * Root composable for the app
  */
 @Composable
+@Suppress("LongMethod")
 fun SolidVerdantApp(
     authViewModel: AuthViewModel,
     trackingViewModel: TrackingViewModel,

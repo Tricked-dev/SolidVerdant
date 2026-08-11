@@ -35,7 +35,6 @@
     <string name="stats2_clear_filters">Clear</string>
     <string name="stats2_clear_filters_content_description">Clear all statistics filters</string>
     <string name="stats2_reset">Reset</string>
-    <string name="stats2_apply">Apply</string>
     <string name="stats2_filter_projects">Projects</string>
     <string name="stats2_filter_clients">Clients</string>
     <string name="stats2_filter_tasks">Tasks</string>
@@ -64,13 +63,11 @@
     <string name="stats2_top_changes">Biggest project changes</string>
     <string name="stats2_delta_percent">%1$s%%</string>
     <string name="stats2_delta_new">new</string>
-    <string name="stats2_delta_flat">no change</string>
     <string name="stats2_delta_increase_content_description">up %1$s</string>
     <string name="stats2_delta_decrease_content_description">down %1$s</string>
     <string name="stats2_delta_flat_content_description">no change from previous period</string>
 
     <!-- Drill-down sheet. -->
-    <string name="stats2_drilldown_close">Close</string>
     <string name="stats2_drilldown_empty">No entries in this selection</string>
     <string name="stats2_drilldown_total">Total %1$s</string>
     <string name="stats2_drilldown_no_description">(no description)</string>

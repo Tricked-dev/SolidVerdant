@@ -95,7 +95,24 @@ class AuthRepositoryApiContractTest {
             MockResponse()
                 .setHeader("Content-Type", "application/json")
                 .setBody(
-                    """{"data":{"id":"entry","start":"2026-08-08T08:00:00Z","end":null,"duration":0,"description":"Running","task_id":null,"project_id":null,"organization_id":"org","user_id":"user","tags":["tag-id"],"billable":false,"type":"work"}}""",
+                    """
+                        {
+                          "data": {
+                            "id": "entry",
+                            "start": "2026-08-08T08:00:00Z",
+                            "end": null,
+                            "duration": 0,
+                            "description": "Running",
+                            "task_id": null,
+                            "project_id": null,
+                            "organization_id": "org",
+                            "user_id": "user",
+                            "tags": ["tag-id"],
+                            "billable": false,
+                            "type": "work"
+                          }
+                        }
+                    """.trimIndent(),
                 ),
         )
 
@@ -133,14 +150,39 @@ class AuthRepositoryApiContractTest {
                     MockResponse()
                         .setHeader("Content-Type", "application/json")
                         .setBody(
-                            """{"data":{"id":"entry","start":"2026-08-07T08:00:00Z","end":"2026-08-08T08:00:00Z","duration":86400,"description":null,"task_id":null,"project_id":null,"organization_id":"org","user_id":"user","tags":[],"billable":false,"type":"work"}}""",
+                            """
+                                {
+                                  "data": {
+                                    "id": "entry",
+                                    "start": "2026-08-07T08:00:00Z",
+                                    "end": "2026-08-08T08:00:00Z",
+                                    "duration": 86400,
+                                    "description": null,
+                                    "task_id": null,
+                                    "project_id": null,
+                                    "organization_id": "org",
+                                    "user_id": "user",
+                                    "tags": [],
+                                    "billable": false,
+                                    "type": "work"
+                                  }
+                                }
+                            """.trimIndent(),
                         )
                 } else {
                     MockResponse()
                         .setResponseCode(422)
                         .setHeader("Content-Type", "application/json")
                         .setBody(
-                            """{"message":"The given data was invalid.","errors":{"start":["The start field must match the format Y-m-dTH:i:sZ."],"end":["The end field must match the format Y-m-dTH:i:sZ."]}}""",
+                            """
+                                {
+                                  "message": "The given data was invalid.",
+                                  "errors": {
+                                    "start": ["The start field must match the format Y-m-dTH:i:sZ."],
+                                    "end": ["The end field must match the format Y-m-dTH:i:sZ."]
+                                  }
+                                }
+                            """.trimIndent(),
                         )
                 }
             }
@@ -170,7 +212,24 @@ class AuthRepositoryApiContractTest {
                 return MockResponse()
                     .setHeader("Content-Type", "application/json")
                     .setBody(
-                        """{"data":{"id":"entry","start":"2026-08-07T08:00:00Z","end":"2026-08-08T08:00:00Z","duration":86400,"description":null,"task_id":null,"project_id":null,"organization_id":"org","user_id":"user","tags":[],"billable":false,"type":"work"}}""",
+                        """
+                            {
+                              "data": {
+                                "id": "entry",
+                                "start": "2026-08-07T08:00:00Z",
+                                "end": "2026-08-08T08:00:00Z",
+                                "duration": 86400,
+                                "description": null,
+                                "task_id": null,
+                                "project_id": null,
+                                "organization_id": "org",
+                                "user_id": "user",
+                                "tags": [],
+                                "billable": false,
+                                "type": "work"
+                              }
+                            }
+                        """.trimIndent(),
                     )
             }
         }
@@ -215,7 +274,24 @@ class AuthRepositoryApiContractTest {
                         .setResponseCode(201)
                         .setHeader("Content-Type", "application/json")
                         .setBody(
-                            """{"data":{"id":"entry","start":"2026-08-07T08:00:00Z","end":"2026-08-07T09:00:00Z","duration":3600,"description":"Atomic","task_id":null,"project_id":null,"organization_id":"org","user_id":"user","tags":["tag-id"],"billable":true,"type":"work"}}""",
+                            """
+                                {
+                                  "data": {
+                                    "id": "entry",
+                                    "start": "2026-08-07T08:00:00Z",
+                                    "end": "2026-08-07T09:00:00Z",
+                                    "duration": 3600,
+                                    "description": "Atomic",
+                                    "task_id": null,
+                                    "project_id": null,
+                                    "organization_id": "org",
+                                    "user_id": "user",
+                                    "tags": ["tag-id"],
+                                    "billable": true,
+                                    "type": "work"
+                                  }
+                                }
+                            """.trimIndent(),
                         )
                 } else {
                     MockResponse()
@@ -249,7 +325,28 @@ class AuthRepositoryApiContractTest {
                 .setResponseCode(200)
                 .setHeader("Content-Type", "application/json")
                 .setBody(
-                    """{"data":[{"id":"entry","start":"2026-08-07T08:00:00Z","end":null,"duration":0,"description":null,"task_id":null,"project_id":null,"organization_id":"org","user_id":"user","tags":["tag-id"],"billable":false,"type":"work"}],"links":{"next":null},"meta":{"total":1}}""",
+                    """
+                        {
+                          "data": [
+                            {
+                              "id": "entry",
+                              "start": "2026-08-07T08:00:00Z",
+                              "end": null,
+                              "duration": 0,
+                              "description": null,
+                              "task_id": null,
+                              "project_id": null,
+                              "organization_id": "org",
+                              "user_id": "user",
+                              "tags": ["tag-id"],
+                              "billable": false,
+                              "type": "work"
+                            }
+                          ],
+                          "links": {"next": null},
+                          "meta": {"total": 1}
+                        }
+                    """.trimIndent(),
                 ),
         )
 

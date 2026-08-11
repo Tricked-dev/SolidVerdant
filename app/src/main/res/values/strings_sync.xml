@@ -19,19 +19,30 @@
     <string name="sync_time_just_now">Just now</string>
     <string name="sync_time_minutes">%1$d min ago</string>
     <string name="sync_time_hours">%1$d hr ago</string>
-    <string name="sync_time_days">%1$d days ago</string>
+    <plurals name="sync_time_days">
+        <item quantity="one">%1$d day ago</item>
+        <item quantity="other">%1$d days ago</item>
+    </plurals>
 
     <!-- Status summary (plain-language, paired with an icon so status is not colour-only) -->
     <string name="sync_status_synced">All changes are synced</string>
-    <string name="sync_status_pending">%1$d changes waiting to sync</string>
-    <string name="sync_status_failures">%1$d changes failed to reach the server</string>
-    <string name="sync_status_conflicts">%1$d changes need your review</string>
+    <plurals name="sync_status_pending">
+        <item quantity="one">%1$d change waiting to sync</item>
+        <item quantity="other">%1$d changes waiting to sync</item>
+    </plurals>
+    <plurals name="sync_status_failures">
+        <item quantity="one">%1$d change failed to reach the server</item>
+        <item quantity="other">%1$d changes failed to reach the server</item>
+    </plurals>
+    <plurals name="sync_status_conflicts">
+        <item quantity="one">%1$d change needs your review</item>
+        <item quantity="other">%1$d changes need your review</item>
+    </plurals>
     <string name="sync_status_icon_synced">Everything synced</string>
     <string name="sync_status_icon_warning">Attention needed</string>
 
     <!-- Pending changes section -->
     <string name="sync_pending_section_title">Waiting to sync</string>
-    <string name="sync_pending_empty">Nothing is waiting to sync.</string>
     <string name="sync_pending_item">This change hasn\'t reached the server yet.</string>
 
     <!-- Failures section -->

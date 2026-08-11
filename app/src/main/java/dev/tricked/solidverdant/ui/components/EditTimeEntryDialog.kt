@@ -77,6 +77,7 @@ import dev.tricked.solidverdant.ui.tracking.ProjectTaskDropdown as TrackingProje
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+@Suppress("LongMethod")
 fun EditTimeEntryDialog(
     entry: TimeEntry,
     zone: ZoneId,

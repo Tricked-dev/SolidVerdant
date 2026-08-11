@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.core.graphics.toColorInt
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
@@ -175,7 +176,7 @@ private fun ProjectTaskPickerDialog(
                                             modifier = Modifier
                                                 .size(12.dp)
                                                 .clip(CircleShape)
-                                                .background(Color(android.graphics.Color.parseColor(project.color))),
+                                                .background(Color(project.color.toColorInt())),
                                         )
                                         Spacer(Modifier.width(8.dp))
                                     }

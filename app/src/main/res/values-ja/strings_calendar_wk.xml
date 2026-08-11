@@ -23,7 +23,9 @@
     <string name="calendar_overlay_denied">カレンダーへのアクセスがオフです。予定を重ねて表示するにはシステム設定でオンにしてください。</string>
     <string name="calendar_overlay_open_settings">設定を開く</string>
     <string name="calendar_overlay_no_calendars">この端末にカレンダーが見つかりませんでした。</string>
-    <string name="calendar_overlay_choose_count">カレンダーを選択（%1$d 件選択中）</string>
+    <plurals name="calendar_overlay_choose_count">
+        <item quantity="other">カレンダーを選択（%1$d 件選択中）</item>
+    </plurals>
     <string name="calendar_overlay_select_prompt">次のカレンダーの予定を表示:</string>
     <string name="calendar_overlay_calendar_desc">%1$s の予定を表示</string>
     <string name="calendar_overlay_none_selected">カレンダーが選択されていません。予定を表示するには 1 つ以上選択してください。</string>

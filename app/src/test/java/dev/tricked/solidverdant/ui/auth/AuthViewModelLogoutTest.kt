@@ -76,7 +76,6 @@ class AuthViewModelLogoutTest {
                         .contains(PAUSED_START_PREFERENCE),
                 )
                 assertNull(notificationManager.getActiveNotifications().firstOrNull { it.id == TRACKING_NOTIFICATION_ID })
-                Unit
             }
         }
         val cacheCleaner = mockk<UserCacheCleaner>(relaxed = true)

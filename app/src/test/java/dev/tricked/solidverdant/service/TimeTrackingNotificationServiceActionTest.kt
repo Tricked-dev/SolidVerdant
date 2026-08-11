@@ -46,6 +46,7 @@ import java.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
+@Suppress("LargeClass")
 class TimeTrackingNotificationServiceActionTest {
 
     private val context = ApplicationProvider.getApplicationContext<Context>()

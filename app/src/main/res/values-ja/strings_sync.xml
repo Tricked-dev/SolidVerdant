@@ -19,19 +19,26 @@
     <string name="sync_time_just_now">たった今</string>
     <string name="sync_time_minutes">%1$d 分前</string>
     <string name="sync_time_hours">%1$d 時間前</string>
-    <string name="sync_time_days">%1$d 日前</string>
+    <plurals name="sync_time_days">
+        <item quantity="other">%1$d 日前</item>
+    </plurals>
 
     <!-- ステータス概要（色だけでなくアイコンでも状態を伝えます） -->
     <string name="sync_status_synced">すべての変更が同期されています</string>
-    <string name="sync_status_pending">%1$d 件の変更が同期待ちです</string>
-    <string name="sync_status_failures">%1$d 件の変更がサーバーに届きませんでした</string>
-    <string name="sync_status_conflicts">%1$d 件の変更に確認が必要です</string>
+    <plurals name="sync_status_pending">
+        <item quantity="other">%1$d 件の変更が同期待ちです</item>
+    </plurals>
+    <plurals name="sync_status_failures">
+        <item quantity="other">%1$d 件の変更がサーバーに届きませんでした</item>
+    </plurals>
+    <plurals name="sync_status_conflicts">
+        <item quantity="other">%1$d 件の変更に確認が必要です</item>
+    </plurals>
     <string name="sync_status_icon_synced">すべて同期済み</string>
     <string name="sync_status_icon_warning">確認が必要です</string>
 
     <!-- 同期待ちの変更 -->
     <string name="sync_pending_section_title">同期待ち</string>
-    <string name="sync_pending_empty">同期待ちの項目はありません。</string>
     <string name="sync_pending_item">この変更はまだサーバーに届いていません。</string>
 
     <!-- 失敗した変更 -->

@@ -23,7 +23,10 @@
     <string name="calendar_overlay_denied">Agendatoegang staat uit. Schakel dit in bij de systeeminstellingen om afspraken te tonen.</string>
     <string name="calendar_overlay_open_settings">Instellingen openen</string>
     <string name="calendar_overlay_no_calendars">Er zijn geen agenda\'s op dit apparaat gevonden.</string>
-    <string name="calendar_overlay_choose_count">Agenda\'s kiezen (%1$d geselecteerd)</string>
+    <plurals name="calendar_overlay_choose_count">
+        <item quantity="one">Agenda\'s kiezen (%1$d geselecteerd)</item>
+        <item quantity="other">Agenda\'s kiezen (%1$d geselecteerd)</item>
+    </plurals>
     <string name="calendar_overlay_select_prompt">Toon afspraken uit deze agenda\'s:</string>
     <string name="calendar_overlay_calendar_desc">Afspraken uit %1$s tonen</string>
     <string name="calendar_overlay_none_selected">Geen agenda\'s geselecteerd. Kies er minstens één om afspraken te zien.</string>

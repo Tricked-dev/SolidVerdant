@@ -167,7 +167,7 @@ data class TrackingUiState(
  * ViewModel for time tracking operations
  */
 @HiltViewModel
-@Suppress("LargeClass")
+@Suppress("LargeClass", "TooManyFunctions")
 class TrackingViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val settingsDataStore: SettingsDataStore,
@@ -416,6 +416,7 @@ class TrackingViewModel @Inject constructor(
     }
 
     /** Collect the Room-backed flows for an organization into [TrackingUiState]. */
+    @Suppress("LongMethod")
     private fun startDataCollectors(organizationId: String) {
         if (collectingOrganizationId == organizationId && dataCollectorJob?.isActive == true) {
             return
@@ -941,7 +942,7 @@ class TrackingViewModel @Inject constructor(
         }
     }
 
-    @Suppress("LongMethod", "LoopWithTooManyJumpStatements")
+    @Suppress("LongMethod", "LoopWithTooManyJumpStatements", "ThrowsCount")
     fun jumpToHistoryDate(date: LocalDate) {
         val organizationId = historyOrganizationId ?: return
         val memberId = historyMemberId ?: return
@@ -1775,7 +1776,6 @@ class TrackingViewModel @Inject constructor(
         .toSortedMap(compareByDescending { it })
 
     override fun onCleared() {
-        super.onCleared()
         loadDataJob?.cancel()
         activeEntryMonitorJob?.cancel()
         dataCollectorJob?.cancel()

@@ -8,7 +8,6 @@ package dev.tricked.solidverdant.util
 
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
@@ -32,10 +31,6 @@ object ShortcutManager {
      * Update dynamic shortcuts with recent projects
      */
     fun updateRecentProjects(context: Context, recentProjects: List<Project>) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N_MR1) {
-            return // Dynamic shortcuts require API 25+
-        }
-
         val shortcuts = recentProjects
             .take(MAX_SHORTCUTS)
             .map { project ->
@@ -72,12 +67,10 @@ object ShortcutManager {
     }
 
     /**
-     * Push a shortcut for immediate pinning (Android O+)
+     * Push a shortcut for immediate pinning.
      */
     fun pushShortcut(context: Context, project: Project) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val shortcut = createProjectShortcut(context, project)
-            ShortcutManagerCompat.pushDynamicShortcut(context, shortcut)
-        }
+        val shortcut = createProjectShortcut(context, project)
+        ShortcutManagerCompat.pushDynamicShortcut(context, shortcut)
     }
 }

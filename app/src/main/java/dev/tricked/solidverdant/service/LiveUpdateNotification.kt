@@ -6,6 +6,7 @@
 
 package dev.tricked.solidverdant.service
 
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.Context
@@ -22,6 +23,7 @@ internal const val ACTION_MANAGE_APP_PROMOTED_NOTIFICATIONS =
  * Requests Live Update promotion without changing the notification on older Android releases.
  * The operating system still decides whether promotion is available for the app and device.
  */
+@SuppressLint("InlinedApi")
 internal fun NotificationCompat.Builder.setLiveUpdateRequested(
     enabled: Boolean,
     sdkInt: Int = Build.VERSION.SDK_INT,

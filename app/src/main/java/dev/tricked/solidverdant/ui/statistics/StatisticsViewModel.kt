@@ -175,7 +175,7 @@ class StatisticsViewModel @Inject constructor(
 
     private data class RemoteEntries(val entries: List<TimeEntry>? = null, val isLoading: Boolean = false, val failed: Boolean = false)
 
-    /** Off-main-thread result bundle for one uiState emission; destructured back on the collector. */
+    /** Off-main-thread result bundle for one uiState emission. */
     private data class EstimateComputation(
         val summary: StatisticsSummary,
         val comparison: PeriodComparison?,
@@ -191,7 +191,7 @@ class StatisticsViewModel @Inject constructor(
     ): Flow<RemoteEntries> = flow {
         emit(RemoteEntries(isLoading = true))
         val entries = mutableListOf<TimeEntry>()
-        val start = statisticsFetchStart(range, zone)
+        val start = statisticsFetchStart
         val end = range.endInclusive.plusDays(1).atStartOfDay(zone).toInstant().toString()
         val pageSize = REMOTE_PAGE_SIZE
         var offset = 0
@@ -310,9 +310,8 @@ class StatisticsViewModel @Inject constructor(
                                 val estimates = StatisticsAggregator.projectEstimateProgress(catalog.projects, filters)
                                 EstimateComputation(current, computeComparison(current, prior, previous), filtered, estimates)
                             }
-                            val (summary, comparison, filtered, estimates) = computed
                             val exportEntries = withContext(Dispatchers.Default) {
-                                filtered.filter {
+                                computed.filtered.filter {
                                     StatisticsAggregator.clippedSeconds(
                                         it,
                                         zone,
@@ -336,14 +335,14 @@ class StatisticsViewModel @Inject constructor(
                                 range = range,
                                 filters = filters,
                                 catalog = catalog,
-                                summary = summary,
-                                estimateProgress = estimates,
-                                comparison = comparison,
-                                filteredEntries = filtered,
+                                summary = computed.summary,
+                                estimateProgress = computed.estimates,
+                                comparison = computed.comparison,
+                                filteredEntries = computed.filtered,
                                 rangeStart = resolved.start,
                                 rangeEnd = resolved.endInclusive,
                                 granularity = granularityFor(resolved),
-                                isEmpty = summary.entryCount == 0,
+                                isEmpty = computed.summary.entryCount == 0,
                             )
                         }
                     }
@@ -493,8 +492,7 @@ class StatisticsViewModel @Inject constructor(
  * Solidtime's `start` query parameter filters by the entry's start timestamp, not interval
  * intersection. This seam is kept explicit so a range fetch cannot silently drop carry-in entries.
  */
-@Suppress("UNUSED_PARAMETER")
-internal fun statisticsFetchStart(range: ClosedRange<LocalDate>, zone: ZoneId): String? = null
+internal val statisticsFetchStart: String? = null
 
 /**
  * Whether another page must be fetched after receiving one of [lastPageSize] entries.

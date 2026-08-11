@@ -930,9 +930,6 @@ class TimeEntryRepository @Inject constructor(
             }
         }
 
-    /** Stable idempotency key for a new outbox operation; persisted on the row (see OutboxEntity). */
-    private fun newClientId(): String = java.util.UUID.randomUUID().toString()
-
     private fun TimeEntry.withDerivedCompletedDuration(): TimeEntry = if (end == null) {
         this
     } else {
@@ -955,3 +952,6 @@ class TimeEntryRepository @Inject constructor(
     private fun nowIso(): String = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC)
         .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'"))
 }
+
+/** Stable idempotency key for a new outbox operation; persisted on the row (see OutboxEntity). */
+private fun newClientId(): String = java.util.UUID.randomUUID().toString()

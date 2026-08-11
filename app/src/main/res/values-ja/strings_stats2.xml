@@ -35,7 +35,6 @@
     <string name="stats2_clear_filters">クリア</string>
     <string name="stats2_clear_filters_content_description">すべての統計フィルターをクリア</string>
     <string name="stats2_reset">リセット</string>
-    <string name="stats2_apply">適用</string>
     <string name="stats2_filter_projects">プロジェクト</string>
     <string name="stats2_filter_clients">クライアント</string>
     <string name="stats2_filter_tasks">タスク</string>
@@ -63,13 +62,11 @@
     <string name="stats2_top_changes">変化の大きいプロジェクト</string>
     <string name="stats2_delta_percent">%1$s%%</string>
     <string name="stats2_delta_new">新規</string>
-    <string name="stats2_delta_flat">変化なし</string>
     <string name="stats2_delta_increase_content_description">%1$s 増加</string>
     <string name="stats2_delta_decrease_content_description">%1$s 減少</string>
     <string name="stats2_delta_flat_content_description">前期間から変化なし</string>
 
     <!-- ドリルダウンシート。 -->
-    <string name="stats2_drilldown_close">閉じる</string>
     <string name="stats2_drilldown_empty">この選択にエントリはありません</string>
     <string name="stats2_drilldown_total">合計 %1$s</string>
     <string name="stats2_drilldown_no_description">（説明なし）</string>

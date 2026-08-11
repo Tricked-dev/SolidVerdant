@@ -14,10 +14,10 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.edit
 import dagger.hilt.android.AndroidEntryPoint
 import dev.tricked.solidverdant.MainActivity
 import dev.tricked.solidverdant.R
@@ -42,6 +42,7 @@ import javax.inject.Inject
  * This provides better background network access and gives users control over tracking.
  */
 @AndroidEntryPoint
+@Suppress("LargeClass")
 class TimeTrackingNotificationService : Service() {
 
     @Inject
@@ -467,11 +468,12 @@ class TimeTrackingNotificationService : Service() {
         // connection dropped while returning it. Confirm the authoritative state before showing
         // a retry error: retrying an already-completed stop is both confusing and unnecessary.
         val confirmedActiveEntry = authRepository.getActiveTimeEntry()
-        if (confirmedActiveEntry.isSuccess && confirmedActiveEntry.getOrNull() == null) {
+        return if (confirmedActiveEntry.isSuccess && confirmedActiveEntry.getOrNull() == null) {
             Timber.d("Stop response failed, but the server confirms there is no active entry")
-            return Result.success(true)
+            Result.success(true)
+        } else {
+            Result.failure(checkNotNull(stopResult.exceptionOrNull()))
         }
-        return Result.failure(checkNotNull(stopResult.exceptionOrNull()))
     }
 
     private fun showIdleNotification(startId: Int) {
@@ -662,7 +664,11 @@ class TimeTrackingNotificationService : Service() {
     }
 
     private fun persistPausedStart() {
-        startTime?.let { statePreferences.edit().putLong(PREF_PAUSED_START_EPOCH_MS, it.toEpochMilli()).apply() }
+        startTime?.let { start ->
+            statePreferences.edit {
+                putLong(PREF_PAUSED_START_EPOCH_MS, start.toEpochMilli())
+            }
+        }
     }
 
     private fun isPersistedPausedStart(requestedStart: Instant): Boolean =
@@ -671,7 +677,9 @@ class TimeTrackingNotificationService : Service() {
     private fun hasPersistedPausedStart(): Boolean = statePreferences.contains(PREF_PAUSED_START_EPOCH_MS)
 
     private fun clearPersistedPausedStart() {
-        statePreferences.edit().remove(PREF_PAUSED_START_EPOCH_MS).apply()
+        statePreferences.edit {
+            remove(PREF_PAUSED_START_EPOCH_MS)
+        }
     }
 
     private fun createNotificationChannel() = ensureChannels(this)
@@ -1093,7 +1101,6 @@ class TimeTrackingNotificationService : Service() {
 
         /** Create the notification channels. Safe to call repeatedly. */
         fun ensureChannels(context: Context) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
             val manager = context.getSystemService(NotificationManager::class.java) ?: return
 
             val activeChannel = NotificationChannel(
@@ -1244,9 +1251,7 @@ class TimeTrackingNotificationService : Service() {
         /** Remove every account-owned timer surface before logout switches or clears the account. */
         fun clearForLogout(context: Context) {
             context.getSharedPreferences(STATE_PREFERENCES, Context.MODE_PRIVATE)
-                .edit()
-                .clear()
-                .commit()
+                .edit { clear() }
             runCatching { LongTimerWarningWorker.cancel(context) }
                 .onFailure { Timber.w(it, "Could not cancel long timer warning during logout") }
             context.getSystemService(NotificationManager::class.java)?.let { manager ->

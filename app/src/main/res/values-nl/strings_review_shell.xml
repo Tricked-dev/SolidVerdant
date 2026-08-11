@@ -13,10 +13,6 @@
     <string name="manage_templates_title">Sjablonen beheren</string>
     <string name="review_navigate_back">Terug</string>
     <string name="review_badge_overflow">99+</string>
-    <string name="review_inbox_placeholder">Items om na te kijken verschijnen hier.</string>
-    <string name="review_day_placeholder">Je dagafsluiting verschijnt hier.</string>
-    <string name="reminder_settings_placeholder">Herinneringsinstellingen verschijnen hier.</string>
-    <string name="manage_templates_placeholder">Je sjablonen verschijnen hier.</string>
     <plurals name="review_pending_badge_description">
         <item quantity="one">Nakijken, %1$d item om na te kijken</item>
         <item quantity="other">Nakijken, %1$d items om na te kijken</item>

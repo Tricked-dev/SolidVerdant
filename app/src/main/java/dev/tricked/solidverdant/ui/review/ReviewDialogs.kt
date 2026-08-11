@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.toColorInt
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -143,7 +144,7 @@ internal fun ProjectPickerDialog(projects: List<ReviewProject>, onSelect: (proje
 private fun projectColor(hex: String): Color {
     val fallback = MaterialTheme.colorScheme.onSurfaceVariant
     return remember(hex) {
-        runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrDefault(fallback)
+        runCatching { Color(hex.toColorInt()) }.getOrDefault(fallback)
     }
 }
 

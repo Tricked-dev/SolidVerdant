@@ -39,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -172,17 +173,17 @@ private fun StatusSummarySection(state: SyncCenterUiState) {
         )
         SyncCenterUiState.TopLine.PENDING -> Triple(
             Icons.Filled.CloudUpload,
-            stringResource(R.string.sync_status_pending, state.pendingCount),
+            pluralStringResource(R.plurals.sync_status_pending, state.pendingCount, state.pendingCount),
             R.string.sync_status_icon_warning,
         )
         SyncCenterUiState.TopLine.FAILURES -> Triple(
             Icons.Filled.SyncProblem,
-            stringResource(R.string.sync_status_failures, state.failedCount),
+            pluralStringResource(R.plurals.sync_status_failures, state.failedCount, state.failedCount),
             R.string.sync_status_icon_warning,
         )
         SyncCenterUiState.TopLine.CONFLICTS -> Triple(
             Icons.Filled.SyncProblem,
-            stringResource(R.string.sync_status_conflicts, state.conflictCount),
+            pluralStringResource(R.plurals.sync_status_conflicts, state.conflictCount, state.conflictCount),
             R.string.sync_status_icon_warning,
         )
     }
@@ -290,7 +291,10 @@ private fun relativeTimeText(timeMs: Long?, neverRes: Int, nowMs: Long): String 
     RelativeTime.Bucket.JustNow -> stringResource(R.string.sync_time_just_now)
     RelativeTime.Bucket.Minutes -> stringResource(R.string.sync_time_minutes, RelativeTime.amount(timeMs, nowMs))
     RelativeTime.Bucket.Hours -> stringResource(R.string.sync_time_hours, RelativeTime.amount(timeMs, nowMs))
-    RelativeTime.Bucket.Days -> stringResource(R.string.sync_time_days, RelativeTime.amount(timeMs, nowMs))
+    RelativeTime.Bucket.Days -> {
+        val days = RelativeTime.amount(timeMs, nowMs)
+        pluralStringResource(R.plurals.sync_time_days, days, days)
+    }
 }
 
 @Composable

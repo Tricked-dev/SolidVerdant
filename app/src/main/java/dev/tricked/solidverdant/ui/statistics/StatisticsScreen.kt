@@ -60,6 +60,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.toColorInt
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.tricked.solidverdant.R
@@ -90,7 +91,7 @@ private val UnknownProjectColor = Color.Gray
  * working unchanged.
  */
 fun hexToColor(hex: String, fallback: Color = UnknownProjectColor): Color = try {
-    Color(android.graphics.Color.parseColor(hex))
+    Color(hex.toColorInt())
 } catch (t: Throwable) {
     fallback
 }
@@ -106,6 +107,7 @@ fun formatDuration(seconds: Long): String {
 }
 
 @Composable
+@Suppress("LongMethod")
 fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val exportState by viewModel.exportState.collectAsStateWithLifecycle()

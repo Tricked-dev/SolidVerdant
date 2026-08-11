@@ -22,18 +22,55 @@
     <string name="connection_failed">Er kon geen verbinding met de server worden gemaakt.</string>
     <string name="connection_test_failed">De verbindingstest is mislukt.</string>
     <string name="sync_entry_failed">Deze wijziging heeft de server niet bereikt.</string>
-    <string name="search_and_filter">Zoeken en filteren</string><string name="active_filters_count">%1$d actieve filters</string>
+    <string name="search_and_filter">Zoeken en filteren</string>
+    <plurals name="active_filters_count">
+        <item quantity="one">%1$d actief filter</item>
+        <item quantity="other">%1$d actieve filters</item>
+    </plurals>
     <string name="long_timer_notification_title">Controle lange timer</string><string name="long_timer_notification_text">Deze timer heeft de ingestelde duur bereikt.</string>
     <string name="all_items">Alle %1$s</string>
     <string name="minutes_short">min</string>
     <string name="nav_track">Registreren</string><string name="nav_calendar">Kalender</string><string name="nav_stats">Statistieken</string>
-    <string name="overlap_policy_warning_count">%1$d overlappende boekingsparen zijn in strijd met het organisatiebeleid.</string>
     <string name="running_entries">Lopend</string>
-    <string name="enable_notifications">Meldingen inschakelen</string><string name="collapse_entries">%1$d boekingen inklappen</string>
+    <string name="enable_notifications">Meldingen inschakelen</string>
+    <plurals name="collapse_entries">
+        <item quantity="one">%1$d boeking inklappen</item>
+        <item quantity="other">%1$d boekingen inklappen</item>
+    </plurals>
     <string name="stats_empty">Geen geregistreerde tijd in deze periode.</string><string name="stats_by_project">Per project</string><string name="stats_trend">Trend</string><string name="stats_last_7_days">Afgelopen 7 dagen</string><string name="stats_last_week">Vorige week</string><string name="stats_this_week">Deze week</string><string name="stats_this_month">Deze maand</string><string name="stats_previous_month">Vorige maand</string><string name="stats_custom">Aangepast</string><string name="apply">Toepassen</string><string name="stats_total">Totaal</string><string name="stats_entries">Boekingen</string><string name="stats_average_day">Gem. / dag</string><string name="calendar_show_month">Maand tonen</string><string name="calendar_previous_month">Vorige maand</string><string name="calendar_next_month">Volgende maand</string>
-    <string name="long_timer_warning">Waarschuwing lange timer</string><string name="long_timer_warning_description">Waarschuw na %1$d uur. Alleen op dit apparaat opgeslagen.</string><string name="hours_short">%1$du</string><string name="timer_running_long">Deze timer loopt al %1$d uur.</string><string name="stop_now">Nu stoppen</string><string name="keep_running">Doorgaan</string><string name="adjust_end_time">Eindtijd aanpassen</string>
+    <string name="long_timer_warning">Waarschuwing lange timer</string>
+    <plurals name="long_timer_warning_description">
+        <item quantity="one">Waarschuw na %1$d uur. Alleen op dit apparaat opgeslagen.</item>
+        <item quantity="other">Waarschuw na %1$d uur. Alleen op dit apparaat opgeslagen.</item>
+    </plurals>
+    <plurals name="hours_short">
+        <item quantity="one">%1$du</item>
+        <item quantity="other">%1$du</item>
+    </plurals>
+    <plurals name="timer_running_long">
+        <item quantity="one">Deze timer loopt al %1$d uur.</item>
+        <item quantity="other">Deze timer loopt al %1$d uur.</item>
+    </plurals>
+    <string name="stop_now">Nu stoppen</string><string name="keep_running">Doorgaan</string><string name="adjust_end_time">Eindtijd aanpassen</string>
     <string name="test_connection">Verbinding testen</string><string name="testing_connection">Testen…</string>
-    <string name="sync_center">Synchronisatiecentrum</string><string name="sync_synced">Gesynchroniseerd</string><string name="sync_pending">In afwachting</string><string name="sync_retrying">Opnieuw proberen</string><string name="sync_failed">Mislukt</string><string name="sync_failed_count">%1$d mislukte wijzigingen</string><string name="sync_retrying_count">%1$d wijzigingen worden opnieuw geprobeerd</string><string name="sync_pending_count">%1$d wijzigingen wachten op synchronisatie</string><string name="sync_conflict">Conflict</string><string name="sync_conflict_count">%1$d conflicten moeten worden nagekeken</string>
+    <string name="sync_pending">In afwachting</string><string name="sync_retrying">Opnieuw proberen</string><string name="sync_failed">Mislukt</string>
+    <plurals name="sync_failed_count">
+        <item quantity="one">%1$d mislukte wijziging</item>
+        <item quantity="other">%1$d mislukte wijzigingen</item>
+    </plurals>
+    <plurals name="sync_retrying_count">
+        <item quantity="one">%1$d wijziging wordt opnieuw geprobeerd</item>
+        <item quantity="other">%1$d wijzigingen worden opnieuw geprobeerd</item>
+    </plurals>
+    <plurals name="sync_pending_count">
+        <item quantity="one">%1$d wijziging wacht op synchronisatie</item>
+        <item quantity="other">%1$d wijzigingen wachten op synchronisatie</item>
+    </plurals>
+    <string name="sync_conflict">Conflict</string>
+    <plurals name="sync_conflict_count">
+        <item quantity="one">%1$d conflict moet worden nagekeken</item>
+        <item quantity="other">%1$d conflicten moeten worden nagekeken</item>
+    </plurals>
     <string name="profile_picture">Profielfoto</string>
     <string name="search_history">Geschiedenis doorzoeken</string>
     <string name="needs_categorization">Moet worden gecategoriseerd</string>
@@ -66,7 +103,10 @@
     <string name="jump_to_date">Ga naar datum</string>
     <string name="finding_date_entries">Registraties rond %1$s zoeken</string>
     <string name="finding_date_hint">De datum zoeken en vervolgens de omliggende geschiedenis laden…</string>
-    <string name="rate_limit_wait">De serverlimiet is bereikt. Over %1$d seconden wordt het laden hervat…</string>
+    <plurals name="rate_limit_wait">
+        <item quantity="one">De serverlimiet is bereikt. Over %1$d seconde wordt het laden hervat…</item>
+        <item quantity="other">De serverlimiet is bereikt. Over %1$d seconden wordt het laden hervat…</item>
+    </plurals>
     <string name="network_unavailable">Geen internetverbinding. Wijzigingen worden mogelijk niet gesynchroniseerd.</string>
     <string name="network_restored">Weer online</string>
 
@@ -75,17 +115,10 @@
     <string name="switch_organization">Organisatie wisselen</string>
     <string name="refresh">Vernieuwen</string><string name="syncing">Synchroniseren</string>
     <string name="logout">Uitloggen</string>
-    <string name="currently_tracking">Momenteel Aan Het Registreren</string>
     <string name="not_tracking">Niet Aan Het Registreren</string>
-    <string name="no_active_time_entry">Geen actieve tijdregistratie</string>
     <string name="start_tracking">Registratie Starten</string>
     <string name="stop_tracking">Registratie Stoppen</string>
-    <string name="entry_details">Registratie Details</string>
-    <string name="started">Gestart</string>
-    <string name="entry_id">Registratie ID</string>
     <string name="billable">Factureerbaar</string>
-    <string name="yes">Ja</string>
-    <string name="no">Nee</string>
     <string name="tags">Tags</string>
     <string name="error">Fout</string>
     <string name="start">Starten</string>
@@ -108,9 +141,7 @@
     <string name="what_are_you_working_on">Waar werk je aan?</string>
     <string name="project">Project</string>
     <string name="task">Taak</string>
-    <string name="no_task">Geen Taak</string>
     <string name="update">Bijwerken</string>
-    <string name="time_entries_history">Tijdregistratie Geschiedenis</string>
     <string name="no_time_entries">Nog geen tijdregistraties</string>
     <string name="edit">Bewerken</string>
     <string name="delete">Verwijderen</string>
@@ -120,9 +151,6 @@
     <string name="duplicate_entry">Dupliceren</string>
     <string name="split_entry">Splitsen</string>
     <string name="split_entry_title">Splitsen op tijd</string>
-    <string name="split_entry_error">De splitstijd moet binnen de registratie vallen.</string>
-    <string name="entry_action_locked">Niet beschikbaar voor lopende of conflicterende registraties.</string>
-    <string name="entry_date">Datum</string>
     <string name="today">Vandaag</string>
     <string name="yesterday">Gisteren</string>
     <string name="time_and_duration">Tijd en duur</string>
@@ -130,7 +158,6 @@
     <string name="end_time">Eindtijd</string>
     <string name="start_date">Startdatum</string>
     <string name="end_date">Einddatum</string>
-    <string name="duration_minutes">Duur (minuten)</string>
     <string name="total_time">Totale tijd</string>
     <string name="minutes">Minuten</string>
     <string name="decrease_15_minutes">15 minuten verminderen</string>
@@ -146,8 +173,6 @@
     </plurals>
 
     <!-- Notifications -->
-    <string name="notification_channel_tracking_name">Tijdregistratie</string>
-    <string name="notification_channel_tracking_description">Toont tijdregistratiestatus en verstreken tijd</string>
     <string name="notification_channel_active_name">Actieve Timer</string>
     <string name="notification_channel_active_description">Toont lopende timer en verstreken tijd</string>
     <string name="notification_channel_idle_name">Snel Starten</string>
@@ -169,7 +194,6 @@
     <string name="settings_menu">Instellingen</string>
     <string name="choose_language">Taal kiezen</string>
     <string name="server_information">Serverinformatie</string>
-    <string name="organization">Organisatie</string>
     <string name="quick_start">Snel Starten</string>
     <string name="always_show_notifications">Meldingen altijd tonen</string>
     <string name="always_show_notifications_description">Toon blijvende melding tijdens tijdregistratie</string>
@@ -189,7 +213,6 @@
     <string name="resume">Hervatten</string>
     <string name="paused">Gepauzeerd</string>
     <string name="notification_paused_title">Tijdregistratie (gepauzeerd)</string>
-    <string name="notification_paused_text">Tik op hervatten om een nieuwe sessie te starten</string>
     <string name="notification_paused_tracked">Geregistreerd: %1$s</string>
     <string name="notification_paused_since">Gepauzeerd gedurende</string>
 
@@ -214,12 +237,13 @@
     <string name="widget_name">Tijdregistratie</string>
     <string name="widget_description">Toont huidige registratiestatus met snelle bediening</string>
     <string name="widget_not_tracking">Niet aan het registreren</string>
-    <string name="widget_login_required">Inloggen vereist</string>
 
     <!-- Tijdregistratie-validatie (bewerken/aanmaken) -->
     <string name="entry_error_end_before_start">De eindtijd moet na de starttijd liggen.</string>
-    <string name="entry_error_duration_too_long">Deze registratie is langer dan 24 uur. Controleer de start- en eindtijd.</string>
-    <string name="entry_warning_long_duration">Deze registratie duurt %1$d uur. Sla alleen op als dat klopt.</string>
+    <plurals name="entry_warning_long_duration">
+        <item quantity="one">Deze registratie duurt %1$d uur. Sla alleen op als dat klopt.</item>
+        <item quantity="other">Deze registratie duurt %1$d uur. Sla alleen op als dat klopt.</item>
+    </plurals>
     <string name="entry_warning_overlap">Deze registratie overlapt met een andere. Overlap is toegestaan maar kan worden gemarkeerd.</string>
     <string name="entry_warning_overlap_policy">Deze registratie overlapt met een andere, wat het beleid van je organisatie afraadt.</string>
 

@@ -257,6 +257,7 @@ private fun EmptyState(canCreate: Boolean, onCreate: () -> Unit) {
 }
 
 @Composable
+@Suppress("LongMethod")
 internal fun TemplateRow(
     template: EntryTemplate,
     resolution: TemplateResolution,

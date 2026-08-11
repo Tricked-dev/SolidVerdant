@@ -52,6 +52,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import dev.tricked.solidverdant.R
 
@@ -64,6 +65,7 @@ import dev.tricked.solidverdant.R
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+@Suppress("LongMethod")
 fun PrivacyScreen(onBack: () -> Unit = {}, onLogout: () -> Unit = {}) {
     val viewModel: PrivacyViewModel = hiltViewModel()
     val state by viewModel.state.collectAsState()
@@ -140,7 +142,7 @@ fun PrivacyScreen(onBack: () -> Unit = {}, onLogout: () -> Unit = {}) {
                                 runCatching {
                                     context.startActivity(
                                         Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                                            .setData(android.net.Uri.parse("package:${context.packageName}")),
+                                            .setData("package:${context.packageName}".toUri()),
                                     )
                                 }
                             }

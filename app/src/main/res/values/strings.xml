@@ -22,18 +22,55 @@
     <string name="connection_failed">Could not connect to the server.</string>
     <string name="connection_test_failed">The connection test failed.</string>
     <string name="sync_entry_failed">This change has not reached the server.</string>
-    <string name="search_and_filter">Search &amp; filter</string><string name="active_filters_count">%1$d active filters</string>
+    <string name="search_and_filter">Search &amp; filter</string>
+    <plurals name="active_filters_count">
+        <item quantity="one">%1$d active filter</item>
+        <item quantity="other">%1$d active filters</item>
+    </plurals>
     <string name="long_timer_notification_title">Long timer check</string><string name="long_timer_notification_text">This timer reached your configured duration limit.</string>
     <string name="all_items">All %1$s</string>
     <string name="minutes_short">min</string>
     <string name="widget_zero_time" translatable="false">00:00:00</string>
-    <string name="overlap_policy_warning_count">%1$d overlapping entry pairs conflict with your organization’s overlap policy.</string>
     <string name="running_entries">Running</string>
-    <string name="enable_notifications">Enable notifications</string><string name="collapse_entries">Collapse %1$d entries</string>
+    <string name="enable_notifications">Enable notifications</string>
+    <plurals name="collapse_entries">
+        <item quantity="one">Collapse %1$d entry</item>
+        <item quantity="other">Collapse %1$d entries</item>
+    </plurals>
     <string name="stats_empty">No tracked time in this range.</string><string name="stats_by_project">By project</string><string name="stats_trend">Trend</string><string name="stats_last_7_days">Last 7 days</string><string name="stats_last_week">Last week</string><string name="stats_this_week">This week</string><string name="stats_this_month">This month</string><string name="stats_previous_month">Previous month</string><string name="stats_custom">Custom</string><string name="apply">Apply</string><string name="stats_total">Total</string><string name="stats_entries">Entries</string><string name="stats_average_day">Avg / day</string><string name="calendar_show_month">Show month</string><string name="calendar_previous_month">Previous month</string><string name="calendar_next_month">Next month</string>
-    <string name="long_timer_warning">Long-timer warning</string><string name="long_timer_warning_description">Warn after %1$d hours. Stored only on this device.</string><string name="hours_short">%1$dh</string><string name="timer_running_long">This timer has been running for %1$d hours.</string><string name="stop_now">Stop now</string><string name="keep_running">Keep running</string><string name="adjust_end_time">Adjust end time</string>
+    <string name="long_timer_warning">Long-timer warning</string>
+    <plurals name="long_timer_warning_description">
+        <item quantity="one">Warn after %1$d hour. Stored only on this device.</item>
+        <item quantity="other">Warn after %1$d hours. Stored only on this device.</item>
+    </plurals>
+    <plurals name="hours_short">
+        <item quantity="one">%1$dh</item>
+        <item quantity="other">%1$dh</item>
+    </plurals>
+    <plurals name="timer_running_long">
+        <item quantity="one">This timer has been running for %1$d hour.</item>
+        <item quantity="other">This timer has been running for %1$d hours.</item>
+    </plurals>
+    <string name="stop_now">Stop now</string><string name="keep_running">Keep running</string><string name="adjust_end_time">Adjust end time</string>
     <string name="test_connection">Test connection</string><string name="testing_connection">Testing…</string>
-    <string name="sync_center">Sync center</string><string name="sync_synced">Synced</string><string name="sync_pending">Pending</string><string name="sync_retrying">Retrying</string><string name="sync_failed">Failed</string><string name="sync_failed_count">%1$d failed changes</string><string name="sync_retrying_count">Retrying %1$d changes</string><string name="sync_pending_count">%1$d changes waiting to sync</string><string name="sync_conflict">Conflict</string><string name="sync_conflict_count">%1$d conflicts need review</string>
+    <string name="sync_pending">Pending</string><string name="sync_retrying">Retrying</string><string name="sync_failed">Failed</string>
+    <plurals name="sync_failed_count">
+        <item quantity="one">%1$d failed change</item>
+        <item quantity="other">%1$d failed changes</item>
+    </plurals>
+    <plurals name="sync_retrying_count">
+        <item quantity="one">Retrying %1$d change</item>
+        <item quantity="other">Retrying %1$d changes</item>
+    </plurals>
+    <plurals name="sync_pending_count">
+        <item quantity="one">%1$d change waiting to sync</item>
+        <item quantity="other">%1$d changes waiting to sync</item>
+    </plurals>
+    <string name="sync_conflict">Conflict</string>
+    <plurals name="sync_conflict_count">
+        <item quantity="one">%1$d conflict needs review</item>
+        <item quantity="other">%1$d conflicts need review</item>
+    </plurals>
     <!-- App Name -->
     <string name="app_name">SolidVerdant</string>
 
@@ -68,27 +105,22 @@
     <string name="jump_to_date">Go to date</string>
     <string name="finding_date_entries">Finding entries around %1$s</string>
     <string name="finding_date_hint">Locating the date, then loading its surrounding history…</string>
-    <string name="rate_limit_wait">Server rate limit reached. Resuming in %1$d seconds…</string>
+    <plurals name="rate_limit_wait">
+        <item quantity="one">Server rate limit reached. Resuming in %1$d second…</item>
+        <item quantity="other">Server rate limit reached. Resuming in %1$d seconds…</item>
+    </plurals>
     <string name="network_unavailable">No internet connection. Changes may not sync.</string>
     <string name="network_restored">Back online</string>
 
     <!-- Tracking Screen -->
     <string name="time_tracking">Time Tracking</string>
     <string name="switch_organization">Switch organization</string>
-    <string name="organization">Organization</string>
     <string name="refresh">Refresh</string><string name="syncing">Syncing</string>
     <string name="logout">Logout</string>
-    <string name="currently_tracking">Currently Tracking</string>
     <string name="not_tracking">Not Tracking</string>
-    <string name="no_active_time_entry">No active time entry</string>
     <string name="start_tracking">Start Tracking</string>
     <string name="stop_tracking">Stop Tracking</string>
-    <string name="entry_details">Entry Details</string>
-    <string name="started">Started</string>
-    <string name="entry_id">Entry ID</string>
     <string name="billable">Billable</string>
-    <string name="yes">Yes</string>
-    <string name="no">No</string>
     <string name="tags">Tags</string>
     <string name="error">Error</string>
     <string name="start">Start</string>
@@ -114,9 +146,7 @@
     <string name="what_are_you_working_on">What are you working on?</string>
     <string name="project">Project</string>
     <string name="task">Task</string>
-    <string name="no_task">No Task</string>
     <string name="update">Update</string>
-    <string name="time_entries_history">Time Entries History</string>
     <string name="no_time_entries">No time entries yet</string>
     <string name="edit">Edit</string>
     <string name="delete">Delete</string>
@@ -129,9 +159,6 @@
     <string name="duplicate_entry">Duplicate</string>
     <string name="split_entry">Split</string>
     <string name="split_entry_title">Split at time</string>
-    <string name="split_entry_error">Split time must be inside the entry.</string>
-    <string name="entry_action_locked">Not available for running or conflicted entries.</string>
-    <string name="entry_date">Date</string>
     <string name="today">Today</string>
     <string name="yesterday">Yesterday</string>
     <string name="time_and_duration">Time and duration</string>
@@ -139,7 +166,6 @@
     <string name="end_time">End time</string>
     <string name="start_date">Start date</string>
     <string name="end_date">End date</string>
-    <string name="duration_minutes">Duration (minutes)</string>
     <string name="total_time">Total time</string>
     <string name="minutes">Minutes</string>
     <string name="decrease_15_minutes">Decrease by 15 minutes</string>
@@ -155,8 +181,6 @@
     </plurals>
 
     <!-- Notifications -->
-    <string name="notification_channel_tracking_name">Time Tracking</string>
-    <string name="notification_channel_tracking_description">Shows time tracking status and elapsed time</string>
     <string name="notification_channel_active_name">Active Timer</string>
     <string name="notification_channel_active_description">Shows running timer and elapsed time</string>
     <string name="notification_channel_idle_name">Quick Start</string>
@@ -198,7 +222,6 @@
     <string name="resume">Resume</string>
     <string name="paused">Paused</string>
     <string name="notification_paused_title">Time Tracking (Paused)</string>
-    <string name="notification_paused_text">Tap resume to start a new session</string>
     <string name="notification_paused_tracked">Tracked: %1$s</string>
     <string name="notification_paused_since">Paused for</string>
 
@@ -223,12 +246,13 @@
     <string name="widget_name">Time Tracker</string>
     <string name="widget_description">Shows current tracking status with quick controls</string>
     <string name="widget_not_tracking">Not tracking</string>
-    <string name="widget_login_required">Login required</string>
 
     <!-- Time entry validation (edit/create) -->
     <string name="entry_error_end_before_start">End time must be after the start time.</string>
-    <string name="entry_error_duration_too_long">This entry is longer than 24 hours. Check the start and end times.</string>
-    <string name="entry_warning_long_duration">This entry is %1$d hours long. Save it only if that\'s correct.</string>
+    <plurals name="entry_warning_long_duration">
+        <item quantity="one">This entry is %1$d hour long. Save it only if that\'s correct.</item>
+        <item quantity="other">This entry is %1$d hours long. Save it only if that\'s correct.</item>
+    </plurals>
     <string name="entry_warning_overlap">This entry overlaps another entry. Overlaps are allowed but may be flagged.</string>
     <string name="entry_warning_overlap_policy">This entry overlaps another entry, which your organization\'s policy discourages.</string>
 

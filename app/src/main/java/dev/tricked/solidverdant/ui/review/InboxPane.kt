@@ -234,7 +234,6 @@ private fun InboxIssueList(
             stickyHeader(key = "header:$date") {
                 InboxDayHeader(
                     date = date,
-                    zone = zone,
                     onDismissAll = { viewModel.dismissDay(issues) },
                     onDismissBefore = {
                         viewModel.dismissBefore(date.atStartOfDay(zone).toInstant().toEpochMilli())
@@ -290,7 +289,7 @@ private fun IssueCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun InboxDayHeader(date: LocalDate, zone: ZoneId, onDismissAll: () -> Unit, onDismissBefore: () -> Unit) {
+private fun InboxDayHeader(date: LocalDate, onDismissAll: () -> Unit, onDismissBefore: () -> Unit) {
     var menuOpen by remember { mutableStateOf(false) }
     val moreCd = stringResource(R.string.inbox_day_more_cd)
     Surface(color = MaterialTheme.colorScheme.surface) {

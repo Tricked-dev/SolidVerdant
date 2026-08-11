@@ -163,7 +163,6 @@ detekt {
     // Layer our overrides on top of detekt's shipped defaults instead of replacing the ruleset.
     buildUponDefaultConfig = true
     config.setFrom(files("$rootDir/config/detekt/detekt.yml"))
-
 }
 
 // Keep detekt off the default verification path: remove the `detekt` dependency that the

@@ -7,12 +7,12 @@
 package dev.tricked.solidverdant.ui.tracking
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
@@ -142,6 +142,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -159,7 +160,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -169,6 +172,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.core.graphics.toColorInt
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -237,6 +241,8 @@ sealed class ProjectTaskSelection {
  * Tracking screen displaying current time tracking state and history
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Suppress("LongMethod", "CyclomaticComplexMethod")
+@SuppressLint("InlinedApi")
 @Composable
 fun TrackingScreen(
     user: User?,
@@ -294,7 +300,7 @@ fun TrackingScreen(
     var historyFilter by remember { mutableStateOf(HistoryFilter()) }
     var deletedEntry by remember { mutableStateOf<TimeEntry?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
-    var longTimerSnoozedUntil by remember { mutableStateOf(0L) }
+    var longTimerSnoozedUntil by remember { mutableLongStateOf(0L) }
     val context = LocalContext.current
     val liveUpdatesSupported = Build.VERSION.SDK_INT >= LIVE_UPDATES_API_LEVEL
     var systemLiveUpdatesEnabled by remember(context, liveUpdatesSupported) {
@@ -511,7 +517,7 @@ fun TrackingScreen(
 
                         OutlinedButton(
                             onClick = {
-                                val appUri = Uri.parse("package:${context.packageName}")
+                                val appUri = "package:${context.packageName}".toUri()
                                 val languageIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                     Intent(Settings.ACTION_APP_LOCALE_SETTINGS, appUri)
                                 } else {
@@ -564,7 +570,7 @@ fun TrackingScreen(
                             modifier = Modifier.padding(top = 16.dp),
                         )
                         Text(
-                            stringResource(R.string.long_timer_warning_description, longTimerHours),
+                            pluralStringResource(R.plurals.long_timer_warning_description, longTimerHours, longTimerHours),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -573,7 +579,7 @@ fun TrackingScreen(
                                 FilterChip(
                                     selected = longTimerHours == hours,
                                     onClick = { onLongTimerHoursChange(hours) },
-                                    label = { Text(stringResource(R.string.hours_short, hours)) },
+                                    label = { Text(pluralStringResource(R.plurals.hours_short, hours, hours)) },
                                 )
                             }
                         }
@@ -1193,7 +1199,7 @@ fun TrackingScreen(
                     )
                     Text(
                         text = uiState.historyRateLimitWaitSeconds?.let { seconds ->
-                            stringResource(R.string.rate_limit_wait, seconds)
+                            pluralStringResource(R.plurals.rate_limit_wait, seconds, seconds)
                         } ?: stringResource(R.string.finding_date_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1259,6 +1265,7 @@ internal fun LiveUpdateSettingRow(
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
+@Suppress("LongMethod")
 private fun HistoryFilters(filter: HistoryFilter, uiState: TrackingUiState, onChange: (HistoryFilter) -> Unit) {
     var expanded by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     var showDateRangePicker by remember { mutableStateOf(false) }
@@ -1308,7 +1315,7 @@ private fun HistoryFilters(filter: HistoryFilter, uiState: TrackingUiState, onCh
                             overflow = TextOverflow.Ellipsis,
                         )
                         activeCount > 0 -> Text(
-                            stringResource(R.string.active_filters_count, activeCount),
+                            pluralStringResource(R.plurals.active_filters_count, activeCount, activeCount),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -1501,10 +1508,10 @@ private fun SyncCenter(
                 SyncChip(status = summaryStatus, showLabel = false)
                 Text(
                     when {
-                        failed > 0 -> stringResource(R.string.sync_failed_count, failed)
-                        conflicts > 0 -> stringResource(R.string.sync_conflict_count, conflicts)
-                        retrying > 0 -> stringResource(R.string.sync_retrying_count, retrying)
-                        else -> stringResource(R.string.sync_pending_count, operations.size)
+                        failed > 0 -> pluralStringResource(R.plurals.sync_failed_count, failed, failed)
+                        conflicts > 0 -> pluralStringResource(R.plurals.sync_conflict_count, conflicts, conflicts)
+                        retrying > 0 -> pluralStringResource(R.plurals.sync_retrying_count, retrying, retrying)
+                        else -> pluralStringResource(R.plurals.sync_pending_count, operations.size, operations.size)
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1546,7 +1553,10 @@ private fun SyncCenter(
 private fun LongTimerWarning(hours: Int, onStop: () -> Unit, onKeepRunning: () -> Unit, onAdjust: () -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
         Column(Modifier.fillMaxWidth().padding(12.dp)) {
-            Text(stringResource(R.string.timer_running_long, hours), style = MaterialTheme.typography.titleSmall)
+            Text(
+                pluralStringResource(R.plurals.timer_running_long, hours, hours),
+                style = MaterialTheme.typography.titleSmall,
+            )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onStop) { Text(stringResource(R.string.stop_now)) }
                 TextButton(onClick = onKeepRunning) { Text(stringResource(R.string.keep_running)) }
@@ -1808,6 +1818,7 @@ private fun HistoryLoadingEntry(index: Int) {
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
+@Suppress("LongMethod")
 internal fun TrackingControls(
     uiState: TrackingUiState,
     elapsedSeconds: Long = 0L,
@@ -2107,7 +2118,7 @@ private fun ContinueLastEntryButton(
                             modifier = Modifier
                                 .size(8.dp)
                                 .clip(CircleShape)
-                                .background(Color(android.graphics.Color.parseColor(project.color)))
+                                .background(Color(project.color.toColorInt()))
                         )
                     } else {
                         Spacer(Modifier.size(8.dp))
@@ -2236,13 +2247,7 @@ private fun DescriptionFieldWithSuggestions(
                                         modifier = Modifier
                                             .size(8.dp)
                                             .clip(CircleShape)
-                                            .background(
-                                                Color(
-                                                    android.graphics.Color.parseColor(
-                                                        project.color
-                                                    )
-                                                )
-                                            )
+                                            .background(Color(project.color.toColorInt()))
                                     )
                                     Text(
                                         text = project.name,
@@ -2407,6 +2412,7 @@ private fun DateHeader(
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val now = remember { Instant.now() }
     val headerStats = remember(entries, projectsById, date, zone, now) {
         val projectIds = entries.mapNotNull { it.projectId }.toSet()
@@ -2415,10 +2421,10 @@ private fun DateHeader(
         val summary = buildList {
             add(formatCompactDuration(totalDuration))
             if (customerCount > 0) {
-                add(context.resources.getQuantityString(R.plurals.customer_count, customerCount, customerCount))
+                add(resources.getQuantityString(R.plurals.customer_count, customerCount, customerCount))
             }
             if (projectIds.isNotEmpty()) {
-                add(context.resources.getQuantityString(R.plurals.project_count, projectIds.size, projectIds.size))
+                add(resources.getQuantityString(R.plurals.project_count, projectIds.size, projectIds.size))
             }
         }.joinToString(" · ")
         summary
@@ -2534,7 +2540,7 @@ private fun CollapsibleTimeEntryGroup(
                     horizontalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = stringResource(R.string.collapse_entries, entries.size),
+                        text = pluralStringResource(R.plurals.collapse_entries, entries.size, entries.size),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.clickable { isExpanded = false }
@@ -2655,6 +2661,7 @@ internal fun TrackingAppBarTitle(
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
+@Suppress("LongMethod")
 private fun CompactTimeEntryRow(
     entry: TimeEntry,
     date: LocalDate,
@@ -2674,7 +2681,7 @@ private fun CompactTimeEntryRow(
         formatDuration(totalDuration ?: entryDurationOnDay(entry, date, zone, now))
     }
     val projectColor = remember(project?.color) {
-        project?.let { runCatching { Color(android.graphics.Color.parseColor(it.color)) }.getOrNull() }
+        project?.let { runCatching { Color(it.color.toColorInt()) }.getOrNull() }
     }
     Row(
         modifier = Modifier
@@ -3521,25 +3528,11 @@ private fun isObtainiumInstalled(context: Context): Boolean = try {
  */
 private fun getSigningCertificateHash(context: Context): String {
     return try {
-        val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            context.packageManager.getPackageInfo(
-                context.packageName,
-                PackageManager.GET_SIGNING_CERTIFICATES
-            )
-        } else {
-            @Suppress("DEPRECATION")
-            context.packageManager.getPackageInfo(
-                context.packageName,
-                PackageManager.GET_SIGNATURES
-            )
-        }
-
-        val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            packageInfo.signingInfo?.apkContentsSigners
-        } else {
-            @Suppress("DEPRECATION")
-            packageInfo.signatures
-        }
+        val packageInfo = context.packageManager.getPackageInfo(
+            context.packageName,
+            PackageManager.GET_SIGNING_CERTIFICATES,
+        )
+        val signatures = packageInfo.signingInfo?.apkContentsSigners
 
         val signature = signatures?.firstOrNull() ?: return "Unknown"
         val digest = java.security.MessageDigest.getInstance("SHA-256")
@@ -3652,7 +3645,7 @@ internal fun EntryValidationBanner(result: EntryTimeValidator.Result, durationHo
                 Text(
                     text = when (warning) {
                         EntryTimeValidator.Warning.LONG_DURATION ->
-                            stringResource(R.string.entry_warning_long_duration, durationHours)
+                            pluralStringResource(R.plurals.entry_warning_long_duration, durationHours.toInt(), durationHours)
                         EntryTimeValidator.Warning.OVERLAP ->
                             stringResource(R.string.entry_warning_overlap)
                         EntryTimeValidator.Warning.OVERLAP_POLICY ->

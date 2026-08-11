@@ -245,9 +245,10 @@ object ScreenshotHost {
 
     /** Repository root (the folder that owns settings.gradle.kts), regardless of Gradle's cwd. */
     private val repoRoot: File by lazy {
-        var dir = File(System.getProperty("user.dir")).absoluteFile
-        while (dir.parentFile != null && !File(dir, "settings.gradle.kts").exists()) {
-            dir = dir.parentFile
+        var dir = File(System.getProperty("user.dir") ?: ".").absoluteFile
+        while (!File(dir, "settings.gradle.kts").exists()) {
+            val parent = dir.parentFile ?: break
+            dir = parent
         }
         dir
     }

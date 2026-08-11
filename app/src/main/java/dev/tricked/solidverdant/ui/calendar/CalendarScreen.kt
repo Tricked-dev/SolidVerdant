@@ -123,84 +123,19 @@ fun CalendarScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
-        val modes = remember {
-            listOf(
-                CalendarViewMode.MONTH to R.string.calendar_view_month,
-                CalendarViewMode.WEEK to R.string.calendar_view_week,
-                CalendarViewMode.DAY to R.string.calendar_view_day,
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space12, vertical = Dimens.Space8),
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-        ) {
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.weight(1f)) {
-                modes.forEachIndexed { index, (mode, labelRes) ->
-                    SegmentedButton(
-                        selected = state.viewMode == mode,
-                        onClick = { viewModel.setViewMode(mode) },
-                        shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
-                        modifier = if (mode == CalendarViewMode.MONTH) {
-                            Modifier.testTag(CalendarTestTags.MODE_MONTH)
-                        } else {
-                            Modifier
-                        },
-                    ) {
-                        Text(stringResource(labelRes))
-                    }
-                }
-            }
-            // Overlay controls apply to the time-grid (week/day) views only.
-            if (state.viewMode != CalendarViewMode.MONTH) {
-                IconButton(onClick = { showOverlaySheet = true }) {
-                    Icon(
-                        Icons.Default.Layers,
-                        contentDescription = stringResource(R.string.calendar_overlay_settings),
-                        tint = if (state.overlayEnabled) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
-                }
-            }
-        }
-
-        when (state.viewMode) {
-            CalendarViewMode.MONTH -> MonthCalendarView(
-                state = state,
-                onSelectDate = viewModel::selectDate,
-                onPreviousMonth = viewModel::previousMonth,
-                onNextMonth = viewModel::nextMonth,
-                onEntryClick = { editing = it },
-                projects = projects,
-                tasks = tasks,
-                modifier = Modifier.weight(1f),
-            )
-
-            else -> {
-                BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    val availableWidth = maxWidth
-                    // Fall back to a 3-day layout on narrow phones (gap analysis #20).
-                    LaunchedEffect(availableWidth, state.viewMode) {
-                        if (state.viewMode == CalendarViewMode.WEEK) {
-                            viewModel.setVisibleDayCount(
-                                if (availableWidth < Dimens.NarrowCalendarWidth) NARROW_CALENDAR_DAYS else FULL_WEEK_DAYS,
-                            )
-                        }
-                    }
-                    WeekCalendarView(
-                        state = state,
-                        onSelectDate = viewModel::selectDate,
-                        onEntryClick = { editing = it },
-                        onPrevious = viewModel::pageBackward,
-                        onNext = viewModel::pageForward,
-                        onToday = viewModel::jumpToToday,
-                        projects = projects,
-                    )
-                }
-            }
-        }
+        CalendarToolbar(
+            state = state,
+            onModeSelected = viewModel::setViewMode,
+            onOpenOverlay = { showOverlaySheet = true },
+        )
+        CalendarBody(
+            state = state,
+            viewModel = viewModel,
+            projects = projects,
+            tasks = tasks,
+            onEntryClick = { editing = it },
+            modifier = Modifier.weight(1f),
+        )
     }
 
     editing?.let { entry ->
@@ -219,23 +154,134 @@ fun CalendarScreen(
     }
 
     if (showOverlaySheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showOverlaySheet = false },
+        CalendarOverlaySheet(
+            state = state,
             sheetState = overlaySheetState,
-        ) {
-            CalendarOverlayControls(
+            showRationale = showRationale,
+            onDismiss = { showOverlaySheet = false },
+            onToggleOverlay = toggleOverlay,
+            onRequestPermission = requestPermission,
+            onOpenAppSettings = openAppSettings,
+            onToggleCalendar = viewModel::toggleCalendarSelected,
+            onRetry = viewModel::retryOverlay,
+        )
+    }
+}
+
+@Composable
+private fun CalendarToolbar(state: CalendarUiState, onModeSelected: (CalendarViewMode) -> Unit, onOpenOverlay: () -> Unit) {
+    val modes = remember {
+        listOf(
+            CalendarViewMode.MONTH to R.string.calendar_view_month,
+            CalendarViewMode.WEEK to R.string.calendar_view_week,
+            CalendarViewMode.DAY to R.string.calendar_view_day,
+        )
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space12, vertical = Dimens.Space8),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+    ) {
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.weight(1f)) {
+            modes.forEachIndexed { index, (mode, labelRes) ->
+                SegmentedButton(
+                    selected = state.viewMode == mode,
+                    onClick = { onModeSelected(mode) },
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
+                    modifier = if (mode == CalendarViewMode.MONTH) {
+                        Modifier.testTag(CalendarTestTags.MODE_MONTH)
+                    } else {
+                        Modifier
+                    },
+                ) {
+                    Text(stringResource(labelRes))
+                }
+            }
+        }
+        if (state.viewMode != CalendarViewMode.MONTH) {
+            IconButton(onClick = onOpenOverlay) {
+                Icon(
+                    Icons.Default.Layers,
+                    contentDescription = stringResource(R.string.calendar_overlay_settings),
+                    tint = if (state.overlayEnabled) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalendarBody(
+    state: CalendarUiState,
+    viewModel: CalendarViewModel,
+    projects: List<Project>,
+    tasks: List<Task>,
+    onEntryClick: (TimeEntry) -> Unit,
+    modifier: Modifier,
+) {
+    when (state.viewMode) {
+        CalendarViewMode.MONTH -> MonthCalendarView(
+            state = state,
+            onSelectDate = viewModel::selectDate,
+            onPreviousMonth = viewModel::previousMonth,
+            onNextMonth = viewModel::nextMonth,
+            onEntryClick = onEntryClick,
+            projects = projects,
+            tasks = tasks,
+            modifier = modifier.fillMaxWidth(),
+        )
+
+        else -> BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+            val availableWidth = maxWidth
+            LaunchedEffect(availableWidth, state.viewMode) {
+                if (state.viewMode == CalendarViewMode.WEEK) {
+                    viewModel.setVisibleDayCount(
+                        if (availableWidth < Dimens.NarrowCalendarWidth) NARROW_CALENDAR_DAYS else FULL_WEEK_DAYS,
+                    )
+                }
+            }
+            WeekCalendarView(
                 state = state,
-                showRationale = showRationale,
-                onToggleOverlay = toggleOverlay,
-                onRequestPermission = requestPermission,
-                onOpenAppSettings = openAppSettings,
-                onToggleCalendar = viewModel::toggleCalendarSelected,
-                onRetry = viewModel::retryOverlay,
-                modifier = Modifier
-                    .padding(horizontal = Dimens.Space16)
-                    .padding(bottom = Dimens.Space24),
+                onSelectDate = viewModel::selectDate,
+                onEntryClick = onEntryClick,
+                onPrevious = viewModel::pageBackward,
+                onNext = viewModel::pageForward,
+                onToday = viewModel::jumpToToday,
+                projects = projects,
             )
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CalendarOverlaySheet(
+    state: CalendarUiState,
+    sheetState: androidx.compose.material3.SheetState,
+    showRationale: Boolean,
+    onDismiss: () -> Unit,
+    onToggleOverlay: (Boolean) -> Unit,
+    onRequestPermission: () -> Unit,
+    onOpenAppSettings: () -> Unit,
+    onToggleCalendar: (String) -> Unit,
+    onRetry: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        CalendarOverlayControls(
+            state = state,
+            showRationale = showRationale,
+            onToggleOverlay = onToggleOverlay,
+            onRequestPermission = onRequestPermission,
+            onOpenAppSettings = onOpenAppSettings,
+            onToggleCalendar = onToggleCalendar,
+            onRetry = onRetry,
+            modifier = Modifier
+                .padding(horizontal = Dimens.Space16)
+                .padding(bottom = Dimens.Space24),
+        )
     }
 }
 

@@ -50,6 +50,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 @RunWith(RobolectricTestRunner::class)
+@Suppress("LargeClass")
 class SyncWorkerTest {
     private lateinit var db: AppDatabase
     private lateinit var remote: FakeRemoteDataSource
@@ -76,10 +77,10 @@ class SyncWorkerTest {
                 override fun createWorker(
                     appContext: android.content.Context,
                     workerClassName: String,
-                    params: androidx.work.WorkerParameters,
+                    workerParameters: androidx.work.WorkerParameters,
                 ) = SyncWorker(
                     appContext,
-                    params,
+                    workerParameters,
                     db.outboxDao(),
                     db.timeEntryDao(),
                     db.syncMetaDao(),

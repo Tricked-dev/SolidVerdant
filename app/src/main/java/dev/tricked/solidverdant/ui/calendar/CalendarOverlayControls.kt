@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -135,8 +136,9 @@ private fun CalendarPickerSection(state: CalendarUiState, onToggleCalendar: (Str
         PrivacyNote()
         TextButton(onClick = { expanded = !expanded }, modifier = Modifier.heightIn(min = 48.dp)) {
             Text(
-                stringResource(
-                    R.string.calendar_overlay_choose_count,
+                pluralStringResource(
+                    R.plurals.calendar_overlay_choose_count,
+                    state.selectedCalendarIds.size,
                     state.selectedCalendarIds.size,
                 ),
             )

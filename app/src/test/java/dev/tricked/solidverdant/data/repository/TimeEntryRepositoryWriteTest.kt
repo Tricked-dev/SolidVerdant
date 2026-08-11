@@ -31,6 +31,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
+@Suppress("LargeClass")
 class TimeEntryRepositoryWriteTest {
     private lateinit var db: AppDatabase
     private lateinit var repo: TimeEntryRepository

@@ -11,27 +11,21 @@ complexity:
   # Compose screens and Android service adapters are intentionally orchestration-heavy. Keep
   # these rules useful for the domain code without forcing artificial splits around UI lambdas.
   CyclomaticComplexMethod:
-    threshold: 30
-    ignoreAnnotated:
-      - 'Composable'
+    allowedComplexity: 30
   LongMethod:
-    threshold: 120
-    ignoreAnnotated:
-      - 'Composable'
+    allowedLines: 120
   LongParameterList:
-    functionThreshold: 12
-    constructorThreshold: 12
-    ignoreAnnotated:
-      - 'Composable'
+    allowedFunctionParameters: 12
+    allowedConstructorParameters: 12
   NestedBlockDepth:
-    threshold: 5
+    allowedDepth: 5
   TooManyFunctions:
-    thresholdInFiles: 40
-    thresholdInClasses: 40
-    thresholdInInterfaces: 25
-    thresholdInObjects: 40
+    allowedFunctionsPerFile: 40
+    allowedFunctionsPerClass: 40
+    allowedFunctionsPerInterface: 25
+    allowedFunctionsPerObject: 40
   ComplexCondition:
-    threshold: 6
+    allowedConditions: 6
 
 exceptions:
   # Network, persistence, and Android callback boundaries must convert unpredictable failures

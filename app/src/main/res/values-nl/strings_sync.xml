@@ -19,19 +19,30 @@
     <string name="sync_time_just_now">Zojuist</string>
     <string name="sync_time_minutes">%1$d min geleden</string>
     <string name="sync_time_hours">%1$d uur geleden</string>
-    <string name="sync_time_days">%1$d dagen geleden</string>
+    <plurals name="sync_time_days">
+        <item quantity="one">%1$d dag geleden</item>
+        <item quantity="other">%1$d dagen geleden</item>
+    </plurals>
 
     <!-- Statusoverzicht (met pictogram, dus niet alleen kleur) -->
     <string name="sync_status_synced">Alle wijzigingen zijn gesynchroniseerd</string>
-    <string name="sync_status_pending">%1$d wijzigingen wachten op synchronisatie</string>
-    <string name="sync_status_failures">%1$d wijzigingen konden de server niet bereiken</string>
-    <string name="sync_status_conflicts">%1$d wijzigingen vragen om je aandacht</string>
+    <plurals name="sync_status_pending">
+        <item quantity="one">%1$d wijziging wacht op synchronisatie</item>
+        <item quantity="other">%1$d wijzigingen wachten op synchronisatie</item>
+    </plurals>
+    <plurals name="sync_status_failures">
+        <item quantity="one">%1$d wijziging kon de server niet bereiken</item>
+        <item quantity="other">%1$d wijzigingen konden de server niet bereiken</item>
+    </plurals>
+    <plurals name="sync_status_conflicts">
+        <item quantity="one">%1$d wijziging vraagt om je aandacht</item>
+        <item quantity="other">%1$d wijzigingen vragen om je aandacht</item>
+    </plurals>
     <string name="sync_status_icon_synced">Alles gesynchroniseerd</string>
     <string name="sync_status_icon_warning">Aandacht vereist</string>
 
     <!-- Wachtende wijzigingen -->
     <string name="sync_pending_section_title">Wacht op synchronisatie</string>
-    <string name="sync_pending_empty">Er wacht niets op synchronisatie.</string>
     <string name="sync_pending_item">Deze wijziging heeft de server nog niet bereikt.</string>
 
     <!-- Mislukkingen -->

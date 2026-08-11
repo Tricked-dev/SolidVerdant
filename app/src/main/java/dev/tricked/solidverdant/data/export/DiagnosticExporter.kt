@@ -11,6 +11,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.tricked.solidverdant.BuildConfig
 import dev.tricked.solidverdant.data.local.AuthDataStore
@@ -122,7 +123,7 @@ class DiagnosticExporter @Inject constructor(
      * cannot be parsed as a URI.
      */
     private fun hostOf(endpoint: String): String {
-        val host = runCatching { Uri.parse(endpoint).host }.getOrNull()
+        val host = runCatching { endpoint.toUri().host }.getOrNull()
         if (!host.isNullOrBlank()) return host
         return endpoint.substringAfter("://").substringBefore("/").ifBlank { "unknown" }
     }

@@ -57,6 +57,7 @@ import dev.tricked.solidverdant.ui.components.ProjectTaskDropdown
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
+@Suppress("LongMethod")
 fun TemplateEditorSheet(
     existing: EntryTemplate?,
     projects: List<Project>,

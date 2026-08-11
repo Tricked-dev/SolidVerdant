@@ -48,6 +48,7 @@ import dev.tricked.solidverdant.ui.auth.OAuthConfigState
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+@Suppress("LongMethod")
 fun ConfigScreen(
     configState: OAuthConfigState,
     onSave: (String, String) -> Unit,

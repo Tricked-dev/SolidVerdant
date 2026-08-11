@@ -14,10 +14,6 @@
     <string name="manage_templates_title">Manage templates</string>
     <string name="review_navigate_back">Back</string>
     <string name="review_badge_overflow">99+</string>
-    <string name="review_inbox_placeholder">Items to review will appear here.</string>
-    <string name="review_day_placeholder">Your end-of-day review will appear here.</string>
-    <string name="reminder_settings_placeholder">Reminder settings will appear here.</string>
-    <string name="manage_templates_placeholder">Your templates will appear here.</string>
     <plurals name="review_pending_badge_description">
         <item quantity="one">Review, %1$d item to review</item>
         <item quantity="other">Review, %1$d items to review</item>

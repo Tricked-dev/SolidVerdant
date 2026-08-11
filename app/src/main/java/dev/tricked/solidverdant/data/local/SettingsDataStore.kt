@@ -207,7 +207,7 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
 
     /** Clear cached account data while preserving the user's app preferences. */
     suspend fun clearCachedData() {
-        immediateCache.edit().clear().commit()
+        immediateCache.edit().clear().apply()
         authCacheChanges.value += 1
         dataStore.edit(::clearWidgetState)
     }

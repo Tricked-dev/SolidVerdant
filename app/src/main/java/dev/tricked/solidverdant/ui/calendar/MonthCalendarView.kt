@@ -15,7 +15,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -71,9 +73,9 @@ fun MonthCalendarView(
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
     onEntryClick: (TimeEntry) -> Unit,
+    modifier: Modifier = Modifier,
     projects: List<Project> = emptyList(),
     tasks: List<Task> = emptyList(),
-    modifier: Modifier = Modifier,
 ) {
     var monthExpanded by remember { mutableStateOf(true) }
     val locale = LocalLocale.current.platformLocale
@@ -107,145 +109,189 @@ fun MonthCalendarView(
             enter = expandVertically(),
             exit = shrinkVertically(),
         ) {
-            Column {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    IconButton(onClick = onPreviousMonth) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                            contentDescription = stringResource(R.string.calendar_previous_month),
-                        )
-                    }
-                    Text(
-                        text = "${state.visibleMonth.month.getDisplayName(TextStyle.FULL, locale)} ${state.visibleMonth.year}",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    IconButton(onClick = onNextMonth) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = stringResource(R.string.calendar_next_month),
-                        )
-                    }
-                }
-
-                if (state.isLoading) {
-                    LinearProgressIndicator(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space4),
-                    )
-                }
-
-                // Grid
-                val weeks = monthGridWeeks(state.visibleMonth, state.weekStart)
-                val maxSeconds = state.bucketsByDate.values.maxOfOrNull { it.totalSeconds } ?: 1L
-                weeks.forEach { week ->
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        week.forEach { day ->
-                            val bucket = state.bucketsByDate[day]
-                            val inMonth = java.time.YearMonth.from(day) == state.visibleMonth
-                            val selected = day == state.selectedDate
-                            val intensity = ((bucket?.totalSeconds ?: 0L).toFloat() / maxSeconds).coerceIn(0f, 1f)
-                            Column(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .aspectRatio(1f)
-                                    .padding(Dimens.Space2)
-                                    .clip(MaterialTheme.shapes.small)
-                                    .background(
-                                        if (selected) {
-                                            MaterialTheme.colorScheme.primaryContainer
-                                        } else {
-                                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f + 0.55f * intensity)
-                                        },
-                                    )
-                                    .clickable {
-                                        onSelectDate(day)
-                                        monthExpanded = false
-                                    }
-                                    .testTag("day-cell-$day"),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center,
-                            ) {
-                                Text(
-                                    text = day.dayOfMonth.toString(),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                    color = calendarDayContentColor(
-                                        selected = selected,
-                                        isToday = false,
-                                        primary = MaterialTheme.colorScheme.primary,
-                                        onPrimaryContainer = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        default = if (inMonth) {
-                                            Color.Unspecified
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
-                                        },
-                                    ),
-                                )
-                                if (bucket != null) {
-                                    Text(
-                                        text = formatDuration(bucket.totalSeconds),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = calendarDayContentColor(
-                                            selected = selected,
-                                            isToday = false,
-                                            primary = MaterialTheme.colorScheme.primary,
-                                            onPrimaryContainer = MaterialTheme.colorScheme.onPrimaryContainer,
-                                            default = Color.Unspecified,
-                                        ),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            MonthCalendarGrid(
+                state = state,
+                locale = locale,
+                onPreviousMonth = onPreviousMonth,
+                onNextMonth = onNextMonth,
+                onSelectDate = onSelectDate,
+                onCollapse = { monthExpanded = false },
+            )
         }
 
-        // Selected day entries
-        val entries = state.bucketsByDate[state.selectedDate]?.entries ?: emptyList()
-        if (monthExpanded) {
+        SelectedDayEntries(
+            state = state,
+            monthExpanded = monthExpanded,
+            projects = projects,
+            tasks = tasks,
+            scrollState = timelineScrollState,
+            onEntryClick = onEntryClick,
+        )
+    }
+}
+
+@Composable
+private fun MonthCalendarGrid(
+    state: CalendarUiState,
+    locale: java.util.Locale,
+    onPreviousMonth: () -> Unit,
+    onNextMonth: () -> Unit,
+    onSelectDate: (LocalDate) -> Unit,
+    onCollapse: () -> Unit,
+) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            IconButton(onClick = onPreviousMonth) {
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                    contentDescription = stringResource(R.string.calendar_previous_month),
+                )
+            }
             Text(
-                text = state.selectedDate.format(DateTimeFormatter.ofPattern("EEEE, d MMMM")),
+                text = "${state.visibleMonth.month.getDisplayName(TextStyle.FULL, locale)} ${state.visibleMonth.year}",
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(top = Dimens.Space16, bottom = Dimens.Space8),
+            )
+            IconButton(onClick = onNextMonth) {
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = stringResource(R.string.calendar_next_month),
+                )
+            }
+        }
+        if (state.isLoading) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(horizontal = Dimens.Space4))
+        }
+        MonthCalendarGridWeeks(state, onSelectDate, onCollapse)
+    }
+}
+
+@Composable
+private fun MonthCalendarGridWeeks(state: CalendarUiState, onSelectDate: (LocalDate) -> Unit, onCollapse: () -> Unit) {
+    val weeks = monthGridWeeks(state.visibleMonth, state.weekStart)
+    val maxSeconds = state.bucketsByDate.values.maxOfOrNull { it.totalSeconds } ?: 1L
+    weeks.forEach { week ->
+        Row(modifier = Modifier.fillMaxWidth()) {
+            week.forEach { day ->
+                MonthCalendarDay(
+                    day = day,
+                    state = state,
+                    maxSeconds = maxSeconds,
+                    onSelectDate = onSelectDate,
+                    onCollapse = onCollapse,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RowScope.MonthCalendarDay(
+    day: LocalDate,
+    state: CalendarUiState,
+    maxSeconds: Long,
+    onSelectDate: (LocalDate) -> Unit,
+    onCollapse: () -> Unit,
+) {
+    val bucket = state.bucketsByDate[day]
+    val inMonth = java.time.YearMonth.from(day) == state.visibleMonth
+    val selected = day == state.selectedDate
+    val intensity = ((bucket?.totalSeconds ?: 0L).toFloat() / maxSeconds).coerceIn(0f, 1f)
+    Column(
+        modifier = Modifier
+            .weight(1f)
+            .aspectRatio(1f)
+            .padding(Dimens.Space2)
+            .clip(MaterialTheme.shapes.small)
+            .background(
+                if (selected) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f + 0.55f * intensity)
+                },
+            )
+            .clickable {
+                onSelectDate(day)
+                onCollapse()
+            }
+            .testTag("day-cell-$day"),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = day.dayOfMonth.toString(),
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = calendarDayContentColor(
+                selected = selected,
+                isToday = false,
+                primary = MaterialTheme.colorScheme.primary,
+                onPrimaryContainer = MaterialTheme.colorScheme.onPrimaryContainer,
+                default = if (inMonth) Color.Unspecified else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+            ),
+        )
+        bucket?.let {
+            Text(
+                text = formatDuration(it.totalSeconds),
+                style = MaterialTheme.typography.labelSmall,
+                color = calendarDayContentColor(
+                    selected = selected,
+                    isToday = false,
+                    primary = MaterialTheme.colorScheme.primary,
+                    onPrimaryContainer = MaterialTheme.colorScheme.onPrimaryContainer,
+                    default = Color.Unspecified,
+                ),
             )
         }
-        if (entries.isEmpty()) {
-            if (state.isLoading) {
-                LoadingState(label = stringResource(R.string.calendar_loading_entries))
-            } else {
-                EmptyState(text = stringResource(R.string.calendar_no_entries))
-            }
-        } else if (!monthExpanded) {
-            DayTimeline(
-                day = state.selectedDate,
-                entries = entries,
-                projects = projects,
-                tasks = tasks,
-                zone = state.zone,
-                scrollState = timelineScrollState,
-                fillViewport = true,
-                onEntryClick = onEntryClick,
-                modifier = Modifier.weight(1f),
-            )
-        } else {
-            LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                item(key = state.selectedDate) {
-                    DayTimeline(
-                        day = state.selectedDate,
-                        entries = entries,
-                        projects = projects,
-                        tasks = tasks,
-                        zone = state.zone,
-                        scrollState = timelineScrollState,
-                        onEntryClick = onEntryClick,
-                    )
-                }
+    }
+}
+
+@Composable
+private fun ColumnScope.SelectedDayEntries(
+    state: CalendarUiState,
+    monthExpanded: Boolean,
+    projects: List<Project>,
+    tasks: List<Task>,
+    scrollState: ScrollState,
+    onEntryClick: (TimeEntry) -> Unit,
+) {
+    val entries = state.bucketsByDate[state.selectedDate]?.entries.orEmpty()
+    if (monthExpanded) {
+        Text(
+            text = state.selectedDate.format(DateTimeFormatter.ofPattern("EEEE, d MMMM")),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = Dimens.Space16, bottom = Dimens.Space8),
+        )
+    }
+    when {
+        entries.isEmpty() && state.isLoading -> LoadingState(label = stringResource(R.string.calendar_loading_entries))
+        entries.isEmpty() -> EmptyState(text = stringResource(R.string.calendar_no_entries))
+        !monthExpanded -> DayTimeline(
+            day = state.selectedDate,
+            entries = entries,
+            projects = projects,
+            tasks = tasks,
+            zone = state.zone,
+            scrollState = scrollState,
+            fillViewport = true,
+            onEntryClick = onEntryClick,
+            modifier = Modifier.weight(1f),
+        )
+        else -> LazyColumn(modifier = Modifier.fillMaxWidth()) {
+            item(key = state.selectedDate) {
+                DayTimeline(
+                    day = state.selectedDate,
+                    entries = entries,
+                    projects = projects,
+                    tasks = tasks,
+                    zone = state.zone,
+                    scrollState = scrollState,
+                    onEntryClick = onEntryClick,
+                )
             }
         }
     }
@@ -266,9 +312,9 @@ fun DayTimeline(
     tasks: List<Task>,
     zone: ZoneId,
     onEntryClick: (TimeEntry) -> Unit,
+    modifier: Modifier = Modifier,
     scrollState: ScrollState? = null,
     fillViewport: Boolean = false,
-    modifier: Modifier = Modifier,
 ) {
     val now = remember { Instant.now() }
     val today = remember(zone) { LocalDate.now(zone) }

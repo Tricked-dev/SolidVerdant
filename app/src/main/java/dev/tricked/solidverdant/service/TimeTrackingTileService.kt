@@ -19,7 +19,6 @@ import android.graphics.drawable.Icon
 import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
-import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
@@ -53,7 +52,6 @@ import javax.inject.Inject
  * - Failures shown via notifications
  * - Optimistic state persisted in SharedPreferences (survives service recreation)
  */
-@RequiresApi(Build.VERSION_CODES.N)
 @AndroidEntryPoint
 class TimeTrackingTileService : TileService() {
 
@@ -788,14 +786,12 @@ class TimeTrackingTileService : TileService() {
     }
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                NOTIFICATION_CHANNEL_ID,
-                "Time Tracking Errors",
-                NotificationManager.IMPORTANCE_HIGH,
-            )
-            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-        }
+        val channel = NotificationChannel(
+            NOTIFICATION_CHANNEL_ID,
+            "Time Tracking Errors",
+            NotificationManager.IMPORTANCE_HIGH,
+        )
+        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
     override fun onDestroy() {

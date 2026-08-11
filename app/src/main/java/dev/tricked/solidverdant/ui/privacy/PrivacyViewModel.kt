@@ -11,6 +11,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.Stable
+import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -44,7 +45,7 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class PrivacyViewModel internal constructor(
-    private val context: Context,
+    context: Context,
     private val readEndpoint: suspend () -> String,
     private val readSessionPresent: suspend () -> Boolean,
     private val clearUserCache: suspend () -> Unit,
@@ -52,6 +53,8 @@ class PrivacyViewModel internal constructor(
     private val buildShareIntent: (Uri) -> Intent,
     private val storageDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
+
+    private val applicationContext = context.applicationContext
 
     /** Production wiring; the internal constructor keeps unit tests off process-wide IO/DataStore. */
     @Suppress("UNUSED_PARAMETER")
@@ -110,7 +113,7 @@ class PrivacyViewModel internal constructor(
     private suspend fun refreshStorageNow() {
         _state.value = _state.value.copy(computingStorage = true)
         val (dbBytes, cacheBytes) = withContext(storageDispatcher) {
-            databaseBytes() to directoryBytes(context.cacheDir)
+            databaseBytes() to directoryBytes(applicationContext.cacheDir)
         }
         _state.value = _state.value.copy(
             dbBytes = dbBytes,
@@ -152,7 +155,7 @@ class PrivacyViewModel internal constructor(
 
     /** Sum of the main Room DB file plus its `-wal`/`-shm`/`-journal` sidecars, if present. */
     private fun databaseBytes(): Long {
-        val main = context.getDatabasePath(DB_NAME)
+        val main = applicationContext.getDatabasePath(DB_NAME)
         return listOf(main, File(main.path + "-wal"), File(main.path + "-shm"), File(main.path + "-journal"))
             .filter { it.exists() }
             .sumOf { it.length() }
@@ -165,7 +168,7 @@ class PrivacyViewModel internal constructor(
     }
 
     private fun hostOf(endpoint: String): String {
-        val host = runCatching { Uri.parse(endpoint).host }.getOrNull()
+        val host = runCatching { endpoint.toUri().host }.getOrNull()
         if (!host.isNullOrBlank()) return host
         return endpoint.substringAfter("://").substringBefore("/").ifBlank { endpoint }
     }

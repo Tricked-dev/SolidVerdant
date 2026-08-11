@@ -9,10 +9,10 @@ package dev.tricked.solidverdant
 import android.app.HandoffActivityData
 import android.app.HandoffActivityDataRequestInfo
 import android.content.ComponentName
-import android.net.Uri
 import android.os.Bundle
 import android.os.PersistableBundle
 import androidx.annotation.RequiresApi
+import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -47,7 +47,7 @@ class HandoffMainActivity : MainActivity() {
         ).setExtras(extras)
         authViewModel.configState.value.endpoint
             .takeIf { it.startsWith("https://") }
-            ?.let { builder.setFallbackUri(Uri.parse(it)) }
+            ?.let { builder.setFallbackUri(it.toUri()) }
         return builder.build()
     }
 }

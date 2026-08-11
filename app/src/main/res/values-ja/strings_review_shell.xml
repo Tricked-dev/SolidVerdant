@@ -13,10 +13,6 @@
     <string name="manage_templates_title">テンプレートの管理</string>
     <string name="review_navigate_back">戻る</string>
     <string name="review_badge_overflow">99+</string>
-    <string name="review_inbox_placeholder">レビューする項目がここに表示されます。</string>
-    <string name="review_day_placeholder">一日の終わりのレビューがここに表示されます。</string>
-    <string name="reminder_settings_placeholder">リマインダー設定がここに表示されます。</string>
-    <string name="manage_templates_placeholder">テンプレートがここに表示されます。</string>
     <plurals name="review_pending_badge_description">
         <item quantity="other">レビュー、%1$d 件の項目</item>
     </plurals>

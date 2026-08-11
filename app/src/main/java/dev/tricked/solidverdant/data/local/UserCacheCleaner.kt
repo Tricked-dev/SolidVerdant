@@ -7,6 +7,7 @@
 package dev.tricked.solidverdant.data.local
 
 import android.content.Context
+import androidx.core.content.edit
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.tricked.solidverdant.data.local.db.AppDatabase
 import dev.tricked.solidverdant.util.ShortcutManager
@@ -28,10 +29,9 @@ class UserCacheCleaner @Inject constructor(
         // apply() is safe here: nothing after this reads the prefs back, and we're already
         // off the main thread (Dispatchers.IO), so there's no ordering requirement forcing
         // a synchronous commit().
-        context.getSharedPreferences(TILE_STATE_PREFERENCES, Context.MODE_PRIVATE)
-            .edit()
-            .clear()
-            .apply()
+        context.getSharedPreferences(TILE_STATE_PREFERENCES, Context.MODE_PRIVATE).edit {
+            clear()
+        }
         ShortcutManager.clearShortcuts(context)
     }
 

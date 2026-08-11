@@ -22,18 +22,46 @@
     <string name="connection_failed">サーバーに接続できませんでした。</string>
     <string name="connection_test_failed">接続テストに失敗しました。</string>
     <string name="sync_entry_failed">この変更はサーバーに届いていません。</string>
-    <string name="search_and_filter">検索と絞り込み</string><string name="active_filters_count">有効なフィルター: %1$d</string>
+    <string name="search_and_filter">検索と絞り込み</string>
+    <plurals name="active_filters_count">
+        <item quantity="other">有効なフィルター: %1$d</item>
+    </plurals>
     <string name="long_timer_notification_title">長時間タイマーの確認</string><string name="long_timer_notification_text">このタイマーは設定した時間制限に達しました。</string>
     <string name="all_items">すべての%1$s</string>
     <string name="minutes_short">分</string>
     <string name="nav_track">記録</string><string name="nav_calendar">カレンダー</string><string name="nav_stats">統計</string>
-    <string name="overlap_policy_warning_count">%1$d組の重複エントリーが組織の重複ポリシーに反しています。</string>
     <string name="running_entries">実行中</string>
-    <string name="enable_notifications">通知を有効にする</string><string name="collapse_entries">%1$d件のエントリーを折りたたむ</string>
+    <string name="enable_notifications">通知を有効にする</string>
+    <plurals name="collapse_entries">
+        <item quantity="other">%1$d件のエントリーを折りたたむ</item>
+    </plurals>
     <string name="stats_empty">この期間に記録された時間はありません。</string><string name="stats_by_project">プロジェクト別</string><string name="stats_trend">推移</string><string name="stats_last_7_days">過去7日間</string><string name="stats_last_week">先週</string><string name="stats_this_week">今週</string><string name="stats_this_month">今月</string><string name="stats_previous_month">先月</string><string name="stats_custom">カスタム</string><string name="apply">適用</string><string name="stats_total">合計</string><string name="stats_entries">エントリー</string><string name="stats_average_day">1日平均</string><string name="calendar_show_month">月を表示</string><string name="calendar_previous_month">前の月</string><string name="calendar_next_month">次の月</string>
-    <string name="long_timer_warning">長時間タイマーの警告</string><string name="long_timer_warning_description">%1$d時間後に警告します。この端末にのみ保存されます。</string><string name="hours_short">%1$d時間</string><string name="timer_running_long">このタイマーは%1$d時間実行されています。</string><string name="stop_now">今すぐ停止</string><string name="keep_running">続行</string><string name="adjust_end_time">終了時刻を調整</string>
+    <string name="long_timer_warning">長時間タイマーの警告</string>
+    <plurals name="long_timer_warning_description">
+        <item quantity="other">%1$d時間後に警告します。この端末にのみ保存されます。</item>
+    </plurals>
+    <plurals name="hours_short">
+        <item quantity="other">%1$d時間</item>
+    </plurals>
+    <plurals name="timer_running_long">
+        <item quantity="other">このタイマーは%1$d時間実行されています。</item>
+    </plurals>
+    <string name="stop_now">今すぐ停止</string><string name="keep_running">続行</string><string name="adjust_end_time">終了時刻を調整</string>
     <string name="test_connection">接続をテスト</string><string name="testing_connection">テスト中…</string>
-    <string name="sync_center">同期センター</string><string name="sync_synced">同期済み</string><string name="sync_pending">保留中</string><string name="sync_retrying">再試行中</string><string name="sync_failed">失敗</string><string name="sync_failed_count">%1$d件の変更に失敗しました</string><string name="sync_retrying_count">%1$d件の変更を再試行中</string><string name="sync_pending_count">%1$d件の変更が同期を待機中</string><string name="sync_conflict">競合</string><string name="sync_conflict_count">%1$d件の競合を確認してください</string>
+    <string name="sync_pending">保留中</string><string name="sync_retrying">再試行中</string><string name="sync_failed">失敗</string>
+    <plurals name="sync_failed_count">
+        <item quantity="other">%1$d件の変更に失敗しました</item>
+    </plurals>
+    <plurals name="sync_retrying_count">
+        <item quantity="other">%1$d件の変更を再試行中</item>
+    </plurals>
+    <plurals name="sync_pending_count">
+        <item quantity="other">%1$d件の変更が同期を待機中</item>
+    </plurals>
+    <string name="sync_conflict">競合</string>
+    <plurals name="sync_conflict_count">
+        <item quantity="other">%1$d件の競合を確認してください</item>
+    </plurals>
     <string name="profile_picture">プロフィール画像</string>
     <string name="search_history">履歴を検索</string>
     <string name="needs_categorization">分類が必要</string>
@@ -66,7 +94,9 @@
     <string name="jump_to_date">日付に移動</string>
     <string name="finding_date_entries">%1$s 前後のエントリを検索中</string>
     <string name="finding_date_hint">指定した日付を探し、その前後の履歴を読み込んでいます…</string>
-    <string name="rate_limit_wait">サーバーのレート制限に達しました。%1$d 秒後に再開します…</string>
+    <plurals name="rate_limit_wait">
+        <item quantity="other">サーバーのレート制限に達しました。%1$d 秒後に再開します…</item>
+    </plurals>
     <string name="network_unavailable">インターネット接続がありません。変更が同期されない可能性があります。</string>
     <string name="network_restored">オンラインに戻りました</string>
 
@@ -75,17 +105,10 @@
     <string name="switch_organization">組織を切り替える</string>
     <string name="refresh">更新</string><string name="syncing">同期中</string>
     <string name="logout">ログアウト</string>
-    <string name="currently_tracking">追跡中</string>
     <string name="not_tracking">追跡していません</string>
-    <string name="no_active_time_entry">アクティブな時間エントリがありません</string>
     <string name="start_tracking">追跡を開始</string>
     <string name="stop_tracking">追跡を停止</string>
-    <string name="entry_details">エントリの詳細</string>
-    <string name="started">開始</string>
-    <string name="entry_id">エントリID</string>
     <string name="billable">請求可能</string>
-    <string name="yes">はい</string>
-    <string name="no">いいえ</string>
     <string name="tags">タグ</string>
     <string name="error">エラー</string>
     <string name="start">開始</string>
@@ -108,9 +131,7 @@
     <string name="what_are_you_working_on">何に取り組んでいますか？</string>
     <string name="project">プロジェクト</string>
     <string name="task">タスク</string>
-    <string name="no_task">タスクなし</string>
     <string name="update">更新</string>
-    <string name="time_entries_history">時間エントリ履歴</string>
     <string name="no_time_entries">まだ時間エントリがありません</string>
     <string name="edit">編集</string>
     <string name="delete">削除</string>
@@ -120,9 +141,6 @@
     <string name="duplicate_entry">複製</string>
     <string name="split_entry">分割</string>
     <string name="split_entry_title">時刻で分割</string>
-    <string name="split_entry_error">分割時刻はエントリの範囲内にする必要があります。</string>
-    <string name="entry_action_locked">実行中または競合中のエントリでは使用できません。</string>
-    <string name="entry_date">日付</string>
     <string name="today">今日</string>
     <string name="yesterday">昨日</string>
     <string name="time_and_duration">時刻と期間</string>
@@ -130,7 +148,6 @@
     <string name="end_time">終了時刻</string>
     <string name="start_date">開始日</string>
     <string name="end_date">終了日</string>
-    <string name="duration_minutes">期間（分）</string>
     <string name="total_time">合計時間</string>
     <string name="minutes">分</string>
     <string name="decrease_15_minutes">15分減らす</string>
@@ -144,8 +161,6 @@
     </plurals>
 
     <!-- Notifications -->
-    <string name="notification_channel_tracking_name">時間追跡</string>
-    <string name="notification_channel_tracking_description">時間追跡のステータスと経過時間を表示します</string>
     <string name="notification_channel_active_name">アクティブタイマー</string>
     <string name="notification_channel_active_description">実行中のタイマーと経過時間を表示します</string>
     <string name="notification_channel_idle_name">クイックスタート</string>
@@ -167,7 +182,6 @@
     <string name="settings_menu">設定</string>
     <string name="choose_language">言語を選択</string>
     <string name="server_information">サーバー情報</string>
-    <string name="organization">組織</string>
     <string name="quick_start">クイックスタート</string>
     <string name="always_show_notifications">通知を常に表示</string>
     <string name="always_show_notifications_description">時間追跡中に継続的な通知を表示</string>
@@ -187,7 +201,6 @@
     <string name="resume">再開</string>
     <string name="paused">一時停止中</string>
     <string name="notification_paused_title">時間追跡（一時停止中）</string>
-    <string name="notification_paused_text">再開をタップして新しいセッションを開始</string>
     <string name="notification_paused_tracked">追跡時間: %1$s</string>
     <string name="notification_paused_since">一時停止してから</string>
 
@@ -212,12 +225,12 @@
     <string name="widget_name">時間トラッカー</string>
     <string name="widget_description">クイックコントロール付きの現在の追跡ステータスを表示します</string>
     <string name="widget_not_tracking">追跡していません</string>
-    <string name="widget_login_required">ログインが必要です</string>
 
     <!-- 時間エントリの検証（編集・作成） -->
     <string name="entry_error_end_before_start">終了時刻は開始時刻より後にしてください。</string>
-    <string name="entry_error_duration_too_long">このエントリは24時間を超えています。開始と終了の時刻を確認してください。</string>
-    <string name="entry_warning_long_duration">このエントリは%1$d時間です。正しい場合のみ保存してください。</string>
+    <plurals name="entry_warning_long_duration">
+        <item quantity="other">このエントリは%1$d時間です。正しい場合のみ保存してください。</item>
+    </plurals>
     <string name="entry_warning_overlap">このエントリは他のエントリと重複しています。重複は許可されますが、フラグが付く場合があります。</string>
     <string name="entry_warning_overlap_policy">このエントリは他のエントリと重複しており、組織のポリシーで推奨されていません。</string>
 
