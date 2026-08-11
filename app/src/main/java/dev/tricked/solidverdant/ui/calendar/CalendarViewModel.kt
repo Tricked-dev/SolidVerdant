@@ -6,6 +6,7 @@
 
 package dev.tricked.solidverdant.ui.calendar
 
+import androidx.annotation.VisibleForTesting
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -534,6 +535,14 @@ class CalendarViewModel @Inject constructor(
     }
 
     fun entriesForSelectedDay(): List<TimeEntry> = _uiState.value.bucketsByDate[_uiState.value.selectedDate]?.entries ?: emptyList()
+
+    /** Cancel Main-bound collectors so JVM tests can reset their test dispatcher safely. */
+    @VisibleForTesting
+    internal fun cancelScopeForTest(): Job? {
+        val scopeJob = viewModelScope.coroutineContext[Job]
+        scopeJob?.cancel()
+        return scopeJob
+    }
 }
 
 private const val FULL_WEEK_DAYS = 7

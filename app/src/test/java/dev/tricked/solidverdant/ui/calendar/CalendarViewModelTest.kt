@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -45,9 +46,17 @@ import java.time.YearMonth
 @OptIn(ExperimentalCoroutinesApi::class)
 class CalendarViewModelTest {
 
+    private val viewModels = mutableListOf<CalendarViewModel>()
+
     @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
 
-    @After fun tearDown() = Dispatchers.resetMain()
+    @After
+    fun tearDown() {
+        val jobs = viewModels.mapNotNull { it.cancelScopeForTest() }
+        viewModels.clear()
+        runBlocking { jobs.forEach { it.join() } }
+        Dispatchers.resetMain()
+    }
 
     private class FakeReader(
         private val entries: List<TimeEntry>,
@@ -147,7 +156,7 @@ class CalendarViewModelTest {
         source: CalendarEventSource = FakeEventSource(),
         settings: CalendarOverlaySettings = FakeOverlaySettings(),
         temporalPolicyProvider: TemporalPolicyProvider = policyProvider(),
-    ) = CalendarViewModel(reader, source, settings, temporalPolicyProvider)
+    ) = CalendarViewModel(reader, source, settings, temporalPolicyProvider).also { viewModels += it }
 
     @Test
     fun buildsBucketsAndTotalsPerDay() = runTest {
