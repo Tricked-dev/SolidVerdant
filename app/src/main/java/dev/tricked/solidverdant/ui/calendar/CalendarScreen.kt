@@ -838,11 +838,13 @@ private fun CalendarToolbar(
                     selected = state.viewMode == mode,
                     onClick = { onModeSelected(mode) },
                     shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
-                    modifier = if (mode == CalendarViewMode.MONTH) {
-                        Modifier.testTag(CalendarTestTags.MODE_MONTH)
-                    } else {
-                        Modifier
-                    },
+                    modifier = Modifier.testTag(
+                        when (mode) {
+                            CalendarViewMode.MONTH -> CalendarTestTags.MODE_MONTH
+                            CalendarViewMode.WEEK -> CalendarTestTags.MODE_WEEK
+                            CalendarViewMode.DAY -> CalendarTestTags.MODE_DAY
+                        },
+                    ),
                 ) {
                     Text(stringResource(labelRes))
                 }

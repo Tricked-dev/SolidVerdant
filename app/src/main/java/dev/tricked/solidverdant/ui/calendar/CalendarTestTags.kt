@@ -13,6 +13,8 @@ object CalendarTestTags {
     const val WEEK_GRID = "calendar_week_grid"
     const val CURRENT_TIME_MARKER = "calendar_current_time_marker"
     const val MODE_MONTH = "calendar_mode_month"
+    const val MODE_WEEK = "calendar_mode_week"
+    const val MODE_DAY = "calendar_mode_day"
     const val ADD_ENTRY = "calendar_add_entry"
     const val ADD_BREAK = "calendar_add_break"
     const val ADD_BREAK_MENU = "calendar_add_break_menu"

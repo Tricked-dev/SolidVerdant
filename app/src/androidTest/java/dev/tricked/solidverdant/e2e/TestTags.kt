@@ -66,6 +66,8 @@ object TestTags {
     const val CALENDAR_WEEK_GRID = CalendarTestTags.WEEK_GRID
     const val CALENDAR_CURRENT_TIME_MARKER = CalendarTestTags.CURRENT_TIME_MARKER
     const val CALENDAR_MODE_MONTH = CalendarTestTags.MODE_MONTH
+    const val CALENDAR_MODE_WEEK = CalendarTestTags.MODE_WEEK
+    const val CALENDAR_MODE_DAY = CalendarTestTags.MODE_DAY
     const val CALENDAR_ADD_ENTRY = CalendarTestTags.ADD_ENTRY
     const val CALENDAR_ADD_BREAK = CalendarTestTags.ADD_BREAK
     const val CALENDAR_ADD_BREAK_MENU = CalendarTestTags.ADD_BREAK_MENU
