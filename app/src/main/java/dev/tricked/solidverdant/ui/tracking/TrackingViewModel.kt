@@ -1778,6 +1778,11 @@ class TrackingViewModel @Inject constructor(
         }
     }
 
+    /** Permanently drop a failed outbox change while keeping the cached entry available for editing. */
+    fun discardFailedSync(entryId: String) {
+        viewModelScope.launch { timeEntryRepository.discardFailedSync(entryId) }
+    }
+
     private fun handleMutationFailure(error: Exception, fallbackMessage: String) {
         if (error is CancellationException) throw error
         Timber.e(error, fallbackMessage)

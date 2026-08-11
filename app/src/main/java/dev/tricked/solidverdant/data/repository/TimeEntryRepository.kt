@@ -192,11 +192,11 @@ class TimeEntryRepository @Inject constructor(
      */
     fun observeSyncMeta(orgId: String): Flow<SyncMetaEntity?> = syncMetaDao.observe(orgId)
 
-    fun observeSyncOperations(orgId: String): Flow<List<SyncOperation>> = combine(
+    override fun observeSyncOperations(organizationId: String): Flow<List<SyncOperation>> = combine(
         outboxDao.observeAll(),
-        timeEntryDao.observeConflicts(orgId),
+        timeEntryDao.observeConflicts(organizationId),
     ) { operations, conflicts ->
-        val organizationOps = operations.filter { it.organizationId == orgId }
+        val organizationOps = operations.filter { it.organizationId == organizationId }
         val queuedIds = organizationOps.map { it.timeEntryId }.toSet()
         val queued = organizationOps.map { op ->
             SyncOperation(

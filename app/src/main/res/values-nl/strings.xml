@@ -52,6 +52,10 @@
     <string name="calendar_split_invalid">Kies een tijd tussen de start en het einde.</string>
     <string name="calendar_discard_entry_title">Niet-gesynchroniseerde registratie weggooien?</string>
     <string name="calendar_discard_entry_message">Deze lokale registratie wordt weggegooid en niet naar de server gestuurd.</string>
+    <string name="calendar_sync_pending_detail">Deze registratie wacht op synchronisatie.</string>
+    <string name="calendar_sync_failed_detail">Deze registratie heeft de server niet bereikt. Probeer opnieuw of gooi de mislukte wijziging weg.</string>
+    <string name="calendar_sync_conflict_detail">Deze registratie conflicteert met een serverwijziging. Open het synchronisatiecentrum om dit te bekijken.</string>
+    <string name="calendar_sync_synced_detail">Deze registratie is gesynchroniseerd.</string>
     <string name="calendar_settings">Kalenderinstellingen</string>
     <string name="calendar_settings_snap">Rasterinterval</string>
     <string name="calendar_settings_visible_hours">Zichtbare uren</string>

@@ -10,9 +10,11 @@ import dev.tricked.solidverdant.data.calendar.CalendarEventSource
 import dev.tricked.solidverdant.data.calendar.CalendarOverlaySettings
 import dev.tricked.solidverdant.data.calendar.DeviceCalendar
 import dev.tricked.solidverdant.data.calendar.DeviceCalendarEvent
+import dev.tricked.solidverdant.data.local.db.OutboxOpType
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.TimeEntryType
 import dev.tricked.solidverdant.data.repository.TimeEntryReader
+import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.domain.time.TemporalPolicy
 import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import io.mockk.coEvery
@@ -46,11 +48,16 @@ class CalendarViewModelTest {
 
     @After fun tearDown() = Dispatchers.resetMain()
 
-    private class FakeReader(private val entries: List<TimeEntry>) : TimeEntryReader {
+    private class FakeReader(
+        private val entries: List<TimeEntry>,
+        private val syncOperations: Flow<List<TimeEntryRepository.SyncOperation>> = flowOf(emptyList()),
+    ) : TimeEntryReader {
         val loadGates = mutableListOf<CompletableDeferred<Unit>>()
         var loadCalls = 0
 
         override fun observeTimeEntries(organizationId: String): Flow<List<TimeEntry>> = flowOf(entries)
+
+        override fun observeSyncOperations(organizationId: String): Flow<List<TimeEntryRepository.SyncOperation>> = syncOperations
 
         override suspend fun loadMonth(organizationId: String, memberId: String, month: java.time.YearMonth, zone: java.time.ZoneId) {
             val call = loadCalls++
@@ -149,6 +156,41 @@ class CalendarViewModelTest {
         val day6 = loaded.bucketsByDate[LocalDate.of(2026, 7, 6)]!!
         assertEquals(2, day6.entries.size)
         assertEquals(5400L, day6.totalSeconds)
+    }
+
+    @Test
+    fun observes_per_entry_sync_state_for_calendar_entries() = runTest {
+        val operation = TimeEntryRepository.SyncOperation(
+            entryId = "pending",
+            type = OutboxOpType.UPDATE,
+            status = TimeEntryRepository.EntrySyncStatus.PENDING,
+            attemptCount = 0,
+            error = null,
+        )
+        val model = vm(
+            FakeReader(
+                entries = listOf(entry("pending", "2026-07-06T09:00:00Z", 3600)),
+                syncOperations = flowOf(listOf(operation)),
+            ),
+        )
+
+        model.setOrganization("org1")
+
+        assertEquals(listOf(operation), model.uiState.first { it.syncOperations.isNotEmpty() }.syncOperations)
+    }
+
+    @Test
+    fun worst_sync_state_keeps_failed_change_visible_when_multiple_operations_exist() {
+        val pending = TimeEntryRepository.SyncOperation(
+            entryId = "entry",
+            type = OutboxOpType.UPDATE,
+            status = TimeEntryRepository.EntrySyncStatus.PENDING,
+            attemptCount = 0,
+            error = null,
+        )
+        val failed = pending.copy(status = TimeEntryRepository.EntrySyncStatus.FAILED, error = "offline")
+
+        assertEquals(failed, worstSyncOperationsByEntryId(listOf(pending, failed))["entry"])
     }
 
     @Test

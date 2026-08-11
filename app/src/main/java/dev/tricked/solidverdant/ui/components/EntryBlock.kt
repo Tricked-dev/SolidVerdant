@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.data.repository.TimeEntryRepository.EntrySyncStatus
 import dev.tricked.solidverdant.ui.theme.Dimens
 import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
 
@@ -53,6 +54,7 @@ fun EntryBlock(
     subtitle: String? = null,
     time: String? = null,
     minHeight: Dp = Dimens.EntryMinHeight,
+    syncStatus: EntrySyncStatus? = null,
 ) {
     val resolvedTitle = title?.takeIf { it.isNotBlank() }
         ?: stringResource(R.string.uikit_untitled_entry)
@@ -102,6 +104,10 @@ fun EntryBlock(
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
+        }
+        syncStatus?.let { status ->
+            Spacer(Modifier.width(Dimens.EntryBarGap))
+            SyncChip(status = status, showLabel = false)
         }
     }
 }

@@ -190,9 +190,23 @@ and runs the device suite against a deterministic local backend. Live-portable t
 an isolated local Solidtime server:
 
 ```bash
-devenv up -d
+# macOS: start Apple's container runtime once per host boot/login.
+container system start
 devenv tasks run solidtime:test
 ```
+
+On macOS the pinned live-test tasks use Apple's `/usr/local/bin/container` CLI, not Docker
+Desktop or Podman. The runtime must have the official `solidtime/solidtime:latest` and `postgres:15`
+images available (the task pulls them when needed). Check the runtime with `container system status`,
+inspect services with `container ls`, and read service output with
+`container logs solidverdant-solidtime-api` or `container logs solidverdant-solidtime-db`. The PostgreSQL task stores
+its cluster below `PGDATA` inside the named test volume because Apple's volume mount includes a
+filesystem metadata directory at the mount root. Apple container networking does not provide the
+Docker service-name route used by the upstream stack, so the task resolves PostgreSQL's reserved
+container address and injects it into the API configuration for each reset.
+The Apple published-port bridge is reset-prone for long-lived HTTP clients, so the task publishes
+the API to a disposable Unix socket under `/tmp`, forwards it through a small PHP/Ruby bridge to
+`127.0.0.1:18080`, and removes that bridge with the test process.
 
 The live task starts the official Solidtime container with disposable PostgreSQL data, resets its
 test account, and runs only E2E tests marked `@BackendPortable`. It requires one authorized physical
@@ -208,9 +222,11 @@ stable `solidtime/solidtime:latest`; set `SOLIDTIME_IMAGE_TAG=main` only for an 
 development compatibility run. The local API uses Solidtime's testing environment so the production
 per-user request throttle does not turn a rapid isolated suite into a false failure.
 
-If a restricted development environment reports read-only Podman state under `/run/user` or cannot
-open the Gradle distribution lock, rerun the same pinned `devenv` task with the approved elevated
-container/build permission. These errors are environment restrictions, not Solidtime test results.
+If the container runtime reports a permission or machine-state error, run `container system status`
+and start it with `container system start` before retrying. If a restricted development environment
+cannot open the Gradle distribution lock, rerun the same pinned `devenv` task with the approved
+elevated container/build permission. These errors are environment restrictions, not Solidtime test
+results.
 Read the JUnit instrumentation summary to determine pass/fail; do not rely on a task wrapper's shell
 exit code when it suppresses the instrumentation transcript.
 

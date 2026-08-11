@@ -58,6 +58,7 @@ import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.TimeEntryType
+import dev.tricked.solidverdant.data.repository.TimeEntryRepository.EntrySyncStatus
 import dev.tricked.solidverdant.ui.components.EntryBlock
 import dev.tricked.solidverdant.ui.components.LoadingState
 import dev.tricked.solidverdant.ui.statistics.hexToColor
@@ -81,6 +82,7 @@ fun MonthCalendarView(
     modifier: Modifier = Modifier,
     projects: List<Project> = emptyList(),
     tasks: List<Task> = emptyList(),
+    syncStatusByEntryId: Map<String, EntrySyncStatus> = emptyMap(),
 ) {
     var monthExpanded by remember { mutableStateOf(true) }
     val locale = LocalLocale.current.platformLocale
@@ -136,6 +138,7 @@ fun MonthCalendarView(
             scrollState = timelineScrollState,
             onEntryClick = onEntryClick,
             onEntryLongPress = onEntryLongPress,
+            syncStatusByEntryId = syncStatusByEntryId,
             onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
             settings = state.calendarSettings,
@@ -271,6 +274,7 @@ private fun ColumnScope.SelectedDayEntries(
     scrollState: ScrollState,
     onEntryClick: (TimeEntry) -> Unit,
     onEntryLongPress: (TimeEntry) -> Unit,
+    syncStatusByEntryId: Map<String, EntrySyncStatus>,
     onMoveEntry: (TimeEntry, String, String) -> Unit,
     onCreateRange: (CalendarTimeRange) -> Unit,
     settings: CalendarGridSettings = CalendarGridSettings(),
@@ -297,6 +301,7 @@ private fun ColumnScope.SelectedDayEntries(
             fillViewport = true,
             onEntryClick = onEntryClick,
             onEntryLongPress = onEntryLongPress,
+            syncStatusByEntryId = syncStatusByEntryId,
             onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
             modifier = Modifier.weight(1f),
@@ -312,6 +317,7 @@ private fun ColumnScope.SelectedDayEntries(
             fillViewport = true,
             onEntryClick = onEntryClick,
             onEntryLongPress = onEntryLongPress,
+            syncStatusByEntryId = syncStatusByEntryId,
             onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
             modifier = Modifier.weight(1f),
@@ -328,6 +334,7 @@ private fun ColumnScope.SelectedDayEntries(
                     scrollState = scrollState,
                     onEntryClick = onEntryClick,
                     onEntryLongPress = onEntryLongPress,
+                    syncStatusByEntryId = syncStatusByEntryId,
                     onMoveEntry = onMoveEntry,
                     onCreateRange = onCreateRange,
                 )
@@ -354,6 +361,7 @@ fun DayTimeline(
     settings: CalendarGridSettings = CalendarGridSettings(),
     onEntryClick: (TimeEntry) -> Unit,
     onEntryLongPress: (TimeEntry) -> Unit = {},
+    syncStatusByEntryId: Map<String, EntrySyncStatus> = emptyMap(),
     onMoveEntry: (TimeEntry, String, String) -> Unit = { _, _, _ -> },
     onCreateRange: (CalendarTimeRange) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -439,6 +447,7 @@ fun DayTimeline(
                             onLongClick = { onEntryLongPress(entry) },
                         )
                         .testTag("entry-row-${entry.id}"),
+                    syncStatus = syncStatusByEntryId[entry.id],
                 )
             }
 

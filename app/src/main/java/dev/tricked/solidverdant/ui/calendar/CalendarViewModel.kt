@@ -15,6 +15,7 @@ import dev.tricked.solidverdant.data.calendar.DeviceCalendar
 import dev.tricked.solidverdant.data.calendar.DeviceCalendarEvent
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.TimeEntryReader
+import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.domain.time.TemporalPolicy
 import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import dev.tricked.solidverdant.domain.time.isWorkTimeEntry
@@ -50,6 +51,13 @@ enum class CalendarViewMode { MONTH, WEEK, DAY }
 
 data class DayBucket(val date: LocalDate, val entries: List<TimeEntry>, val totalSeconds: Long)
 
+/** Keep the most actionable state when an entry has more than one queued local change. */
+internal fun worstSyncOperationsByEntryId(
+    operations: List<TimeEntryRepository.SyncOperation>,
+): Map<String, TimeEntryRepository.SyncOperation> = operations
+    .groupBy { it.entryId }
+    .mapValues { (_, entryOperations) -> entryOperations.maxByOrNull { it.status.ordinal } ?: entryOperations.first() }
+
 data class CalendarUiState(
     val viewMode: CalendarViewMode = CalendarViewMode.WEEK,
     /** Account temporal-policy zone; day/week boundaries and "today" are computed in it. */
@@ -63,6 +71,7 @@ data class CalendarUiState(
     val dayCount: Int = 7,
     val visibleDays: List<LocalDate> = emptyList(),
     val bucketsByDate: Map<LocalDate, DayBucket> = emptyMap(),
+    val syncOperations: List<TimeEntryRepository.SyncOperation> = emptyList(),
     val isLoading: Boolean = true,
     val calendarSettings: CalendarGridSettings = CalendarGridSettings(),
     // --- Device-calendar overlay ---
@@ -88,6 +97,7 @@ class CalendarViewModel @Inject constructor(
     private var organizationId: String? = null
     private var memberId: String? = null
     private var entriesJob: Job? = null
+    private var syncOperationsJob: Job? = null
     private var visibleLoadJob: Job? = null
     private var visibleLoadGeneration = 0L
 
@@ -198,9 +208,10 @@ class CalendarViewModel @Inject constructor(
         this.organizationId = organizationId
         this.memberId = memberId
         entriesJob?.cancel()
+        syncOperationsJob?.cancel()
         if (organizationChanged) {
             visibleLoadJob?.cancel()
-            _uiState.update { it.copy(bucketsByDate = emptyMap(), isLoading = true) }
+            _uiState.update { it.copy(bucketsByDate = emptyMap(), syncOperations = emptyList(), isLoading = true) }
         }
         entriesJob = viewModelScope.launch {
             reader.observeTimeEntries(organizationId).collect { entries ->
@@ -222,6 +233,13 @@ class CalendarViewModel @Inject constructor(
                         }
                 }
                 _uiState.update { it.copy(bucketsByDate = buckets, isLoading = false) }
+            }
+        }
+        syncOperationsJob = viewModelScope.launch {
+            reader.observeSyncOperations(organizationId).collect { operations ->
+                if (this@CalendarViewModel.organizationId == organizationId) {
+                    _uiState.update { it.copy(syncOperations = operations) }
+                }
             }
         }
         loadForVisibleDays()

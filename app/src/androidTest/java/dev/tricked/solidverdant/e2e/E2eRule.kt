@@ -283,7 +283,7 @@ class E2eRule(private val test: Any) : TestRule {
         entryPoint.database().outboxDao().insert(
             OutboxEntity(
                 opType = OutboxOpType.UPDATE,
-                organizationId = MockSolidtimeServer.DEFAULT_ORG_ID,
+                organizationId = currentSession.organizationId,
                 timeEntryId = entryId,
                 payloadJson = "{}",
                 createdAtMs = testClock.nowMs(),

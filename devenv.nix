@@ -39,8 +39,29 @@ let
     test_apk="$project_root/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
     [ -f "$app_apk" ] || { printf '%s\n' "Missing debug APK: $app_apk" >&2; exit 1; }
     [ -f "$test_apk" ] || { printf '%s\n' "Missing instrumentation APK: $test_apk" >&2; exit 1; }
-    adb -s "$device_serial" install -r "$app_apk"
-    adb -s "$device_serial" install -r "$test_apk"
+    install_e2e_apk() {
+      apk="$1"
+      package_name="$2"
+      install_output=""
+      if install_output=$(adb -s "$device_serial" install -r "$apk" 2>&1); then
+        printf '%s\n' "$install_output"
+        return 0
+      fi
+      printf '%s\n' "$install_output" >&2
+      case "$install_output" in
+        *INSTALL_FAILED_UPDATE_INCOMPATIBLE*)
+          adb -s "$device_serial" uninstall "$package_name" >/dev/null 2>&1
+          adb -s "$device_serial" install -r "$apk"
+          ;;
+        *)
+          return 1
+          ;;
+      esac
+    }
+    # E2E builds normally install in place; recover from a different local signing key only when
+    # adb reports the specific update-incompatible failure.
+    install_e2e_apk "$app_apk" dev.tricked.solidverdant.dev
+    install_e2e_apk "$test_apk" dev.tricked.solidverdant.dev.test
   '';
 in
 {
@@ -68,17 +89,21 @@ in
   packages = [
     pkgs.curl
     pkgs.jq
+    pkgs.ruby
   ];
 
   env.SOLIDTIME_E2E_URL = "http://127.0.0.1:18080";
-  env.SOLIDTIME_CONTAINER_ENGINE = "docker";
+  # macOS's supported container runtime is Apple's `container` CLI. Keep the absolute path because
+  # devenv's hermetic PATH does not include /usr/local/bin, while all task invocations still go
+  # through this single variable for easy auditing.
+  env.SOLIDTIME_CONTAINER_ENGINE = "/usr/local/bin/container";
 
   tasks."solidtime:engine".exec = ''
     command -v "$SOLIDTIME_CONTAINER_ENGINE" >/dev/null || {
       printf '%s\n' "SOLIDTIME_CONTAINER_ENGINE must name a Docker-compatible CLI" >&2
       exit 1
     }
-    "$SOLIDTIME_CONTAINER_ENGINE" info >/dev/null
+    "$SOLIDTIME_CONTAINER_ENGINE" system status >/dev/null
   '';
 
   tasks."solidtime:network" = {
@@ -92,6 +117,9 @@ in
     exec = ''
       "$SOLIDTIME_CONTAINER_ENGINE" rm -f \
         ${solidtimeApiContainer} ${solidtimeDatabaseContainer} >/dev/null 2>&1 || true
+      "$SOLIDTIME_CONTAINER_ENGINE" network rm ${solidtimeNetwork} >/dev/null 2>&1 || true
+      "$SOLIDTIME_CONTAINER_ENGINE" network create ${solidtimeNetwork} >/dev/null
+      rm -f /tmp/solidverdant-solidtime-api.sock
     '';
   };
 
@@ -110,7 +138,7 @@ in
       if [ ! -s "$laravel_env" ]; then
         umask 077
         keys_file="$state_dir/generated-keys.env"
-        "$SOLIDTIME_CONTAINER_ENGINE" run --rm "$image" php artisan self-host:generate-keys >"$keys_file"
+        "$SOLIDTIME_CONTAINER_ENGINE" run --remove "$image" php artisan self-host:generate-keys >"$keys_file"
         grep -q '^APP_KEY=' "$keys_file"
         grep -q '^PASSPORT_PRIVATE_KEY=' "$keys_file"
         grep -q '^PASSPORT_PUBLIC_KEY=' "$keys_file"
@@ -155,12 +183,13 @@ in
       "$SOLIDTIME_CONTAINER_ENGINE" rm -f ${solidtimeDatabaseContainer} >/dev/null 2>&1 || true
       cleanup() { "$SOLIDTIME_CONTAINER_ENGINE" stop -t 3 ${solidtimeDatabaseContainer} >/dev/null 2>&1 || true; }
       trap cleanup EXIT INT TERM
-      "$SOLIDTIME_CONTAINER_ENGINE" run --rm \
+      "$SOLIDTIME_CONTAINER_ENGINE" run --remove \
         --name ${solidtimeDatabaseContainer} \
         --network ${solidtimeNetwork} \
         --env POSTGRES_DB=solidtime \
         --env POSTGRES_USER=solidtime \
         --env POSTGRES_PASSWORD=solidtime-local-e2e \
+        --env PGDATA=/var/lib/postgresql/data/pgdata \
         --volume solidverdant-solidtime_database:/var/lib/postgresql/data \
         postgres:15 &
       child=$!
@@ -170,17 +199,36 @@ in
   };
 
   tasks."solidtime:database-ready" = {
-    after = [ "devenv:processes:solidtime-db@started" ];
+    after = [
+      "devenv:processes:solidtime-db@started"
+      "solidtime:config"
+    ];
     exec = ''
+      set -euo pipefail
+      ready=0
       for attempt in $(seq 1 90); do
         if "$SOLIDTIME_CONTAINER_ENGINE" exec ${solidtimeDatabaseContainer} \
           pg_isready -q -d solidtime -U solidtime; then
-          exit 0
+          ready=1
+          break
         fi
         sleep 1
       done
-      printf '%s\n' "Solidtime PostgreSQL did not become ready" >&2
-      exit 1
+      if [ "$ready" -ne 1 ]; then
+        printf '%s\n' "Solidtime PostgreSQL did not become ready" >&2
+        exit 1
+      fi
+      # Apple's container network does not provide Docker-style service-name DNS. Resolve the
+      # database's current reserved address and put it in the API environment instead.
+      db_host=$("$SOLIDTIME_CONTAINER_ENGINE" inspect ${solidtimeDatabaseContainer} |
+        jq -r '.[0].status.networks[] | select(.network == "${solidtimeNetwork}") | .ipv4Address' |
+        cut -d/ -f1)
+      if [ -z "$db_host" ] || [ "$db_host" = "null" ]; then
+        printf '%s\n' "Could not resolve the PostgreSQL container address" >&2
+        exit 1
+      fi
+      sed -i "s/^DB_HOST=.*/DB_HOST=\"$db_host\"/" "$DEVENV_STATE/solidtime/laravel.env"
+      sed -i 's/^DB_PORT=.*/DB_PORT="5432"/' "$DEVENV_STATE/solidtime/laravel.env"
     '';
   };
 
@@ -192,18 +240,133 @@ in
     exec = ''
       image="solidtime/solidtime:''${SOLIDTIME_IMAGE_TAG:-latest}"
       "$SOLIDTIME_CONTAINER_ENGINE" rm -f ${solidtimeApiContainer} >/dev/null 2>&1 || true
-      cleanup() { "$SOLIDTIME_CONTAINER_ENGINE" stop -t 3 ${solidtimeApiContainer} >/dev/null 2>&1 || true; }
+      api_socket="/tmp/solidverdant-solidtime-api.sock"
+      rm -f "$api_socket"
+      proxy_pid=""
+      cleanup() {
+        if [ -n "$proxy_pid" ]; then
+          kill "$proxy_pid" >/dev/null 2>&1 || true
+        fi
+        "$SOLIDTIME_CONTAINER_ENGINE" stop -t 3 ${solidtimeApiContainer} >/dev/null 2>&1 || true
+      }
       trap cleanup EXIT INT TERM
-      "$SOLIDTIME_CONTAINER_ENGINE" run --rm \
+      "$SOLIDTIME_CONTAINER_ENGINE" run --detach --remove \
         --name ${solidtimeApiContainer} \
         --network ${solidtimeNetwork} \
-        --publish 127.0.0.1:18080:8000 \
+        --publish-socket "$api_socket:/tmp/solidtime-api.sock" \
         --env-file "$DEVENV_STATE/solidtime/laravel.env" \
         --env CONTAINER_MODE=http \
         --env AUTO_DB_MIGRATE=true \
-        "$image" &
-      child=$!
-      wait "$child"
+        "$image" >/dev/null
+      api_running=0
+      for attempt in $(seq 1 90); do
+        api_state=$("$SOLIDTIME_CONTAINER_ENGINE" inspect ${solidtimeApiContainer} |
+          jq -r '.[0].status.state' || true)
+        if [ "$api_state" = "running" ]; then
+          api_running=1
+          break
+        fi
+        sleep 1
+      done
+      if [ "$api_running" -ne 1 ]; then
+        printf '%s\n' "Solidtime API container did not stay running" >&2
+        exit 1
+      fi
+      proxy_started=0
+      for attempt in $(seq 1 90); do
+        if "$SOLIDTIME_CONTAINER_ENGINE" exec -d ${solidtimeApiContainer} php -r '
+          $server = stream_socket_server("unix:///tmp/solidtime-api.sock", $errno, $error);
+          if ($server === false) { fwrite(STDERR, $error . PHP_EOL); exit(1); }
+          if (function_exists("pcntl_signal")) { pcntl_signal(SIGCHLD, SIG_IGN); }
+          while (true) {
+            $client = @stream_socket_accept($server, -1);
+            if ($client === false) { continue; }
+            $child = function_exists("pcntl_fork") ? pcntl_fork() : null;
+            if ($child === -1) { fclose($client); continue; }
+            if ($child > 0) { fclose($client); continue; }
+            if ($child === 0) { fclose($server); }
+            $upstream = false;
+            for ($attempt = 0; $attempt < 90; $attempt++) {
+              $upstream = @stream_socket_client("tcp://127.0.0.1:8000", $upstreamErrno, $upstreamError, 1);
+              if ($upstream !== false) { break; }
+              usleep(100000);
+            }
+            if ($upstream === false) { fclose($client); continue; }
+            stream_set_blocking($client, false);
+            stream_set_blocking($upstream, false);
+            while (!feof($client) && !feof($upstream)) {
+              $read = [$client, $upstream];
+              $write = [];
+              $except = [];
+              if (@stream_select($read, $write, $except, 1) === false) { break; }
+              foreach ($read as $source) {
+                $data = fread($source, 8192);
+                if ($data === false || $data === "") {
+                  if (feof($source)) { break 2; }
+                  continue;
+                }
+                $target = $source === $client ? $upstream : $client;
+                $offset = 0;
+                $length = strlen($data);
+                while ($offset < $length) {
+                  $written = @fwrite($target, substr($data, $offset));
+                  if ($written === false) { break 2; }
+                  $offset += $written;
+                }
+              }
+            }
+            fclose($upstream);
+            fclose($client);
+            if ($child === 0) { exit(0); }
+          }
+        ' >/dev/null 2>&1; then
+          proxy_started=1
+          break
+        fi
+        sleep 1
+      done
+      if [ "$proxy_started" -ne 1 ]; then
+        printf '%s\n' "Could not start the Solidtime API socket proxy" >&2
+        exit 1
+      fi
+      # Apple container's published-port bridge is not visible to devenv's readiness probe or
+      # adb reverse. Keep the public test URL stable with a host TCP proxy to the published Unix
+      # socket; both proxies exist only for this disposable process.
+      SOLIDTIME_API_SOCKET="$api_socket" ruby -rsocket -e '
+        socket_path = ENV.fetch("SOLIDTIME_API_SOCKET")
+        server = TCPServer.new("127.0.0.1", 18080)
+        loop do
+          socket = server.accept
+          Thread.new(socket) do |client|
+            upstream = nil
+            begin
+              20.times do
+                begin
+                  upstream = UNIXSocket.new(socket_path)
+                  break
+                rescue Errno::ENOENT, Errno::ECONNREFUSED
+                  sleep 0.1
+                end
+              end
+              next if upstream.nil?
+              to_upstream = Thread.new { IO.copy_stream(client, upstream); upstream.close_write rescue nil }
+              to_client = Thread.new { IO.copy_stream(upstream, client); client.close_write rescue nil }
+              to_upstream.join
+              to_client.join
+            ensure
+              client.close rescue nil
+              upstream.close rescue nil
+            end
+          end
+        end
+      ' &
+      proxy_pid=$!
+      while true; do
+        api_state=$("$SOLIDTIME_CONTAINER_ENGINE" inspect ${solidtimeApiContainer} |
+          jq -r '.[0].status.state' || true)
+        [ "$api_state" = "running" ] || exit 1
+        sleep 1
+      done
     '';
     ready = {
       http.get = {

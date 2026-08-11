@@ -50,6 +50,10 @@
     <string name="calendar_split_invalid">開始と終了の間の時刻を選択してください。</string>
     <string name="calendar_discard_entry_title">未同期のエントリーを破棄しますか？</string>
     <string name="calendar_discard_entry_message">このローカルエントリーは破棄され、サーバーには送信されません。</string>
+    <string name="calendar_sync_pending_detail">このエントリーは同期を待機中です。</string>
+    <string name="calendar_sync_failed_detail">このエントリーはサーバーに届いていません。再試行するか、失敗した変更を破棄してください。</string>
+    <string name="calendar_sync_conflict_detail">このエントリーはサーバーの変更と競合しています。同期センターで確認してください。</string>
+    <string name="calendar_sync_synced_detail">このエントリーは同期済みです。</string>
     <string name="calendar_settings">カレンダー設定</string>
     <string name="calendar_settings_snap">スナップ間隔</string>
     <string name="calendar_settings_visible_hours">表示する時間帯</string>

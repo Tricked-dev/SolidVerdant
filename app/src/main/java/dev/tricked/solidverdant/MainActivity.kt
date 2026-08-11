@@ -511,6 +511,11 @@ fun SolidVerdantApp(
                             onSplitEntry = trackingViewModel::splitTimeEntry,
                             onStopEntry = { trackingViewModel.stopTimeEntry() },
                             onUndoDelete = trackingViewModel::undoDelete,
+                            onRetrySyncEntry = trackingViewModel::retrySync,
+                            onDiscardFailedSync = trackingViewModel::discardFailedSync,
+                            onOpenSyncCenter = {
+                                navController.navigate(SyncRoutes.SYNC_CENTER)
+                            },
                             preventOverlap = currentMembership.organization.preventOverlappingTimeEntries,
                         )
                     }

@@ -81,9 +81,11 @@ import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.TimeEntryType
+import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.domain.time.isCompletedTimeEntry
 import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.ui.components.EditTimeEntryDialog
+import dev.tricked.solidverdant.ui.components.SyncChip
 import dev.tricked.solidverdant.ui.theme.Dimens
 import java.time.Instant
 import java.time.ZoneOffset
@@ -108,11 +110,15 @@ fun CalendarScreen(
     onSplitEntry: (String, String) -> Unit = { _, _ -> },
     onStopEntry: (TimeEntry) -> Unit = {},
     onUndoDelete: (TimeEntry) -> Unit = {},
+    onRetrySyncEntry: (String) -> Unit = {},
+    onDiscardFailedSync: (String) -> Unit = {},
+    onOpenSyncCenter: () -> Unit = {},
     preventOverlap: Boolean = false,
     viewModel: CalendarViewModel = hiltViewModel(),
 ) {
     LaunchedEffect(organizationId, memberId) { viewModel.setOrganization(organizationId, memberId) }
     val state by viewModel.uiState.collectAsState()
+    val syncOperationByEntryId = remember(state.syncOperations) { worstSyncOperationsByEntryId(state.syncOperations) }
     var editing by remember { mutableStateOf<TimeEntry?>(null) }
     var creatingRange by remember { mutableStateOf<CalendarTimeRange?>(null) }
     var creatingBreakRange by remember { mutableStateOf<CalendarTimeRange?>(null) }
@@ -215,6 +221,7 @@ fun CalendarScreen(
                 tasks = tasks,
                 onEntryClick = { editing = it },
                 onEntryLongPress = { contextEntry = it },
+                syncStatusByEntryId = syncOperationByEntryId.mapValues { (_, operation) -> operation.status },
                 onMoveEntry = onMoveEntry,
                 onCreateRange = { creatingRange = it },
                 modifier = Modifier.weight(1f),
@@ -229,6 +236,7 @@ fun CalendarScreen(
     contextEntry?.let { entry ->
         CalendarEntryActionsSheet(
             entry = entry,
+            syncOperation = syncOperationByEntryId[entry.id],
             sheetState = entryActionsSheetState,
             onDismiss = { contextEntry = null },
             onEdit = {
@@ -250,6 +258,18 @@ fun CalendarScreen(
             onDelete = {
                 contextEntry = null
                 deleteTarget = entry
+            },
+            onRetrySync = {
+                contextEntry = null
+                onRetrySyncEntry(entry.id)
+            },
+            onDiscardFailedSync = {
+                contextEntry = null
+                onDiscardFailedSync(entry.id)
+            },
+            onOpenSyncCenter = {
+                contextEntry = null
+                onOpenSyncCenter()
             },
         )
     }
@@ -405,6 +425,7 @@ fun CalendarScreen(
 @Composable
 private fun CalendarEntryActionsSheet(
     entry: TimeEntry,
+    syncOperation: TimeEntryRepository.SyncOperation?,
     sheetState: androidx.compose.material3.SheetState,
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
@@ -412,6 +433,9 @@ private fun CalendarEntryActionsSheet(
     onSplit: () -> Unit,
     onStop: () -> Unit,
     onDelete: () -> Unit,
+    onRetrySync: () -> Unit,
+    onDiscardFailedSync: () -> Unit,
+    onOpenSyncCenter: () -> Unit,
 ) {
     val running = isRunningTimeEntry(entry)
     val unsynced = entry.id.startsWith("local-")
@@ -434,6 +458,50 @@ private fun CalendarEntryActionsSheet(
                 modifier = Modifier.padding(top = Dimens.Space4),
             )
             Spacer(Modifier.heightIn(min = Dimens.Space8))
+            syncOperation?.let { operation ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(CalendarTestTags.SYNC_STATUS),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SyncChip(status = operation.status)
+                    }
+                    Text(
+                        text = stringResource(
+                            when (operation.status) {
+                                TimeEntryRepository.EntrySyncStatus.PENDING,
+                                TimeEntryRepository.EntrySyncStatus.RETRYING,
+                                -> R.string.calendar_sync_pending_detail
+                                TimeEntryRepository.EntrySyncStatus.FAILED -> R.string.calendar_sync_failed_detail
+                                TimeEntryRepository.EntrySyncStatus.CONFLICT -> R.string.calendar_sync_conflict_detail
+                                TimeEntryRepository.EntrySyncStatus.SYNCED -> R.string.calendar_sync_synced_detail
+                            },
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = Dimens.Space4),
+                    )
+                }
+                when (operation.status) {
+                    TimeEntryRepository.EntrySyncStatus.FAILED -> {
+                        CalendarEntryActionButton(
+                            label = stringResource(R.string.sync_retry),
+                            onClick = onRetrySync,
+                            actionTestTag = CalendarTestTags.SYNC_RETRY,
+                        )
+                        CalendarEntryActionButton(
+                            label = stringResource(R.string.sync_discard),
+                            onClick = onDiscardFailedSync,
+                            actionTestTag = CalendarTestTags.SYNC_DISCARD,
+                        )
+                    }
+                    TimeEntryRepository.EntrySyncStatus.CONFLICT -> {
+                        CalendarEntryActionButton(stringResource(R.string.sync_center_title), onOpenSyncCenter)
+                    }
+                    else -> Unit
+                }
+            }
             CalendarEntryActionButton(stringResource(R.string.edit), onEdit)
             if (running) {
                 CalendarEntryActionButton(stringResource(R.string.stop_tracking), onStop)
@@ -451,10 +519,13 @@ private fun CalendarEntryActionsSheet(
 }
 
 @Composable
-private fun CalendarEntryActionButton(label: String, onClick: () -> Unit) {
+private fun CalendarEntryActionButton(label: String, onClick: () -> Unit, actionTestTag: String? = null) {
     TextButton(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.MinTouchTarget),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = Dimens.MinTouchTarget)
+            .then(actionTestTag?.let { Modifier.testTag(it) } ?: Modifier),
     ) {
         Text(label, modifier = Modifier.fillMaxWidth())
     }
@@ -788,6 +859,7 @@ private fun CalendarBody(
     tasks: List<Task>,
     onEntryClick: (TimeEntry) -> Unit,
     onEntryLongPress: (TimeEntry) -> Unit,
+    syncStatusByEntryId: Map<String, TimeEntryRepository.EntrySyncStatus>,
     onMoveEntry: (TimeEntry, String, String) -> Unit,
     onCreateRange: (CalendarTimeRange) -> Unit,
     modifier: Modifier,
@@ -800,6 +872,7 @@ private fun CalendarBody(
             onNextMonth = viewModel::nextMonth,
             onEntryClick = onEntryClick,
             onEntryLongPress = onEntryLongPress,
+            syncStatusByEntryId = syncStatusByEntryId,
             onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
             projects = projects,
@@ -821,6 +894,7 @@ private fun CalendarBody(
                 onSelectDate = viewModel::selectDate,
                 onEntryClick = onEntryClick,
                 onEntryLongPress = onEntryLongPress,
+                syncStatusByEntryId = syncStatusByEntryId,
                 onMoveEntry = onMoveEntry,
                 onCreateRange = onCreateRange,
                 onPrevious = viewModel::pageBackward,

@@ -58,6 +58,7 @@ import dev.tricked.solidverdant.data.calendar.DeviceCalendarEvent
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.TimeEntryType
+import dev.tricked.solidverdant.data.repository.TimeEntryRepository.EntrySyncStatus
 import dev.tricked.solidverdant.ui.components.EntryBlock
 import dev.tricked.solidverdant.ui.components.LoadingState
 import dev.tricked.solidverdant.ui.statistics.hexToColor
@@ -95,6 +96,7 @@ fun WeekCalendarView(
     onNext: () -> Unit,
     onToday: () -> Unit,
     projects: List<Project>,
+    syncStatusByEntryId: Map<String, EntrySyncStatus> = emptyMap(),
     modifier: Modifier = Modifier,
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
@@ -117,6 +119,7 @@ fun WeekCalendarView(
             onNext = onNext,
             onToday = onToday,
             projects = projects,
+            syncStatusByEntryId = syncStatusByEntryId,
         )
     }
 }
@@ -134,6 +137,7 @@ private fun WeekCalendarContent(
     onNext: () -> Unit,
     onToday: () -> Unit,
     projects: List<Project>,
+    syncStatusByEntryId: Map<String, EntrySyncStatus>,
 ) {
     val zone = state.zone
     val settings = state.calendarSettings
@@ -212,6 +216,7 @@ private fun WeekCalendarContent(
                     onEntryLongPress = onEntryLongPress,
                     onMoveEntry = onMoveEntry,
                     onCreateRange = onCreateRange,
+                    syncStatusByEntryId = syncStatusByEntryId,
                 )
             }
         }
@@ -232,6 +237,7 @@ private fun WeekGrid(
     onEntryLongPress: (TimeEntry) -> Unit,
     onMoveEntry: (TimeEntry, String, String) -> Unit,
     onCreateRange: (CalendarTimeRange) -> Unit,
+    syncStatusByEntryId: Map<String, EntrySyncStatus>,
 ) {
     val initialScrollHours = (INITIAL_SCROLL_HOURS - settings.startHour)
         .coerceIn(0, (settings.endHour - settings.startHour - 1).coerceAtLeast(0))
@@ -268,6 +274,7 @@ private fun WeekGrid(
                         onEntryLongPress = onEntryLongPress,
                         onMoveEntry = onMoveEntry,
                         onCreateRange = onCreateRange,
+                        syncStatusByEntryId = syncStatusByEntryId,
                         dayIndex = index,
                         dayCount = days.size,
                         modifier = Modifier.weight(1f).fillMaxHeight(),
@@ -426,6 +433,7 @@ private fun DayColumn(
     onEntryLongPress: (TimeEntry) -> Unit,
     onMoveEntry: (TimeEntry, String, String) -> Unit,
     onCreateRange: (CalendarTimeRange) -> Unit,
+    syncStatusByEntryId: Map<String, EntrySyncStatus>,
     dayIndex: Int,
     dayCount: Int,
     modifier: Modifier = Modifier,
@@ -532,6 +540,7 @@ private fun DayColumn(
                     )
                     .testTag("week-entry-${entry.id}")
                     .semantics { contentDescription = a11y },
+                syncStatus = syncStatusByEntryId[entry.id],
             )
         }
 
