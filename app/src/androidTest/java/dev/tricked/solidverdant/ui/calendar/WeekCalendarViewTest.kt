@@ -307,7 +307,7 @@ class WeekCalendarViewTest {
             }
         }
 
-        composeRule.onNodeWithTag("week-entry-${entry.id}").performTouchInput { longClick() }
+        composeRule.onNodeWithTag("week-entry-${entry.id}").performScrollTo().performTouchInput { longClick() }
 
         composeRule.runOnIdle { assertEquals(entry.id, longPressed) }
     }
