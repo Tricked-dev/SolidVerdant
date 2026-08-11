@@ -141,4 +141,51 @@ class WeekCalendarViewTest {
             assertEquals(10, ZonedDateTime.parse(result.second).hour)
         }
     }
+
+    @Test
+    fun draggingTheBottomEdgeResizesAnExistingEntry() {
+        val date = LocalDate.of(2026, 7, 6)
+        val entry = TimeEntry(
+            id = "entry-resize",
+            userId = "user-1",
+            organizationId = "org-1",
+            start = "2026-07-06T09:00:00Z",
+            end = "2026-07-06T10:00:00Z",
+        )
+        var resized: Triple<TimeEntry, String, String>? = null
+        composeRule.setContent {
+            MaterialTheme {
+                WeekCalendarView(
+                    state = CalendarUiState(
+                        viewMode = CalendarViewMode.WEEK,
+                        visibleDays = listOf(date),
+                        selectedDate = date,
+                        weekAnchor = date,
+                        isLoading = false,
+                        bucketsByDate = mapOf(date to DayBucket(date, listOf(entry), 3_600)),
+                    ),
+                    onSelectDate = {},
+                    onEntryClick = {},
+                    onMoveEntry = { source, start, end -> resized = Triple(source, start, end) },
+                    onPrevious = {},
+                    onNext = {},
+                    onToday = {},
+                    projects = emptyList(),
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("week-entry-${entry.id}").performTouchInput {
+            down(Offset(center.x, bottom - 4f))
+            moveBy(Offset(0f, 48f), delayMillis = 250)
+            up()
+        }
+
+        composeRule.runOnIdle {
+            val result = requireNotNull(resized)
+            assertEquals(entry, result.first)
+            assertEquals("2026-07-06T09:00:00Z", result.second)
+            assertEquals("2026-07-06T11:00:00Z", result.third)
+        }
+    }
 }

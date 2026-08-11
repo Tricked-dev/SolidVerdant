@@ -479,17 +479,16 @@ private fun DayColumn(
                         y = CalendarTotalHeight * block.startFraction,
                     )
                     .width(slotWidth)
-                    .padding(horizontal = 0.5.dp)
-                    .height(
-                        (CalendarTotalHeight * block.heightFraction)
-                            .coerceAtLeast(Dimens.EntryMinHeight),
-                    ),
+                    .padding(horizontal = 0.5.dp),
                 entry = entry,
                 day = day,
                 zone = zone,
                 dayIndex = dayIndex,
                 dayCount = dayCount,
                 blockStartFraction = block.startFraction,
+                blockHeightPx = with(density) {
+                    (CalendarTotalHeight * block.heightFraction).coerceAtLeast(Dimens.EntryMinHeight).toPx()
+                },
                 gridHeightPx = gridHeightPx,
                 columnWidthPx = colWidthPx,
                 onMoveEntry = onMoveEntry,

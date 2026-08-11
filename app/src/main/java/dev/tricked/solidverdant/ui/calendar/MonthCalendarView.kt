@@ -372,14 +372,16 @@ fun DayTimeline(
                 val entryModifier = calendarEntryDragModifier(
                     modifier = Modifier
                         .padding(start = CalendarGutterWidth, end = Dimens.Space2)
-                        .offset(y = CalendarTotalHeight * top)
-                        .height((CalendarTotalHeight * height).coerceAtLeast(Dimens.EntryMinHeight)),
+                        .offset(y = CalendarTotalHeight * top),
                     entry = entry,
                     day = day,
                     zone = zone,
                     dayIndex = 0,
                     dayCount = 1,
                     blockStartFraction = top,
+                    blockHeightPx = with(LocalDensity.current) {
+                        (CalendarTotalHeight * height).coerceAtLeast(Dimens.EntryMinHeight).toPx()
+                    },
                     gridHeightPx = with(LocalDensity.current) { CalendarTotalHeight.toPx() },
                     columnWidthPx = with(LocalDensity.current) { CalendarTotalHeight.toPx() },
                     onMoveEntry = onMoveEntry,
