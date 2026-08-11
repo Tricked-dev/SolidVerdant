@@ -385,9 +385,12 @@ class CalendarViewModel @Inject constructor(
         val normalized = settings.normalized()
         _uiState.update { it.copy(calendarSettings = normalized) }
         viewModelScope.launch {
-            overlaySettings.setCalendarSnapMinutes(normalized.snapMinutes)
-            overlaySettings.setCalendarHours(normalized.startHour, normalized.endHour)
-            overlaySettings.setCalendarDensity(normalized.density.name)
+            overlaySettings.setCalendarGridSettings(
+                snapMinutes = normalized.snapMinutes,
+                startHour = normalized.startHour,
+                endHour = normalized.endHour,
+                density = normalized.density.name,
+            )
         }
     }
 

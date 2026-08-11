@@ -52,6 +52,7 @@ class CalendarSyncRecoveryE2eTest {
 
         e2e.composeRule.onNodeWithTag("main_nav_calendar", useUnmergedTree = true).performClick()
         val entryTag = "week-entry-$serverId"
+        e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_CONTENT_READY), WAIT_MS)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(entryTag), WAIT_MS)
         // Seed after the initial pull so the calendar observes a durable failure on the already
         // rendered Room entry instead of allowing the first refresh to race the fixture setup.
@@ -82,6 +83,7 @@ class CalendarSyncRecoveryE2eTest {
 
         e2e.composeRule.onNodeWithTag("main_nav_calendar", useUnmergedTree = true).performClick()
         val entryTag = "week-entry-$serverId"
+        e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_CONTENT_READY), WAIT_MS)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(entryTag), WAIT_MS)
         e2e.seedFailedSync(
             serverId,

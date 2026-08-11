@@ -39,6 +39,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
@@ -157,6 +158,36 @@ class ExternalTimerSurfacesE2eTest {
         robot.assertRunningEditSettingsVisible().tapSheetCancel()
 
         assertEquals(originalHandle.serverId, e2e.serverSnapshot().activeEntry?.id)
+    }
+
+    @BackendPortable
+    @Test
+    fun track_timer_start_date_edit_updates_the_running_entry_without_stopping_timer() {
+        val original = e2e.completedFixtureEntry(
+            logicalId = "track-start-correction",
+            description = "Track start correction",
+            start = Instant.now().minusSeconds(60),
+        ).copy(end = null, duration = null)
+        val originalHandle = e2e.prepare(E2eFixture.Active(original))
+        e2e.launchApp()
+        val robot = TrackRobot(e2e.composeRule).waitForHistory().assertStopButtonVisible()
+        val adjustedStart = Instant.parse(original.start).minus(1, ChronoUnit.DAYS)
+
+        e2e.composeRule.onNodeWithTag(TestTags.TRACK_EDIT_ACTIVE_ENTRY, useUnmergedTree = true).performClick()
+        robot
+            .assertRunningEditSettingsVisible()
+            .changeSheetStartDate(adjustedStart.atZone(e2e.session.zone).toLocalDate())
+            .saveSheet()
+
+        val snapshot = e2e.awaitServer(TEST_TIMEOUT_MS, driveSync = true) { current ->
+            current.activeEntry?.id == originalHandle.serverId &&
+                current.activeEntry?.end == null &&
+                current.activeEntry?.let { Instant.parse(it.start) == adjustedStart } == true
+        }
+        val active = requireNotNull(snapshot.activeEntry)
+        assertEquals(originalHandle.serverId, active.id)
+        assertEquals(adjustedStart, Instant.parse(active.start))
+        assertTrue("Editing the start must leave the timer running", active.end == null)
     }
 
     @BackendPortable

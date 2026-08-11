@@ -56,6 +56,7 @@ class CalendarSettingsE2eTest {
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag("main_nav_calendar"), WAIT_MS)
         e2e.composeRule.onNodeWithTag("main_nav_calendar", useUnmergedTree = true).performClick()
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_WEEK_GRID), WAIT_MS)
+        e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_CONTENT_READY), WAIT_MS)
     }
 
     private fun openSettings() {
@@ -72,9 +73,18 @@ class CalendarSettingsE2eTest {
 
     private fun assertSettingsAreVisible() {
         e2e.composeRule.onNodeWithTag(TestTags.CALENDAR_SETTINGS_SHEET, useUnmergedTree = true).assertIsDisplayed()
-        e2e.composeRule.onNodeWithTag(TestTags.CALENDAR_SETTINGS_SNAP, useUnmergedTree = true).assertTextContains("30")
-        e2e.composeRule.onNodeWithTag(TestTags.CALENDAR_SETTINGS_START, useUnmergedTree = true).assertTextContains("8")
-        e2e.composeRule.onNodeWithTag(TestTags.CALENDAR_SETTINGS_END, useUnmergedTree = true).assertTextContains("18")
+        e2e.composeRule.onNodeWithTag(
+            TestTags.calendarSettingsValue(TestTags.CALENDAR_SETTINGS_SNAP),
+            useUnmergedTree = true,
+        ).assertTextContains("30")
+        e2e.composeRule.onNodeWithTag(
+            TestTags.calendarSettingsValue(TestTags.CALENDAR_SETTINGS_START),
+            useUnmergedTree = true,
+        ).assertTextContains("8")
+        e2e.composeRule.onNodeWithTag(
+            TestTags.calendarSettingsValue(TestTags.CALENDAR_SETTINGS_END),
+            useUnmergedTree = true,
+        ).assertTextContains("18")
         e2e.composeRule.onNodeWithTag(TestTags.CALENDAR_SETTINGS_DENSITY_SPACIOUS, useUnmergedTree = true).assertIsSelected()
     }
 

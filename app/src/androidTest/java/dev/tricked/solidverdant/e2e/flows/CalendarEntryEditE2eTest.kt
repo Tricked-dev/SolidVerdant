@@ -48,6 +48,7 @@ class CalendarEntryEditE2eTest {
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag("main_nav_calendar"), WAIT_MS)
         e2e.composeRule.onNodeWithTag("main_nav_calendar", useUnmergedTree = true).performClick()
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_WEEK_GRID), WAIT_MS)
+        e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_CONTENT_READY), WAIT_MS)
         val entryTag = "week-entry-${requireNotNull(fixture.serverId)}"
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(entryTag), WAIT_MS)
         e2e.composeRule.onNodeWithTag(entryTag, useUnmergedTree = true)
@@ -63,12 +64,14 @@ class CalendarEntryEditE2eTest {
             .performScrollTo()
             .performClick()
 
-        val persisted = e2e.awaitServer(WAIT_MS, driveSync = true) { snapshot ->
-            snapshot.entry(fixture)?.description == "Calendar after edit"
-        }.entry(fixture)
-        assertEquals("Calendar after edit", persisted?.description)
-        assertEquals(original.start, persisted?.start)
-        assertEquals(original.end, persisted?.end)
+        val persisted = requireNotNull(
+            e2e.awaitServer(WAIT_MS, driveSync = true) { snapshot ->
+                snapshot.entry(fixture)?.description == "Calendar after edit"
+            }.entry(fixture),
+        )
+        assertEquals("Calendar after edit", persisted.description)
+        assertEquals(Instant.parse(original.start), Instant.parse(persisted.start))
+        assertEquals(Instant.parse(requireNotNull(original.end)), Instant.parse(requireNotNull(persisted.end)))
     }
 
     private companion object {

@@ -37,6 +37,13 @@ interface CalendarOverlaySettings {
     suspend fun setCalendarSnapMinutes(minutes: Int) = Unit
     suspend fun setCalendarHours(startHour: Int, endHour: Int) = Unit
     suspend fun setCalendarDensity(density: String) = Unit
+
+    /** Persist all grid controls as one snapshot when the backing store supports atomic writes. */
+    suspend fun setCalendarGridSettings(snapMinutes: Int, startHour: Int, endHour: Int, density: String) {
+        setCalendarSnapMinutes(snapMinutes)
+        setCalendarHours(startHour, endHour)
+        setCalendarDensity(density)
+    }
 }
 
 /** DataStore-backed [CalendarOverlaySettings] delegating to the shared [SettingsDataStore]. */
@@ -52,4 +59,6 @@ class SettingsCalendarOverlaySettings @Inject constructor(private val settings: 
     override suspend fun setCalendarSnapMinutes(minutes: Int) = settings.setCalendarSnapMinutes(minutes)
     override suspend fun setCalendarHours(startHour: Int, endHour: Int) = settings.setCalendarHours(startHour, endHour)
     override suspend fun setCalendarDensity(density: String) = settings.setCalendarDensity(density)
+    override suspend fun setCalendarGridSettings(snapMinutes: Int, startHour: Int, endHour: Int, density: String) =
+        settings.setCalendarGridSettings(snapMinutes, startHour, endHour, density)
 }

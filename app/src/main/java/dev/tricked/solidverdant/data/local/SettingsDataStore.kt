@@ -389,6 +389,19 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         dataStore.edit { it[CALENDAR_DENSITY] = density }
     }
 
+    /** Persist the calendar grid as one snapshot so its combined observer never sees a partial update. */
+    suspend fun setCalendarGridSettings(snapMinutes: Int, startHour: Int, endHour: Int, density: String) {
+        require(snapMinutes in setOf(1, 5, 10, 15, 30, 60))
+        require(startHour in 0..23 && endHour in 1..24 && startHour < endHour)
+        require(density in setOf("COMPACT", "COMFORTABLE", "SPACIOUS"))
+        dataStore.edit {
+            it[CALENDAR_SNAP_MINUTES] = snapMinutes
+            it[CALENDAR_START_HOUR] = startHour
+            it[CALENDAR_END_HOUR] = endHour
+            it[CALENDAR_DENSITY] = density
+        }
+    }
+
     /**
      * Widget state data class
      */

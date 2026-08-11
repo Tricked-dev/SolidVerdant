@@ -1043,7 +1043,12 @@ private fun CalendarSettingDropdown(
         ) {
             Column(horizontalAlignment = Alignment.Start) {
                 Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                Text(value, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    value,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.testTag(CalendarTestTags.settingsValue(controlTestTag)),
+                )
             }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -1075,6 +1080,9 @@ private fun CalendarBody(
     onCreateRange: (CalendarTimeRange) -> Unit,
     modifier: Modifier,
 ) {
+    val bodyModifier = modifier
+        .fillMaxWidth()
+        .then(if (!state.isLoading) Modifier.testTag(CalendarTestTags.CONTENT_READY) else Modifier)
     when (state.viewMode) {
         CalendarViewMode.MONTH -> MonthCalendarView(
             state = state,
@@ -1089,10 +1097,10 @@ private fun CalendarBody(
             projects = projects,
             tasks = tasks,
             clients = clients,
-            modifier = modifier.fillMaxWidth(),
+            modifier = bodyModifier,
         )
 
-        else -> BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        else -> BoxWithConstraints(modifier = bodyModifier) {
             val availableWidth = maxWidth
             LaunchedEffect(availableWidth, state.viewMode) {
                 if (state.viewMode == CalendarViewMode.WEEK) {

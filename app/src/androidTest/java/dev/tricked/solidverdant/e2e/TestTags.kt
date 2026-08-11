@@ -93,6 +93,7 @@ object TestTags {
     const val CALENDAR_ENTRY_SYNC_RETRY = CalendarTestTags.SYNC_RETRY
     const val CALENDAR_ENTRY_SYNC_DISCARD = CalendarTestTags.SYNC_DISCARD
     const val CALENDAR_LOAD_ERROR = CalendarTestTags.LOAD_ERROR
+    const val CALENDAR_CONTENT_READY = CalendarTestTags.CONTENT_READY
     const val CALENDAR_SPLIT_CONFIRM = CalendarTestTags.SPLIT_CONFIRM
     const val CALENDAR_SPLIT_CANCEL = CalendarTestTags.SPLIT_CANCEL
     const val TRACK_SHEET_START_DATE = TrackingTestTags.SHEET_START_DATE
@@ -119,4 +120,6 @@ object TestTags {
     fun calendarSelection(day: LocalDate): String = CalendarTestTags.selection(day)
 
     fun calendarSettingsOption(control: String, value: String): String = CalendarTestTags.settingsOption(control, value)
+
+    fun calendarSettingsValue(control: String): String = CalendarTestTags.settingsValue(control)
 }

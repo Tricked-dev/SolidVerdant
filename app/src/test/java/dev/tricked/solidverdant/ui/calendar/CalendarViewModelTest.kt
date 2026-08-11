@@ -104,6 +104,7 @@ class CalendarViewModelTest {
         val startHourState = MutableStateFlow(0)
         val endHourState = MutableStateFlow(24)
         val densityState = MutableStateFlow(CalendarGridDensity.COMFORTABLE.name)
+        var gridWrites = 0
         override val calendarOverlayEnabled: Flow<Boolean> = enabledState
         override val selectedCalendarIds: Flow<Set<String>> = selectedState
         override val calendarSnapMinutes: Flow<Int> = snapState
@@ -124,6 +125,13 @@ class CalendarViewModelTest {
             endHourState.value = endHour
         }
         override suspend fun setCalendarDensity(density: String) {
+            densityState.value = density
+        }
+        override suspend fun setCalendarGridSettings(snapMinutes: Int, startHour: Int, endHour: Int, density: String) {
+            gridWrites++
+            snapState.value = snapMinutes
+            startHourState.value = startHour
+            endHourState.value = endHour
             densityState.value = density
         }
     }
@@ -342,6 +350,7 @@ class CalendarViewModelTest {
         assertEquals(8, settings.startHourState.value)
         assertEquals(18, settings.endHourState.value)
         assertEquals(CalendarGridDensity.SPACIOUS.name, settings.densityState.value)
+        assertEquals("All calendar controls should persist as one snapshot", 1, settings.gridWrites)
     }
 
     @Test

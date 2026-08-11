@@ -323,6 +323,19 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
         waitUntilTagExists(TestTags.TRACK_SHEET_SAVE_BUTTON)
     }
 
+    fun changeSheetStartDate(date: LocalDate): TrackRobot = apply {
+        firstSheetNodeWithTag(TestTags.TRACK_SHEET_START_DATE).performScrollTo().performClick()
+        waitUntilTagExists(TestTags.ENTRY_DATE_PICKER)
+        val dayLabel = datePickerDayLabel(date)
+        val day = hasText(dayLabel) and hasAnyAncestor(hasTestTag(TestTags.ENTRY_DATE_PICKER))
+        composeRule.waitUntil(DEFAULT_TIMEOUT_MS) {
+            composeRule.onAllNodes(day, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onAllNodes(day, useUnmergedTree = true).onFirst().performClick()
+        firstEnabledNodeWithTag(TestTags.ENTRY_DATE_PICKER_CONFIRM).performClick()
+        waitUntilTagExists(TestTags.TRACK_SHEET_SAVE_BUTTON)
+    }
+
     fun saveSheet(): TrackRobot = apply {
         // The IME from typing can cover the save button; dismiss it before clicking.
         Espresso.closeSoftKeyboard()

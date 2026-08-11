@@ -40,6 +40,7 @@ object CalendarTestTags {
     const val SYNC_RETRY = "calendar_entry_sync_retry"
     const val SYNC_DISCARD = "calendar_entry_sync_discard"
     const val LOAD_ERROR = "calendar_load_error"
+    const val CONTENT_READY = "calendar_content_ready"
     const val SPLIT_PICKER = "calendar_split_picker"
     const val SPLIT_CONFIRM = "calendar_split_confirm"
     const val SPLIT_CANCEL = "calendar_split_cancel"
@@ -47,4 +48,6 @@ object CalendarTestTags {
     fun selection(day: LocalDate): String = "calendar-selection-$day"
 
     fun settingsOption(control: String, value: String): String = "$control-option-$value"
+
+    fun settingsValue(control: String): String = "$control-value"
 }
