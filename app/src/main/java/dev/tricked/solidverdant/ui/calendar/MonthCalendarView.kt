@@ -9,9 +9,11 @@ package dev.tricked.solidverdant.ui.calendar
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,6 +74,7 @@ fun MonthCalendarView(
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
     onEntryClick: (TimeEntry) -> Unit,
+    onEntryLongPress: (TimeEntry) -> Unit = {},
     onMoveEntry: (TimeEntry, String, String) -> Unit = { _, _, _ -> },
     onCreateRange: (CalendarTimeRange) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -131,6 +134,7 @@ fun MonthCalendarView(
             tasks = tasks,
             scrollState = timelineScrollState,
             onEntryClick = onEntryClick,
+            onEntryLongPress = onEntryLongPress,
             onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
             settings = state.calendarSettings,
@@ -265,6 +269,7 @@ private fun ColumnScope.SelectedDayEntries(
     tasks: List<Task>,
     scrollState: ScrollState,
     onEntryClick: (TimeEntry) -> Unit,
+    onEntryLongPress: (TimeEntry) -> Unit,
     onMoveEntry: (TimeEntry, String, String) -> Unit,
     onCreateRange: (CalendarTimeRange) -> Unit,
     settings: CalendarGridSettings = CalendarGridSettings(),
@@ -290,6 +295,7 @@ private fun ColumnScope.SelectedDayEntries(
             scrollState = scrollState,
             fillViewport = true,
             onEntryClick = onEntryClick,
+            onEntryLongPress = onEntryLongPress,
             onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
             modifier = Modifier.weight(1f),
@@ -304,6 +310,7 @@ private fun ColumnScope.SelectedDayEntries(
             scrollState = scrollState,
             fillViewport = true,
             onEntryClick = onEntryClick,
+            onEntryLongPress = onEntryLongPress,
             onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
             modifier = Modifier.weight(1f),
@@ -319,6 +326,7 @@ private fun ColumnScope.SelectedDayEntries(
                     settings = settings,
                     scrollState = scrollState,
                     onEntryClick = onEntryClick,
+                    onEntryLongPress = onEntryLongPress,
                     onMoveEntry = onMoveEntry,
                     onCreateRange = onCreateRange,
                 )
@@ -335,6 +343,7 @@ private const val INITIAL_SCROLL_HOURS = 8
  * so a day rendered here is visually identical to the same day inside the week grid.
  */
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 fun DayTimeline(
     day: LocalDate,
     entries: List<TimeEntry>,
@@ -343,6 +352,7 @@ fun DayTimeline(
     zone: ZoneId,
     settings: CalendarGridSettings = CalendarGridSettings(),
     onEntryClick: (TimeEntry) -> Unit,
+    onEntryLongPress: (TimeEntry) -> Unit = {},
     onMoveEntry: (TimeEntry, String, String) -> Unit = { _, _, _ -> },
     onCreateRange: (CalendarTimeRange) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -411,7 +421,10 @@ fun DayTimeline(
                     subtitle = subtitle,
                     time = formatDuration(entryDurationSecondsOnDay(entry, day, zone, now)),
                     modifier = entryModifier
-                        .clickable { onEntryClick(entry) }
+                        .combinedClickable(
+                            onClick = { onEntryClick(entry) },
+                            onLongClick = { onEntryLongPress(entry) },
+                        )
                         .testTag("entry-row-${entry.id}"),
                 )
             }

@@ -188,4 +188,46 @@ class WeekCalendarViewTest {
             assertEquals("2026-07-06T11:00:00Z", result.third)
         }
     }
+
+    @Test
+    fun longPressingAnExistingEntryInvokesLongPressCallback() {
+        val date = LocalDate.of(2026, 7, 6)
+        val entry = TimeEntry(
+            id = "entry-long-press",
+            userId = "user-1",
+            organizationId = "org-1",
+            start = "2026-07-06T09:00:00Z",
+            end = "2026-07-06T10:00:00Z",
+        )
+        var longPressed: String? = null
+        composeRule.setContent {
+            MaterialTheme {
+                WeekCalendarView(
+                    state = CalendarUiState(
+                        viewMode = CalendarViewMode.WEEK,
+                        visibleDays = listOf(date),
+                        selectedDate = date,
+                        weekAnchor = date,
+                        isLoading = false,
+                        bucketsByDate = mapOf(date to DayBucket(date, listOf(entry), 3_600)),
+                    ),
+                    onSelectDate = {},
+                    onEntryClick = {},
+                    onEntryLongPress = { longPressed = it.id },
+                    onPrevious = {},
+                    onNext = {},
+                    onToday = {},
+                    projects = emptyList(),
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("week-entry-${entry.id}").performTouchInput {
+            down(center)
+            advanceEventTime(600)
+            up()
+        }
+
+        composeRule.runOnIdle { assertEquals(entry.id, longPressed) }
+    }
 }

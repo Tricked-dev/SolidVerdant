@@ -6,9 +6,11 @@
 
 package dev.tricked.solidverdant.ui.calendar
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -85,6 +87,7 @@ fun WeekCalendarView(
     state: CalendarUiState,
     onSelectDate: (LocalDate) -> Unit,
     onEntryClick: (TimeEntry) -> Unit,
+    onEntryLongPress: (TimeEntry) -> Unit = {},
     onMoveEntry: (TimeEntry, String, String) -> Unit = { _, _, _ -> },
     onCreateRange: (CalendarTimeRange) -> Unit = {},
     onPrevious: () -> Unit,
@@ -106,6 +109,7 @@ fun WeekCalendarView(
             days = days,
             onSelectDate = onSelectDate,
             onEntryClick = onEntryClick,
+            onEntryLongPress = onEntryLongPress,
             onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
             onPrevious = onPrevious,
@@ -122,6 +126,7 @@ private fun WeekCalendarContent(
     days: List<LocalDate>,
     onSelectDate: (LocalDate) -> Unit,
     onEntryClick: (TimeEntry) -> Unit,
+    onEntryLongPress: (TimeEntry) -> Unit,
     onMoveEntry: (TimeEntry, String, String) -> Unit,
     onCreateRange: (CalendarTimeRange) -> Unit,
     onPrevious: () -> Unit,
@@ -203,6 +208,7 @@ private fun WeekCalendarContent(
                     state = state,
                     projects = projects,
                     onEntryClick = onEntryClick,
+                    onEntryLongPress = onEntryLongPress,
                     onMoveEntry = onMoveEntry,
                     onCreateRange = onCreateRange,
                 )
@@ -222,6 +228,7 @@ private fun WeekGrid(
     state: CalendarUiState,
     projects: List<Project>,
     onEntryClick: (TimeEntry) -> Unit,
+    onEntryLongPress: (TimeEntry) -> Unit,
     onMoveEntry: (TimeEntry, String, String) -> Unit,
     onCreateRange: (CalendarTimeRange) -> Unit,
 ) {
@@ -257,6 +264,7 @@ private fun WeekGrid(
                         entries = state.bucketsByDate[day]?.entries.orEmpty(),
                         projects = projects,
                         onEntryClick = onEntryClick,
+                        onEntryLongPress = onEntryLongPress,
                         onMoveEntry = onMoveEntry,
                         onCreateRange = onCreateRange,
                         dayIndex = index,
@@ -403,6 +411,7 @@ private fun AllDayRow(days: List<LocalDate>, allDayByDay: Map<LocalDate, List<De
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun DayColumn(
     day: LocalDate,
     isToday: Boolean,
@@ -413,6 +422,7 @@ private fun DayColumn(
     settings: CalendarGridSettings,
     projects: List<Project>,
     onEntryClick: (TimeEntry) -> Unit,
+    onEntryLongPress: (TimeEntry) -> Unit,
     onMoveEntry: (TimeEntry, String, String) -> Unit,
     onCreateRange: (CalendarTimeRange) -> Unit,
     dayIndex: Int,
@@ -506,7 +516,10 @@ private fun DayColumn(
                 color = base,
                 title = label,
                 modifier = entryModifier
-                    .clickable(onClick = { onEntryClick(entry) })
+                    .combinedClickable(
+                        onClick = { onEntryClick(entry) },
+                        onLongClick = { onEntryLongPress(entry) },
+                    )
                     .testTag("week-entry-${entry.id}")
                     .semantics { contentDescription = a11y },
             )

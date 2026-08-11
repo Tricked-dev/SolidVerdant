@@ -99,18 +99,32 @@ internal fun CalendarTimeSelectionLayer(
                 )
             }
             .pointerInput(day, zone, gridHeightPx, settings) {
-                detectTapGestures { offset ->
-                    onSelectionCompleteState(
-                        calendarTimeRangeForDrag(
-                            day = day,
-                            startY = offset.y,
-                            endY = offset.y,
-                            gridHeightPx = gridHeightPx,
-                            zone = zone,
-                            settings = settings,
-                        ),
-                    )
-                }
+                detectTapGestures(
+                    onTap = { offset ->
+                        onSelectionCompleteState(
+                            calendarTimeRangeForDrag(
+                                day = day,
+                                startY = offset.y,
+                                endY = offset.y,
+                                gridHeightPx = gridHeightPx,
+                                zone = zone,
+                                settings = settings,
+                            ),
+                        )
+                    },
+                    onLongPress = { offset ->
+                        onSelectionCompleteState(
+                            calendarTimeRangeForDrag(
+                                day = day,
+                                startY = offset.y,
+                                endY = offset.y,
+                                gridHeightPx = gridHeightPx,
+                                zone = zone,
+                                settings = settings,
+                            ),
+                        )
+                    },
+                )
             },
     ) {
         if (dragStart != null && dragCurrent != null) {

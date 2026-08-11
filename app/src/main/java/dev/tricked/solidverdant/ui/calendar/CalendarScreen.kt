@@ -33,6 +33,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -48,7 +50,10 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -74,8 +79,14 @@ import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.domain.time.isCompletedTimeEntry
+import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.ui.components.EditTimeEntryDialog
 import dev.tricked.solidverdant.ui.theme.Dimens
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,6 +100,9 @@ fun CalendarScreen(
     onMoveEntry: (TimeEntry, String, String) -> Unit = { _, _, _ -> },
     onCreateEntry: (String?, String?, String?, List<String>, Boolean, String, String) -> Unit = { _, _, _, _, _, _, _ -> },
     onDeleteEntry: (TimeEntry) -> Unit = {},
+    onDuplicateEntry: (String) -> Unit = {},
+    onSplitEntry: (String, String) -> Unit = { _, _ -> },
+    onStopEntry: (TimeEntry) -> Unit = {},
     onUndoDelete: (TimeEntry) -> Unit = {},
     preventOverlap: Boolean = false,
     viewModel: CalendarViewModel = hiltViewModel(),
@@ -97,6 +111,8 @@ fun CalendarScreen(
     val state by viewModel.uiState.collectAsState()
     var editing by remember { mutableStateOf<TimeEntry?>(null) }
     var creatingRange by remember { mutableStateOf<CalendarTimeRange?>(null) }
+    var contextEntry by remember { mutableStateOf<TimeEntry?>(null) }
+    var splitTarget by remember { mutableStateOf<TimeEntry?>(null) }
     var deleteTarget by remember { mutableStateOf<TimeEntry?>(null) }
     var deletedEntry by remember { mutableStateOf<TimeEntry?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -106,6 +122,7 @@ fun CalendarScreen(
     val overlaySheetState = rememberModalBottomSheetState()
     var showSettingsSheet by remember { mutableStateOf(false) }
     val settingsSheetState = rememberModalBottomSheetState()
+    val entryActionsSheetState = rememberModalBottomSheetState()
 
     val context = LocalContext.current
     val activity = context as? Activity
@@ -184,6 +201,7 @@ fun CalendarScreen(
                 projects = projects,
                 tasks = tasks,
                 onEntryClick = { editing = it },
+                onEntryLongPress = { contextEntry = it },
                 onMoveEntry = onMoveEntry,
                 onCreateRange = { creatingRange = it },
                 modifier = Modifier.weight(1f),
@@ -192,6 +210,46 @@ fun CalendarScreen(
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter).padding(Dimens.Space16),
+        )
+    }
+
+    contextEntry?.let { entry ->
+        CalendarEntryActionsSheet(
+            entry = entry,
+            sheetState = entryActionsSheetState,
+            onDismiss = { contextEntry = null },
+            onEdit = {
+                contextEntry = null
+                editing = entry
+            },
+            onDuplicate = {
+                contextEntry = null
+                onDuplicateEntry(entry.id)
+            },
+            onSplit = {
+                contextEntry = null
+                splitTarget = entry
+            },
+            onStop = {
+                contextEntry = null
+                onStopEntry(entry)
+            },
+            onDelete = {
+                contextEntry = null
+                deleteTarget = entry
+            },
+        )
+    }
+
+    splitTarget?.let { entry ->
+        CalendarSplitDialog(
+            entry = entry,
+            zone = state.zone,
+            onDismiss = { splitTarget = null },
+            onConfirm = { at ->
+                splitTarget = null
+                onSplitEntry(entry.id, at)
+            },
         )
     }
 
@@ -261,10 +319,31 @@ fun CalendarScreen(
     }
 
     deleteTarget?.let { entry ->
+        val discard = entry.id.startsWith("local-")
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text(stringResource(R.string.calendar_delete_entry_title)) },
-            text = { Text(stringResource(R.string.calendar_delete_entry_message)) },
+            title = {
+                Text(
+                    stringResource(
+                        if (discard) {
+                            R.string.calendar_discard_entry_title
+                        } else {
+                            R.string.calendar_delete_entry_title
+                        },
+                    ),
+                )
+            },
+            text = {
+                Text(
+                    stringResource(
+                        if (discard) {
+                            R.string.calendar_discard_entry_message
+                        } else {
+                            R.string.calendar_delete_entry_message
+                        },
+                    ),
+                )
+            },
             confirmButton = {
                 Button(
                     onClick = {
@@ -274,7 +353,7 @@ fun CalendarScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                 ) {
-                    Text(stringResource(R.string.delete))
+                    Text(stringResource(if (discard) R.string.calendar_action_discard else R.string.delete))
                 }
             },
             dismissButton = {
@@ -284,6 +363,170 @@ fun CalendarScreen(
             },
         )
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CalendarEntryActionsSheet(
+    entry: TimeEntry,
+    sheetState: androidx.compose.material3.SheetState,
+    onDismiss: () -> Unit,
+    onEdit: () -> Unit,
+    onDuplicate: () -> Unit,
+    onSplit: () -> Unit,
+    onStop: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val running = isRunningTimeEntry(entry)
+    val unsynced = entry.id.startsWith("local-")
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(CalendarTestTags.ENTRY_ACTIONS)
+                .padding(horizontal = Dimens.Space16)
+                .padding(bottom = Dimens.Space24),
+        ) {
+            Text(stringResource(R.string.calendar_entry_actions), style = MaterialTheme.typography.titleLarge)
+            Text(
+                text = entry.description?.takeIf { it.isNotBlank() }
+                    ?: stringResource(R.string.calendar_entry_untitled),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = Dimens.Space4),
+            )
+            Spacer(Modifier.heightIn(min = Dimens.Space8))
+            CalendarEntryActionButton(stringResource(R.string.edit), onEdit)
+            if (running) {
+                CalendarEntryActionButton(stringResource(R.string.stop_tracking), onStop)
+            }
+            if (!running && isCompletedTimeEntry(entry)) {
+                CalendarEntryActionButton(stringResource(R.string.duplicate_entry), onDuplicate)
+                CalendarEntryActionButton(stringResource(R.string.split_entry), onSplit)
+            }
+            CalendarEntryActionButton(
+                label = stringResource(if (unsynced) R.string.calendar_action_discard else R.string.delete),
+                onClick = onDelete,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CalendarEntryActionButton(label: String, onClick: () -> Unit) {
+    TextButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.MinTouchTarget),
+    ) {
+        Text(label, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CalendarSplitDialog(entry: TimeEntry, zone: java.time.ZoneId, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    val originalStart = remember(entry.id, entry.start, zone) {
+        runCatching {
+            ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME).withZoneSameInstant(zone)
+        }.getOrNull()
+    }
+    val originalEnd = remember(entry.id, entry.end, zone) {
+        entry.end?.let {
+            runCatching {
+                ZonedDateTime.parse(it, DateTimeFormatter.ISO_DATE_TIME).withZoneSameInstant(zone)
+            }.getOrNull()
+        }
+    }
+    if (originalStart == null || originalEnd == null || !originalEnd.isAfter(originalStart)) {
+        LaunchedEffect(entry.id) { onDismiss() }
+        return
+    }
+
+    val midpoint = remember(originalStart, originalEnd) {
+        originalStart.plusSeconds(java.time.Duration.between(originalStart, originalEnd).seconds / 2)
+    }
+    var selectedDate by remember(entry.id, zone) { mutableStateOf(midpoint.toLocalDate()) }
+    val timeState = rememberTimePickerState(
+        initialHour = midpoint.hour,
+        initialMinute = midpoint.minute,
+        is24Hour = true,
+    )
+    var invalid by remember(entry.id) { mutableStateOf(false) }
+    var showDatePicker by remember(entry.id) { mutableStateOf(false) }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = selectedDate.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            selectedDate = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
+                        }
+                        showDatePicker = false
+                    },
+                ) {
+                    Text(stringResource(R.string.done))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        ) {
+            DatePicker(state = datePickerState)
+        }
+        return
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.split_entry_title)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.calendar_split_help))
+                OutlinedButton(
+                    onClick = { showDatePicker = true },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.MinTouchTarget),
+                ) {
+                    Text(selectedDate.format(java.time.format.DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM)))
+                }
+                TimePicker(state = timeState, modifier = Modifier.testTag(CalendarTestTags.SPLIT_PICKER))
+                if (invalid) {
+                    Text(
+                        text = stringResource(R.string.calendar_split_invalid),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val candidate = selectedDate.atTime(timeState.hour, timeState.minute).atZone(zone)
+                    if (candidate.isAfter(originalStart) && candidate.isBefore(originalEnd)) {
+                        onConfirm(candidate.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+                    } else {
+                        invalid = true
+                    }
+                },
+            ) {
+                Text(stringResource(R.string.done))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+    )
 }
 
 @Composable
@@ -479,6 +722,7 @@ private fun CalendarBody(
     projects: List<Project>,
     tasks: List<Task>,
     onEntryClick: (TimeEntry) -> Unit,
+    onEntryLongPress: (TimeEntry) -> Unit,
     onMoveEntry: (TimeEntry, String, String) -> Unit,
     onCreateRange: (CalendarTimeRange) -> Unit,
     modifier: Modifier,
@@ -490,6 +734,7 @@ private fun CalendarBody(
             onPreviousMonth = viewModel::previousMonth,
             onNextMonth = viewModel::nextMonth,
             onEntryClick = onEntryClick,
+            onEntryLongPress = onEntryLongPress,
             onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
             projects = projects,
@@ -510,6 +755,7 @@ private fun CalendarBody(
                 state = state,
                 onSelectDate = viewModel::selectDate,
                 onEntryClick = onEntryClick,
+                onEntryLongPress = onEntryLongPress,
                 onMoveEntry = onMoveEntry,
                 onCreateRange = onCreateRange,
                 onPrevious = viewModel::pageBackward,

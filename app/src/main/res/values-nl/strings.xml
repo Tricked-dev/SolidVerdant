@@ -41,6 +41,12 @@
     <string name="calendar_drag_to_create">Tik om een boeking te maken of sleep om een start- en eindtijd te selecteren.</string>
     <string name="calendar_delete_entry_title">Tijdregistratie verwijderen?</string>
     <string name="calendar_delete_entry_message">Deze registratie wordt uit de kalender verwijderd en voor verwijdering klaargezet.</string>
+    <string name="calendar_entry_actions">Acties voor tijdregistratie</string>
+    <string name="calendar_action_discard">Niet-gesynchroniseerde registratie weggooien</string>
+    <string name="calendar_split_help">Kies de datum en tijd waarop deze registratie moet worden gesplitst.</string>
+    <string name="calendar_split_invalid">Kies een tijd tussen de start en het einde.</string>
+    <string name="calendar_discard_entry_title">Niet-gesynchroniseerde registratie weggooien?</string>
+    <string name="calendar_discard_entry_message">Deze lokale registratie wordt weggegooid en niet naar de server gestuurd.</string>
     <string name="calendar_settings">Kalenderinstellingen</string>
     <string name="calendar_settings_snap">Rasterinterval</string>
     <string name="calendar_settings_visible_hours">Zichtbare uren</string>

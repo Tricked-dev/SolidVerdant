@@ -488,6 +488,9 @@ fun SolidVerdantApp(
                                 }
                             },
                             onDeleteEntry = trackingViewModel::deleteTimeEntry,
+                            onDuplicateEntry = trackingViewModel::duplicateTimeEntry,
+                            onSplitEntry = trackingViewModel::splitTimeEntry,
+                            onStopEntry = { trackingViewModel.stopTimeEntry() },
                             onUndoDelete = trackingViewModel::undoDelete,
                             preventOverlap = currentMembership.organization.preventOverlappingTimeEntries,
                         )

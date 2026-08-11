@@ -14,6 +14,8 @@ object CalendarTestTags {
     const val MODE_MONTH = "calendar_mode_month"
     const val ADD_ENTRY = "calendar_add_entry"
     const val SETTINGS = "calendar_settings"
+    const val ENTRY_ACTIONS = "calendar_entry_actions"
+    const val SPLIT_PICKER = "calendar_split_picker"
 
     fun selection(day: LocalDate): String = "calendar-selection-$day"
 }

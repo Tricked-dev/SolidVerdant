@@ -41,6 +41,12 @@
     <string name="calendar_drag_to_create">Tap to create an entry, or drag to select a start and end time.</string>
     <string name="calendar_delete_entry_title">Delete time entry?</string>
     <string name="calendar_delete_entry_message">This entry will be removed from the calendar and queued for deletion.</string>
+    <string name="calendar_entry_actions">Time entry actions</string>
+    <string name="calendar_action_discard">Discard unsynced entry</string>
+    <string name="calendar_split_help">Choose the date and time where this entry should be split.</string>
+    <string name="calendar_split_invalid">Choose a time strictly between the start and end.</string>
+    <string name="calendar_discard_entry_title">Discard unsynced entry?</string>
+    <string name="calendar_discard_entry_message">This local entry will be discarded and will not be sent to the server.</string>
     <string name="calendar_settings">Calendar settings</string>
     <string name="calendar_settings_snap">Snap interval</string>
     <string name="calendar_settings_visible_hours">Visible hours</string>

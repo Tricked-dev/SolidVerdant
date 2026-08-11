@@ -11,6 +11,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
 import dev.tricked.solidverdant.data.model.TimeEntry
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -51,5 +52,43 @@ class MonthCalendarViewTest {
         composeRule.onNodeWithTag("day-cell-2026-07-06").assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("entry-row-e1").performScrollTo().assertIsDisplayed().performClick()
         assertEquals("e1", clicked)
+    }
+
+    @Test
+    fun longPressingEntryInvokesCallback() {
+        val date = LocalDate.of(2026, 7, 6)
+        val entry = TimeEntry(
+            id = "e-long-press",
+            userId = "u",
+            start = "2026-07-06T09:00:00Z",
+            end = "2026-07-06T10:00:00Z",
+            duration = 3600,
+            organizationId = "o",
+        )
+        val state = CalendarUiState(
+            visibleMonth = YearMonth.of(2026, 7),
+            selectedDate = date,
+            bucketsByDate = mapOf(date to DayBucket(date, listOf(entry), 3600)),
+            isLoading = false,
+        )
+        var longPressed: String? = null
+        composeRule.setContent {
+            MonthCalendarView(
+                state,
+                onSelectDate = {},
+                onPreviousMonth = {},
+                onNextMonth = {},
+                onEntryClick = {},
+                onEntryLongPress = { longPressed = it.id },
+            )
+        }
+        composeRule.onNodeWithTag("day-cell-2026-07-06").performClick()
+        composeRule.onNodeWithTag("entry-row-${entry.id}").performScrollTo().performTouchInput {
+            down(center)
+            advanceEventTime(600)
+            up()
+        }
+
+        composeRule.runOnIdle { assertEquals(entry.id, longPressed) }
     }
 }
