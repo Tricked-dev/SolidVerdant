@@ -23,6 +23,7 @@ import dev.tricked.solidverdant.sync.SyncTrigger
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -45,7 +46,7 @@ import org.robolectric.Shadows.shadowOf
 class TrackingViewModelForegroundTest {
 
     private lateinit var db: AppDatabase
-    private val dispatcher = UnconfinedTestDispatcher()
+    private lateinit var dispatcher: TestDispatcher
     private val viewModels = mutableListOf<TrackingViewModel>()
     private var syncRequests = 0
     private var now = 0L
@@ -57,6 +58,7 @@ class TrackingViewModelForegroundTest {
 
     @Before
     fun setup() {
+        dispatcher = UnconfinedTestDispatcher()
         kotlinx.coroutines.Dispatchers.setMain(dispatcher)
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
@@ -66,11 +68,16 @@ class TrackingViewModelForegroundTest {
 
     @After
     fun teardown() {
-        viewModels.forEach { it.cancelScopeForTest() }
+        val testViewModels = viewModels.toList()
+        viewModels.clear()
+        val scopeJobs = testViewModels.mapNotNull { it.cancelScopeForTest() }
         dispatcher.scheduler.advanceUntilIdle()
-        db.close()
+        kotlinx.coroutines.runBlocking {
+            scopeJobs.forEach { it.join() }
+        }
         shadowOf(Looper.getMainLooper()).idle()
         dispatcher.scheduler.advanceUntilIdle()
+        db.close()
         kotlinx.coroutines.Dispatchers.resetMain()
     }
 
