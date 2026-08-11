@@ -280,13 +280,13 @@ class E2eRule(private val test: Any) : TestRule {
     }
 
     /** Seed one visible terminal sync failure without running a worker or touching the mock server. */
-    fun seedFailedSync(entryId: String = "failed-entry") = runBlocking {
+    fun seedFailedSync(entryId: String = "failed-entry", payloadJson: String = "{}") = runBlocking {
         entryPoint.database().outboxDao().insert(
             OutboxEntity(
                 opType = OutboxOpType.UPDATE,
                 organizationId = currentSession.organizationId,
                 timeEntryId = entryId,
-                payloadJson = "{}",
+                payloadJson = payloadJson,
                 createdAtMs = testClock.nowMs(),
                 attemptCount = 1,
                 lastError = "422 rejected",
