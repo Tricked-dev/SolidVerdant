@@ -20,6 +20,7 @@ object CalendarTestTags {
     const val SYNC_STATUS = "calendar_entry_sync_status"
     const val SYNC_RETRY = "calendar_entry_sync_retry"
     const val SYNC_DISCARD = "calendar_entry_sync_discard"
+    const val LOAD_ERROR = "calendar_load_error"
     const val SPLIT_PICKER = "calendar_split_picker"
 
     fun selection(day: LocalDate): String = "calendar-selection-$day"

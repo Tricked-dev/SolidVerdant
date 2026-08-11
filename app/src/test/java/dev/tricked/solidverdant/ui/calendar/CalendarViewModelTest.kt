@@ -54,6 +54,7 @@ class CalendarViewModelTest {
     ) : TimeEntryReader {
         val loadGates = mutableListOf<CompletableDeferred<Unit>>()
         var loadCalls = 0
+        var loadFailure: Throwable? = null
 
         override fun observeTimeEntries(organizationId: String): Flow<List<TimeEntry>> = flowOf(entries)
 
@@ -62,6 +63,10 @@ class CalendarViewModelTest {
         override suspend fun loadMonth(organizationId: String, memberId: String, month: java.time.YearMonth, zone: java.time.ZoneId) {
             val call = loadCalls++
             loadGates.getOrNull(call)?.await()
+            loadFailure?.let { failure ->
+                loadFailure = null
+                throw failure
+            }
         }
     }
 
@@ -191,6 +196,27 @@ class CalendarViewModelTest {
         val failed = pending.copy(status = TimeEntryRepository.EntrySyncStatus.FAILED, error = "offline")
 
         assertEquals(failed, worstSyncOperationsByEntryId(listOf(pending, failed))["entry"])
+    }
+
+    @Test
+    fun load_failure_marks_cached_calendar_stale_and_retry_recovers() = runTest {
+        val reader = FakeReader(listOf(entry("cached", "2026-07-06T09:00:00Z", 3600)))
+        val model = vm(reader)
+
+        model.setOrganization("org1")
+        model.uiState.first { it.bucketsByDate.isNotEmpty() }
+        reader.loadFailure = IllegalStateException("offline")
+        model.retryLoad()
+
+        val failed = model.uiState.first { it.loadError }
+        assertFalse(failed.isLoading)
+        assertTrue(failed.isStale)
+
+        model.retryLoad()
+
+        val recovered = model.uiState.first { reader.loadCalls >= 3 && !it.isLoading && !it.loadError }
+        assertFalse(recovered.isStale)
+        assertTrue(recovered.bucketsByDate.isNotEmpty())
     }
 
     @Test

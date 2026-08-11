@@ -54,6 +54,8 @@
     <string name="calendar_sync_failed_detail">このエントリーはサーバーに届いていません。再試行するか、失敗した変更を破棄してください。</string>
     <string name="calendar_sync_conflict_detail">このエントリーはサーバーの変更と競合しています。同期センターで確認してください。</string>
     <string name="calendar_sync_synced_detail">このエントリーは同期済みです。</string>
+    <string name="calendar_load_error">カレンダーの記録を読み込めませんでした。接続を確認して再試行してください。</string>
+    <string name="calendar_load_error_cached">カレンダーを更新できませんでした。キャッシュされた記録は古い可能性があります。</string>
     <string name="calendar_settings">カレンダー設定</string>
     <string name="calendar_settings_snap">スナップ間隔</string>
     <string name="calendar_settings_visible_hours">表示する時間帯</string>

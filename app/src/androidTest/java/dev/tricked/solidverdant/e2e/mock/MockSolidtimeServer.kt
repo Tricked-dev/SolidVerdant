@@ -80,6 +80,7 @@ class MockSolidtimeServer {
     @Volatile
     var activeEntry: TimeEntry? = null
 
+    private var timeEntriesRequestsFailing = false
     private var nextTimeEntriesResponseGate: CountDownLatch? = null
     private val responseGate = ThreadLocal<CountDownLatch?>()
 
@@ -127,6 +128,7 @@ class MockSolidtimeServer {
         )
         timeEntries.clear()
         seededEntry?.let { timeEntries += it }
+        timeEntriesRequestsFailing = false
     }
 
     fun addTimeEntry(entry: TimeEntry) {
@@ -194,6 +196,11 @@ class MockSolidtimeServer {
     }
 
     fun wasRequested(method: String, pathContains: String): Boolean = callsMatching(method, pathContains).isNotEmpty()
+
+    /** Make time-entry GETs fail until the test restores the healthy response path. */
+    fun setTimeEntriesRequestsFailing(failing: Boolean) {
+        synchronized(lock) { timeEntriesRequestsFailing = failing }
+    }
 
     /** Hold one history response until the test has completed a concurrent local edit and sync. */
     fun delayNextTimeEntriesResponseUntilReleased(): CountDownLatch = CountDownLatch(1).also { gate ->
@@ -280,6 +287,7 @@ class MockSolidtimeServer {
      * offsets, which a return-everything fake silently short-circuits.
      */
     private fun handleListEntries(fullPath: String): MockResponse {
+        if (timeEntriesRequestsFailing) return serviceUnavailable()
         val query = fullPath.substringAfter("?", missingDelimiterValue = "")
         val params = query.split("&").mapNotNull {
             val (k, v) = it.split("=", limit = 2).takeIf { p -> p.size == 2 } ?: return@mapNotNull null
@@ -380,6 +388,11 @@ class MockSolidtimeServer {
         .setBody(bodyJson)
 
     private fun notFound(): MockResponse = MockResponse().setResponseCode(404).setBody("""{"message":"not found"}""")
+
+    private fun serviceUnavailable(): MockResponse = MockResponse()
+        .setResponseCode(503)
+        .setHeader("Content-Type", "application/json")
+        .setBody("""{"message":"temporarily unavailable"}""")
 
     companion object {
         const val DEFAULT_USER_ID = "user-1"

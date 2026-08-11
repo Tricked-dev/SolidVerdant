@@ -56,6 +56,8 @@
     <string name="calendar_sync_failed_detail">This entry has not reached the server. Retry or discard the failed change.</string>
     <string name="calendar_sync_conflict_detail">This entry conflicts with a server change. Open Sync Center to review it.</string>
     <string name="calendar_sync_synced_detail">This entry is synced.</string>
+    <string name="calendar_load_error">Calendar entries could not be loaded. Check your connection and try again.</string>
+    <string name="calendar_load_error_cached">Couldn’t refresh the calendar. Cached entries may be out of date.</string>
     <string name="calendar_settings">Calendar settings</string>
     <string name="calendar_settings_snap">Snap interval</string>
     <string name="calendar_settings_visible_hours">Visible hours</string>

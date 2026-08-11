@@ -69,6 +69,7 @@ object TestTags {
     const val CALENDAR_ENTRY_SYNC_STATUS = CalendarTestTags.SYNC_STATUS
     const val CALENDAR_ENTRY_SYNC_RETRY = CalendarTestTags.SYNC_RETRY
     const val CALENDAR_ENTRY_SYNC_DISCARD = CalendarTestTags.SYNC_DISCARD
+    const val CALENDAR_LOAD_ERROR = CalendarTestTags.LOAD_ERROR
     const val TRACK_SHEET_START_DATE = TrackingTestTags.SHEET_START_DATE
     const val TRACK_SHEET_END_DATE = TrackingTestTags.SHEET_END_DATE
     const val ENTRY_DATE_PICKER = EditTimeEntryTestTags.DATE_PICKER

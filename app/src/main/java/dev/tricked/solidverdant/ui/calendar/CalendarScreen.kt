@@ -85,6 +85,7 @@ import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.domain.time.isCompletedTimeEntry
 import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.ui.components.EditTimeEntryDialog
+import dev.tricked.solidverdant.ui.components.ErrorState
 import dev.tricked.solidverdant.ui.components.SyncChip
 import dev.tricked.solidverdant.ui.theme.Dimens
 import java.time.Instant
@@ -214,18 +215,35 @@ fun CalendarScreen(
                 onOpenOverlay = { showOverlaySheet = true },
                 onOpenSettings = { showSettingsSheet = true },
             )
-            CalendarBody(
-                state = state,
-                viewModel = viewModel,
-                projects = projects,
-                tasks = tasks,
-                onEntryClick = { editing = it },
-                onEntryLongPress = { contextEntry = it },
-                syncStatusByEntryId = syncOperationByEntryId.mapValues { (_, operation) -> operation.status },
-                onMoveEntry = onMoveEntry,
-                onCreateRange = { creatingRange = it },
-                modifier = Modifier.weight(1f),
-            )
+            if (state.loadError && !state.isStale) {
+                ErrorState(
+                    text = stringResource(R.string.calendar_load_error),
+                    onRetry = viewModel::retryLoad,
+                    modifier = Modifier.weight(1f).testTag(CalendarTestTags.LOAD_ERROR),
+                )
+            } else {
+                Column(modifier = Modifier.weight(1f)) {
+                    if (state.loadError) {
+                        ErrorState(
+                            text = stringResource(R.string.calendar_load_error_cached),
+                            onRetry = viewModel::retryLoad,
+                            modifier = Modifier.testTag(CalendarTestTags.LOAD_ERROR),
+                        )
+                    }
+                    CalendarBody(
+                        state = state,
+                        viewModel = viewModel,
+                        projects = projects,
+                        tasks = tasks,
+                        onEntryClick = { editing = it },
+                        onEntryLongPress = { contextEntry = it },
+                        syncStatusByEntryId = syncOperationByEntryId.mapValues { (_, operation) -> operation.status },
+                        onMoveEntry = onMoveEntry,
+                        onCreateRange = { creatingRange = it },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
         }
         SnackbarHost(
             hostState = snackbarHostState,

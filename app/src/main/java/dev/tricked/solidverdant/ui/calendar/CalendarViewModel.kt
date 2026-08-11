@@ -73,6 +73,8 @@ data class CalendarUiState(
     val bucketsByDate: Map<LocalDate, DayBucket> = emptyMap(),
     val syncOperations: List<TimeEntryRepository.SyncOperation> = emptyList(),
     val isLoading: Boolean = true,
+    val loadError: Boolean = false,
+    val isStale: Boolean = false,
     val calendarSettings: CalendarGridSettings = CalendarGridSettings(),
     // --- Device-calendar overlay ---
     val overlayEnabled: Boolean = false,
@@ -211,7 +213,15 @@ class CalendarViewModel @Inject constructor(
         syncOperationsJob?.cancel()
         if (organizationChanged) {
             visibleLoadJob?.cancel()
-            _uiState.update { it.copy(bucketsByDate = emptyMap(), syncOperations = emptyList(), isLoading = true) }
+            _uiState.update {
+                it.copy(
+                    bucketsByDate = emptyMap(),
+                    syncOperations = emptyList(),
+                    isLoading = true,
+                    loadError = false,
+                    isStale = false,
+                )
+            }
         }
         entriesJob = viewModelScope.launch {
             reader.observeTimeEntries(organizationId).collect { entries ->
@@ -268,6 +278,9 @@ class CalendarViewModel @Inject constructor(
     fun pageForward() = page(1)
 
     fun pageBackward() = page(-1)
+
+    /** Re-fetch the current calendar page without changing the user's current selection. */
+    fun retryLoad() = loadForVisibleDays()
 
     private fun page(direction: Int) {
         val state = _uiState.value
@@ -479,7 +492,7 @@ class CalendarViewModel @Inject constructor(
                 }
             }
         }
-        _uiState.update { it.copy(isLoading = true) }
+        _uiState.update { it.copy(isLoading = true, loadError = false, isStale = false) }
         val requestGeneration = ++visibleLoadGeneration
         visibleLoadJob?.cancel()
         visibleLoadJob = viewModelScope.launch {
@@ -489,13 +502,19 @@ class CalendarViewModel @Inject constructor(
                     currentCoroutineContext().ensureActive()
                 }
                 if (requestGeneration == visibleLoadGeneration && this@CalendarViewModel.organizationId == org) {
-                    _uiState.update { it.copy(isLoading = false) }
+                    _uiState.update { it.copy(isLoading = false, loadError = false, isStale = false) }
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 if (requestGeneration == visibleLoadGeneration && this@CalendarViewModel.organizationId == org) {
-                    _uiState.update { it.copy(isLoading = false) }
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            loadError = true,
+                            isStale = it.bucketsByDate.isNotEmpty(),
+                        )
+                    }
                 }
             }
         }

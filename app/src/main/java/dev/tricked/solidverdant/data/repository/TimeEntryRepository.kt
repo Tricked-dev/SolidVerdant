@@ -149,7 +149,7 @@ class TimeEntryRepository @Inject constructor(
             ).getOrElse {
                 if (it is CancellationException) throw it
                 Timber.e(it, "Failed loading calendar month %s", month)
-                return
+                throw it
             }
             val now = clock.nowMs()
             applyServerEntries(

@@ -56,6 +56,8 @@
     <string name="calendar_sync_failed_detail">Deze registratie heeft de server niet bereikt. Probeer opnieuw of gooi de mislukte wijziging weg.</string>
     <string name="calendar_sync_conflict_detail">Deze registratie conflicteert met een serverwijziging. Open het synchronisatiecentrum om dit te bekijken.</string>
     <string name="calendar_sync_synced_detail">Deze registratie is gesynchroniseerd.</string>
+    <string name="calendar_load_error">Kalenderregistraties konden niet worden geladen. Controleer je verbinding en probeer het opnieuw.</string>
+    <string name="calendar_load_error_cached">De kalender kon niet worden vernieuwd. Gecachte registraties kunnen verouderd zijn.</string>
     <string name="calendar_settings">Kalenderinstellingen</string>
     <string name="calendar_settings_snap">Rasterinterval</string>
     <string name="calendar_settings_visible_hours">Zichtbare uren</string>
