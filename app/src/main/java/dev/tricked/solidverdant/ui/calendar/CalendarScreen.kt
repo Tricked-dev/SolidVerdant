@@ -929,6 +929,7 @@ private fun CalendarSettingsSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .testTag(CalendarTestTags.SETTINGS_SHEET)
                 .padding(horizontal = Dimens.Space16)
                 .padding(bottom = Dimens.Space24),
         ) {
@@ -939,6 +940,7 @@ private fun CalendarSettingsSheet(
                 value = stringResource(R.string.calendar_settings_minutes, settings.snapMinutes),
                 options = snapOptions,
                 onSelected = { minutes -> onSettingsChanged(settings.copy(snapMinutes = minutes)) },
+                controlTestTag = CalendarTestTags.SETTINGS_SNAP,
             )
             Spacer(Modifier.heightIn(min = Dimens.Space12))
             Text(
@@ -959,6 +961,7 @@ private fun CalendarSettingsSheet(
                     onSelected = { hour ->
                         onSettingsChanged(settings.copy(startHour = hour.coerceAtMost(settings.endHour - 1)))
                     },
+                    controlTestTag = CalendarTestTags.SETTINGS_START,
                     modifier = Modifier.weight(1f),
                 )
                 CalendarSettingDropdown(
@@ -968,6 +971,7 @@ private fun CalendarSettingsSheet(
                         hour to stringResource(R.string.calendar_settings_hour, hour)
                     },
                     onSelected = { hour -> onSettingsChanged(settings.copy(endHour = hour)) },
+                    controlTestTag = CalendarTestTags.SETTINGS_END,
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -983,7 +987,15 @@ private fun CalendarSettingsSheet(
                         selected = settings.density == density,
                         onClick = { onSettingsChanged(settings.copy(density = density)) },
                         shape = SegmentedButtonDefaults.itemShape(index = index, count = densityOptions.size),
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag(
+                                when (density) {
+                                    CalendarGridDensity.COMPACT -> CalendarTestTags.SETTINGS_DENSITY_COMPACT
+                                    CalendarGridDensity.COMFORTABLE -> CalendarTestTags.SETTINGS_DENSITY_COMFORTABLE
+                                    CalendarGridDensity.SPACIOUS -> CalendarTestTags.SETTINGS_DENSITY_SPACIOUS
+                                },
+                            ),
                     ) {
                         Text(stringResource(label), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
@@ -999,13 +1011,17 @@ private fun CalendarSettingDropdown(
     value: String,
     options: List<Pair<Int, String>>,
     onSelected: (Int) -> Unit,
+    controlTestTag: String,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember(label) { mutableStateOf(false) }
     Column(modifier = modifier) {
         OutlinedButton(
             onClick = { expanded = true },
-            modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.MinTouchTarget),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = Dimens.MinTouchTarget)
+                .testTag(controlTestTag),
         ) {
             Column(horizontalAlignment = Alignment.Start) {
                 Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
@@ -1016,6 +1032,7 @@ private fun CalendarSettingDropdown(
             options.forEach { (option, optionLabel) ->
                 DropdownMenuItem(
                     text = { Text(optionLabel) },
+                    modifier = Modifier.testTag(CalendarTestTags.settingsOption(controlTestTag, option.toString())),
                     onClick = {
                         onSelected(option)
                         expanded = false

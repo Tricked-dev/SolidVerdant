@@ -69,8 +69,16 @@ object TestTags {
     const val CALENDAR_ADD_ENTRY = CalendarTestTags.ADD_ENTRY
     const val CALENDAR_ADD_BREAK = CalendarTestTags.ADD_BREAK
     const val CALENDAR_ADD_BREAK_MENU = CalendarTestTags.ADD_BREAK_MENU
+    const val CALENDAR_SETTINGS = CalendarTestTags.SETTINGS
     const val CALENDAR_RUNNING_TIMER = CalendarTestTags.RUNNING_TIMER
     const val CALENDAR_RUNNING_TIMER_EDIT = CalendarTestTags.RUNNING_TIMER_EDIT
+    const val CALENDAR_SETTINGS_SHEET = CalendarTestTags.SETTINGS_SHEET
+    const val CALENDAR_SETTINGS_SNAP = CalendarTestTags.SETTINGS_SNAP
+    const val CALENDAR_SETTINGS_START = CalendarTestTags.SETTINGS_START
+    const val CALENDAR_SETTINGS_END = CalendarTestTags.SETTINGS_END
+    const val CALENDAR_SETTINGS_DENSITY_COMPACT = CalendarTestTags.SETTINGS_DENSITY_COMPACT
+    const val CALENDAR_SETTINGS_DENSITY_COMFORTABLE = CalendarTestTags.SETTINGS_DENSITY_COMFORTABLE
+    const val CALENDAR_SETTINGS_DENSITY_SPACIOUS = CalendarTestTags.SETTINGS_DENSITY_SPACIOUS
     const val CALENDAR_ENTRY_ACTIONS = CalendarTestTags.ENTRY_ACTIONS
     const val CALENDAR_EDIT_START_TIME = CalendarTestTags.EDIT_START_TIME
     const val CALENDAR_DELETE_ENTRY = CalendarTestTags.DELETE_ENTRY
@@ -102,4 +110,6 @@ object TestTags {
     fun trackSheetTagChip(tagId: String): String = TrackingTestTags.sheetTagChip(tagId)
 
     fun calendarSelection(day: LocalDate): String = CalendarTestTags.selection(day)
+
+    fun calendarSettingsOption(control: String, value: String): String = CalendarTestTags.settingsOption(control, value)
 }

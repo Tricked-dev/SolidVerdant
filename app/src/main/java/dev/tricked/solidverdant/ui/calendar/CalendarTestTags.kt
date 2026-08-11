@@ -19,6 +19,13 @@ object CalendarTestTags {
     const val RUNNING_TIMER = "calendar_running_timer"
     const val RUNNING_TIMER_EDIT = "calendar_running_timer_edit"
     const val SETTINGS = "calendar_settings"
+    const val SETTINGS_SHEET = "calendar_settings_sheet"
+    const val SETTINGS_SNAP = "calendar_settings_snap"
+    const val SETTINGS_START = "calendar_settings_start"
+    const val SETTINGS_END = "calendar_settings_end"
+    const val SETTINGS_DENSITY_COMPACT = "calendar_settings_density_compact"
+    const val SETTINGS_DENSITY_COMFORTABLE = "calendar_settings_density_comfortable"
+    const val SETTINGS_DENSITY_SPACIOUS = "calendar_settings_density_spacious"
     const val ENTRY_ACTIONS = "calendar_entry_actions"
     const val EDIT_START_TIME = "calendar_edit_start_time"
     const val DELETE_ENTRY = "calendar_delete_entry"
@@ -31,4 +38,6 @@ object CalendarTestTags {
     const val SPLIT_PICKER = "calendar_split_picker"
 
     fun selection(day: LocalDate): String = "calendar-selection-$day"
+
+    fun settingsOption(control: String, value: String): String = "$control-option-$value"
 }
