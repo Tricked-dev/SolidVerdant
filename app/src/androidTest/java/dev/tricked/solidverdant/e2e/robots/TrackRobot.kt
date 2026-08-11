@@ -6,6 +6,10 @@
 
 package dev.tricked.solidverdant.e2e.robots
 
+import android.icu.text.DateFormat
+import android.icu.text.DisplayContext
+import android.icu.util.TimeZone
+import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -23,7 +27,8 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.espresso.Espresso
 import dev.tricked.solidverdant.e2e.TestTags
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
+import java.time.ZoneOffset
+import java.util.Date
 import java.util.Locale
 
 /**
@@ -259,7 +264,7 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
     fun changeSheetEndDate(date: LocalDate): TrackRobot = apply {
         firstSheetNodeWithTag(TestTags.TRACK_SHEET_END_DATE).performScrollTo().performClick()
         waitUntilTagExists(TestTags.ENTRY_DATE_PICKER)
-        val dayLabel = date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", Locale.getDefault()))
+        val dayLabel = datePickerDayLabel(date)
         val day = hasText(dayLabel) and hasAnyAncestor(hasTestTag(TestTags.ENTRY_DATE_PICKER))
         composeRule.waitUntil(DEFAULT_TIMEOUT_MS) {
             composeRule.onAllNodes(day, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
@@ -330,4 +335,16 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
         hasTestTag(tag) and hasAnyAncestor(hasTestTag(TestTags.TRACK_SHEET)),
         useUnmergedTree = true,
     )
+}
+
+/** Match the localized accessibility label emitted by Material3's DatePicker day semantics. */
+private fun datePickerDayLabel(date: LocalDate): String {
+    val formatter = DateFormat.getInstanceForSkeleton(
+        DatePickerDefaults.YearMonthWeekdayDaySkeleton,
+        Locale.getDefault(),
+    ).apply {
+        setContext(DisplayContext.CAPITALIZATION_FOR_STANDALONE)
+        timeZone = TimeZone.GMT_ZONE
+    }
+    return formatter.format(Date(date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()))
 }
