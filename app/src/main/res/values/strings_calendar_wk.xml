@@ -31,6 +31,8 @@
     <string name="calendar_overlay_select_prompt">Show events from these calendars:</string>
     <string name="calendar_overlay_calendar_desc">Show events from %1$s</string>
     <string name="calendar_overlay_none_selected">No calendars selected. Choose at least one to see events.</string>
+    <string name="calendar_overlay_calendars_loading">Loading calendars…</string>
+    <string name="calendar_overlay_calendars_error">Couldn\'t load calendars.</string>
     <string name="calendar_overlay_loading">Loading calendar events…</string>
     <string name="calendar_overlay_error">Couldn\'t load calendar events.</string>
     <string name="calendar_overlay_retry">Retry</string>

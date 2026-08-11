@@ -89,7 +89,14 @@ class CalendarViewModelTest {
     ) : CalendarEventSource {
         var lastRange: Pair<Long, Long>? = null
         var queryCount = 0
+        var queryCalendarsCount = 0
+        var calendarQueryFailure: Throwable? = null
         override suspend fun queryCalendars(): List<DeviceCalendar> = calendars
+            .also {
+                queryCalendarsCount++
+                calendarQueryFailure?.let { failure -> throw failure }
+            }
+
         override suspend fun queryEvents(calendarIds: Set<String>, rangeStartMs: Long, rangeEndMs: Long): List<DeviceCalendarEvent> {
             queryCount++
             lastRange = rangeStartMs to rangeEndMs
@@ -431,6 +438,36 @@ class CalendarViewModelTest {
         // Overlay enabled + calendar selected, but the READ_CALENDAR grant is still missing.
         assertNull(source.lastRange)
         assertTrue(model.uiState.value.overlayEvents.isEmpty())
+    }
+
+    @Test
+    fun overlay_calendar_list_failure_is_visible_and_retryable() = runTest {
+        val source = FakeEventSource(
+            calendars = listOf(DeviceCalendar("1", "Work", "account", null)),
+        ).apply { calendarQueryFailure = IllegalStateException("provider unavailable") }
+        val model = vm(
+            FakeReader(emptyList()),
+            source = source,
+            settings = FakeOverlaySettings(enabled = true),
+        )
+
+        model.setOrganization("org1")
+        model.onCalendarPermissionChanged(true)
+
+        val failed = model.uiState.first { it.calendarListError }
+        assertFalse(failed.calendarListLoading)
+        assertTrue(failed.availableCalendars.isEmpty())
+
+        source.calendarQueryFailure = null
+        model.retryOverlay()
+
+        val recovered = model.uiState.first {
+            source.queryCalendarsCount >= 2 &&
+                !it.calendarListLoading &&
+                !it.calendarListError &&
+                it.availableCalendars.isNotEmpty()
+        }
+        assertEquals("1", recovered.availableCalendars.single().id)
     }
 
     @Test

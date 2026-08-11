@@ -160,8 +160,7 @@ class TrackingViewModelNetworkRaceTest {
         viewModel.loadAllData(OTHER_ORG, MEMBER)
         viewModel.uiState.first { it.hasLoadedTimeEntries }
         viewModel.onAppForegrounded(OTHER_ORG, MEMBER, refreshAll = false)
-        dispatcher.scheduler.runCurrent()
-        assertEquals(active.id, viewModel.uiState.value.currentTimeEntry?.id)
+        viewModel.uiState.first { it.currentTimeEntry?.id == active.id }
 
         // A catalog emission is enough to re-run the combined Room collector while its active
         // query still has the old empty snapshot.
@@ -170,8 +169,10 @@ class TrackingViewModelNetworkRaceTest {
                 Project(id = "project-refresh", name = "Refresh", color = "#123456").toEntity(OTHER_ORG),
             ),
         )
-        dispatcher.scheduler.runCurrent()
-
+        viewModel.uiState.first { state ->
+            state.projects.any { it.id == "project-refresh" } &&
+                state.currentTimeEntry?.id == active.id
+        }
         assertEquals(active.id, viewModel.uiState.value.currentTimeEntry?.id)
         viewModel.cancelScopeForTest()
     }

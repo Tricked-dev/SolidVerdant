@@ -87,6 +87,8 @@ data class CalendarUiState(
     val overlayEvents: List<DeviceCalendarEvent> = emptyList(),
     val overlayLoading: Boolean = false,
     val overlayError: Boolean = false,
+    val calendarListLoading: Boolean = false,
+    val calendarListError: Boolean = false,
 )
 
 @HiltViewModel
@@ -138,6 +140,8 @@ class CalendarViewModel @Inject constructor(
         val retry: Int,
     )
 
+    private data class CalendarListInputs(val ready: Boolean, val retry: Int)
+
     private data class OverlayResult(val events: List<DeviceCalendarEvent>, val loading: Boolean, val error: Boolean)
 
     init {
@@ -185,17 +189,30 @@ class CalendarViewModel @Inject constructor(
         }
         // Load the picker's calendar list only while the overlay is on and permission is granted.
         viewModelScope.launch {
-            combine(overlaySettings.calendarOverlayEnabled, hasPermissionInput) { enabled, perm ->
-                enabled && perm
+            combine(overlaySettings.calendarOverlayEnabled, hasPermissionInput, retryCounter) { enabled, perm, retry ->
+                CalendarListInputs(ready = enabled && perm, retry = retry)
             }
                 .distinctUntilChanged()
-                .collectLatest { ready ->
-                    if (ready) {
+                .collectLatest { input ->
+                    if (input.ready) {
+                        _uiState.update { it.copy(calendarListLoading = true, calendarListError = false) }
                         val calendars = refreshAvailableCalendars()
                         currentCoroutineContext().ensureActive()
-                        _uiState.update { it.copy(availableCalendars = calendars) }
+                        _uiState.update {
+                            it.copy(
+                                availableCalendars = calendars.orEmpty(),
+                                calendarListLoading = false,
+                                calendarListError = calendars == null,
+                            )
+                        }
                     } else {
-                        _uiState.update { it.copy(availableCalendars = emptyList()) }
+                        _uiState.update {
+                            it.copy(
+                                availableCalendars = emptyList(),
+                                calendarListLoading = false,
+                                calendarListError = false,
+                            )
+                        }
                     }
                 }
         }
@@ -394,12 +411,12 @@ class CalendarViewModel @Inject constructor(
         }
     }
 
-    private suspend fun refreshAvailableCalendars(): List<DeviceCalendar> = try {
+    private suspend fun refreshAvailableCalendars(): List<DeviceCalendar>? = try {
         eventSource.queryCalendars()
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        emptyList()
+        null
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

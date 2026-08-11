@@ -30,6 +30,8 @@
     <string name="calendar_overlay_select_prompt">次のカレンダーの予定を表示:</string>
     <string name="calendar_overlay_calendar_desc">%1$s の予定を表示</string>
     <string name="calendar_overlay_none_selected">カレンダーが選択されていません。予定を表示するには 1 つ以上選択してください。</string>
+    <string name="calendar_overlay_calendars_loading">カレンダーを読み込み中…</string>
+    <string name="calendar_overlay_calendars_error">カレンダーを読み込めませんでした。</string>
     <string name="calendar_overlay_loading">カレンダーの予定を読み込み中…</string>
     <string name="calendar_overlay_error">カレンダーの予定を読み込めませんでした。</string>
     <string name="calendar_overlay_retry">再試行</string>

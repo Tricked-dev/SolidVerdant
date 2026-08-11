@@ -71,6 +71,11 @@ object TestTags {
     const val CALENDAR_ADD_ENTRY = CalendarTestTags.ADD_ENTRY
     const val CALENDAR_ADD_BREAK = CalendarTestTags.ADD_BREAK
     const val CALENDAR_ADD_BREAK_MENU = CalendarTestTags.ADD_BREAK_MENU
+    const val CALENDAR_OVERLAY = CalendarTestTags.OVERLAY
+    const val CALENDAR_OVERLAY_TOGGLE = CalendarTestTags.OVERLAY_TOGGLE
+    const val CALENDAR_OVERLAY_CALENDAR_LOADING = CalendarTestTags.OVERLAY_CALENDAR_LOADING
+    const val CALENDAR_OVERLAY_CALENDAR_ERROR = CalendarTestTags.OVERLAY_CALENDAR_ERROR
+    const val CALENDAR_OVERLAY_RETRY = CalendarTestTags.OVERLAY_RETRY
     const val CALENDAR_SETTINGS = CalendarTestTags.SETTINGS
     const val CALENDAR_RUNNING_TIMER = CalendarTestTags.RUNNING_TIMER
     const val CALENDAR_RUNNING_TIMER_EDIT = CalendarTestTags.RUNNING_TIMER_EDIT

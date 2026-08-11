@@ -912,7 +912,10 @@ private fun CalendarToolbar(
             )
         }
         if (state.viewMode != CalendarViewMode.MONTH) {
-            IconButton(onClick = onOpenOverlay) {
+            IconButton(
+                onClick = onOpenOverlay,
+                modifier = Modifier.testTag(CalendarTestTags.OVERLAY),
+            ) {
                 Icon(
                     Icons.Default.Layers,
                     contentDescription = stringResource(R.string.calendar_overlay_settings),

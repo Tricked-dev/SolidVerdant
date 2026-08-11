@@ -31,6 +31,8 @@
     <string name="calendar_overlay_select_prompt">Toon afspraken uit deze agenda\'s:</string>
     <string name="calendar_overlay_calendar_desc">Afspraken uit %1$s tonen</string>
     <string name="calendar_overlay_none_selected">Geen agenda\'s geselecteerd. Kies er minstens één om afspraken te zien.</string>
+    <string name="calendar_overlay_calendars_loading">Agenda\'s laden…</string>
+    <string name="calendar_overlay_calendars_error">Agenda\'s kunnen niet worden geladen.</string>
     <string name="calendar_overlay_loading">Agenda-afspraken laden…</string>
     <string name="calendar_overlay_error">Kan agenda-afspraken niet laden.</string>
     <string name="calendar_overlay_retry">Opnieuw</string>

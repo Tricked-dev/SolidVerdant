@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -80,6 +81,7 @@ fun CalendarOverlayControls(
             Switch(
                 checked = state.overlayEnabled,
                 onCheckedChange = onToggleOverlay,
+                modifier = Modifier.testTag(CalendarTestTags.OVERLAY_TOGGLE),
             )
         }
 
@@ -91,6 +93,31 @@ fun CalendarOverlayControls(
                         onRequestPermission = onRequestPermission,
                         onOpenAppSettings = onOpenAppSettings,
                     )
+
+                state.calendarListLoading ->
+                    StatusText(
+                        stringResource(R.string.calendar_overlay_calendars_loading),
+                        modifier = Modifier.testTag(CalendarTestTags.OVERLAY_CALENDAR_LOADING),
+                    )
+
+                state.calendarListError ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag(CalendarTestTags.OVERLAY_CALENDAR_ERROR),
+                    ) {
+                        StatusText(stringResource(R.string.calendar_overlay_calendars_error))
+                        TextButton(
+                            onClick = onRetry,
+                            modifier = Modifier
+                                .heightIn(min = 48.dp)
+                                .testTag(CalendarTestTags.OVERLAY_RETRY),
+                        ) {
+                            Text(stringResource(R.string.calendar_overlay_retry))
+                        }
+                    }
 
                 state.availableCalendars.isEmpty() ->
                     StatusText(stringResource(R.string.calendar_overlay_no_calendars))
@@ -248,11 +275,11 @@ private fun PrivacyNote() {
 }
 
 @Composable
-private fun StatusText(text: String) {
+private fun StatusText(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(vertical = 2.dp),
+        modifier = modifier.padding(vertical = 2.dp),
     )
 }
