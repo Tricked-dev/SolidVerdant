@@ -262,7 +262,11 @@ class TimeTrackingTileServiceTest {
 
     private fun awaitCondition(predicate: () -> Boolean) = runBlocking {
         withTimeout(TIMEOUT_MS) {
-            while (!predicate()) delay(POLL_MS)
+            while (true) {
+                shadowOf(Looper.getMainLooper()).idle()
+                if (predicate()) return@withTimeout
+                delay(POLL_MS)
+            }
         }
     }
 

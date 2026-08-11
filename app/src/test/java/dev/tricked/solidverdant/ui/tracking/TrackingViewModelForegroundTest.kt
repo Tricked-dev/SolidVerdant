@@ -186,6 +186,7 @@ class TrackingViewModelForegroundTest {
         vm.loadAllData(ORG, MEMBER)
 
         vm.uiState.first { it.syncOperations.isNotEmpty() }
+        shadowOf(Looper.getMainLooper()).idle()
         dispatcher.scheduler.runCurrent()
         assertFalse(vm.uiState.value.syncStatusVisible)
 
@@ -196,8 +197,21 @@ class TrackingViewModelForegroundTest {
         dispatcher.scheduler.advanceTimeBy(1)
         // Flush work scheduled exactly at the reveal boundary; a Room emission can enqueue the
         // visibility continuation behind the timer callback on the same virtual timestamp.
+        shadowOf(Looper.getMainLooper()).idle()
         dispatcher.scheduler.advanceUntilIdle()
-        assertTrue(vm.uiState.value.syncStatusVisible)
+        shadowOf(Looper.getMainLooper()).idle()
+        dispatcher.scheduler.runCurrent()
+        // If Room delivered the pending operation from its executor after the first virtual-time
+        // flush, the reveal delay starts at that later scheduler instant. Give that continuation
+        // one full reveal window to run without making the pre-threshold assertions weaker.
+        dispatcher.scheduler.advanceTimeBy(SYNC_STATUS_REVEAL_DELAY_MS)
+        dispatcher.scheduler.runCurrent()
+        assertTrue(
+            "Expected delayed sync visibility; operations=${vm.uiState.value.syncOperations.size}, " +
+                "statuses=${vm.uiState.value.syncOperations.map { it.status }}, " +
+                "visible=${vm.uiState.value.syncStatusVisible}",
+            vm.uiState.value.syncStatusVisible,
+        )
     }
 
     @Test
