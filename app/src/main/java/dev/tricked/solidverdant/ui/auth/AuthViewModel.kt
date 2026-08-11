@@ -26,6 +26,7 @@ import dev.tricked.solidverdant.data.repository.TemplateRepository
 import dev.tricked.solidverdant.service.TimeTrackingNotificationService
 import dev.tricked.solidverdant.sync.SyncScheduler
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -110,6 +111,8 @@ class AuthViewModel @Inject constructor(
     )
     private val _snapshotHydrated = MutableStateFlow(false)
     val snapshotHydrated: StateFlow<Boolean> = _snapshotHydrated.asStateFlow()
+    private var accountDataGeneration = 0L
+    private var userDataJob: Job? = null
 
     init {
         // Load OAuth config on init
@@ -194,17 +197,22 @@ class AuthViewModel @Inject constructor(
      * Load user data and memberships after login
      */
     fun loadUserData() {
-        viewModelScope.launch {
+        val generation = ++accountDataGeneration
+        userDataJob?.cancel()
+        userDataJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             coroutineScope {
                 val userResult = async { authRepository.getCurrentUser() }
                 val membershipsResult = async { authRepository.getMyMemberships() }
                 val user = userResult.await().getOrElse { error ->
+                    if (generation != accountDataGeneration) return@coroutineScope
                     Timber.e(error, "Failed to load user")
                     _uiState.value = _uiState.value.copy(isLoading = false, error = error.message)
                     return@coroutineScope
                 }
+                if (generation != accountDataGeneration) return@coroutineScope
                 membershipsResult.await().onSuccess { memberships ->
+                    if (generation != accountDataGeneration) return@onSuccess
                     val savedMembershipId = authRepository.getCurrentMembershipId()
                     val currentMembership = memberships.firstOrNull { it.id == savedMembershipId }
                         ?: memberships.firstOrNull()
@@ -217,17 +225,21 @@ class AuthViewModel @Inject constructor(
                     )
                     settingsDataStore.cacheAuth(user, memberships, currentMembership?.id)
 
+                    if (generation != accountDataGeneration) return@onSuccess
+
                     // Claim legacy (pre-ownership) templates for this account now that the auth
                     // cache is written. Only affects NULL-owner rows and is a no-op for accounts
                     // that already own their templates (org-switch never reaches this path).
                     templateRepository.claimUnowned(authRepository.endpoint.first(), user.id)
 
                     // Save current membership
+                    if (generation != accountDataGeneration) return@onSuccess
                     currentMembership?.let {
                         authRepository.saveCurrentMembershipId(it.id)
                     }
                 }
                     .onFailure { error ->
+                        if (generation != accountDataGeneration) return@onFailure
                         Timber.e(error, "Failed to load memberships")
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
@@ -321,6 +333,9 @@ class AuthViewModel @Inject constructor(
      */
     @OptIn(coil.annotation.ExperimentalCoilApi::class)
     fun logout() {
+        accountDataGeneration++
+        userDataJob?.cancel()
+        userDataJob = null
         viewModelScope.launch {
             _uiState.value.user?.profilePhotoUrl?.takeIf { it.isNotBlank() }?.let { url ->
                 context.imageLoader.memoryCache?.remove(MemoryCache.Key(url))

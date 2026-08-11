@@ -152,6 +152,25 @@ class AuthDataStore @Inject constructor(@ApplicationContext private val context:
     }
 
     /**
+     * Save refreshed credentials only while the refresh token used for the request is still current.
+     * DataStore serializes this edit with logout and OAuth writes, so a late refresh cannot
+     * resurrect a session that was cleared while the network call was in flight.
+     */
+    suspend fun saveTokensIfRefreshTokenMatches(expectedRefreshToken: String, accessToken: String, refreshToken: String): Boolean {
+        var saved = false
+        context.authDataStore.edit { preferences ->
+            val currentRefreshToken = preferences[PreferencesKeys.REFRESH_TOKEN]?.let(secretCipher::decryptOrNull)
+            if (currentRefreshToken == expectedRefreshToken) {
+                preferences[PreferencesKeys.ACCESS_TOKEN] = secretCipher.encrypt(accessToken)
+                preferences[PreferencesKeys.REFRESH_TOKEN] = secretCipher.encrypt(refreshToken)
+                saved = true
+            }
+        }
+        if (saved) cacheAccessToken(accessToken)
+        return saved
+    }
+
+    /**
      * Save only the access token (used during token refresh)
      */
     suspend fun saveAccessToken(accessToken: String) {

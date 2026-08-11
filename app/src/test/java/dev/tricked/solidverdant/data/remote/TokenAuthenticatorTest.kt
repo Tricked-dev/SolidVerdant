@@ -145,6 +145,34 @@ class TokenAuthenticatorTest {
         assertEquals(0, refreshCalls.get())
     }
 
+    @Test
+    fun `late refresh completion cannot resurrect credentials cleared by logout`() {
+        val storage = FakeTokenStorage("old-access", "old-refresh")
+        val enteredRefresh = CountDownLatch(1)
+        val releaseRefresh = CountDownLatch(1)
+        val authenticator = TokenAuthenticator(storage) { _, _, _ ->
+            enteredRefresh.countDown()
+            check(releaseRefresh.await(5, TimeUnit.SECONDS))
+            RefreshResult.Success(TokenResponse("new-access", "new-refresh"))
+        }
+        val executor = Executors.newSingleThreadExecutor()
+        try {
+            val result = executor.submit<Request?> {
+                authenticator.authenticate(null, unauthorized("old-access"))
+            }
+            check(enteredRefresh.await(5, TimeUnit.SECONDS))
+
+            kotlinx.coroutines.runBlocking { storage.clearTokens() }
+            releaseRefresh.countDown()
+
+            assertNull(result.get(5, TimeUnit.SECONDS))
+            assertNull(storage.access)
+            assertNull(storage.refresh)
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
     private fun unauthorized(token: String): Response {
         val request = Request.Builder()
             .url("https://example.test/api")
@@ -164,12 +192,26 @@ class TokenAuthenticatorTest {
         override suspend fun endpoint() = "https://example.test"
         override suspend fun clientId() = "client"
         override suspend fun saveTokens(accessToken: String, refreshToken: String) {
+            synchronized(this) {
+                access = accessToken
+                refresh = refreshToken
+            }
+        }
+        override suspend fun saveTokensIfRefreshTokenMatches(
+            expectedRefreshToken: String,
+            accessToken: String,
+            refreshToken: String,
+        ): Boolean = synchronized(this) {
+            if (refresh != expectedRefreshToken) return@synchronized false
             access = accessToken
             refresh = refreshToken
+            true
         }
         override suspend fun clearTokens() {
-            access = null
-            refresh = null
+            synchronized(this) {
+                access = null
+                refresh = null
+            }
         }
     }
 }

@@ -96,7 +96,8 @@ class InboxViewModel @Inject constructor(
 
     @Volatile
     private var context: OrgContext? = null
-    private var didInitialRefresh = false
+    private var contextGeneration = 0L
+    private var initialRefreshContext: Pair<String, String>? = null
 
     private val orgContext = authDataStore.currentMembershipId.map { selectedId ->
         val cached = settingsDataStore.getCachedAuth() ?: return@map null
@@ -124,11 +125,12 @@ class InboxViewModel @Inject constructor(
     @OptIn(ExperimentalCoroutinesApi::class)
     private suspend fun observeInbox() {
         orgContext.flatMapLatest { ctx ->
+            val generation = ++contextGeneration
             context = ctx
             if (ctx == null) {
                 flowOf<Pair<OrgContext?, InboxData?>>(null to null)
             } else {
-                maybeInitialRefresh(ctx)
+                maybeInitialRefresh(ctx, generation)
                 combine(
                     combine(
                         timeEntryRepository.observeTimeEntries(ctx.organizationId),
@@ -213,24 +215,31 @@ class InboxViewModel @Inject constructor(
         }
     }
 
-    private fun maybeInitialRefresh(ctx: OrgContext) {
-        if (didInitialRefresh) return
-        didInitialRefresh = true
-        refresh(ctx)
+    private fun maybeInitialRefresh(ctx: OrgContext, generation: Long) {
+        val key = ctx.organizationId to ctx.memberId
+        if (initialRefreshContext == key) return
+        initialRefreshContext = key
+        refresh(ctx, generation)
     }
 
     /** Best-effort background refresh; failure keeps cached results and shows the stale banner. */
     fun refresh() {
-        refresh(context ?: return)
+        val ctx = context ?: return
+        refresh(ctx, contextGeneration)
     }
 
-    private fun refresh(ctx: OrgContext) {
+    private fun refresh(ctx: OrgContext, generation: Long) {
         viewModelScope.launch {
+            if (!isCurrentContext(ctx, generation)) return@launch
             _uiState.update { it.copy(isRefreshing = true, refreshError = false) }
             val result = timeEntryRepository.refreshAll(ctx.organizationId, ctx.memberId)
-            _uiState.update { it.copy(isRefreshing = false, refreshError = result.isFailure) }
+            if (isCurrentContext(ctx, generation)) {
+                _uiState.update { it.copy(isRefreshing = false, refreshError = result.isFailure) }
+            }
         }
     }
+
+    private fun isCurrentContext(ctx: OrgContext, generation: Long): Boolean = generation == contextGeneration && context == ctx
 
     /** Persist a dismissal for [issue]; the analyzer immediately drops it from the list. */
     fun dismiss(issue: InboxIssue) {

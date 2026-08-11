@@ -13,6 +13,9 @@ import androidx.test.core.app.ApplicationProvider
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.local.UserCacheCleaner
+import dev.tricked.solidverdant.data.model.Membership
+import dev.tricked.solidverdant.data.model.Organization
+import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.remote.ConnectionTester
 import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.data.repository.TemplateRepository
@@ -22,13 +25,17 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Before
@@ -116,6 +123,49 @@ class AuthViewModelLogoutTest {
         )
         assertNull(notificationManager.getActiveNotifications().firstOrNull { it.id == TRACKING_NOTIFICATION_ID })
         assertNull(notificationManager.getActiveNotifications().firstOrNull { it.id == ERROR_NOTIFICATION_ID })
+    }
+
+    @Test
+    fun logout_cancels_an_in_flight_user_load_without_repopulating_the_logged_out_state() = runTest(dispatcher.scheduler) {
+        val user = User(id = "user-1", name = "User", email = "user@example.invalid")
+        val membership = Membership(
+            id = "membership-1",
+            role = "member",
+            organization = Organization("organization-1", "Organization", "EUR"),
+        )
+        val loadStarted = CompletableDeferred<Unit>()
+        val releaseLoad = CompletableDeferred<Result<User>>()
+        val authRepository = mockk<AuthRepository>(relaxed = true) {
+            every { isLoggedIn } returns flowOf(true)
+            every { endpoint } returns flowOf("https://example.invalid")
+            every { clientId } returns flowOf("client")
+            coEvery { getCurrentUser() } coAnswers {
+                loadStarted.complete(Unit)
+                kotlinx.coroutines.withContext(NonCancellable) { releaseLoad.await() }
+            }
+            coEvery { getMyMemberships() } returns Result.success(listOf(membership))
+        }
+        val viewModel = AuthViewModel(
+            authRepository = authRepository,
+            userCacheCleaner = mockk<UserCacheCleaner>(relaxed = true),
+            settingsDataStore = mockk<SettingsDataStore>(relaxed = true),
+            templateRepository = mockk<TemplateRepository>(relaxed = true),
+            connectionTester = mockk<ConnectionTester>(relaxed = true),
+            syncScheduler = mockk<SyncScheduler>(relaxed = true),
+            context = context,
+        )
+
+        viewModel.loadUserData()
+        loadStarted.await()
+        viewModel.logout()
+        dispatcher.scheduler.advanceUntilIdle()
+
+        releaseLoad.complete(Result.success(user))
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.user)
+        assertEquals(emptyList<Membership>(), viewModel.uiState.value.memberships)
+        assertFalse(viewModel.uiState.value.isLoading)
     }
 
     private companion object {

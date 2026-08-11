@@ -28,6 +28,7 @@ internal interface TokenStorage {
     suspend fun endpoint(): String
     suspend fun clientId(): String
     suspend fun saveTokens(accessToken: String, refreshToken: String)
+    suspend fun saveTokensIfRefreshTokenMatches(expectedRefreshToken: String, accessToken: String, refreshToken: String): Boolean
     suspend fun clearTokens()
 }
 
@@ -37,6 +38,8 @@ private class DataStoreTokenStorage(private val store: AuthDataStore) : TokenSto
     override suspend fun endpoint() = store.getEndpoint()
     override suspend fun clientId() = store.getClientId()
     override suspend fun saveTokens(accessToken: String, refreshToken: String) = store.saveTokens(accessToken, refreshToken)
+    override suspend fun saveTokensIfRefreshTokenMatches(expectedRefreshToken: String, accessToken: String, refreshToken: String) =
+        store.saveTokensIfRefreshTokenMatches(expectedRefreshToken, accessToken, refreshToken)
     override suspend fun clearTokens() = store.clearTokens()
 }
 
@@ -149,8 +152,23 @@ class TokenAuthenticator internal constructor(
                 try {
                     when (val result = refresher.refresh(storage.endpoint(), storage.clientId(), refreshToken)) {
                         is RefreshResult.Success -> {
-                            storage.saveTokens(result.tokens.accessToken, result.tokens.refreshToken)
-                            retry(response, result.tokens.accessToken)
+                            val saved = storage.saveTokensIfRefreshTokenMatches(
+                                expectedRefreshToken = refreshToken,
+                                accessToken = result.tokens.accessToken,
+                                refreshToken = result.tokens.refreshToken,
+                            )
+                            if (saved) {
+                                retry(response, result.tokens.accessToken)
+                            } else {
+                                // Logout or another session replaced the credentials while the
+                                // refresh request was in flight. Never retry with that stale result.
+                                val currentAccessToken = storage.accessToken()
+                                if (!currentAccessToken.isNullOrEmpty() && currentAccessToken != failedToken) {
+                                    retry(response, currentAccessToken)
+                                } else {
+                                    null
+                                }
+                            }
                         }
                         RefreshResult.Invalid -> {
                             // The server rejected the refresh token; the credentials are dead.

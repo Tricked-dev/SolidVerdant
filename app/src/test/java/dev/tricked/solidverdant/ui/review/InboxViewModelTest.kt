@@ -23,6 +23,7 @@ import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import dev.tricked.solidverdant.sync.SyncTrigger
 import dev.tricked.solidverdant.util.Clock
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -239,6 +240,57 @@ class InboxViewModelTest {
             "horizon durably hides pre-day-B issues even past dismissal retention",
             futureState.issues.none { it.startMs < DAY_B_START_OF_DAY },
         )
+    }
+
+    @Test
+    fun switching_membership_refreshes_the_new_organization_instead_of_reusing_the_old_load() = runTest {
+        val store = newStore().also { it.chooseEverythingForTest() }
+        val selectedMembership = MutableStateFlow<String?>("m1")
+        val org1 = Organization(id = "org1", name = "Org 1", currency = "USD")
+        val org2 = Organization(id = "org2", name = "Org 2", currency = "USD")
+        val m1 = Membership(id = "m1", role = "member", organization = org1)
+        val m2 = Membership(id = "m2", role = "member", organization = org2)
+        val user = User(id = "u1", name = "U", email = "u@e.co", timezone = "UTC", weekStart = "monday")
+        var cachedAuth = SettingsDataStore.CachedAuth(user, listOf(m1, m2), "m1")
+
+        val auth = mockk<AuthDataStore>()
+        every { auth.currentMembershipId } returns selectedMembership
+        val settings = mockk<SettingsDataStore>()
+        every { settings.getCachedAuth() } answers { cachedAuth }
+        every { settings.longTimerHours } returns flowOf(8)
+        val repository = mockk<TimeEntryRepository>(relaxed = true)
+        every { repository.observeTimeEntries(any()) } returns flowOf(emptyList())
+        every { repository.observeConflicts(any()) } returns flowOf(emptyList())
+        every { repository.observeProjects(any()) } returns flowOf(emptyList())
+        every { repository.observeTasks(any()) } returns flowOf(emptyList())
+        every { repository.observeTags(any()) } returns flowOf(emptyList())
+        coEvery { repository.refreshAll("org1", "m1") } returns Result.success(Unit)
+        coEvery { repository.refreshAll("org2", "m2") } returns Result.success(Unit)
+        val policy = TemporalPolicy(zone, java.time.DayOfWeek.MONDAY)
+        val policyProvider = mockk<TemporalPolicyProvider>()
+        every { policyProvider.policy } returns flowOf(policy)
+        coEvery { policyProvider.current() } returns policy
+
+        val viewModel = InboxViewModel(
+            timeEntryRepository = repository,
+            authDataStore = auth,
+            settingsDataStore = settings,
+            inboxSettingsDataStore = store,
+            dismissalDao = FakeDismissalDao(),
+            syncTrigger = mockk<SyncTrigger>(relaxed = true),
+            clock = object : Clock {
+                override fun nowMs() = NOW_MS
+            },
+            temporalPolicyProvider = policyProvider,
+        )
+
+        viewModel.awaitState { it.organizationId == "org1" && !it.isLoading }
+        cachedAuth = cachedAuth.copy(currentMembershipId = "m2")
+        selectedMembership.value = "m2"
+        viewModel.awaitState { it.organizationId == "org2" && !it.isLoading }
+
+        coVerify(exactly = 1) { repository.refreshAll("org1", "m1") }
+        coVerify(exactly = 1) { repository.refreshAll("org2", "m2") }
     }
 
     private fun longEntry(id: String, startMs: Long): TimeEntry {

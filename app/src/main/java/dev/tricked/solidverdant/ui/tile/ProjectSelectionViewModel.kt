@@ -15,6 +15,8 @@ import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.remote.ApiClientFactory
 import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,13 +47,20 @@ class ProjectSelectionViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ProjectSelectionUiState())
     val uiState: StateFlow<ProjectSelectionUiState> = _uiState.asStateFlow()
     val appTheme = settingsDataStore.appTheme
+    private var loadGeneration = 0L
+    private var loadJob: Job? = null
+    private var backgroundLoadJob: Job? = null
 
     fun loadProjects(forceRefresh: Boolean = false) {
-        viewModelScope.launch {
+        val generation = ++loadGeneration
+        loadJob?.cancel()
+        backgroundLoadJob?.cancel()
+        loadJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
             try {
                 val organizationId = authRepository.getCurrentMembership()?.organizationId
+                if (!isCurrentLoad(generation)) return@launch
 
                 if (organizationId == null) {
                     _uiState.value = _uiState.value.copy(
@@ -65,6 +74,7 @@ class ProjectSelectionViewModel @Inject constructor(
                 if (!forceRefresh) {
                     val cachedProjects = timeEntryRepository.observeProjects(organizationId).first()
                     val cachedTasks = timeEntryRepository.observeTasks(organizationId).first()
+                    if (!isCurrentLoad(generation)) return@launch
 
                     if (cachedProjects.isNotEmpty() || cachedTasks.isNotEmpty()) {
                         Timber.d("Using cached projects and tasks")
@@ -74,7 +84,7 @@ class ProjectSelectionViewModel @Inject constructor(
                             tasks = cachedTasks,
                         )
                         // Refresh in background
-                        loadProjectsInBackground(organizationId)
+                        loadProjectsInBackground(organizationId, generation)
                         return@launch
                     }
                 }
@@ -84,13 +94,17 @@ class ProjectSelectionViewModel @Inject constructor(
                 val api = apiClientFactory.createApi(endpoint)
                 val projectsResponse = api.getProjects(organizationId)
                 val tasksResponse = api.getTasks(organizationId)
+                if (!isCurrentLoad(generation)) return@launch
 
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     projects = projectsResponse.data,
                     tasks = tasksResponse.data,
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
+                if (!isCurrentLoad(generation)) return@launch
                 Timber.e(e, "Failed to load projects and tasks")
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -100,22 +114,28 @@ class ProjectSelectionViewModel @Inject constructor(
         }
     }
 
-    private fun loadProjectsInBackground(organizationId: String) {
-        viewModelScope.launch {
+    private fun loadProjectsInBackground(organizationId: String, generation: Long) {
+        backgroundLoadJob = viewModelScope.launch {
             try {
                 val endpoint = authRepository.endpoint.first()
                 val api = apiClientFactory.createApi(endpoint)
                 val projectsResponse = api.getProjects(organizationId)
                 val tasksResponse = api.getTasks(organizationId)
+                if (!isCurrentLoad(generation)) return@launch
 
                 _uiState.value = _uiState.value.copy(
                     projects = projectsResponse.data,
                     tasks = tasksResponse.data,
                 )
                 Timber.d("Background refresh completed")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
+                if (!isCurrentLoad(generation)) return@launch
                 Timber.w(e, "Background refresh failed")
             }
         }
     }
+
+    private fun isCurrentLoad(generation: Long): Boolean = generation == loadGeneration
 }

@@ -1266,46 +1266,49 @@ class TrackingViewModel @Inject constructor(
         clearActivePollOverride()
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            try {
+                // Optimistic local write + outbox enqueue. The Room collector surfaces the
+                // new active entry and starts the timer.
+                val timeEntry = timeEntryRepository.startEntry(
+                    organizationId = organizationId,
+                    memberId = memberId,
+                    userId = userId,
+                    projectId = _uiState.value.editingProjectId,
+                    taskId = _uiState.value.editingTaskId,
+                    description = _uiState.value.editingDescription,
+                    tagIds = _uiState.value.editingTags,
+                )
+                syncTrigger.requestSync()
 
-            // Optimistic local write + outbox enqueue. The Room collector surfaces the
-            // new active entry and starts the timer.
-            val timeEntry = timeEntryRepository.startEntry(
-                organizationId = organizationId,
-                memberId = memberId,
-                userId = userId,
-                projectId = _uiState.value.editingProjectId,
-                taskId = _uiState.value.editingTaskId,
-                description = _uiState.value.editingDescription,
-                tagIds = _uiState.value.editingTags,
-            )
-            syncTrigger.requestSync()
+                // Active timers always have a foreground notification.
+                val projectName = _uiState.value.projects.find { it.id == timeEntry.projectId }?.name
+                val taskName = _uiState.value.tasks.find { it.id == timeEntry.taskId }?.name
 
-            // Active timers always have a foreground notification.
-            val projectName = _uiState.value.projects.find { it.id == timeEntry.projectId }?.name
-            val taskName = _uiState.value.tasks.find { it.id == timeEntry.taskId }?.name
+                TimeTrackingNotificationService.startTracking(
+                    context = context,
+                    startTime = Instant.parse(timeEntry.start),
+                    projectName = projectName,
+                    taskName = taskName,
+                    description = timeEntry.description,
+                    projectId = timeEntry.projectId,
+                    taskId = timeEntry.taskId,
+                    organizationId = timeEntry.organizationId,
+                )
 
-            TimeTrackingNotificationService.startTracking(
-                context = context,
-                startTime = Instant.parse(timeEntry.start),
-                projectName = projectName,
-                taskName = taskName,
-                description = timeEntry.description,
-                projectId = timeEntry.projectId,
-                taskId = timeEntry.taskId,
-                organizationId = timeEntry.organizationId,
-            )
+                settingsDataStore.setWidgetTrackingState(
+                    isTracking = true,
+                    startTimeEpochMillis = Instant.parse(timeEntry.start).toEpochMilli(),
+                    projectName = projectName,
+                    taskName = taskName,
+                    description = timeEntry.description,
+                )
+                TimeTrackingWidget.requestUpdate(context)
 
-            settingsDataStore.setWidgetTrackingState(
-                isTracking = true,
-                startTimeEpochMillis = Instant.parse(timeEntry.start).toEpochMilli(),
-                projectName = projectName,
-                taskName = taskName,
-                description = timeEntry.description,
-            )
-            TimeTrackingWidget.requestUpdate(context)
-
-            _uiState.value = _uiState.value.copy(isLoading = false, isTracking = true)
-            Timber.d("Time entry started successfully (optimistic)")
+                _uiState.value = _uiState.value.copy(isLoading = false, isTracking = true)
+                Timber.d("Time entry started successfully (optimistic)")
+            } catch (e: Exception) {
+                handleMutationFailure(e, "Failed to start time entry")
+            }
         }
     }
 
@@ -1322,48 +1325,51 @@ class TrackingViewModel @Inject constructor(
         clearActivePollOverride()
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-
-            val editingTags = tags ?: _uiState.value.editingTags
-            val updatedEntry = entryToUpdate.copy(
-                description = _uiState.value.editingDescription,
-                projectId = _uiState.value.editingProjectId,
-                taskId = _uiState.value.editingTaskId,
-                billable = _uiState.value.editingBillable,
-                tags = editingTags.map { Tag(it) },
-            )
-
-            timeEntryRepository.updateEntry(updatedEntry, editingTags)
-            syncTrigger.requestSync()
-
-            // Reassert the foreground notification with the edited details.
-            if (isRunningTimeEntry(updatedEntry)) {
-                val projectName = _uiState.value.projects.find { it.id == updatedEntry.projectId }?.name
-                val taskName = _uiState.value.tasks.find { it.id == updatedEntry.taskId }?.name
-                TimeTrackingNotificationService.startTracking(
-                    context = context,
-                    startTime = Instant.parse(updatedEntry.start),
-                    projectName = projectName,
-                    taskName = taskName,
-                    description = updatedEntry.description,
-                    projectId = updatedEntry.projectId,
-                    taskId = updatedEntry.taskId,
-                    organizationId = updatedEntry.organizationId,
+            try {
+                val editingTags = tags ?: _uiState.value.editingTags
+                val updatedEntry = entryToUpdate.copy(
+                    description = _uiState.value.editingDescription,
+                    projectId = _uiState.value.editingProjectId,
+                    taskId = _uiState.value.editingTaskId,
+                    billable = _uiState.value.editingBillable,
+                    tags = editingTags.map { Tag(it) },
                 )
-                settingsDataStore.setWidgetTrackingState(
-                    isTracking = true,
-                    startTimeEpochMillis = Instant.parse(updatedEntry.start).toEpochMilli(),
-                    projectName = projectName,
-                    taskName = taskName,
-                    description = updatedEntry.description,
+
+                timeEntryRepository.updateEntry(updatedEntry, editingTags)
+                syncTrigger.requestSync()
+
+                // Reassert the foreground notification with the edited details.
+                if (isRunningTimeEntry(updatedEntry)) {
+                    val projectName = _uiState.value.projects.find { it.id == updatedEntry.projectId }?.name
+                    val taskName = _uiState.value.tasks.find { it.id == updatedEntry.taskId }?.name
+                    TimeTrackingNotificationService.startTracking(
+                        context = context,
+                        startTime = Instant.parse(updatedEntry.start),
+                        projectName = projectName,
+                        taskName = taskName,
+                        description = updatedEntry.description,
+                        projectId = updatedEntry.projectId,
+                        taskId = updatedEntry.taskId,
+                        organizationId = updatedEntry.organizationId,
+                    )
+                    settingsDataStore.setWidgetTrackingState(
+                        isTracking = true,
+                        startTimeEpochMillis = Instant.parse(updatedEntry.start).toEpochMilli(),
+                        projectName = projectName,
+                        taskName = taskName,
+                        description = updatedEntry.description,
+                    )
+                    TimeTrackingWidget.requestUpdate(context)
+                }
+
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    editingTags = editingTags,
                 )
-                TimeTrackingWidget.requestUpdate(context)
+                Timber.d("Time entry updated successfully (optimistic)")
+            } catch (e: Exception) {
+                handleMutationFailure(e, "Failed to update time entry")
             }
-
-            _uiState.value = _uiState.value.copy(
-                isLoading = false,
-                editingTags = editingTags,
-            )
-            Timber.d("Time entry updated successfully (optimistic)")
         }
     }
 
@@ -1404,33 +1410,37 @@ class TrackingViewModel @Inject constructor(
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            try {
+                // Optimistic local stop + outbox enqueue. The collector clears the active entry.
+                timeEntryRepository.stopEntry(currentEntry, currentEntry.userId)
+                syncTrigger.requestSync()
 
-            // Optimistic local stop + outbox enqueue. The collector clears the active entry.
-            timeEntryRepository.stopEntry(currentEntry, currentEntry.userId)
-            syncTrigger.requestSync()
+                _uiState.value = _uiState.value.copy(
+                    isTracking = false,
+                    isPaused = false,
+                    currentTimeEntry = null,
+                    editingDescription = "",
+                    editingProjectId = null,
+                    editingTaskId = null,
+                    editingTags = emptyList(),
+                    editingBillable = false,
+                )
+                stopTimer()
+                lastCollectedActiveId = null
+                Timber.d("Time entry stopped successfully (optimistic)")
 
-            _uiState.value = _uiState.value.copy(
-                isTracking = false,
-                isPaused = false,
-                currentTimeEntry = null,
-                editingDescription = "",
-                editingProjectId = null,
-                editingTaskId = null,
-                editingTags = emptyList(),
-                editingBillable = false,
-            )
-            stopTimer()
-            lastCollectedActiveId = null
-            Timber.d("Time entry stopped successfully (optimistic)")
+                // Update notification state (will switch to idle or hide based on settings)
+                updateNotificationState()
 
-            // Update notification state (will switch to idle or hide based on settings)
-            updateNotificationState()
+                // Update widget state to idle
+                settingsDataStore.setWidgetTrackingState(isTracking = false)
+                TimeTrackingWidget.requestUpdate(context)
 
-            // Update widget state to idle
-            settingsDataStore.setWidgetTrackingState(isTracking = false)
-            TimeTrackingWidget.requestUpdate(context)
-
-            _uiState.value = _uiState.value.copy(isLoading = false)
+                _uiState.value = _uiState.value.copy(isLoading = false)
+            } catch (e: Exception) {
+                locallyStoppingEntryIds.remove(currentEntry.id)
+                handleMutationFailure(e, "Failed to stop time entry")
+            }
         }
     }
 
@@ -1448,27 +1458,30 @@ class TrackingViewModel @Inject constructor(
         clearActivePollOverride()
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            try {
+                // Optimistic local stop + outbox enqueue; keep editing state for resume.
+                timeEntryRepository.stopEntry(currentEntry, currentEntry.userId)
+                syncTrigger.requestSync()
 
-            // Optimistic local stop + outbox enqueue; keep editing state for resume.
-            timeEntryRepository.stopEntry(currentEntry, currentEntry.userId)
-            syncTrigger.requestSync()
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    isTracking = false,
+                    isPaused = true,
+                    currentTimeEntry = null,
+                )
+                stopTimer()
+                lastCollectedActiveId = null
+                Timber.d("Time entry paused successfully (optimistic)")
 
-            _uiState.value = _uiState.value.copy(
-                isLoading = false,
-                isTracking = false,
-                isPaused = true,
-                currentTimeEntry = null,
-            )
-            stopTimer()
-            lastCollectedActiveId = null
-            Timber.d("Time entry paused successfully (optimistic)")
+                // Update notification to paused state
+                TimeTrackingNotificationService.showPaused(context)
 
-            // Update notification to paused state
-            TimeTrackingNotificationService.showPaused(context)
-
-            // Update widget state to idle
-            settingsDataStore.setWidgetTrackingState(isTracking = false)
-            TimeTrackingWidget.requestUpdate(context)
+                // Update widget state to idle
+                settingsDataStore.setWidgetTrackingState(isTracking = false)
+                TimeTrackingWidget.requestUpdate(context)
+            } catch (e: Exception) {
+                handleMutationFailure(e, "Failed to pause time entry")
+            }
         }
     }
 
@@ -1477,46 +1490,51 @@ class TrackingViewModel @Inject constructor(
      */
     fun resumeTimeEntry(organizationId: String, memberId: String, userId: String) {
         clearActivePollOverride()
+        val wasPaused = _uiState.value.isPaused
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null, isPaused = false)
+            try {
+                val timeEntry = timeEntryRepository.startEntry(
+                    organizationId = organizationId,
+                    memberId = memberId,
+                    userId = userId,
+                    projectId = _uiState.value.editingProjectId,
+                    taskId = _uiState.value.editingTaskId,
+                    description = _uiState.value.editingDescription,
+                    tagIds = _uiState.value.editingTags,
+                )
+                syncTrigger.requestSync()
 
-            val timeEntry = timeEntryRepository.startEntry(
-                organizationId = organizationId,
-                memberId = memberId,
-                userId = userId,
-                projectId = _uiState.value.editingProjectId,
-                taskId = _uiState.value.editingTaskId,
-                description = _uiState.value.editingDescription,
-                tagIds = _uiState.value.editingTags,
-            )
-            syncTrigger.requestSync()
+                val projectName = _uiState.value.projects.find { it.id == timeEntry.projectId }?.name
+                val taskName = _uiState.value.tasks.find { it.id == timeEntry.taskId }?.name
 
-            val projectName = _uiState.value.projects.find { it.id == timeEntry.projectId }?.name
-            val taskName = _uiState.value.tasks.find { it.id == timeEntry.taskId }?.name
+                // Update notification to tracking state
+                TimeTrackingNotificationService.startTracking(
+                    context = context,
+                    startTime = Instant.parse(timeEntry.start),
+                    projectName = projectName,
+                    taskName = taskName,
+                    description = timeEntry.description,
+                    projectId = timeEntry.projectId,
+                    taskId = timeEntry.taskId,
+                    organizationId = timeEntry.organizationId,
+                )
 
-            // Update notification to tracking state
-            TimeTrackingNotificationService.startTracking(
-                context = context,
-                startTime = Instant.parse(timeEntry.start),
-                projectName = projectName,
-                taskName = taskName,
-                description = timeEntry.description,
-                projectId = timeEntry.projectId,
-                taskId = timeEntry.taskId,
-                organizationId = timeEntry.organizationId,
-            )
+                settingsDataStore.setWidgetTrackingState(
+                    isTracking = true,
+                    startTimeEpochMillis = Instant.parse(timeEntry.start).toEpochMilli(),
+                    projectName = projectName,
+                    taskName = taskName,
+                    description = timeEntry.description,
+                )
+                TimeTrackingWidget.requestUpdate(context)
 
-            settingsDataStore.setWidgetTrackingState(
-                isTracking = true,
-                startTimeEpochMillis = Instant.parse(timeEntry.start).toEpochMilli(),
-                projectName = projectName,
-                taskName = taskName,
-                description = timeEntry.description,
-            )
-            TimeTrackingWidget.requestUpdate(context)
-
-            _uiState.value = _uiState.value.copy(isLoading = false, isTracking = true)
-            Timber.d("Time entry resumed successfully with new entry (optimistic)")
+                _uiState.value = _uiState.value.copy(isLoading = false, isTracking = true)
+                Timber.d("Time entry resumed successfully with new entry (optimistic)")
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(isPaused = wasPaused)
+                handleMutationFailure(e, "Failed to resume time entry")
+            }
         }
     }
 
@@ -1537,38 +1555,41 @@ class TrackingViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-
-            authRepository.createTimeEntry(
-                organizationId = organizationId,
-                memberId = memberId,
-                userId = userId,
-                start = start,
-                end = end,
-                description = description ?: "",
-                projectId = projectId,
-                taskId = taskId,
-                tags = tags,
-                billable = billable,
-            )
-                .onSuccess { created ->
-                    // Insert into the loaded history, keeping newest-first order.
-                    // Parse instead of string-sorting: starts mix "Z" and "+02:00" offsets.
-                    val updatedList = (_uiState.value.timeEntries + created)
-                        .sortedByDescending { java.time.OffsetDateTime.parse(it.start) }
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        timeEntries = updatedList,
-                    )
-                    timeEntryRepository.refreshAll(organizationId, memberId)
-                    Timber.d("Manual time entry created successfully")
-                }
-                .onFailure { error ->
-                    Timber.e(error, "Failed to create manual time entry")
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = error.message ?: "Failed to create entry",
-                    )
-                }
+            try {
+                authRepository.createTimeEntry(
+                    organizationId = organizationId,
+                    memberId = memberId,
+                    userId = userId,
+                    start = start,
+                    end = end,
+                    description = description ?: "",
+                    projectId = projectId,
+                    taskId = taskId,
+                    tags = tags,
+                    billable = billable,
+                )
+                    .onSuccess { created ->
+                        // Insert into the loaded history, keeping newest-first order.
+                        // Parse instead of string-sorting: starts mix "Z" and "+02:00" offsets.
+                        val updatedList = (_uiState.value.timeEntries + created)
+                            .sortedByDescending { java.time.OffsetDateTime.parse(it.start) }
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            timeEntries = updatedList,
+                        )
+                        timeEntryRepository.refreshAll(organizationId, memberId)
+                        Timber.d("Manual time entry created successfully")
+                    }
+                    .onFailure { error ->
+                        Timber.e(error, "Failed to create manual time entry")
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = error.message ?: "Failed to create entry",
+                        )
+                    }
+            } catch (e: Exception) {
+                handleMutationFailure(e, "Failed to create entry")
+            }
         }
     }
 
@@ -1587,23 +1608,26 @@ class TrackingViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            try {
+                val updatedEntry = timeEntry.copy(
+                    description = description,
+                    projectId = projectId,
+                    taskId = taskId,
+                    billable = billable,
+                    start = start,
+                    end = end,
+                    tags = tags.map { Tag(it) },
+                )
 
-            val updatedEntry = timeEntry.copy(
-                description = description,
-                projectId = projectId,
-                taskId = taskId,
-                billable = billable,
-                start = start,
-                end = end,
-                tags = tags.map { Tag(it) },
-            )
+                // Optimistic local update + outbox enqueue; the collector refreshes the list.
+                timeEntryRepository.updateEntry(updatedEntry, tags)
+                syncTrigger.requestSync()
 
-            // Optimistic local update + outbox enqueue; the collector refreshes the list.
-            timeEntryRepository.updateEntry(updatedEntry, tags)
-            syncTrigger.requestSync()
-
-            _uiState.value = _uiState.value.copy(isLoading = false)
-            Timber.d("Time entry updated successfully (optimistic)")
+                _uiState.value = _uiState.value.copy(isLoading = false)
+                Timber.d("Time entry updated successfully (optimistic)")
+            } catch (e: Exception) {
+                handleMutationFailure(e, "Failed to update time entry")
+            }
         }
     }
 
@@ -1718,6 +1742,15 @@ class TrackingViewModel @Inject constructor(
         viewModelScope.launch {
             if (timeEntryRepository.prepareRetry(entryId)) syncTrigger.requestSync()
         }
+    }
+
+    private fun handleMutationFailure(error: Exception, fallbackMessage: String) {
+        if (error is CancellationException) throw error
+        Timber.e(error, fallbackMessage)
+        _uiState.value = _uiState.value.copy(
+            isLoading = false,
+            error = error.message ?: fallbackMessage,
+        )
     }
 
     /**

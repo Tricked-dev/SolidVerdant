@@ -17,6 +17,7 @@ import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -29,6 +30,8 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -43,7 +46,15 @@ class CalendarViewModelTest {
     @After fun tearDown() = Dispatchers.resetMain()
 
     private class FakeReader(private val entries: List<TimeEntry>) : TimeEntryReader {
+        val loadGates = mutableListOf<CompletableDeferred<Unit>>()
+        var loadCalls = 0
+
         override fun observeTimeEntries(organizationId: String): Flow<List<TimeEntry>> = flowOf(entries)
+
+        override suspend fun loadMonth(organizationId: String, memberId: String, month: java.time.YearMonth, zone: java.time.ZoneId) {
+            val call = loadCalls++
+            loadGates.getOrNull(call)?.await()
+        }
     }
 
     private class FakeEventSource(
@@ -89,6 +100,11 @@ class CalendarViewModelTest {
     ): TemporalPolicyProvider = mockk {
         every { this@mockk.policy } returns kotlinx.coroutines.flow.flowOf(policy)
         coEvery { current() } returns policy
+    }
+
+    private fun mutablePolicyProvider(policies: MutableStateFlow<TemporalPolicy>): TemporalPolicyProvider = mockk {
+        every { this@mockk.policy } returns policies
+        coEvery { current() } answers { policies.value }
     }
 
     private fun vm(
@@ -178,6 +194,28 @@ class CalendarViewModelTest {
     }
 
     @Test
+    fun navigation_does_not_clear_loading_from_a_superseded_month_load() = runTest {
+        val reader = FakeReader(emptyList())
+        val firstLoad = CompletableDeferred<Unit>()
+        val secondLoad = CompletableDeferred<Unit>()
+        reader.loadGates += firstLoad
+        reader.loadGates += secondLoad
+        val model = vm(reader)
+        model.setViewMode(CalendarViewMode.DAY)
+        model.setOrganization("org1")
+        assertEquals(1, reader.loadCalls)
+
+        model.pageForward()
+        assertEquals(2, reader.loadCalls)
+
+        firstLoad.complete(Unit)
+        assertTrue("The replacement page is still loading", model.uiState.value.isLoading)
+
+        secondLoad.complete(Unit)
+        assertFalse(model.uiState.value.isLoading)
+    }
+
+    @Test
     fun overlayIsNotQueriedWithoutPermission() = runTest {
         val source = FakeEventSource(events = listOf(event(1, "2026-07-06T09:00:00Z", "2026-07-06T10:00:00Z")))
         val model = vm(
@@ -206,6 +244,27 @@ class CalendarViewModelTest {
         model.onCalendarPermissionChanged(true)
         val state = model.uiState.first { it.overlayEvents.isNotEmpty() }
         assertEquals(1, state.overlayEvents.size)
+    }
+
+    @Test
+    fun overlay_requeries_when_the_account_temporal_zone_changes() = runTest {
+        val policies = MutableStateFlow(TemporalPolicy(java.time.ZoneId.of("UTC"), java.time.DayOfWeek.MONDAY))
+        val source = FakeEventSource()
+        val model = vm(
+            FakeReader(emptyList()),
+            source = source,
+            settings = FakeOverlaySettings(enabled = true, selected = setOf("1")),
+            temporalPolicyProvider = mutablePolicyProvider(policies),
+        )
+
+        model.onCalendarPermissionChanged(true)
+        val firstRange = requireNotNull(source.lastRange)
+        val firstQueryCount = source.queryCount
+
+        policies.value = TemporalPolicy(java.time.ZoneId.of("Asia/Tokyo"), java.time.DayOfWeek.MONDAY)
+
+        assertTrue(source.queryCount > firstQueryCount)
+        assertNotEquals(firstRange, source.lastRange)
     }
 
     private fun event(id: Long, startIso: String, endIso: String, allDay: Boolean = false, cal: String = "1") = DeviceCalendarEvent(

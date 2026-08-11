@@ -41,6 +41,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 
 /**
@@ -71,6 +72,7 @@ class TimeTrackingTileService : TileService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val isProcessing = AtomicBoolean(false)
     private val isUpdating = AtomicBoolean(false)
+    private val updateGeneration = AtomicLong()
     private var lastUpdateTime = 0L
 
     private val prefs by lazy {
@@ -392,10 +394,12 @@ class TimeTrackingTileService : TileService() {
         }
         lastUpdateTime = now
 
-        if (!isUpdating.compareAndSet(false, true)) {
+        val alreadyUpdating = !isUpdating.compareAndSet(false, true)
+        if (alreadyUpdating && !forceNetwork) {
             Timber.d("Update already in progress, skipping")
             return
         }
+        val requestGeneration = updateGeneration.incrementAndGet()
 
         serviceScope.launch {
             try {
@@ -403,13 +407,13 @@ class TimeTrackingTileService : TileService() {
 
                 val optimistic = getOptimisticState()
                 if (optimistic != null) {
-                    applyState(tile, optimistic)
+                    applyState(tile, optimistic, requestGeneration)
                     return@launch
                 }
 
                 val isLoggedIn = authRepository.isLoggedIn.first()
                 if (!isLoggedIn) {
-                    applyState(tile, TileState.NotLoggedIn)
+                    applyState(tile, TileState.NotLoggedIn, requestGeneration)
                     return@launch
                 }
 
@@ -417,7 +421,7 @@ class TimeTrackingTileService : TileService() {
                 if (cachedId != null) {
                     val cachedProject = prefs.getString(PREF_LAST_PROJECT_NAME, null)
                     val cachedTask = prefs.getString(PREF_LAST_TASK_NAME, null)
-                    applyState(tile, TileState.Active(cachedProject, cachedTask, null))
+                    applyState(tile, TileState.Active(cachedProject, cachedTask, null), requestGeneration)
                 }
 
                 // Fetch from network - Result.success(null) means no entry, Result.failure means network failed
@@ -429,6 +433,8 @@ class TimeTrackingTileService : TileService() {
                     Timber.w(e, "Network fetch failed")
                     null
                 }
+
+                if (updateGeneration.get() != requestGeneration) return@launch
 
                 when {
                     result == null -> {
@@ -447,9 +453,7 @@ class TimeTrackingTileService : TileService() {
                                 activeEntry.taskId != prefs.getString(PREF_LAST_TASK_ID, null)
 
                             val (projectName, taskName) = if (entryChanged) {
-                                loadNames(activeEntry).also { (project, task) ->
-                                    cacheActiveEntry(activeEntry, project, task)
-                                }
+                                loadNames(activeEntry)
                             } else {
                                 Pair(
                                     prefs.getString(PREF_LAST_PROJECT_NAME, null),
@@ -457,10 +461,16 @@ class TimeTrackingTileService : TileService() {
                                 )
                             }
 
+                            if (updateGeneration.get() != requestGeneration) return@launch
+                            if (entryChanged) cacheActiveEntry(activeEntry, projectName, taskName)
+
                             applyState(
                                 tile,
                                 TileState.Active(projectName, taskName, activeEntry.description),
+                                requestGeneration,
                             )
+
+                            if (updateGeneration.get() != requestGeneration) return@launch
 
                             // (Re)assert the tracking notification whenever an entry is
                             // active - not only when it changed. The notification may have
@@ -481,18 +491,20 @@ class TimeTrackingTileService : TileService() {
                         } else if (cachedId != null) {
                             // Network succeeded, no active entry - stopped externally
                             Timber.d("Entry stopped externally, clearing cache")
+                            if (updateGeneration.get() != requestGeneration) return@launch
                             clearCachedEntry()
-                            applyState(tile, TileState.Inactive)
+                            applyState(tile, TileState.Inactive, requestGeneration)
 
                             // Update notification state based on settings
                             val alwaysShow = settingsDataStore.alwaysShowNotification.first()
+                            if (updateGeneration.get() != requestGeneration) return@launch
                             if (alwaysShow) {
                                 TimeTrackingNotificationService.showIdle(this@TimeTrackingTileService)
                             } else {
                                 TimeTrackingNotificationService.hide(this@TimeTrackingTileService)
                             }
                         } else {
-                            applyState(tile, TileState.Inactive)
+                            applyState(tile, TileState.Inactive, requestGeneration)
                         }
                     }
 
@@ -502,10 +514,11 @@ class TimeTrackingTileService : TileService() {
                     }
                 }
             } catch (e: Exception) {
+                if (updateGeneration.get() != requestGeneration) return@launch
                 Timber.e(e, "Failed to update tile")
-                applyFallbackState()
+                applyFallbackState(requestGeneration)
             } finally {
-                isUpdating.set(false)
+                if (updateGeneration.get() == requestGeneration) isUpdating.set(false)
             }
         }
     }
@@ -532,7 +545,6 @@ class TimeTrackingTileService : TileService() {
         }
         // Force network refresh
         lastUpdateTime = 0 // Reset debounce
-        isUpdating.set(false) // Allow new update
         updateTileState(forceNetwork = true)
     }
 
@@ -545,8 +557,9 @@ class TimeTrackingTileService : TileService() {
         object Stopping : TileState()
     }
 
-    private fun applyState(tile: Tile, state: TileState) {
+    private fun applyState(tile: Tile, state: TileState, requestGeneration: Long? = null) {
         serviceScope.launch(Dispatchers.Main) {
+            if (requestGeneration != null && updateGeneration.get() != requestGeneration) return@launch
             applyStateSync(tile, state)
         }
     }
@@ -593,9 +606,10 @@ class TimeTrackingTileService : TileService() {
         tile.updateTile()
     }
 
-    private fun applyFallbackState() {
+    private fun applyFallbackState(requestGeneration: Long? = null) {
         val tile = qsTile ?: return
         serviceScope.launch(Dispatchers.Main) {
+            if (requestGeneration != null && updateGeneration.get() != requestGeneration) return@launch
             applyFallbackStateSync(tile)
         }
     }
@@ -786,6 +800,8 @@ class TimeTrackingTileService : TileService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        updateGeneration.incrementAndGet()
+        isUpdating.set(false)
         try {
             unregisterReceiver(broadcastReceiver)
         } catch (e: Exception) {

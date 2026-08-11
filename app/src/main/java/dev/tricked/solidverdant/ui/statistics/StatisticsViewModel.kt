@@ -20,6 +20,7 @@ import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.domain.time.TemporalPolicy
 import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -168,6 +169,7 @@ class StatisticsViewModel @Inject constructor(
         val catalog: StatCatalog,
         val rangeStart: LocalDate,
         val rangeEnd: LocalDate,
+        val zone: ZoneId,
         val organizationName: String,
     )
 
@@ -222,8 +224,13 @@ class StatisticsViewModel @Inject constructor(
 
     private suspend fun resolveOrgName(organizationId: String): String {
         cachedOrgName?.let { (id, name) -> if (id == organizationId) return name }
-        val name = runCatching { authRepository.getCurrentMembership() }
-            .getOrNull()
+        val name = try {
+            authRepository.getCurrentMembership()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
             ?.takeIf { it.organizationId == organizationId }
             ?.organization?.name
             ?: organizationId
@@ -319,6 +326,7 @@ class StatisticsViewModel @Inject constructor(
                                 catalog = catalog,
                                 rangeStart = resolved.start,
                                 rangeEnd = resolved.endInclusive,
+                                zone = zone,
                                 organizationName = orgName,
                             )
                             StatisticsUiState(
@@ -390,6 +398,7 @@ class StatisticsViewModel @Inject constructor(
         val snapshot = uiState.value
         val rangeStart = snapshot.rangeStart ?: return
         val rangeEnd = snapshot.rangeEnd ?: return
+        val snapshotZone = zone
         _drillDown.value = DrillDownUiState(target = target, isLoading = true)
         viewModelScope.launch {
             val rows = withContext(Dispatchers.Default) {
@@ -398,7 +407,7 @@ class StatisticsViewModel @Inject constructor(
                         entries = snapshot.filteredEntries,
                         projects = snapshot.catalog.projects,
                         tasks = snapshot.catalog.tasks,
-                        zone = zone,
+                        zone = snapshotZone,
                         selStart = rangeStart,
                         selEnd = rangeEnd,
                         matchProject = true,
@@ -411,7 +420,7 @@ class StatisticsViewModel @Inject constructor(
                             entries = snapshot.filteredEntries,
                             projects = snapshot.catalog.projects,
                             tasks = snapshot.catalog.tasks,
-                            zone = zone,
+                            zone = snapshotZone,
                             selStart = selStart,
                             selEnd = selEnd,
                             matchProject = false,
@@ -453,13 +462,15 @@ class StatisticsViewModel @Inject constructor(
                         clients = input.catalog.clients,
                         tasks = input.catalog.tasks,
                         tags = input.catalog.tags,
-                        zone = zone,
+                        zone = input.zone,
                         organizationName = input.organizationName,
                     )
                 }
                 val baseName = exportBaseName(input.rangeStart, input.rangeEnd)
                 val uri = csvExporter.writeToCache(csv, baseName)
                 _exportState.value = ExportState.Ready(uri, "$baseName.csv")
+            } catch (e: CancellationException) {
+                throw e
             } catch (t: Throwable) {
                 // Never log entry contents; the message alone is safe.
                 Timber.e(t, "CSV export failed")

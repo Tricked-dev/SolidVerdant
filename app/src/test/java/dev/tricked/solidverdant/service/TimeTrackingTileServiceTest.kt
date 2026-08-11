@@ -37,6 +37,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import java.util.concurrent.atomic.AtomicInteger
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -123,6 +124,41 @@ class TimeTrackingTileServiceTest {
 
         awaitTile(service) { state == Tile.STATE_ACTIVE && subtitle == "Tap to stop" }
         coVerify(timeout = TIMEOUT_MS, exactly = 2) { authRepository.getActiveTimeEntry() }
+    }
+
+    @Test
+    fun late_refresh_result_cannot_overwrite_a_newer_tile_state() {
+        val firstLookupStarted = CompletableDeferred<Unit>()
+        val secondLookupStarted = CompletableDeferred<Unit>()
+        val releaseFirstLookup = CompletableDeferred<Unit>()
+        val releaseSecondLookup = CompletableDeferred<Unit>()
+        val lookupCount = AtomicInteger()
+        val authRepository = loggedInRepository().also {
+            coEvery { it.getActiveTimeEntry() } coAnswers {
+                if (lookupCount.incrementAndGet() == 1) {
+                    firstLookupStarted.complete(Unit)
+                    releaseFirstLookup.await()
+                    Result.success(activeEntry)
+                } else {
+                    secondLookupStarted.complete(Unit)
+                    releaseSecondLookup.await()
+                    Result.success<TimeEntry?>(null)
+                }
+            }
+        }
+        val service = createService(authRepository)
+
+        service.onStartListening()
+        runBlocking { withTimeout(TIMEOUT_MS) { firstLookupStarted.await() } }
+        requestRefresh()
+        runBlocking { withTimeout(TIMEOUT_MS) { secondLookupStarted.await() } }
+
+        releaseSecondLookup.complete(Unit)
+        awaitTile(service) { state == Tile.STATE_INACTIVE && subtitle == "Tap to start" }
+        releaseFirstLookup.complete(Unit)
+        awaitCondition {
+            service.qsTile.state == Tile.STATE_INACTIVE && service.qsTile.subtitle == "Tap to start"
+        }
     }
 
     @Test

@@ -17,13 +17,17 @@ import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.TimeEntryReader
 import dev.tricked.solidverdant.domain.time.TemporalPolicy
 import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
@@ -82,6 +86,8 @@ class CalendarViewModel @Inject constructor(
     private var organizationId: String? = null
     private var memberId: String? = null
     private var entriesJob: Job? = null
+    private var visibleLoadJob: Job? = null
+    private var visibleLoadGeneration = 0L
 
     // Account temporal policy (zone + week start). Seeded synchronously from the provider's cached
     // read so the first frame already uses the account zone/week-start (see StatisticsViewModel);
@@ -129,6 +135,7 @@ class CalendarViewModel @Inject constructor(
                 currentPolicy = policy
                 _uiState.update { it.copy(zone = policy.zone, weekStart = policy.firstDayOfWeek) }
                 recomputeVisibleDays()
+                loadForVisibleDays()
             }
         }
 
@@ -149,9 +156,11 @@ class CalendarViewModel @Inject constructor(
                 enabled && perm
             }
                 .distinctUntilChanged()
-                .collect { ready ->
+                .collectLatest { ready ->
                     if (ready) {
-                        refreshAvailableCalendars()
+                        val calendars = refreshAvailableCalendars()
+                        currentCoroutineContext().ensureActive()
+                        _uiState.update { it.copy(availableCalendars = calendars) }
                     } else {
                         _uiState.update { it.copy(availableCalendars = emptyList()) }
                     }
@@ -165,9 +174,14 @@ class CalendarViewModel @Inject constructor(
         if (this.organizationId == organizationId && this.memberId == memberId && entriesJob?.isActive == true) {
             return
         }
+        val organizationChanged = this.organizationId != organizationId || this.memberId != memberId
         this.organizationId = organizationId
         this.memberId = memberId
         entriesJob?.cancel()
+        if (organizationChanged) {
+            visibleLoadJob?.cancel()
+            _uiState.update { it.copy(bucketsByDate = emptyMap(), isLoading = true) }
+        }
         entriesJob = viewModelScope.launch {
             reader.observeTimeEntries(organizationId).collect { entries ->
                 // Aggregate off the main thread: a large month can hold thousands of entries and
@@ -313,15 +327,20 @@ class CalendarViewModel @Inject constructor(
         retryCounter.update { it + 1 }
     }
 
-    private suspend fun refreshAvailableCalendars() {
-        val calendars = runCatching { eventSource.queryCalendars() }.getOrDefault(emptyList())
-        _uiState.update { it.copy(availableCalendars = calendars) }
+    private suspend fun refreshAvailableCalendars(): List<DeviceCalendar> = try {
+        eventSource.queryCalendars()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        emptyList()
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private suspend fun observeOverlayEvents() {
         val rangeFlow: Flow<Pair<Long, Long>?> =
-            combine(viewModeInput, weekAnchorInput, dayCountInput) { mode, anchor, dc -> rangeFor(mode, anchor, dc) }
+            combine(viewModeInput, weekAnchorInput, dayCountInput, temporalPolicyProvider.policy) { mode, anchor, dc, policy ->
+                rangeFor(mode, anchor, dc, policy.zone, policy.firstDayOfWeek)
+            }
         combine(
             overlaySettings.calendarOverlayEnabled,
             overlaySettings.selectedCalendarIds,
@@ -336,14 +355,16 @@ class CalendarViewModel @Inject constructor(
                 } else {
                     flow {
                         emit(OverlayResult(emptyList(), loading = true, error = false))
-                        val result = runCatching {
+                        val result = try {
                             eventSource.queryEvents(input.ids, input.range.first, input.range.second)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            null
                         }
                         emit(
-                            result.fold(
-                                onSuccess = { OverlayResult(it, loading = false, error = false) },
-                                onFailure = { OverlayResult(emptyList(), loading = false, error = true) },
-                            ),
+                            result?.let { OverlayResult(it, loading = false, error = false) }
+                                ?: OverlayResult(emptyList(), loading = false, error = true),
                         )
                     }
                 }
@@ -366,18 +387,29 @@ class CalendarViewModel @Inject constructor(
         _uiState.update { it.copy(visibleDays = visibleDaysFor(s.viewMode, s.weekAnchor, s.dayCount)) }
     }
 
-    private fun visibleDaysFor(mode: CalendarViewMode, anchor: LocalDate, dayCount: Int): List<LocalDate> = when (mode) {
+    private fun visibleDaysFor(
+        mode: CalendarViewMode,
+        anchor: LocalDate,
+        dayCount: Int,
+        startOfWeek: DayOfWeek = weekStart,
+    ): List<LocalDate> = when (mode) {
         CalendarViewMode.MONTH -> emptyList()
-        CalendarViewMode.WEEK -> visibleCalendarDays(anchor, weekStart, dayCount)
+        CalendarViewMode.WEEK -> visibleCalendarDays(anchor, startOfWeek, dayCount)
         CalendarViewMode.DAY -> listOf(anchor)
     }
 
     /** Epoch-milli half-open range covering the visible page, or null for MONTH mode. */
-    private fun rangeFor(mode: CalendarViewMode, anchor: LocalDate, dayCount: Int): Pair<Long, Long>? {
-        val days = visibleDaysFor(mode, anchor, dayCount)
+    private fun rangeFor(
+        mode: CalendarViewMode,
+        anchor: LocalDate,
+        dayCount: Int,
+        rangeZone: ZoneId = zone,
+        startOfWeek: DayOfWeek = weekStart,
+    ): Pair<Long, Long>? {
+        val days = visibleDaysFor(mode, anchor, dayCount, startOfWeek)
         if (days.isEmpty()) return null
-        val start = days.first().atStartOfDay(zone).toInstant().toEpochMilli()
-        val end = days.last().plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val start = days.first().atStartOfDay(rangeZone).toInstant().toEpochMilli()
+        val end = days.last().plusDays(1).atStartOfDay(rangeZone).toInstant().toEpochMilli()
         return start to end
     }
 
@@ -398,9 +430,24 @@ class CalendarViewModel @Inject constructor(
             }
         }
         _uiState.update { it.copy(isLoading = true) }
-        viewModelScope.launch {
-            months.forEach { reader.loadMonth(org, member, it, state.zone) }
-            _uiState.update { it.copy(isLoading = false) }
+        val requestGeneration = ++visibleLoadGeneration
+        visibleLoadJob?.cancel()
+        visibleLoadJob = viewModelScope.launch {
+            try {
+                months.forEach {
+                    reader.loadMonth(org, member, it, state.zone)
+                    currentCoroutineContext().ensureActive()
+                }
+                if (requestGeneration == visibleLoadGeneration && this@CalendarViewModel.organizationId == org) {
+                    _uiState.update { it.copy(isLoading = false) }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (requestGeneration == visibleLoadGeneration && this@CalendarViewModel.organizationId == org) {
+                    _uiState.update { it.copy(isLoading = false) }
+                }
+            }
         }
     }
 
