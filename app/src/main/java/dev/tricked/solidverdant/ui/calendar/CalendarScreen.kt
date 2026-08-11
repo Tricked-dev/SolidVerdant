@@ -89,6 +89,7 @@ import dev.tricked.solidverdant.ui.components.ErrorState
 import dev.tricked.solidverdant.ui.components.SyncChip
 import dev.tricked.solidverdant.ui.theme.Dimens
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -98,6 +99,8 @@ import java.time.format.DateTimeFormatter
 fun CalendarScreen(
     organizationId: String,
     memberId: String,
+    initialDate: LocalDate? = null,
+    onInitialDateConsumed: () -> Unit = {},
     projects: List<Project>,
     tasks: List<Task>,
     tags: List<Tag>,
@@ -118,6 +121,12 @@ fun CalendarScreen(
     viewModel: CalendarViewModel = hiltViewModel(),
 ) {
     LaunchedEffect(organizationId, memberId) { viewModel.setOrganization(organizationId, memberId) }
+    LaunchedEffect(initialDate) {
+        initialDate?.let {
+            viewModel.selectDate(it)
+            onInitialDateConsumed()
+        }
+    }
     val state by viewModel.uiState.collectAsState()
     val syncOperationByEntryId = remember(state.syncOperations) { worstSyncOperationsByEntryId(state.syncOperations) }
     var editing by remember { mutableStateOf<TimeEntry?>(null) }

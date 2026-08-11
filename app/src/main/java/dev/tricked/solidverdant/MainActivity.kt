@@ -42,8 +42,10 @@ import dev.tricked.solidverdant.ui.components.AppStatusOverlay
 import dev.tricked.solidverdant.ui.login.LoginScreen
 import dev.tricked.solidverdant.ui.navigation.MainNavHost
 import dev.tricked.solidverdant.ui.navigation.ReviewRoutes
+import dev.tricked.solidverdant.ui.navigation.Screen
 import dev.tricked.solidverdant.ui.navigation.SettingsRoutes
 import dev.tricked.solidverdant.ui.navigation.SyncRoutes
+import dev.tricked.solidverdant.ui.navigation.calendarDateFromUri
 import dev.tricked.solidverdant.ui.review.ReviewBadgeViewModel
 import dev.tricked.solidverdant.ui.review.ReviewScreen
 import dev.tricked.solidverdant.ui.statistics.StatisticsScreen
@@ -53,6 +55,7 @@ import dev.tricked.solidverdant.ui.tracking.TrackingViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.time.LocalDate
 import javax.inject.Inject
 
 /**
@@ -71,6 +74,7 @@ open class MainActivity : ComponentActivity() {
     private var handoffOrganizationId by mutableStateOf<String?>(null)
     private var editActiveEntryRequested by mutableStateOf(false)
     private var pendingReviewRoute by mutableStateOf<String?>(null)
+    private var pendingCalendarDate by mutableStateOf<LocalDate?>(null)
     private val startupTheme = MutableStateFlow(AppThemeMode.SYSTEM)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -109,6 +113,8 @@ open class MainActivity : ComponentActivity() {
                             onEditActiveEntryConsumed = { editActiveEntryRequested = false },
                             pendingReviewRoute = pendingReviewRoute,
                             onPendingReviewRouteConsumed = { pendingReviewRoute = null },
+                            calendarInitialDate = pendingCalendarDate,
+                            onCalendarInitialDateConsumed = { pendingCalendarDate = null },
                         )
                     }
                 }
@@ -166,18 +172,18 @@ open class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * Handle OAuth callback deep link
-     */
+    /** Handle incoming app deep links without logging URI contents. */
     private fun handleDeepLink(uri: Uri) {
-        Timber.d("Handling auth deep link")
+        Timber.d("Handling app deep link")
 
         if (uri.scheme == "solidtime" && uri.host == "oauth" && uri.path == "/callback") {
             val code = uri.getQueryParameter("code")
             val state = uri.getQueryParameter("state")
 
             authViewModel.handleOAuthCallback(code, state)
+            return
         }
+        calendarDateFromUri(uri)?.let { pendingCalendarDate = it }
     }
 
     companion object {
@@ -201,6 +207,8 @@ fun SolidVerdantApp(
     onEditActiveEntryConsumed: () -> Unit = {},
     pendingReviewRoute: String? = null,
     onPendingReviewRouteConsumed: () -> Unit = {},
+    calendarInitialDate: LocalDate? = null,
+    onCalendarInitialDateConsumed: () -> Unit = {},
 ) {
     val authUiState by authViewModel.uiState.collectAsState()
     val configState by authViewModel.configState.collectAsState()
@@ -268,6 +276,15 @@ fun SolidVerdantApp(
                         launchSingleTop = true
                     }
                     onPendingReviewRouteConsumed()
+                }
+            }
+            LaunchedEffect(calendarInitialDate, currentMembership?.organizationId) {
+                if (calendarInitialDate != null && currentMembership != null) {
+                    navController.navigate(Screen.Calendar.route) {
+                        popUpTo(Screen.Track.route) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
                 }
             }
             MainNavHost(
@@ -445,6 +462,8 @@ fun SolidVerdantApp(
                         CalendarScreen(
                             organizationId = currentMembership.organizationId,
                             memberId = currentMembership.id,
+                            initialDate = calendarInitialDate,
+                            onInitialDateConsumed = onCalendarInitialDateConsumed,
                             projects = trackingUiState.projects,
                             tasks = trackingUiState.tasks,
                             tags = trackingUiState.tags,

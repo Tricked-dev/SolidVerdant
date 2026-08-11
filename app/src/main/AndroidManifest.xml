@@ -55,6 +55,14 @@
                     android:pathPrefix="/callback"
                     android:scheme="solidtime" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="calendar"
+                    android:scheme="solidtime" />
+            </intent-filter>
         </activity-alias>
 
         <activity
@@ -76,6 +84,14 @@
                 <data
                     android:host="oauth"
                     android:pathPrefix="/callback"
+                    android:scheme="solidtime" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="calendar"
                     android:scheme="solidtime" />
             </intent-filter>
         </activity>

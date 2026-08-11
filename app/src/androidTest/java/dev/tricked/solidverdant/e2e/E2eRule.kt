@@ -7,6 +7,7 @@
 package dev.tricked.solidverdant.e2e
 
 import android.content.Context
+import android.content.Intent
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.hilt.work.HiltWorkerFactory
@@ -211,9 +212,9 @@ class E2eRule(private val test: Any) : TestRule {
     }
 
     /** Launch the real [MainActivity]. Call after [prepare] or [requireMockBackend]. */
-    fun launchApp(): ActivityScenario<MainActivity> {
+    fun launchApp(intent: Intent = Intent(context, MainActivity::class.java)): ActivityScenario<MainActivity> {
         check(prepared) { "Call prepare(E2eFixture...) before launchApp()" }
-        return ActivityScenario.launch(MainActivity::class.java).also { scenario = it }
+        return ActivityScenario.launch<MainActivity>(intent).also { scenario = it }
     }
 
     /**
