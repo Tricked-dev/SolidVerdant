@@ -73,6 +73,9 @@ object TestTags {
     const val CALENDAR_RUNNING_TIMER_EDIT = CalendarTestTags.RUNNING_TIMER_EDIT
     const val CALENDAR_ENTRY_ACTIONS = CalendarTestTags.ENTRY_ACTIONS
     const val CALENDAR_EDIT_START_TIME = CalendarTestTags.EDIT_START_TIME
+    const val CALENDAR_DELETE_ENTRY = CalendarTestTags.DELETE_ENTRY
+    const val CALENDAR_DELETE_CONFIRM = CalendarTestTags.DELETE_CONFIRM
+    const val CALENDAR_DELETE_CANCEL = CalendarTestTags.DELETE_CANCEL
     const val CALENDAR_ENTRY_SYNC_STATUS = CalendarTestTags.SYNC_STATUS
     const val CALENDAR_ENTRY_SYNC_RETRY = CalendarTestTags.SYNC_RETRY
     const val CALENDAR_ENTRY_SYNC_DISCARD = CalendarTestTags.SYNC_DISCARD

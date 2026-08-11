@@ -488,13 +488,17 @@ fun CalendarScreen(
                         deletedEntry = entry
                         deleteTarget = null
                     },
+                    modifier = Modifier.testTag(CalendarTestTags.DELETE_CONFIRM),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                 ) {
                     Text(stringResource(if (discard) R.string.calendar_action_discard else R.string.delete))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { deleteTarget = null }) {
+                TextButton(
+                    onClick = { deleteTarget = null },
+                    modifier = Modifier.testTag(CalendarTestTags.DELETE_CANCEL),
+                ) {
                     Text(stringResource(R.string.cancel))
                 }
             },
@@ -620,6 +624,7 @@ private fun CalendarEntryActionsSheet(
             CalendarEntryActionButton(
                 label = stringResource(if (unsynced) R.string.calendar_action_discard else R.string.delete),
                 onClick = onDelete,
+                actionTestTag = CalendarTestTags.DELETE_ENTRY,
             )
         }
     }
