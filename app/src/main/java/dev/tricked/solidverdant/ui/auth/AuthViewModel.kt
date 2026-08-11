@@ -271,6 +271,7 @@ class AuthViewModel @Inject constructor(
     }
 
     fun testConnection(endpoint: String, clientId: String) {
+        if (_configState.value.isTesting) return
         viewModelScope.launch {
             _configState.value = _configState.value.copy(isTesting = true, testSuccess = null, testMessage = null)
             val result = connectionTester.test(endpoint.removeSuffix("/"), clientId)

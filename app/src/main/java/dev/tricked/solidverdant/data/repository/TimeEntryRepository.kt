@@ -146,6 +146,7 @@ class TimeEntryRepository @Inject constructor(
                     end = queryEnd,
                 ),
             ).getOrElse {
+                if (it is CancellationException) throw it
                 Timber.e(it, "Failed loading calendar month %s", month)
                 return
             }
@@ -238,7 +239,10 @@ class TimeEntryRepository @Inject constructor(
         catalogDao.upsertTags(tags.map { it.toEntity(organizationId) })
 
         // Memberships/organizations cache so auth-adjacent screens can read offline.
-        remote.getMyMemberships().getOrNull()?.let { memberships ->
+        remote.getMyMemberships().getOrElse { error ->
+            if (error is CancellationException) throw error
+            null
+        }?.let { memberships ->
             catalogDao.upsertMemberships(memberships.map { it.toEntity() })
             catalogDao.upsertOrganizations(memberships.map { it.organization.toEntity() })
         }

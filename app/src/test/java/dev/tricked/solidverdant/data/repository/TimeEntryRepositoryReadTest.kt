@@ -28,6 +28,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.io.IOException
 import java.time.YearMonth
 import java.time.ZoneId
 
@@ -84,6 +85,17 @@ class TimeEntryRepositoryReadTest {
         clock.t = 1000L
         repo.refreshAll("org1", "member1")
         assertEquals("local", repo.observeTimeEntries("org1").first().first { it.id == "a" }.description)
+    }
+
+    @Test fun intermittent_refresh_failure_keeps_the_cached_history_intact() = runTest {
+        val cached = srv("cached").copy(description = "offline copy")
+        db.timeEntryDao().upsert(cached.toEntity(updatedAt = 1L, syncState = SyncState.SYNCED))
+        remote.timeEntriesQueryValidator = { IOException("network disappeared") }
+
+        val result = repo.refreshAll("org1", "member1")
+
+        assertTrue(result.isFailure)
+        assertEquals("offline copy", repo.observeTimeEntries("org1").first().single().description)
     }
 
     @Test fun refresh_applies_server_edit_when_pulls_share_a_timestamp() = runTest {

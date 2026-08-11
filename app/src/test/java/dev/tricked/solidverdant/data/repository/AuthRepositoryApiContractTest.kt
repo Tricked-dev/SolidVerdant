@@ -11,7 +11,12 @@ import androidx.test.core.app.ApplicationProvider
 import dev.tricked.solidverdant.data.local.AuthDataStore
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.ApiClientFactory
+import dev.tricked.solidverdant.data.remote.SolidtimeApi
 import dev.tricked.solidverdant.di.NetworkModule
+import io.mockk.coEvery
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
@@ -22,6 +27,7 @@ import okhttp3.mockwebserver.RecordedRequest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -97,6 +103,22 @@ class AuthRepositoryApiContractTest {
 
         assertEquals("entry", active?.id)
         assertEquals(listOf("tag-id"), active?.tags?.map { it.id })
+    }
+
+    @Test
+    fun `cancellation from the active endpoint is not converted into a failed result`() {
+        val authDataStore = mockk<AuthDataStore>(relaxed = true)
+        val api = mockk<SolidtimeApi>()
+        val apiClientFactory = mockk<ApiClientFactory>()
+        coEvery { authDataStore.getEndpoint() } returns "https://example.test"
+        every { apiClientFactory.createApi(any()) } returns api
+        coEvery { api.getActiveTimeEntry() } throws CancellationException("screen closed")
+
+        val repository = AuthRepository(authDataStore, apiClientFactory)
+
+        assertThrows(CancellationException::class.java) {
+            runBlocking { repository.getActiveTimeEntry() }
+        }
     }
 
     @Test

@@ -39,6 +39,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -239,6 +241,87 @@ class TrackingViewModelNetworkRaceTest {
             ),
         )
         dispatcher.scheduler.runCurrent()
+        viewModel.cancelScopeForTest()
+    }
+
+    @Test
+    fun late_history_page_after_switching_organization_is_ignored() = runTest(dispatcher.scheduler) {
+        val remote = FakeRemoteDataSource(
+            entries = (0 until HISTORY_LIMIT).map { index ->
+                entry(
+                    "cached-$index",
+                    start = "2026-07-07T${(index / 60).toString().padStart(2, '0')}:${(index % 60).toString().padStart(2, '0')}:00Z",
+                )
+            },
+        )
+        val pageResponse = CompletableDeferred<Result<TimeEntriesResponse>>()
+        var pageCalls = 0
+        val authRepository = mockk<AuthRepository>(relaxed = true)
+        coEvery { authRepository.getActiveTimeEntry() } returns Result.success(null)
+        coEvery { authRepository.getTimeEntries(any(), any(), any(), any(), any(), any(), any()) } coAnswers {
+            pageCalls += 1
+            pageResponse.await()
+        }
+        val viewModel = viewModel(authRepository, SettingsDataStore(context), remote)
+
+        viewModel.loadAllData(ORG, MEMBER)
+        viewModel.uiState.first { it.hasMoreTimeEntries }
+        viewModel.loadMoreTimeEntries()
+        dispatcher.scheduler.runCurrent()
+        assertEquals(1, pageCalls)
+
+        viewModel.loadAllData(OTHER_ORG, MEMBER)
+        pageResponse.complete(
+            Result.success(
+                TimeEntriesResponse(
+                    data = listOf(entry("stale-page")),
+                    meta = TimeEntriesMeta(total = HISTORY_LIMIT + 1),
+                ),
+            ),
+        )
+        dispatcher.scheduler.runCurrent()
+
+        assertTrue(viewModel.uiState.value.timeEntries.none { it.id == "stale-page" })
+        assertFalse(viewModel.uiState.value.isLoadingMoreTimeEntries)
+        viewModel.cancelScopeForTest()
+    }
+
+    @Test
+    fun failed_history_page_can_retry_after_network_returns() = runTest(dispatcher.scheduler) {
+        val remote = FakeRemoteDataSource(
+            entries = (0 until HISTORY_LIMIT).map { index ->
+                entry(
+                    "cached-$index",
+                    start = "2026-07-07T${(index / 60).toString().padStart(2, '0')}:${(index % 60).toString().padStart(2, '0')}:00Z",
+                )
+            },
+        )
+        val authRepository = mockk<AuthRepository>(relaxed = true)
+        coEvery { authRepository.getActiveTimeEntry() } returns Result.success(null)
+        coEvery { authRepository.getTimeEntries(any(), any(), any(), any(), any(), any(), any()) } returnsMany listOf(
+            Result.failure(IOException("network disappeared")),
+            Result.success(
+                TimeEntriesResponse(
+                    data = listOf(entry("retried-page")),
+                    meta = TimeEntriesMeta(total = HISTORY_LIMIT + 1),
+                ),
+            ),
+        )
+        val viewModel = viewModel(authRepository, SettingsDataStore(context), remote)
+
+        viewModel.loadAllData(ORG, MEMBER)
+        viewModel.uiState.first { it.hasMoreTimeEntries }
+
+        viewModel.loadMoreTimeEntries()
+        dispatcher.scheduler.runCurrent()
+        assertFalse(viewModel.uiState.value.isLoadingMoreTimeEntries)
+        assertTrue(viewModel.uiState.value.error?.contains("network disappeared") == true)
+
+        viewModel.loadMoreTimeEntries()
+        viewModel.uiState.first { state -> state.timeEntries.any { it.id == "retried-page" } }
+
+        assertTrue(viewModel.uiState.value.timeEntries.any { it.id == "retried-page" })
+        assertNull(viewModel.uiState.value.error)
         viewModel.cancelScopeForTest()
     }
 

@@ -260,6 +260,7 @@ class TrackingViewModel @Inject constructor(
     private val locallyStoppingEntryIds = mutableSetOf<String>()
     private var historyOrganizationId: String? = null
     private var historyMemberId: String? = null
+    private var historyRequestGeneration = 0L
     private var historyLoadStage = 0
     private var historyOffset = 0
     private var historyWindowStartOffset = 0
@@ -353,6 +354,12 @@ class TrackingViewModel @Inject constructor(
         // selected account or starting another refresh; a slow/non-cooperative HTTP call must not
         // write stale tracking state into the next screen.
         activeEntryRequestGeneration++
+        val historyContextChanged = historyOrganizationId != organizationId || historyMemberId != memberId
+        if (historyContextChanged) {
+            historyRequestGeneration++
+            val canKeepCachedFirstFrame = historyOrganizationId == null && cachedTrackingState?.organizationId == organizationId
+            if (!canKeepCachedFirstFrame) resetHistoryForContextSwitch()
+        }
         historyOrganizationId = organizationId
         historyMemberId = memberId
 
@@ -385,6 +392,9 @@ class TrackingViewModel @Inject constructor(
             // Refresh implementations and test doubles may finish after cancellation. Do not let
             // that stale completion start a monitor or clear a newer screen's refresh state.
             currentCoroutineContext().ensureActive()
+            refreshResult.exceptionOrNull()?.let { error ->
+                if (error is CancellationException) throw error
+            }
             refreshResult
                 .onFailure { error ->
                     Timber.w(error, "Background refresh failed; showing cached data")
@@ -574,6 +584,42 @@ class TrackingViewModel @Inject constructor(
         } else {
             roomActive
         }
+
+    private fun resetHistoryForContextSwitch() {
+        historyLoadStage = 1
+        historyWindowStartOffset = 0
+        historyOffset = 0
+        historyWindowMode = HistoryWindowMode.RECENT
+        _uiState.value = _uiState.value.copy(
+            isTracking = false,
+            currentTimeEntry = null,
+            timeEntries = emptyList(),
+            overlapCount = 0,
+            hasLoadedTimeEntries = false,
+            isLoadingMoreTimeEntries = false,
+            hasMoreTimeEntries = false,
+            totalTimeEntries = null,
+            historyJumpDate = null,
+            historyJumpTarget = null,
+            historyJumpProgress = null,
+            historyRateLimitWaitSeconds = null,
+            canLoadNewerHistory = false,
+            cachedContinueEntry = null,
+            projects = emptyList(),
+            clients = emptyList(),
+            tasks = emptyList(),
+            tags = emptyList(),
+            editingDescription = "",
+            editingProjectId = null,
+            editingTaskId = null,
+            editingTags = emptyList(),
+            editingBillable = false,
+            conflictedEntryIds = emptySet(),
+        )
+    }
+
+    private fun isCurrentHistoryRequest(organizationId: String, memberId: String, generation: Long): Boolean =
+        historyOrganizationId == organizationId && historyMemberId == memberId && historyRequestGeneration == generation
 
     private fun updateSyncStatusVisibility(operations: List<TimeEntryRepository.SyncOperation>) {
         val hasError = operations.any { operation ->
@@ -810,6 +856,7 @@ class TrackingViewModel @Inject constructor(
             }
             .onFailure { error ->
                 if (requestGeneration != activeEntryRequestGeneration) return@onFailure
+                if (error is CancellationException) throw error
                 Timber.e(error, "Failed to load active time entry")
                 // An intermittent poll failure must not turn a cached/running timer into an idle
                 // state. Keep the last trusted UI and notification surface; the next poll or
@@ -834,6 +881,7 @@ class TrackingViewModel @Inject constructor(
         // turn before the coroutine gets its first slice; setting it inside the coroutine lets
         // both callbacks issue the same page request.
         _uiState.value = state.copy(isLoadingMoreTimeEntries = true)
+        val requestGeneration = historyRequestGeneration
         viewModelScope.launch {
             val (limit, offset) = when (historyLoadStage) {
                 0 -> FIRST_SCROLL_TOTAL to 0
@@ -842,6 +890,7 @@ class TrackingViewModel @Inject constructor(
             }
             authRepository.getTimeEntries(organizationId, memberId, limit, offset)
                 .onSuccess { response ->
+                    if (!isCurrentHistoryRequest(organizationId, memberId, requestGeneration)) return@onSuccess
                     val currentEntries = _uiState.value.timeEntries
                     val currentTags = _uiState.value.tags
                     // Tag resolution plus the dedupe/sort of a growing window is O(n log n);
@@ -869,6 +918,7 @@ class TrackingViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(
                         timeEntries = merged,
                         isLoadingMoreTimeEntries = false,
+                        error = null,
                         hasMoreTimeEntries = incoming.isNotEmpty() &&
                             (total?.let { merged.size < it } ?: true),
                         totalTimeEntries = total,
@@ -880,6 +930,8 @@ class TrackingViewModel @Inject constructor(
                     }
                 }
                 .onFailure { error ->
+                    if (!isCurrentHistoryRequest(organizationId, memberId, requestGeneration)) return@onFailure
+                    if (error is CancellationException) throw error
                     Timber.e(error, "Failed to load more time entries")
                     _uiState.value = _uiState.value.copy(
                         isLoadingMoreTimeEntries = false,
@@ -899,6 +951,7 @@ class TrackingViewModel @Inject constructor(
             historyJumpTarget = date,
             historyJumpProgress = 0f,
         )
+        val requestGeneration = historyRequestGeneration
         viewModelScope.launch {
             val total = _uiState.value.totalTimeEntries ?: getHistoryPageWithRateLimit(
                 organizationId,
@@ -906,6 +959,8 @@ class TrackingViewModel @Inject constructor(
                 limit = 1,
                 offset = 0,
             ).getOrElse { error ->
+                if (!isCurrentHistoryRequest(organizationId, memberId, requestGeneration)) return@launch
+                if (error is CancellationException) throw error
                 _uiState.value = _uiState.value.copy(
                     isLoadingMoreTimeEntries = false,
                     historyJumpTarget = null,
@@ -933,6 +988,8 @@ class TrackingViewModel @Inject constructor(
                     limit = 1,
                     offset = middle,
                 ).getOrElse { error ->
+                    if (!isCurrentHistoryRequest(organizationId, memberId, requestGeneration)) return@launch
+                    if (error is CancellationException) throw error
                     _uiState.value = _uiState.value.copy(
                         isLoadingMoreTimeEntries = false,
                         historyJumpTarget = null,
@@ -942,6 +999,7 @@ class TrackingViewModel @Inject constructor(
                     )
                     return@launch
                 }
+                if (!isCurrentHistoryRequest(organizationId, memberId, requestGeneration)) return@launch
                 val probeDate = probe.data.firstOrNull()?.let { entry -> historyEntryStartDate(entry, _uiState.value.zone) }
                     ?: break
                 completedProbes++
@@ -968,6 +1026,8 @@ class TrackingViewModel @Inject constructor(
                 limit = MAX_PAGE_SIZE,
                 offset = windowStart,
             ).getOrElse { error ->
+                if (!isCurrentHistoryRequest(organizationId, memberId, requestGeneration)) return@launch
+                if (error is CancellationException) throw error
                 _uiState.value = _uiState.value.copy(
                     isLoadingMoreTimeEntries = false,
                     historyJumpTarget = null,
@@ -977,8 +1037,11 @@ class TrackingViewModel @Inject constructor(
                 )
                 return@launch
             }
+            if (!isCurrentHistoryRequest(organizationId, memberId, requestGeneration)) return@launch
             val tagsById = _uiState.value.tags.associateBy { it.id }
             val carryInEntries = loadEntriesOverlappingDate(organizationId, memberId, date).getOrElse { error ->
+                if (!isCurrentHistoryRequest(organizationId, memberId, requestGeneration)) return@launch
+                if (error is CancellationException) throw error
                 _uiState.value = _uiState.value.copy(
                     isLoadingMoreTimeEntries = false,
                     historyJumpTarget = null,
@@ -988,6 +1051,7 @@ class TrackingViewModel @Inject constructor(
                 )
                 return@launch
             }
+            if (!isCurrentHistoryRequest(organizationId, memberId, requestGeneration)) return@launch
             val window = (response.data + carryInEntries).distinctBy { it.id }.map { entry ->
                 entry.copy(tags = entry.tags.map { tagsById[it.id] ?: it })
             }
@@ -1015,6 +1079,7 @@ class TrackingViewModel @Inject constructor(
         val memberId = historyMemberId ?: return
         if (_uiState.value.isLoadingMoreTimeEntries || historyWindowStartOffset <= 0) return
         _uiState.value = _uiState.value.copy(isLoadingMoreTimeEntries = true)
+        val requestGeneration = historyRequestGeneration
         viewModelScope.launch {
             val newStart = (historyWindowStartOffset - MAX_PAGE_SIZE).coerceAtLeast(0)
             authRepository.getTimeEntries(
@@ -1023,6 +1088,7 @@ class TrackingViewModel @Inject constructor(
                 limit = historyWindowStartOffset - newStart,
                 offset = newStart,
             ).onSuccess { response ->
+                if (!isCurrentHistoryRequest(organizationId, memberId, requestGeneration)) return@onSuccess
                 val tagsById = _uiState.value.tags.associateBy { it.id }
                 val incoming = response.data.map { entry ->
                     entry.copy(tags = entry.tags.map { tagsById[it.id] ?: it })
@@ -1036,6 +1102,8 @@ class TrackingViewModel @Inject constructor(
                     canLoadNewerHistory = newStart > 0,
                 )
             }.onFailure { error ->
+                if (!isCurrentHistoryRequest(organizationId, memberId, requestGeneration)) return@onFailure
+                if (error is CancellationException) throw error
                 _uiState.value = _uiState.value.copy(isLoadingMoreTimeEntries = false, error = error.message)
             }
         }
@@ -1063,6 +1131,7 @@ class TrackingViewModel @Inject constructor(
                 end = end,
             )
             val error = result.exceptionOrNull()
+            if (error is CancellationException) throw error
             if (error !is retrofit2.HttpException || error.code() != HTTP_TOO_MANY_REQUESTS) return result
             val waitSeconds = error.response()?.headers()?.get("Retry-After")
                 ?.toIntOrNull()?.coerceIn(MIN_RETRY_AFTER_SECONDS, MAX_RETRY_AFTER_SECONDS)
@@ -1081,7 +1150,7 @@ class TrackingViewModel @Inject constructor(
      * normal binary-search window.
      */
     private suspend fun loadEntriesOverlappingDate(organizationId: String, memberId: String, date: LocalDate): Result<List<TimeEntry>> =
-        runCatching {
+        try {
             val zone = _uiState.value.zone
             val queryEnd = date.plusDays(1).atStartOfDay(zone).toInstant().toString()
             val now = Instant.ofEpochMilli(clock.nowMs())
@@ -1105,7 +1174,11 @@ class TrackingViewModel @Inject constructor(
                 val total = page.meta?.total
                 if (page.data.size < MAX_PAGE_SIZE || (total != null && offset >= total) || newEntries.isEmpty()) break
             }
-            matches
+            Result.success(matches)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
         }
 
     /**

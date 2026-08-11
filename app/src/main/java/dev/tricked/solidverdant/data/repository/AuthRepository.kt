@@ -20,6 +20,7 @@ import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.remote.ApiClientFactory
 import dev.tricked.solidverdant.data.remote.SolidtimeTimestamps
 import dev.tricked.solidverdant.util.PKCEUtil
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import retrofit2.HttpException
@@ -79,6 +80,8 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
 
         Timber.d("OAuth flow initialized")
         Result.success(authUrl)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Timber.e(e, "Failed to initialize OAuth flow")
         Result.failure(e)
@@ -132,6 +135,8 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
 
             Timber.d("OAuth callback handled successfully")
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.e(e, "Failed to handle OAuth callback")
             authDataStore.clearPKCEData()
@@ -147,6 +152,8 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
         val api = apiClientFactory.createApi(endpoint)
         val response = api.getCurrentUser()
         Result.success(response.data)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Timber.e(e, "Failed to get current user")
         Result.failure(e)
@@ -160,6 +167,8 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
         val api = apiClientFactory.createApi(endpoint)
         val response = api.getMyMemberships()
         Result.success(response.data)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Timber.e(e, "Failed to get memberships")
         Result.failure(e)
@@ -181,6 +190,8 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
             Timber.e(e, "Failed to get active time entry")
             Result.failure(e)
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Timber.e(e, "Failed to get active time entry")
         Result.failure(e)
@@ -193,6 +204,8 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
         authDataStore.saveOAuthConfig(endpoint, clientId)
         Timber.d("OAuth config saved")
         Result.success(Unit)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Timber.e(e, "Failed to save OAuth config")
         Result.failure(e)
@@ -205,6 +218,8 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
         authDataStore.saveCurrentMembershipId(membershipId)
         Timber.d("Current membership ID saved")
         Result.success(Unit)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Timber.e(e, "Failed to save current membership ID")
         Result.failure(e)
@@ -246,6 +261,8 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
         val response = api.startTimeEntry(organizationId, request)
         Timber.d("Time entry started")
         Result.success(response.data!!)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Timber.e(e, "Failed to start time entry")
         Result.failure(e)
@@ -286,6 +303,8 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
 
         Timber.d("Manual time entry created")
         Result.success(created)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Timber.e(e, "Failed to create manual time entry")
         Result.failure(e)
@@ -320,6 +339,8 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
         val response = api.stopTimeEntry(organizationId, timeEntryId, request)
         Timber.d("Time entry stopped")
         Result.success(response.data!!)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Timber.e(e, "Failed to stop time entry")
         Result.failure(e)
@@ -340,6 +361,8 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
         authDataStore.resetOAuthConfig()
         Timber.d("OAuth config reset to defaults")
         Result.success(Unit)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Timber.e(e, "Failed to reset OAuth config")
         Result.failure(e)
@@ -369,6 +392,8 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
             end = end,
         )
         Result.success(response)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Timber.e(e, "Failed to get time entries")
         Result.failure(e)
@@ -386,6 +411,8 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
                 response.data to response.meta
             },
         )
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Timber.e(e, "Failed to get tags")
         Result.failure(e)
@@ -403,6 +430,8 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
                 response.data to response.meta
             },
         )
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Timber.e(e, "Failed to get projects")
         Result.failure(e)
@@ -416,6 +445,8 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
                 response.data to response.meta
             },
         )
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -432,6 +463,8 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
                 response.data to response.meta
             },
         )
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Timber.e(e, "Failed to get tasks")
         Result.failure(e)
@@ -458,6 +491,8 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
         val response = api.updateTimeEntry(organizationId, timeEntry.id, request)
         Timber.d("Time entry updated")
         Result.success(response.data!!)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Timber.e(e, "Failed to update time entry")
         Result.failure(e)
@@ -473,6 +508,8 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
         if (!response.isSuccessful) throw HttpException(response)
         Timber.d("Time entry deleted")
         Result.success(Unit)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Timber.e(e, "Failed to delete time entry")
         Result.failure(e)

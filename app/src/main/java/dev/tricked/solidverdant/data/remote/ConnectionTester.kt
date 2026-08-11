@@ -6,6 +6,7 @@
 
 package dev.tricked.solidverdant.data.remote
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -73,6 +74,8 @@ class ConnectionTester @Inject constructor(private val client: OkHttpClient) {
             ConnectionTestResult(ConnectionTestCode.DNS_FAILED)
         } catch (e: java.net.ConnectException) {
             ConnectionTestResult(ConnectionTestCode.CONNECTION_FAILED)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             ConnectionTestResult(ConnectionTestCode.TEST_FAILED)
         }
