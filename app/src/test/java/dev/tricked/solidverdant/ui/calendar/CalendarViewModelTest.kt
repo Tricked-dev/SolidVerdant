@@ -40,6 +40,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.time.LocalDate
+import java.time.YearMonth
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CalendarViewModelTest {
@@ -53,6 +54,7 @@ class CalendarViewModelTest {
         private val syncOperations: Flow<List<TimeEntryRepository.SyncOperation>> = flowOf(emptyList()),
     ) : TimeEntryReader {
         val loadGates = mutableListOf<CompletableDeferred<Unit>>()
+        val loadedMonths = mutableListOf<YearMonth>()
         var loadCalls = 0
         var loadFailure: Throwable? = null
 
@@ -62,6 +64,7 @@ class CalendarViewModelTest {
 
         override suspend fun loadMonth(organizationId: String, memberId: String, month: java.time.YearMonth, zone: java.time.ZoneId) {
             val call = loadCalls++
+            loadedMonths += month
             loadGates.getOrNull(call)?.await()
             loadFailure?.let { failure ->
                 loadFailure = null
@@ -295,6 +298,20 @@ class CalendarViewModelTest {
         val model = vm(FakeReader(emptyList()))
         model.setViewMode(CalendarViewMode.DAY)
         assertEquals(1, model.uiState.value.visibleDays.size)
+    }
+
+    @Test
+    fun prefetches_the_month_before_and_after_the_visible_month() = runTest {
+        val reader = FakeReader(emptyList())
+        val model = vm(reader)
+
+        model.setOrganization("org1")
+
+        val visible = model.uiState.value.visibleMonth
+        assertEquals(
+            listOf(visible, visible.minusMonths(1), visible.plusMonths(1)),
+            reader.loadedMonths,
+        )
     }
 
     @Test

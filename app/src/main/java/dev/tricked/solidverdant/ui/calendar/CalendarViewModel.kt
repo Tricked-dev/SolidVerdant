@@ -480,7 +480,7 @@ class CalendarViewModel @Inject constructor(
         val org = organizationId ?: return
         val member = memberId ?: return
         val state = _uiState.value
-        val months = when (state.viewMode) {
+        val visibleMonths = when (state.viewMode) {
             CalendarViewMode.MONTH -> listOf(state.visibleMonth)
             else -> {
                 val days = state.visibleDays
@@ -492,17 +492,15 @@ class CalendarViewModel @Inject constructor(
                 }
             }
         }
+        val months = monthsWithAdjacentPeriods(visibleMonths)
         _uiState.update { it.copy(isLoading = true, loadError = false, isStale = false) }
         val requestGeneration = ++visibleLoadGeneration
         visibleLoadJob?.cancel()
         visibleLoadJob = viewModelScope.launch {
             try {
-                months.forEach {
+                visibleMonths.forEach {
                     reader.loadMonth(org, member, it, state.zone)
                     currentCoroutineContext().ensureActive()
-                }
-                if (requestGeneration == visibleLoadGeneration && this@CalendarViewModel.organizationId == org) {
-                    _uiState.update { it.copy(isLoading = false, loadError = false, isStale = false) }
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -516,6 +514,21 @@ class CalendarViewModel @Inject constructor(
                         )
                     }
                 }
+                return@launch
+            }
+            if (requestGeneration == visibleLoadGeneration && this@CalendarViewModel.organizationId == org) {
+                _uiState.update { it.copy(isLoading = false, loadError = false, isStale = false) }
+            }
+            months.filterNot { it in visibleMonths }.forEach { month ->
+                try {
+                    reader.loadMonth(org, member, month, state.zone)
+                    currentCoroutineContext().ensureActive()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // The visible page is already usable; a prefetch miss should not replace it
+                    // with an error state. The next navigation or explicit refresh retries it.
+                }
             }
         }
     }
@@ -525,3 +538,17 @@ class CalendarViewModel @Inject constructor(
 
 private const val FULL_WEEK_DAYS = 7
 private const val MIN_VISIBLE_DAYS = 1
+
+internal fun monthsWithAdjacentPeriods(visibleMonths: List<YearMonth>): List<YearMonth> {
+    if (visibleMonths.isEmpty()) return emptyList()
+    val first = visibleMonths.minOrNull() ?: return emptyList()
+    val last = visibleMonths.maxOrNull() ?: return emptyList()
+    return buildList {
+        var month = first.minusMonths(1)
+        val end = last.plusMonths(1)
+        while (!month.isAfter(end)) {
+            add(month)
+            month = month.plusMonths(1)
+        }
+    }
+}
