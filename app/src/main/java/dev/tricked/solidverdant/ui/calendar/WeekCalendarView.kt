@@ -87,6 +87,7 @@ fun WeekCalendarView(
     state: CalendarUiState,
     onSelectDate: (LocalDate) -> Unit,
     onEntryClick: (TimeEntry) -> Unit,
+    onMoveEntry: (TimeEntry, String, String) -> Unit = { _, _, _ -> },
     onCreateRange: (CalendarTimeRange) -> Unit = {},
     onPrevious: () -> Unit,
     onNext: () -> Unit,
@@ -107,6 +108,7 @@ fun WeekCalendarView(
             days = days,
             onSelectDate = onSelectDate,
             onEntryClick = onEntryClick,
+            onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
             onPrevious = onPrevious,
             onNext = onNext,
@@ -122,6 +124,7 @@ private fun WeekCalendarContent(
     days: List<LocalDate>,
     onSelectDate: (LocalDate) -> Unit,
     onEntryClick: (TimeEntry) -> Unit,
+    onMoveEntry: (TimeEntry, String, String) -> Unit,
     onCreateRange: (CalendarTimeRange) -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
@@ -200,6 +203,7 @@ private fun WeekCalendarContent(
                     state = state,
                     projects = projects,
                     onEntryClick = onEntryClick,
+                    onMoveEntry = onMoveEntry,
                     onCreateRange = onCreateRange,
                 )
             }
@@ -217,6 +221,7 @@ private fun WeekGrid(
     state: CalendarUiState,
     projects: List<Project>,
     onEntryClick: (TimeEntry) -> Unit,
+    onMoveEntry: (TimeEntry, String, String) -> Unit,
     onCreateRange: (CalendarTimeRange) -> Unit,
 ) {
     val initialScroll = with(LocalDensity.current) { (CalendarHourHeight * INITIAL_SCROLL_HOURS).roundToPx() }
@@ -237,7 +242,7 @@ private fun WeekGrid(
                     .height(CalendarTotalHeight)
                     .padding(start = CalendarGutterWidth),
             ) {
-                days.forEach { day ->
+                days.forEachIndexed { index, day ->
                     DayColumn(
                         day = day,
                         isToday = day == today,
@@ -247,7 +252,10 @@ private fun WeekGrid(
                         entries = state.bucketsByDate[day]?.entries.orEmpty(),
                         projects = projects,
                         onEntryClick = onEntryClick,
+                        onMoveEntry = onMoveEntry,
                         onCreateRange = onCreateRange,
+                        dayIndex = index,
+                        dayCount = days.size,
                         modifier = Modifier.weight(1f).fillMaxHeight(),
                     )
                 }
@@ -399,7 +407,10 @@ private fun DayColumn(
     entries: List<TimeEntry>,
     projects: List<Project>,
     onEntryClick: (TimeEntry) -> Unit,
+    onMoveEntry: (TimeEntry, String, String) -> Unit,
     onCreateRange: (CalendarTimeRange) -> Unit,
+    dayIndex: Int,
+    dayCount: Int,
     modifier: Modifier = Modifier,
 ) {
     val untitled = stringResource(R.string.calendar_overlay_event_untitled)
@@ -410,6 +421,9 @@ private fun DayColumn(
             .testTag("week-day-column-$day"),
     ) {
         val colWidth = maxWidth
+        val density = LocalDensity.current
+        val colWidthPx = with(density) { colWidth.toPx() }
+        val gridHeightPx = with(density) { CalendarTotalHeight.toPx() }
 
         // Faded, read-only device-calendar events behind the tracked entries.
         eventBlocks.forEach { block ->
@@ -458,9 +472,7 @@ private fun DayColumn(
                 ?: MaterialTheme.colorScheme.primary
             val label = entry.description?.ifBlank { null } ?: noDescription
             val a11y = stringResource(R.string.calendar_entry_a11y, label)
-            EntryBlock(
-                color = base,
-                title = label,
+            val entryModifier = calendarEntryDragModifier(
                 modifier = Modifier
                     .offset(
                         x = slotWidth * block.column,
@@ -471,7 +483,21 @@ private fun DayColumn(
                     .height(
                         (CalendarTotalHeight * block.heightFraction)
                             .coerceAtLeast(Dimens.EntryMinHeight),
-                    )
+                    ),
+                entry = entry,
+                day = day,
+                zone = zone,
+                dayIndex = dayIndex,
+                dayCount = dayCount,
+                blockStartFraction = block.startFraction,
+                gridHeightPx = gridHeightPx,
+                columnWidthPx = colWidthPx,
+                onMoveEntry = onMoveEntry,
+            )
+            EntryBlock(
+                color = base,
+                title = label,
+                modifier = entryModifier
                     .clickable(onClick = { onEntryClick(entry) })
                     .testTag("week-entry-${entry.id}")
                     .semantics { contentDescription = a11y },

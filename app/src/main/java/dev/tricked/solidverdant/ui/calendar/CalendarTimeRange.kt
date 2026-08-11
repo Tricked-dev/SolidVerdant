@@ -6,6 +6,8 @@
 
 package dev.tricked.solidverdant.ui.calendar
 
+import dev.tricked.solidverdant.data.model.TimeEntry
+import java.time.Duration
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -13,6 +15,9 @@ import java.time.temporal.ChronoUnit
 
 /** A half-open time range selected in a calendar time grid. */
 data class CalendarTimeRange(val start: ZonedDateTime, val end: ZonedDateTime)
+
+/** The complete interval produced when an existing entry is moved to a new start. */
+data class CalendarEntryRange(val start: ZonedDateTime, val end: ZonedDateTime)
 
 /**
  * Convert a vertical drag in a 24-hour grid into a valid, quarter-hour range. The grid uses the
@@ -30,6 +35,19 @@ fun calendarTimeRangeForDrag(day: LocalDate, startY: Float, endY: Float, gridHei
         start = dayStart.plusSeconds(startSecond).atZone(zone),
         end = dayStart.plusSeconds(endSecond).atZone(zone),
     )
+}
+
+/** Convert one vertical grid coordinate into the nearest valid calendar start time. */
+fun calendarTimeAtGridPosition(day: LocalDate, y: Float, gridHeightPx: Float, zone: ZoneId): ZonedDateTime =
+    calendarTimeRangeForDrag(day, y, y, gridHeightPx, zone).start
+
+/** Preserve an entry's complete duration while moving its start across local calendar days. */
+fun calendarEntryRangeAt(entry: TimeEntry, targetStart: ZonedDateTime): CalendarEntryRange? {
+    val originalStart = runCatching { ZonedDateTime.parse(entry.start) }.getOrNull() ?: return null
+    val originalEnd = entry.end?.let { runCatching { ZonedDateTime.parse(it) }.getOrNull() } ?: return null
+    val duration = Duration.between(originalStart, originalEnd)
+    if (duration.isZero || duration.isNegative) return null
+    return CalendarEntryRange(start = targetStart, end = targetStart.plus(duration))
 }
 
 /** A useful one-hour fallback for the toolbar's Add action when no drag range was selected. */

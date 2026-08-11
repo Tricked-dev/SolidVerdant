@@ -72,6 +72,7 @@ fun MonthCalendarView(
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
     onEntryClick: (TimeEntry) -> Unit,
+    onMoveEntry: (TimeEntry, String, String) -> Unit = { _, _, _ -> },
     onCreateRange: (CalendarTimeRange) -> Unit = {},
     modifier: Modifier = Modifier,
     projects: List<Project> = emptyList(),
@@ -126,6 +127,7 @@ fun MonthCalendarView(
             tasks = tasks,
             scrollState = timelineScrollState,
             onEntryClick = onEntryClick,
+            onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
         )
     }
@@ -258,6 +260,7 @@ private fun ColumnScope.SelectedDayEntries(
     tasks: List<Task>,
     scrollState: ScrollState,
     onEntryClick: (TimeEntry) -> Unit,
+    onMoveEntry: (TimeEntry, String, String) -> Unit,
     onCreateRange: (CalendarTimeRange) -> Unit,
 ) {
     val entries = state.bucketsByDate[state.selectedDate]?.entries.orEmpty()
@@ -280,6 +283,7 @@ private fun ColumnScope.SelectedDayEntries(
             scrollState = scrollState,
             fillViewport = true,
             onEntryClick = onEntryClick,
+            onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
             modifier = Modifier.weight(1f),
         )
@@ -292,6 +296,7 @@ private fun ColumnScope.SelectedDayEntries(
             scrollState = scrollState,
             fillViewport = true,
             onEntryClick = onEntryClick,
+            onMoveEntry = onMoveEntry,
             onCreateRange = onCreateRange,
             modifier = Modifier.weight(1f),
         )
@@ -305,6 +310,7 @@ private fun ColumnScope.SelectedDayEntries(
                     zone = state.zone,
                     scrollState = scrollState,
                     onEntryClick = onEntryClick,
+                    onMoveEntry = onMoveEntry,
                     onCreateRange = onCreateRange,
                 )
             }
@@ -327,6 +333,7 @@ fun DayTimeline(
     tasks: List<Task>,
     zone: ZoneId,
     onEntryClick: (TimeEntry) -> Unit,
+    onMoveEntry: (TimeEntry, String, String) -> Unit = { _, _, _ -> },
     onCreateRange: (CalendarTimeRange) -> Unit = {},
     modifier: Modifier = Modifier,
     scrollState: ScrollState? = null,
@@ -362,15 +369,27 @@ fun DayTimeline(
                 val subtitle = listOfNotNull(project?.name, task?.name)
                     .joinToString(" · ")
                     .ifBlank { null }
+                val entryModifier = calendarEntryDragModifier(
+                    modifier = Modifier
+                        .padding(start = CalendarGutterWidth, end = Dimens.Space2)
+                        .offset(y = CalendarTotalHeight * top)
+                        .height((CalendarTotalHeight * height).coerceAtLeast(Dimens.EntryMinHeight)),
+                    entry = entry,
+                    day = day,
+                    zone = zone,
+                    dayIndex = 0,
+                    dayCount = 1,
+                    blockStartFraction = top,
+                    gridHeightPx = with(LocalDensity.current) { CalendarTotalHeight.toPx() },
+                    columnWidthPx = with(LocalDensity.current) { CalendarTotalHeight.toPx() },
+                    onMoveEntry = onMoveEntry,
+                )
                 EntryBlock(
                     color = blockColor,
                     title = label,
                     subtitle = subtitle,
                     time = formatDuration(entryDurationSecondsOnDay(entry, day, zone, now)),
-                    modifier = Modifier
-                        .padding(start = CalendarGutterWidth, end = Dimens.Space2)
-                        .offset(y = CalendarTotalHeight * top)
-                        .height((CalendarTotalHeight * height).coerceAtLeast(Dimens.EntryMinHeight))
+                    modifier = entryModifier
                         .clickable { onEntryClick(entry) }
                         .testTag("entry-row-${entry.id}"),
                 )

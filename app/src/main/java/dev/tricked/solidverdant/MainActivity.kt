@@ -459,6 +459,18 @@ fun SolidVerdantApp(
                                     end = end,
                                 )
                             },
+                            onMoveEntry = { entry, start, end ->
+                                trackingViewModel.updatePastTimeEntry(
+                                    timeEntry = entry,
+                                    description = entry.description,
+                                    projectId = entry.projectId,
+                                    taskId = entry.taskId,
+                                    tags = entry.tags.map { it.id },
+                                    billable = entry.billable,
+                                    start = start,
+                                    end = end,
+                                )
+                            },
                             onCreateEntry = { description, projectId, taskId, entryTags, billable, start, end ->
                                 authUiState.user?.let { user ->
                                     trackingViewModel.createManualTimeEntry(
