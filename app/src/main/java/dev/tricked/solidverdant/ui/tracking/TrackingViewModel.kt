@@ -1782,11 +1782,9 @@ class TrackingViewModel @Inject constructor(
 
     fun retrySync() = syncTrigger.requestSync()
 
-    fun retryAllSync(organizationId: String) {
-        viewModelScope.launch {
-            timeEntryRepository.prepareRetryAll(organizationId)
-            syncTrigger.requestSync()
-        }
+    fun retryAllSync(organizationId: String): Job = viewModelScope.launch {
+        timeEntryRepository.prepareRetryAll(organizationId)
+        syncTrigger.requestSync()
     }
 
     fun retrySync(entryId: String) {

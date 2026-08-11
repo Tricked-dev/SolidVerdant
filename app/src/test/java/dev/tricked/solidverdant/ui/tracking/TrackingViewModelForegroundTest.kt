@@ -161,7 +161,7 @@ class TrackingViewModelForegroundTest {
         val vm = viewModel()
         syncRequests = 0
 
-        vm.retryAllSync(ORG)
+        vm.retryAllSync(ORG).join()
         dispatcher.scheduler.advanceUntilIdle()
 
         val revived = db.outboxDao().peekAll().single()
