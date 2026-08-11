@@ -18,6 +18,7 @@ import java.time.YearMonth
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 private const val DAYS_PER_WEEK = 7
 private const val SECONDS_PER_HOUR = 3600
@@ -66,4 +67,13 @@ fun formatDuration(seconds: Long): String {
     val hours = safe / SECONDS_PER_HOUR
     val minutes = (safe % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE
     return "%dh %02dm".format(hours, minutes)
+}
+
+/** Format a live timer without losing seconds while the entry is running. */
+fun formatRunningDuration(seconds: Long): String {
+    val safe = seconds.coerceAtLeast(0)
+    val hours = safe / (SECONDS_PER_HOUR * 1L)
+    val minutes = (safe % (SECONDS_PER_HOUR * 1L)) / SECONDS_PER_MINUTE
+    val remainingSeconds = safe % SECONDS_PER_MINUTE
+    return String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, minutes, remainingSeconds)
 }

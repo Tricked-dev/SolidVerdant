@@ -26,8 +26,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
@@ -49,6 +52,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -90,6 +94,7 @@ import dev.tricked.solidverdant.ui.components.EditTimeEntryDialog
 import dev.tricked.solidverdant.ui.components.ErrorState
 import dev.tricked.solidverdant.ui.components.SyncChip
 import dev.tricked.solidverdant.ui.theme.Dimens
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
@@ -104,6 +109,8 @@ fun CalendarScreen(
     memberId: String,
     initialDate: LocalDate? = null,
     onInitialDateConsumed: () -> Unit = {},
+    runningEntry: TimeEntry? = null,
+    elapsedSeconds: StateFlow<Long>? = null,
     projects: List<Project>,
     clients: List<Client> = emptyList(),
     tasks: List<Task>,
@@ -153,6 +160,7 @@ fun CalendarScreen(
             .distinctBy { it.id }
             .toList()
     }
+    val visibleRunningEntry = runningEntry?.takeIf(::isRunningTimeEntry)
     val moveEntryWithWarning: (TimeEntry, String, String) -> Unit = { entry, start, end ->
         if (calendarMoveOverlapsExisting(entry, start, end, calendarEntries)) {
             coroutineScope.launch { snackbarHostState.showSnackbar(moveOverlapMessage) }
@@ -246,6 +254,13 @@ fun CalendarScreen(
                 onOpenOverlay = { showOverlaySheet = true },
                 onOpenSettings = { showSettingsSheet = true },
             )
+            visibleRunningEntry?.let { entry ->
+                CalendarRunningTimerCard(
+                    entry = entry,
+                    elapsedSeconds = elapsedSeconds,
+                    onEdit = { editing = entry },
+                )
+            }
             if (state.loadError && !state.isStale) {
                 ErrorState(
                     text = stringResource(R.string.calendar_load_error),
@@ -590,7 +605,11 @@ private fun CalendarEntryActionsSheet(
                     else -> Unit
                 }
             }
-            CalendarEntryActionButton(stringResource(R.string.edit), onEdit)
+            CalendarEntryActionButton(
+                label = stringResource(if (running) R.string.edit_start_time else R.string.edit),
+                onClick = onEdit,
+                actionTestTag = if (running) CalendarTestTags.EDIT_START_TIME else null,
+            )
             if (running) {
                 CalendarEntryActionButton(stringResource(R.string.stop_tracking), onStop)
             }
@@ -616,6 +635,69 @@ private fun CalendarEntryActionButton(label: String, onClick: () -> Unit, action
             .then(actionTestTag?.let { Modifier.testTag(it) } ?: Modifier),
     ) {
         Text(label, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+@Composable
+private fun CalendarRunningTimerCard(entry: TimeEntry, elapsedSeconds: StateFlow<Long>?, onEdit: () -> Unit) {
+    val elapsedState = elapsedSeconds?.collectAsState()
+    val liveElapsedSeconds = elapsedState?.value ?: run {
+        val now = rememberCalendarNow(secondPrecision = true)
+        entryDurationSeconds(entry, now)
+    }
+    val title = entry.description?.trim()?.takeIf(String::isNotEmpty)
+        ?: stringResource(R.string.calendar_entry_untitled)
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.Space12)
+            .padding(bottom = Dimens.Space8)
+            .testTag(CalendarTestTags.RUNNING_TIMER),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.primaryContainer,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Dimens.CardContentPadding),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Default.AccessTime,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+            Spacer(Modifier.width(Dimens.Space12))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.calendar_timer_running),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                text = formatRunningDuration(liveElapsedSeconds),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+            IconButton(
+                onClick = onEdit,
+                modifier = Modifier.testTag(CalendarTestTags.RUNNING_TIMER_EDIT),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = stringResource(R.string.edit_start_time),
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+        }
     }
 }
 

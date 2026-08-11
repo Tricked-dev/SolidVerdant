@@ -218,4 +218,10 @@ class CalendarDateUtilsTest {
         assertEquals("2h 05m", formatDuration(2 * 3600 + 5 * 60L))
         assertEquals("0h 00m", formatDuration(0))
     }
+
+    @Test
+    fun formatRunningDuration_keepsSecondsAndClampsNegativeValues() {
+        assertEquals("02:05:09", formatRunningDuration(2 * 3600 + 5 * 60 + 9L))
+        assertEquals("00:00:00", formatRunningDuration(-1))
+    }
 }

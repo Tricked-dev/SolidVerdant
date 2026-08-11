@@ -183,6 +183,25 @@ class WeekCalendarLayoutTest {
     }
 
     @Test
+    fun layoutTrackedEntries_growsRunningEntryAsNowAdvances() {
+        val running = entry("running", "2026-07-06T09:00:00Z", null)
+        val first = layoutTrackedEntries(
+            listOf(running),
+            LocalDate.of(2026, 7, 6),
+            Instant.parse("2026-07-06T10:00:00Z"),
+            utc,
+        ).single()
+        val later = layoutTrackedEntries(
+            listOf(running),
+            LocalDate.of(2026, 7, 6),
+            Instant.parse("2026-07-06T10:05:00Z"),
+            utc,
+        ).single()
+
+        assertTrue(later.heightFraction > first.heightFraction)
+    }
+
+    @Test
     fun layoutTrackedEntries_nonOverlappingEntriesUseFullWidth() {
         val day = LocalDate.of(2026, 7, 6)
         val entries = listOf(

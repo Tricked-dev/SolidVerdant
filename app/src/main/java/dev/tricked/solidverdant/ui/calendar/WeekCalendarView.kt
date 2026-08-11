@@ -60,6 +60,7 @@ import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.TimeEntryType
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository.EntrySyncStatus
+import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.ui.components.EntryBlock
 import dev.tricked.solidverdant.ui.components.LoadingState
 import dev.tricked.solidverdant.ui.statistics.hexToColor
@@ -147,7 +148,10 @@ private fun WeekCalendarContent(
 ) {
     val zone = state.zone
     val settings = state.calendarSettings
-    val now = rememberCalendarNow()
+    val hasRunningEntries = remember(state.bucketsByDate, days) {
+        days.any { day -> state.bucketsByDate[day]?.entries.orEmpty().any(::isRunningTimeEntry) }
+    }
+    val now = rememberCalendarNow(secondPrecision = hasRunningEntries)
     val today = now.atZone(zone).toLocalDate()
     val locale = LocalLocale.current.platformLocale
 
@@ -534,6 +538,9 @@ private fun DayColumn(
             }
             val subtitle = metadata.subtitle
             val duration = metadata.durationSeconds?.let(::formatDuration)
+                ?: entry.takeIf(::isRunningTimeEntry)?.let {
+                    formatRunningDuration(entryDurationSecondsOnDay(it, day, zone, now))
+                }
             val details = listOfNotNull(subtitle, duration).joinToString(", ")
             val a11y = if (details.isBlank()) {
                 stringResource(R.string.calendar_entry_a11y, label)

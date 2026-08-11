@@ -14,19 +14,31 @@ import java.time.Instant
 import java.time.ZoneId
 
 private const val MILLIS_PER_MINUTE = 60_000L
+private const val MILLIS_PER_SECOND = 1_000L
 internal const val CURRENT_TIME_SCROLL_LEAD_HOURS = 2.0
 
-/** Keep time-dependent calendar content fresh without causing a per-second recomposition. */
+/** Keep time-dependent calendar content fresh, using second precision while a timer is visible. */
 @Composable
-internal fun rememberCalendarNow(): Instant {
-    val now by produceState(initialValue = Instant.now()) {
+internal fun rememberCalendarNow(secondPrecision: Boolean = false): Instant {
+    val now by produceState(initialValue = Instant.now(), secondPrecision) {
         while (true) {
             val current = Instant.now()
             value = current
-            delay(millisUntilNextCalendarMinute(current.toEpochMilli()))
+            delay(
+                if (secondPrecision) {
+                    millisUntilNextCalendarSecond(current.toEpochMilli())
+                } else {
+                    millisUntilNextCalendarMinute(current.toEpochMilli())
+                },
+            )
         }
     }
     return now
+}
+
+internal fun millisUntilNextCalendarSecond(epochMillis: Long): Long {
+    val elapsedInSecond = Math.floorMod(epochMillis, MILLIS_PER_SECOND)
+    return MILLIS_PER_SECOND - elapsedInSecond
 }
 
 internal fun millisUntilNextCalendarMinute(epochMillis: Long): Long {

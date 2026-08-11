@@ -464,6 +464,8 @@ fun SolidVerdantApp(
                             memberId = currentMembership.id,
                             initialDate = calendarInitialDate,
                             onInitialDateConsumed = onCalendarInitialDateConsumed,
+                            runningEntry = trackingUiState.currentTimeEntry,
+                            elapsedSeconds = trackingViewModel.elapsedSeconds,
                             projects = trackingUiState.projects,
                             clients = trackingUiState.clients,
                             tasks = trackingUiState.tasks,

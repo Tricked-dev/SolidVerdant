@@ -62,6 +62,7 @@ import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.TimeEntryType
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository.EntrySyncStatus
+import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.ui.components.EntryBlock
 import dev.tricked.solidverdant.ui.components.LoadingState
 import dev.tricked.solidverdant.ui.statistics.hexToColor
@@ -90,7 +91,8 @@ fun MonthCalendarView(
 ) {
     var monthExpanded by remember { mutableStateOf(true) }
     val locale = LocalLocale.current.platformLocale
-    val now = rememberCalendarNow()
+    val selectedEntries = state.bucketsByDate[state.selectedDate]?.entries.orEmpty()
+    val now = rememberCalendarNow(secondPrecision = selectedEntries.any(::isRunningTimeEntry))
     val initialScrollHours = calendarInitialScrollHours(now, state.zone, state.calendarSettings).toFloat()
     val timelineInitialScroll = with(LocalDensity.current) {
         (calendarHourHeight(state.calendarSettings) * initialScrollHours).roundToPx()

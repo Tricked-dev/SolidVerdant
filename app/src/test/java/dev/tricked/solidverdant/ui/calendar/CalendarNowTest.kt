@@ -26,6 +26,18 @@ class CalendarNowTest {
     }
 
     @Test
+    fun runningTickerAlignsWithTheNextSecondBoundary() {
+        assertEquals(
+            1_000L,
+            millisUntilNextCalendarSecond(Instant.parse("2026-08-11T14:54:00Z").toEpochMilli()),
+        )
+        assertEquals(
+            544L,
+            millisUntilNextCalendarSecond(Instant.parse("2026-08-11T14:54:00.456Z").toEpochMilli()),
+        )
+    }
+
+    @Test
     fun initialScrollKeepsTheCurrentTimeNearTheTopOfTheViewport() {
         val scrollHours = calendarInitialScrollHours(
             now = Instant.parse("2026-08-11T14:54:00Z"),

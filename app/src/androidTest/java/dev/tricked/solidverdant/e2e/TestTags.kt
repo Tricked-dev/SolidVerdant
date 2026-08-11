@@ -31,6 +31,7 @@ object TestTags {
     const val TRACK_LIVE_UPDATE_SWITCH = TrackingTestTags.LIVE_UPDATE_SWITCH
     const val TRACK_REFRESH_BUTTON = TrackingTestTags.REFRESH_BUTTON
     const val TRACK_ADD_ENTRY_BUTTON = TrackingTestTags.ADD_ENTRY_BUTTON
+    const val TRACK_EDIT_ACTIVE_ENTRY = TrackingTestTags.EDIT_ACTIVE_ENTRY
     const val TRACK_LOGOUT_BUTTON = TrackingTestTags.LOGOUT_BUTTON
     const val TRACK_ENTRY_EDIT_BUTTON = TrackingTestTags.ENTRY_EDIT_BUTTON
     const val TRACK_ENTRY_DELETE_BUTTON = TrackingTestTags.ENTRY_DELETE_BUTTON
@@ -68,7 +69,10 @@ object TestTags {
     const val CALENDAR_ADD_ENTRY = CalendarTestTags.ADD_ENTRY
     const val CALENDAR_ADD_BREAK = CalendarTestTags.ADD_BREAK
     const val CALENDAR_ADD_BREAK_MENU = CalendarTestTags.ADD_BREAK_MENU
+    const val CALENDAR_RUNNING_TIMER = CalendarTestTags.RUNNING_TIMER
+    const val CALENDAR_RUNNING_TIMER_EDIT = CalendarTestTags.RUNNING_TIMER_EDIT
     const val CALENDAR_ENTRY_ACTIONS = CalendarTestTags.ENTRY_ACTIONS
+    const val CALENDAR_EDIT_START_TIME = CalendarTestTags.EDIT_START_TIME
     const val CALENDAR_ENTRY_SYNC_STATUS = CalendarTestTags.SYNC_STATUS
     const val CALENDAR_ENTRY_SYNC_RETRY = CalendarTestTags.SYNC_RETRY
     const val CALENDAR_ENTRY_SYNC_DISCARD = CalendarTestTags.SYNC_DISCARD

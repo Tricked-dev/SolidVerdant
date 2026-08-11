@@ -967,7 +967,8 @@ fun TrackingScreen(
                                 onStop = onStopTracking,
                                 onPause = onPauseTracking,
                                 onResume = onResumeTracking,
-                                onUpdate = onUpdateCurrentEntry
+                                onUpdate = onUpdateCurrentEntry,
+                                onEditActiveEntry = { uiState.currentTimeEntry?.let { showEditDialog = it } },
                             )
                         }
                         item(key = "long_timer_warning") {
@@ -1838,7 +1839,8 @@ internal fun TrackingControls(
     onStop: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
-    onUpdate: () -> Unit
+    onUpdate: () -> Unit,
+    onEditActiveEntry: () -> Unit = {},
 ) {
     val haptic = LocalHapticFeedback.current
 
@@ -1858,16 +1860,32 @@ internal fun TrackingControls(
         ) {
             // Timer display
             if (uiState.isTracking) {
-                Text(
-                    text = formatElapsedTime(elapsedSeconds),
-                    style = MaterialTheme.typography.displayMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontSize = 48.sp,
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .testTag(TrackingTestTags.ELAPSED_TIMER)
-                )
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = formatElapsedTime(elapsedSeconds),
+                        style = MaterialTheme.typography.displayMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 48.sp,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .testTag(TrackingTestTags.ELAPSED_TIMER),
+                    )
+                    if (uiState.currentTimeEntry != null) {
+                        IconButton(
+                            onClick = onEditActiveEntry,
+                            enabled = !uiState.isMutating,
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .testTag(TrackingTestTags.EDIT_ACTIVE_ENTRY),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = stringResource(R.string.edit_start_time),
+                            )
+                        }
+                    }
+                }
                 HorizontalDivider(
                     color = MaterialTheme.colorScheme.outline,
                     modifier = Modifier.padding(vertical = 8.dp)

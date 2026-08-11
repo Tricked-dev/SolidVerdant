@@ -143,6 +143,24 @@ class ExternalTimerSurfacesE2eTest {
 
     @BackendPortable
     @Test
+    fun track_timer_edit_button_opens_running_entry_editor_without_stopping_timer() {
+        val original = e2e.completedFixtureEntry(
+            logicalId = "track-editable-running-entry",
+            description = "Track editable timer",
+            start = Instant.now().minusSeconds(60),
+        ).copy(end = null, duration = null)
+        val originalHandle = e2e.prepare(E2eFixture.Active(original))
+        e2e.launchApp()
+        val robot = TrackRobot(e2e.composeRule).waitForHistory().assertStopButtonVisible()
+
+        e2e.composeRule.onNodeWithTag(TestTags.TRACK_EDIT_ACTIVE_ENTRY, useUnmergedTree = true).performClick()
+        robot.assertRunningEditSettingsVisible().tapSheetCancel()
+
+        assertEquals(originalHandle.serverId, e2e.serverSnapshot().activeEntry?.id)
+    }
+
+    @BackendPortable
+    @Test
     fun app_outbox_room_notification_and_tile_converge_through_a_multi_action_journey() {
         e2e.prepare(E2eFixture.Empty)
         grantNotificationPermission()

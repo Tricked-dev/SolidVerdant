@@ -216,6 +216,18 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
         }
     }
 
+    fun assertRunningEditSettingsVisible(): TrackRobot = apply {
+        listOf(
+            TestTags.TRACK_SHEET_START_DATE,
+            TestTags.TRACK_SHEET_START_TIME,
+            TestTags.TRACK_SHEET_SAVE_BUTTON,
+            TestTags.TRACK_SHEET_CANCEL_BUTTON,
+        ).forEach { tag ->
+            waitUntilSheetTagExists(tag)
+            firstSheetNodeWithTag(tag).performScrollTo().assertIsDisplayed()
+        }
+    }
+
     /** Replace the description in the open edit sheet. */
     fun replaceSheetDescription(text: String): TrackRobot = apply {
         waitUntilSheetTagExists(TestTags.TRACK_SHEET_DESCRIPTION_FIELD)
@@ -226,9 +238,18 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
     fun selectSheetProjectTask(taskName: String): TrackRobot = apply {
         firstSheetNodeWithTag(TestTags.TRACK_SHEET_PROJECT_TASK_SELECTOR).performScrollTo().performClick()
         waitUntilTagExists(TestTags.TRACK_PROJECT_TASK_LIST)
-        composeRule.onAllNodes(hasText(taskName, substring = false), useUnmergedTree = true)
-            .onFirst()
-            .performClick()
+        val taskMatcher = hasText(taskName, substring = false)
+        // Tasks live in a LazyColumn below the project rows. Wait for the target to be composed by
+        // scrolling the picker, rather than clicking a node that may not exist on small emulators.
+        composeRule.waitUntil(DEFAULT_TIMEOUT_MS) {
+            runCatching {
+                firstNodeWithTag(TestTags.TRACK_PROJECT_TASK_LIST).performScrollToNode(taskMatcher)
+                composeRule.onAllNodes(taskMatcher, useUnmergedTree = true)
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
+            }.getOrDefault(false)
+        }
+        composeRule.onAllNodes(taskMatcher, useUnmergedTree = true).onFirst().performClick()
         waitUntilTagExists(TestTags.TRACK_SHEET_SAVE_BUTTON)
     }
 
