@@ -57,6 +57,7 @@ import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.calendar.DeviceCalendarEvent
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.TimeEntryType
 import dev.tricked.solidverdant.ui.components.EntryBlock
 import dev.tricked.solidverdant.ui.components.LoadingState
 import dev.tricked.solidverdant.ui.statistics.hexToColor
@@ -485,10 +486,19 @@ private fun DayColumn(
         layoutTrackedEntries(entries, day, now, zone, settings).forEach { block ->
             val entry = block.entry
             val slotWidth = colWidth / block.columnCount.coerceAtLeast(1)
-            val base = projects.firstOrNull { it.id == entry.projectId }?.color
-                ?.let { hexToColor(it) }
-                ?: MaterialTheme.colorScheme.primary
-            val label = entry.description?.ifBlank { null } ?: noDescription
+            val base = if (entry.type == TimeEntryType.BREAK) {
+                MaterialTheme.colorScheme.tertiary
+            } else {
+                projects.firstOrNull { it.id == entry.projectId }?.color
+                    ?.let { hexToColor(it) }
+                    ?: MaterialTheme.colorScheme.primary
+            }
+            val label = if (entry.type == TimeEntryType.BREAK) {
+                entry.description?.ifBlank { null }?.let { stringResource(R.string.calendar_break_with_description, it) }
+                    ?: stringResource(R.string.calendar_break_entry)
+            } else {
+                entry.description?.ifBlank { null } ?: noDescription
+            }
             val a11y = stringResource(R.string.calendar_entry_a11y, label)
             val entryModifier = calendarEntryDragModifier(
                 modifier = Modifier

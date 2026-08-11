@@ -22,6 +22,7 @@ import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.TimeEntryType
 import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.domain.time.TemporalPolicy
@@ -1553,6 +1554,7 @@ class TrackingViewModel @Inject constructor(
         billable: Boolean,
         start: String,
         end: String,
+        type: TimeEntryType = TimeEntryType.WORK,
     ) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
@@ -1568,6 +1570,7 @@ class TrackingViewModel @Inject constructor(
                     billable = billable,
                     start = start,
                     end = end,
+                    type = type,
                 )
                 syncTrigger.requestSync()
                 // The Room collector will reconcile this row in the normal path. Updating the

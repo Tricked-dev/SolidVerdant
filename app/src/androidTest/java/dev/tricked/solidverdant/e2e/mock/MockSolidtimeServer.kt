@@ -22,6 +22,7 @@ import dev.tricked.solidverdant.data.model.TimeEntriesMeta
 import dev.tricked.solidverdant.data.model.TimeEntriesResponse
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.TimeEntryResponse
+import dev.tricked.solidverdant.data.model.TimeEntryType
 import dev.tricked.solidverdant.data.model.TokenResponse
 import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.model.UserResponse
@@ -121,6 +122,7 @@ class MockSolidtimeServer {
                 name = "Acme Org",
                 currency = "USD",
                 preventOverlappingTimeEntries = false,
+                breaksEnabled = true,
             ),
         )
         timeEntries.clear()
@@ -319,6 +321,7 @@ class MockSolidtimeServer {
             tags = req?.tags.orEmpty().map { Tag(id = it) },
             billable = req?.billable ?: false,
             organizationId = orgId,
+            type = req?.type ?: TimeEntryType.WORK,
         )
         timeEntries += entry
         if (entry.end == null) activeEntry = entry
@@ -339,6 +342,7 @@ class MockSolidtimeServer {
             tags = patch?.tags?.map { Tag(id = it) } ?: existing?.tags.orEmpty(),
             billable = patch?.billable ?: existing?.billable ?: false,
             duration = computeDuration(patch?.start ?: existing?.start, patch?.end ?: existing?.end),
+            type = patch?.type ?: existing?.type ?: TimeEntryType.WORK,
         )
         timeEntries.removeAll { it.id == id }
         timeEntries += updated
@@ -431,4 +435,5 @@ private data class PutBody(
     val task_id: String? = null,
     val tags: List<String>? = null,
     val billable: Boolean? = null,
+    val type: TimeEntryType? = null,
 )

@@ -30,13 +30,17 @@ interface TimeEntryDao {
     @Query("SELECT * FROM time_entries WHERE organizationId = :orgId AND pendingDelete = 0 ORDER BY start DESC")
     fun observeVisibleEntries(orgId: String): Flow<List<TimeEntryEntity>>
 
-    @Query("SELECT * FROM time_entries WHERE organizationId = :orgId AND end IS NULL AND pendingDelete = 0 ORDER BY start DESC LIMIT 1")
+    @Query(
+        "SELECT * FROM time_entries WHERE organizationId = :orgId AND type = 'work' AND end IS NULL AND pendingDelete = 0 ORDER BY start DESC LIMIT 1",
+    )
     fun observeActive(orgId: String): Flow<TimeEntryEntity?>
 
     @Query("SELECT * FROM time_entries WHERE id = :id")
     suspend fun getById(id: String): TimeEntryEntity?
 
-    @Query("SELECT * FROM time_entries WHERE organizationId = :orgId AND end IS NULL AND pendingDelete = 0 ORDER BY start DESC LIMIT 1")
+    @Query(
+        "SELECT * FROM time_entries WHERE organizationId = :orgId AND type = 'work' AND end IS NULL AND pendingDelete = 0 ORDER BY start DESC LIMIT 1",
+    )
     suspend fun getActive(orgId: String): TimeEntryEntity?
 
     @Query("SELECT * FROM time_entries WHERE organizationId = :orgId AND syncState = 'CONFLICT' ORDER BY start DESC")
@@ -155,6 +159,7 @@ interface TimeEntryDao {
                     taskId = entity.taskId,
                     billable = entity.billable,
                     tagIds = tagIds,
+                    type = entity.type,
                 )
                 if (baseSnapshot?.matches(serverSnapshot) == true) return@forEach
                 upsert(local.copy(syncState = SyncState.CONFLICT, conflictServerJson = serverJson))
@@ -178,6 +183,7 @@ interface TimeEntryDao {
             tags = tagIds.map { dev.tricked.solidverdant.data.model.Tag(it) },
             billable = entity.billable,
             organizationId = entity.organizationId,
+            type = entity.type,
         ),
     )
 
@@ -193,6 +199,7 @@ interface TimeEntryDao {
                 it.taskId,
                 it.billable,
                 it.tags.map { tag -> tag.id },
+                it.type,
             ).matches(
                 ConflictSnapshot.of(
                     entity.start,
@@ -202,6 +209,7 @@ interface TimeEntryDao {
                     entity.taskId,
                     entity.billable,
                     tagIds,
+                    entity.type,
                 ),
             )
         } ?: false

@@ -15,6 +15,7 @@ import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntriesMeta
 import dev.tricked.solidverdant.data.model.TimeEntriesResponse
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.TimeEntryType
 import dev.tricked.solidverdant.data.model.UpdateTimeEntryRequest
 import dev.tricked.solidverdant.data.model.User
 import dev.tricked.solidverdant.data.remote.ApiClientFactory
@@ -284,6 +285,7 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
         taskId: String? = null,
         tags: List<String> = emptyList(),
         billable: Boolean = false,
+        type: TimeEntryType = TimeEntryType.WORK,
     ): Result<TimeEntry> = try {
         val endpoint = authDataStore.getEndpoint()
         val api = apiClientFactory.createApi(endpoint)
@@ -297,6 +299,7 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
             taskId = taskId,
             billable = billable,
             tags = tags,
+            type = type,
         )
 
         val created = api.startTimeEntry(organizationId, request).data!!
@@ -486,6 +489,7 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
             taskId = timeEntry.taskId,
             billable = timeEntry.billable,
             tags = tags,
+            type = timeEntry.type,
         )
 
         val response = api.updateTimeEntry(organizationId, timeEntry.id, request)

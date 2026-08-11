@@ -39,6 +39,11 @@
     </plurals>
     <string name="stats_empty">Geen geregistreerde tijd in deze periode.</string><string name="stats_by_project">Per project</string><string name="stats_trend">Trend</string><string name="stats_last_7_days">Afgelopen 7 dagen</string><string name="stats_last_week">Vorige week</string><string name="stats_this_week">Deze week</string><string name="stats_this_month">Deze maand</string><string name="stats_previous_month">Vorige maand</string><string name="stats_custom">Aangepast</string><string name="apply">Toepassen</string><string name="stats_total">Totaal</string><string name="stats_entries">Boekingen</string><string name="stats_average_day">Gem. / dag</string><string name="calendar_show_month">Maand tonen</string><string name="calendar_previous_month">Vorige maand</string><string name="calendar_next_month">Volgende maand</string>
     <string name="calendar_drag_to_create">Tik om een boeking te maken of sleep om een start- en eindtijd te selecteren.</string>
+    <string name="calendar_more_actions">Meer kalenderacties</string>
+    <string name="calendar_add_break">Pauze toevoegen</string>
+    <string name="calendar_break_entry">Pauze</string>
+    <string name="calendar_break_with_description">Pauze · %1$s</string>
+    <string name="break_entry_title">Pauze toevoegen</string>
     <string name="calendar_delete_entry_title">Tijdregistratie verwijderen?</string>
     <string name="calendar_delete_entry_message">Deze registratie wordt uit de kalender verwijderd en voor verwijdering klaargezet.</string>
     <string name="calendar_entry_actions">Acties voor tijdregistratie</string>

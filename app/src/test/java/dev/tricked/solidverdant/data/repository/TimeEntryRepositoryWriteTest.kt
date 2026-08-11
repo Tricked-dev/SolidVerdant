@@ -15,8 +15,10 @@ import dev.tricked.solidverdant.data.local.db.SyncState
 import dev.tricked.solidverdant.data.local.db.toEntity
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.TimeEntryType
 import dev.tricked.solidverdant.data.remote.FakeRemoteDataSource
 import dev.tricked.solidverdant.sync.ConflictSnapshot
+import dev.tricked.solidverdant.sync.CreatePayload
 import dev.tricked.solidverdant.sync.UpdatePayload
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.flow.first
@@ -446,6 +448,31 @@ class TimeEntryRepositoryWriteTest {
 
         assertEquals(26 * 3_600, created.duration)
         assertEquals(26 * 3_600, db.timeEntryDao().getById(created.id)?.duration)
+    }
+
+    @Test fun create_break_entry_persists_type_and_sends_break_payload() = runTest {
+        val created = repo.createCompletedEntry(
+            organizationId = "org1",
+            memberId = "member",
+            userId = "u",
+            description = "Lunch",
+            projectId = null,
+            taskId = null,
+            tagIds = emptyList(),
+            billable = false,
+            start = "2026-07-06T12:00:00Z",
+            end = "2026-07-06T12:30:00Z",
+            type = TimeEntryType.BREAK,
+        )
+
+        assertEquals(TimeEntryType.BREAK, created.type)
+        assertEquals(TimeEntryType.BREAK, db.timeEntryDao().getById(created.id)?.type)
+        val payload = Json.decodeFromString<CreatePayload>(db.outboxDao().peekAll().single().payloadJson)
+        assertEquals(TimeEntryType.BREAK, payload.type)
+        assertNull(payload.projectId)
+        assertNull(payload.taskId)
+        assertTrue(payload.tagIds.isEmpty())
+        assertEquals(false, payload.billable)
     }
 
     @Test fun stop_captures_pre_stop_base() = runTest {

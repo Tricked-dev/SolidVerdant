@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -79,6 +80,7 @@ import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.TimeEntryType
 import dev.tricked.solidverdant.domain.time.isCompletedTimeEntry
 import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.ui.components.EditTimeEntryDialog
@@ -99,6 +101,8 @@ fun CalendarScreen(
     onSaveEntry: (TimeEntry, String?, String?, String?, List<String>, Boolean, String, String?) -> Unit,
     onMoveEntry: (TimeEntry, String, String) -> Unit = { _, _, _ -> },
     onCreateEntry: (String?, String?, String?, List<String>, Boolean, String, String) -> Unit = { _, _, _, _, _, _, _ -> },
+    breaksEnabled: Boolean = false,
+    onCreateBreakEntry: (String?, String, String) -> Unit = { _, _, _ -> },
     onDeleteEntry: (TimeEntry) -> Unit = {},
     onDuplicateEntry: (String) -> Unit = {},
     onSplitEntry: (String, String) -> Unit = { _, _ -> },
@@ -111,6 +115,7 @@ fun CalendarScreen(
     val state by viewModel.uiState.collectAsState()
     var editing by remember { mutableStateOf<TimeEntry?>(null) }
     var creatingRange by remember { mutableStateOf<CalendarTimeRange?>(null) }
+    var creatingBreakRange by remember { mutableStateOf<CalendarTimeRange?>(null) }
     var contextEntry by remember { mutableStateOf<TimeEntry?>(null) }
     var splitTarget by remember { mutableStateOf<TimeEntry?>(null) }
     var deleteTarget by remember { mutableStateOf<TimeEntry?>(null) }
@@ -192,6 +197,14 @@ fun CalendarScreen(
                         settings = state.calendarSettings,
                     )
                 },
+                breaksEnabled = breaksEnabled,
+                onAddBreak = {
+                    creatingBreakRange = defaultCalendarTimeRange(
+                        day = state.selectedDate,
+                        zone = state.zone,
+                        settings = state.calendarSettings,
+                    )
+                },
                 onOpenOverlay = { showOverlaySheet = true },
                 onOpenSettings = { showSettingsSheet = true },
             )
@@ -267,6 +280,7 @@ fun CalendarScreen(
             },
             existingEntries = state.bucketsByDate.values.flatMap { it.entries }.distinctBy { it.id },
             preventOverlap = preventOverlap,
+            isBreak = entry.type == TimeEntryType.BREAK,
             onDelete = {
                 editing = null
                 deleteTarget = entry
@@ -290,6 +304,28 @@ fun CalendarScreen(
                 end?.let {
                     onCreateEntry(desc, projectId, taskId, tagIds, billable, start, it)
                     creatingRange = null
+                }
+            },
+        )
+    }
+
+    creatingBreakRange?.let { range ->
+        EditTimeEntryDialog(
+            entry = null,
+            zone = state.zone,
+            projects = emptyList(),
+            tasks = emptyList(),
+            tags = emptyList(),
+            suggestedStart = range.start,
+            suggestedEnd = range.end,
+            existingEntries = state.bucketsByDate.values.flatMap { it.entries }.distinctBy { it.id },
+            preventOverlap = false,
+            isBreak = true,
+            onDismiss = { creatingBreakRange = null },
+            onSave = { desc, _, _, _, _, start, end ->
+                end?.let {
+                    onCreateBreakEntry(desc, start, it)
+                    creatingBreakRange = null
                 }
             },
         )
@@ -534,6 +570,8 @@ private fun CalendarToolbar(
     state: CalendarUiState,
     onModeSelected: (CalendarViewMode) -> Unit,
     onAddEntry: () -> Unit,
+    breaksEnabled: Boolean,
+    onAddBreak: () -> Unit,
     onOpenOverlay: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
@@ -572,6 +610,33 @@ private fun CalendarToolbar(
                 Icons.Default.Add,
                 contentDescription = stringResource(R.string.add_time_entry),
             )
+        }
+        if (breaksEnabled) {
+            var addMenuExpanded by remember { mutableStateOf(false) }
+            Box {
+                IconButton(
+                    onClick = { addMenuExpanded = true },
+                    modifier = Modifier.testTag(CalendarTestTags.ADD_BREAK),
+                ) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = stringResource(R.string.calendar_more_actions),
+                    )
+                }
+                DropdownMenu(
+                    expanded = addMenuExpanded,
+                    onDismissRequest = { addMenuExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.calendar_add_break)) },
+                        modifier = Modifier.testTag(CalendarTestTags.ADD_BREAK_MENU),
+                        onClick = {
+                            addMenuExpanded = false
+                            onAddBreak()
+                        },
+                    )
+                }
+            }
         }
         IconButton(
             onClick = onOpenSettings,

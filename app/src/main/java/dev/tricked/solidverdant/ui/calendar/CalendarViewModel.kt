@@ -17,6 +17,7 @@ import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.TimeEntryReader
 import dev.tricked.solidverdant.domain.time.TemporalPolicy
 import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
+import dev.tricked.solidverdant.domain.time.isWorkTimeEntry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -214,7 +215,9 @@ class CalendarViewModel @Inject constructor(
                             DayBucket(
                                 date = date,
                                 entries = daySlices.map { it.second }.sortedByDescending { it.start },
-                                totalSeconds = daySlices.sumOf { it.first.seconds },
+                                totalSeconds = daySlices
+                                    .filter { (_, entry) -> isWorkTimeEntry(entry) }
+                                    .sumOf { it.first.seconds },
                             )
                         }
                 }

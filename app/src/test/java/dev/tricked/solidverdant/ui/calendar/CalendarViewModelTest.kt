@@ -11,6 +11,7 @@ import dev.tricked.solidverdant.data.calendar.CalendarOverlaySettings
 import dev.tricked.solidverdant.data.calendar.DeviceCalendar
 import dev.tricked.solidverdant.data.calendar.DeviceCalendarEvent
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.TimeEntryType
 import dev.tricked.solidverdant.data.repository.TimeEntryReader
 import dev.tricked.solidverdant.domain.time.TemporalPolicy
 import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
@@ -148,6 +149,23 @@ class CalendarViewModelTest {
         val day6 = loaded.bucketsByDate[LocalDate.of(2026, 7, 6)]!!
         assertEquals(2, day6.entries.size)
         assertEquals(5400L, day6.totalSeconds)
+    }
+
+    @Test
+    fun break_entries_are_visible_but_excluded_from_work_totals() = runTest {
+        val model = vm(
+            FakeReader(
+                listOf(
+                    entry("work", "2026-07-06T09:00:00Z", 3600),
+                    entry("break", "2026-07-06T10:00:00Z", 1800).copy(type = TimeEntryType.BREAK),
+                ),
+            ),
+        )
+        model.setOrganization("org1")
+
+        val day = model.uiState.first { it.bucketsByDate.isNotEmpty() }.bucketsByDate.getValue(LocalDate.of(2026, 7, 6))
+        assertEquals(setOf("work", "break"), day.entries.map { it.id }.toSet())
+        assertEquals(3600L, day.totalSeconds)
     }
 
     @Test

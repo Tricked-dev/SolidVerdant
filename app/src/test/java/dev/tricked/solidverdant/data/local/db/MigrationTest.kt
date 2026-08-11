@@ -265,4 +265,37 @@ class MigrationTest {
         }
         helper.close()
     }
+
+    @Test fun migration_7_8_adds_work_break_type_with_work_default() {
+        val helper = openHelper(7) { db ->
+            db.execSQL(
+                "CREATE TABLE time_entries (id TEXT NOT NULL, description TEXT, userId TEXT NOT NULL, " +
+                    "start TEXT NOT NULL, end TEXT, duration INTEGER, taskId TEXT, projectId TEXT, " +
+                    "billable INTEGER NOT NULL, organizationId TEXT NOT NULL, updatedAt INTEGER NOT NULL, " +
+                    "syncState TEXT NOT NULL, pendingDelete INTEGER NOT NULL, conflictServerJson TEXT, " +
+                    "PRIMARY KEY(id))",
+            )
+            db.execSQL(
+                "INSERT INTO time_entries (id, userId, start, billable, organizationId, updatedAt, " +
+                    "syncState, pendingDelete) VALUES ('e1', 'u1', '2026-08-11T09:00:00Z', 0, 'o1', 1, 'SYNCED', 0)",
+            )
+        }
+        val db = helper.writableDatabase
+
+        AppDatabase.MIGRATION_7_8.migrate(db)
+
+        db.query("SELECT type FROM time_entries WHERE id = 'e1'").use { cursor ->
+            cursor.moveToFirst()
+            assertEquals("work", cursor.getString(0))
+        }
+        db.execSQL(
+            "INSERT INTO time_entries (id, userId, start, billable, organizationId, updatedAt, syncState, pendingDelete, type) " +
+                "VALUES ('e2', 'u1', '2026-08-11T10:00:00Z', 0, 'o1', 1, 'SYNCED', 0, 'break')",
+        )
+        db.query("SELECT type FROM time_entries WHERE id = 'e2'").use { cursor ->
+            cursor.moveToFirst()
+            assertEquals("break", cursor.getString(0))
+        }
+        helper.close()
+    }
 }

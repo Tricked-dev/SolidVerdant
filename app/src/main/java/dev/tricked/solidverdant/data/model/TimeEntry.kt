@@ -39,7 +39,17 @@ data class TimeEntry(
     val billable: Boolean = false,
     @SerialName("organization_id")
     val organizationId: String,
+    val type: TimeEntryType = TimeEntryType.WORK,
 )
+
+@Serializable
+enum class TimeEntryType {
+    @SerialName("work")
+    WORK,
+
+    @SerialName("break")
+    BREAK,
+}
 
 /**
  * Tag associated with a time entry
@@ -99,6 +109,8 @@ data class Organization(
     val currency: String,
     @SerialName("prevent_overlapping_time_entries")
     val preventOverlappingTimeEntries: Boolean = false,
+    @SerialName("breaks_enabled")
+    val breaksEnabled: Boolean = false,
 )
 
 /**
@@ -135,6 +147,7 @@ data class StartTimeEntryRequest(
     val taskId: String? = null,
     val billable: Boolean = false,
     val tags: List<String> = emptyList(),
+    val type: TimeEntryType = TimeEntryType.WORK,
 )
 
 /**
@@ -244,4 +257,5 @@ data class UpdateTimeEntryRequest(
     val taskId: String? = null,
     val billable: Boolean = false,
     val tags: List<String> = emptyList(),
+    val type: TimeEntryType = TimeEntryType.WORK,
 )

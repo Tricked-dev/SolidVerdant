@@ -9,6 +9,7 @@ package dev.tricked.solidverdant.ui.statistics
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.domain.time.isWorkTimeEntry
 import dev.tricked.solidverdant.domain.time.parseTimeEntryInstant
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -76,12 +77,15 @@ object StatisticsAggregator {
     /**
      * Applies the active [filters] to [entries] before aggregation. An empty dimension means no
      * restriction; the client dimension is resolved through each entry's project. Returns [entries]
-     * unchanged when nothing is active so the common unfiltered path allocates nothing.
+     * Break entries are intentionally excluded from work statistics even when no filter is active.
      */
     fun applyFilters(entries: List<TimeEntry>, projects: List<Project>, filters: StatFilters): List<TimeEntry> {
-        if (!filters.isActive) return entries
+        if (!filters.isActive) {
+            return if (entries.any { !isWorkTimeEntry(it) }) entries.filter(::isWorkTimeEntry) else entries
+        }
         val clientByProject: Map<String, String?> = projects.associate { it.id to it.clientId }
         return entries.filter { e ->
+            if (!isWorkTimeEntry(e)) return@filter false
             val projectOk = filters.projectIds.isEmpty() ||
                 (e.projectId != null && e.projectId in filters.projectIds)
             val taskOk = filters.taskIds.isEmpty() ||
@@ -199,6 +203,7 @@ object StatisticsAggregator {
         data class Counted(val seconds: Long, val entry: TimeEntry, val daily: List<Pair<LocalDate, Long>>)
 
         val counted = entries.mapNotNull { e ->
+            if (!isWorkTimeEntry(e)) return@mapNotNull null
             val daily = clippedDailyBreakdown(e, zone, rangeStart, rangeEnd) ?: return@mapNotNull null
             Counted(daily.sumOf { it.second }, e, daily)
         }

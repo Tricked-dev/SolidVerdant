@@ -24,6 +24,7 @@ import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.TimeEntryType
 import dev.tricked.solidverdant.data.remote.RemoteDataSource
 import dev.tricked.solidverdant.data.remote.TimeEntriesQuery
 import dev.tricked.solidverdant.domain.time.parseTimeEntryInstant
@@ -408,6 +409,7 @@ class TimeEntryRepository @Inject constructor(
                             normalizedEntry.taskId,
                             normalizedEntry.billable,
                             tagIds,
+                            type = normalizedEntry.type,
                         ),
                     ),
                     baseSnapshotJson = base,
@@ -427,6 +429,7 @@ class TimeEntryRepository @Inject constructor(
         billable: Boolean,
         start: String,
         end: String,
+        type: TimeEntryType = TimeEntryType.WORK,
     ): TimeEntry {
         val now = clock.nowMs()
         val localId = "local-create-${java.util.UUID.randomUUID()}"
@@ -442,6 +445,7 @@ class TimeEntryRepository @Inject constructor(
             tags = tagIds.map { Tag(it) },
             billable = billable,
             organizationId = organizationId,
+            type = type,
         )
         database.withTransaction {
             timeEntryDao.upsert(entry.toEntity(updatedAt = now, syncState = SyncState.PENDING))
@@ -464,6 +468,7 @@ class TimeEntryRepository @Inject constructor(
                             taskId,
                             billable,
                             tagIds,
+                            type = type,
                         ),
                     ),
                 ),
@@ -500,6 +505,7 @@ class TimeEntryRepository @Inject constructor(
                 billable = source.billable,
                 start = source.start,
                 end = end,
+                type = source.type,
             ),
         )
     } catch (e: CancellationException) {
@@ -549,6 +555,7 @@ class TimeEntryRepository @Inject constructor(
                 billable = source.billable,
                 start = atIso,
                 end = end,
+                type = source.type,
             ).id,
         )
     } catch (e: CancellationException) {
@@ -707,6 +714,7 @@ class TimeEntryRepository @Inject constructor(
                     server.taskId,
                     server.billable,
                     server.tags.map { it.id },
+                    type = server.type,
                 ),
             )
         }
@@ -750,6 +758,7 @@ class TimeEntryRepository @Inject constructor(
                         current.taskId,
                         current.billable,
                         conflict.local.tags.map { it.id },
+                        type = current.type,
                     ),
                 ),
             ),
@@ -795,6 +804,7 @@ class TimeEntryRepository @Inject constructor(
                         current.taskId,
                         current.billable,
                         conflict.local.tags.map { it.id },
+                        type = current.type,
                     ),
                 ),
                 baseSnapshotJson = baseSnapshot,
@@ -881,6 +891,7 @@ class TimeEntryRepository @Inject constructor(
                     tags,
                     entity.billable,
                     entity.organizationId,
+                    entity.type,
                 ),
             )
         }
@@ -925,6 +936,7 @@ class TimeEntryRepository @Inject constructor(
                         taskId = current.taskId,
                         billable = current.billable,
                         tagIds = timeEntryDao.tagIdsFor(entryId),
+                        type = current.type,
                     ),
                 )
             }

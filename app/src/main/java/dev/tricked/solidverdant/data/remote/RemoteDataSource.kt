@@ -93,6 +93,7 @@ class AuthRemoteDataSource @Inject constructor(private val authRepository: AuthR
         authRepository.createTimeEntry(
             organizationId, memberId, userId, entry.start, requireNotNull(entry.end),
             entry.description.orEmpty(), entry.projectId, entry.taskId, tags, entry.billable,
+            type = entry.type,
         )
     override suspend fun stopTimeEntry(organizationId: String, timeEntryId: String, userId: String, startTime: String, endTime: String) =
         authRepository.stopTimeEntry(organizationId, timeEntryId, userId, startTime, endIso = endTime)

@@ -6,6 +6,7 @@
 
 package dev.tricked.solidverdant.sync
 
+import dev.tricked.solidverdant.data.model.TimeEntryType
 import kotlinx.serialization.Serializable
 import java.time.Instant
 import java.time.OffsetDateTime
@@ -32,6 +33,7 @@ data class ConflictSnapshot(
     val taskId: String?,
     val billable: Boolean,
     val tagIds: List<String>,
+    val type: TimeEntryType = TimeEntryType.WORK,
 ) {
     /** True when every conflict-relevant field is equivalent to [other]. */
     fun matches(other: ConflictSnapshot): Boolean = instantsMatch(startMs, startRaw, other.startMs, other.startRaw) &&
@@ -40,6 +42,7 @@ data class ConflictSnapshot(
         projectId == other.projectId &&
         taskId == other.taskId &&
         billable == other.billable &&
+        type == other.type &&
         // Sorted here (not just in [of]) so directly-constructed snapshots keep tag-order invariance.
         tagIds.sorted() == other.tagIds.sorted()
 
@@ -63,6 +66,7 @@ data class ConflictSnapshot(
             taskId: String?,
             billable: Boolean,
             tagIds: List<String>,
+            type: TimeEntryType = TimeEntryType.WORK,
         ): ConflictSnapshot {
             val startMs = start?.let(::parseToEpochMs)
             val endMs = end?.let(::parseToEpochMs)
@@ -76,6 +80,7 @@ data class ConflictSnapshot(
                 taskId = taskId,
                 billable = billable,
                 tagIds = tagIds.sorted(),
+                type = type,
             )
         }
 

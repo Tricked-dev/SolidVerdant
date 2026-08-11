@@ -8,6 +8,7 @@ package dev.tricked.solidverdant.ui.statistics
 
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.TimeEntryType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -422,5 +423,24 @@ class StatisticsAggregatorTest {
         assertEquals(0L, s.totalSeconds)
         assertEquals(0, s.entryCount)
         assertEquals(emptyList<ProjectTotal>(), s.perProject)
+    }
+
+    @Test
+    fun `break entries are excluded from statistics`() {
+        val work = entry("work", "2026-07-01T09:00:00Z", end = "2026-07-01T10:00:00Z")
+        val breakEntry = work.copy(id = "break", type = TimeEntryType.BREAK, projectId = null, billable = false)
+
+        val summary = compute(
+            listOf(work, breakEntry),
+            projects,
+            LocalDate.parse("2026-07-01"),
+            LocalDate.parse("2026-07-01"),
+            utc,
+            TrendGranularity.DAY,
+        )
+
+        assertEquals(3600L, summary.totalSeconds)
+        assertEquals(1, summary.entryCount)
+        assertEquals(3600L, summary.nonBillableSeconds)
     }
 }

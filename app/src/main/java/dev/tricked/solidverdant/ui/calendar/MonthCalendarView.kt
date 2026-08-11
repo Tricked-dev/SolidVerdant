@@ -57,6 +57,7 @@ import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.TimeEntryType
 import dev.tricked.solidverdant.ui.components.EntryBlock
 import dev.tricked.solidverdant.ui.components.LoadingState
 import dev.tricked.solidverdant.ui.statistics.hexToColor
@@ -391,12 +392,24 @@ fun DayTimeline(
                 val task = tasks.find { it.id == entry.taskId }
                 val top = block.startFraction
                 val height = block.heightFraction
-                val blockColor = project?.color?.let { hexToColor(it) }
-                    ?: MaterialTheme.colorScheme.primary
-                val label = entry.description?.ifBlank { null } ?: noDescription
-                val subtitle = listOfNotNull(project?.name, task?.name)
-                    .joinToString(" · ")
-                    .ifBlank { null }
+                val blockColor = if (entry.type == TimeEntryType.BREAK) {
+                    MaterialTheme.colorScheme.tertiary
+                } else {
+                    project?.color?.let { hexToColor(it) } ?: MaterialTheme.colorScheme.primary
+                }
+                val label = if (entry.type == TimeEntryType.BREAK) {
+                    entry.description?.ifBlank { null }?.let { stringResource(R.string.calendar_break_with_description, it) }
+                        ?: stringResource(R.string.calendar_break_entry)
+                } else {
+                    entry.description?.ifBlank { null } ?: noDescription
+                }
+                val subtitle = if (entry.type == TimeEntryType.BREAK) {
+                    null
+                } else {
+                    listOfNotNull(project?.name, task?.name)
+                        .joinToString(" · ")
+                        .ifBlank { null }
+                }
                 val entryModifier = calendarEntryDragModifier(
                     modifier = Modifier
                         .padding(start = CalendarGutterWidth, end = Dimens.Space2)

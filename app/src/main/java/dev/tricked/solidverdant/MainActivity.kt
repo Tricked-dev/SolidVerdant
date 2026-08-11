@@ -32,6 +32,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import dev.tricked.solidverdant.data.local.AppThemeMode
 import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.TimeEntryType
 import dev.tricked.solidverdant.reminder.ReminderWorker
 import dev.tricked.solidverdant.sync.SyncStatusReporter
 import dev.tricked.solidverdant.ui.auth.AuthState
@@ -447,6 +448,7 @@ fun SolidVerdantApp(
                             projects = trackingUiState.projects,
                             tasks = trackingUiState.tasks,
                             tags = trackingUiState.tags,
+                            breaksEnabled = currentMembership.organization.breaksEnabled,
                             onSaveEntry = { entry, description, projectId, taskId, entryTags, billable, start, end ->
                                 trackingViewModel.updatePastTimeEntry(
                                     timeEntry = entry,
@@ -458,6 +460,23 @@ fun SolidVerdantApp(
                                     start = start,
                                     end = end,
                                 )
+                            },
+                            onCreateBreakEntry = { description, start, end ->
+                                authUiState.user?.let { user ->
+                                    trackingViewModel.createManualTimeEntry(
+                                        organizationId = currentMembership.organizationId,
+                                        memberId = currentMembership.id,
+                                        userId = user.id,
+                                        description = description,
+                                        projectId = null,
+                                        taskId = null,
+                                        tags = emptyList(),
+                                        billable = false,
+                                        start = start,
+                                        end = end,
+                                        type = TimeEntryType.BREAK,
+                                    )
+                                }
                             },
                             onMoveEntry = { entry, start, end ->
                                 trackingViewModel.updatePastTimeEntry(

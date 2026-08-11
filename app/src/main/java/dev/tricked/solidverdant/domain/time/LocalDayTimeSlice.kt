@@ -7,6 +7,7 @@
 package dev.tricked.solidverdant.domain.time
 
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.TimeEntryType
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -83,7 +84,14 @@ fun resolveTimeEntryInterval(entry: TimeEntry, now: Instant): Pair<Instant, Inst
 }
 
 /** Solidtime represents a running timer with no end and a null or zero duration. */
-fun isRunningTimeEntry(entry: TimeEntry): Boolean = entry.end == null && (entry.duration ?: 0) <= 0
+fun isRunningTimeEntry(entry: TimeEntry): Boolean = entry.type == TimeEntryType.WORK &&
+    entry.end == null && (entry.duration ?: 0) <= 0
+
+/** Breaks are completed calendar intervals and never count as active work timers. */
+fun isBreakTimeEntry(entry: TimeEntry): Boolean = entry.type == TimeEntryType.BREAK
+
+/** Work entries are the intervals included in tracked/billable totals. */
+fun isWorkTimeEntry(entry: TimeEntry): Boolean = !isBreakTimeEntry(entry)
 
 /** Whether the response carries either supported representation of a completed entry. */
 fun isCompletedTimeEntry(entry: TimeEntry): Boolean = !isRunningTimeEntry(entry)

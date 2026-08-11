@@ -9,6 +9,7 @@ package dev.tricked.solidverdant.data.local.db
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import dev.tricked.solidverdant.data.model.TimeEntryType
 
 enum class SyncState { SYNCED, PENDING, CONFLICT }
 
@@ -35,6 +36,7 @@ data class TimeEntryEntity(
      * unless [syncState] is [SyncState.CONFLICT].
      */
     val conflictServerJson: String? = null,
+    val type: TimeEntryType = TimeEntryType.WORK,
 )
 
 @Entity(tableName = "projects")

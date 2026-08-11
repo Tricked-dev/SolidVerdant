@@ -7,6 +7,7 @@
 package dev.tricked.solidverdant.data.local.db
 
 import androidx.room.TypeConverter
+import dev.tricked.solidverdant.data.model.TimeEntryType
 
 class Converters {
     @TypeConverter fun syncStateToString(value: SyncState): String = value.name
@@ -16,4 +17,14 @@ class Converters {
     @TypeConverter fun opTypeToString(value: OutboxOpType): String = value.name
 
     @TypeConverter fun stringToOpType(value: String): OutboxOpType = OutboxOpType.valueOf(value)
+
+    @TypeConverter fun entryTypeToString(value: TimeEntryType): String = when (value) {
+        TimeEntryType.WORK -> "work"
+        TimeEntryType.BREAK -> "break"
+    }
+
+    @TypeConverter fun stringToEntryType(value: String): TimeEntryType = when (value) {
+        "break" -> TimeEntryType.BREAK
+        else -> TimeEntryType.WORK
+    }
 }

@@ -19,6 +19,7 @@ private const val DATABASE_VERSION_4 = 4
 private const val DATABASE_VERSION_5 = 5
 private const val DATABASE_VERSION_6 = 6
 private const val DATABASE_VERSION_7 = 7
+private const val DATABASE_VERSION_8 = 8
 
 @Database(
     entities = [
@@ -35,7 +36,7 @@ private const val DATABASE_VERSION_7 = 7
         TemplateEntity::class,
         InboxDismissalEntity::class,
     ],
-    version = DATABASE_VERSION_7,
+    version = DATABASE_VERSION_8,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -158,6 +159,13 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v7 -> v8 stores the server's work/break type on cached time entries. */
+        val MIGRATION_7_8 = object : Migration(DATABASE_VERSION_7, DATABASE_VERSION_8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `time_entries` ADD COLUMN `type` TEXT NOT NULL DEFAULT 'work'")
+            }
+        }
+
         val MIGRATIONS: Array<Migration> =
             arrayOf(
                 MIGRATION_1_2,
@@ -166,6 +174,7 @@ abstract class AppDatabase : RoomDatabase() {
                 MIGRATION_4_5,
                 MIGRATION_5_6,
                 MIGRATION_6_7,
+                MIGRATION_7_8,
             )
     }
 }

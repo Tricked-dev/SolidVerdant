@@ -11,6 +11,7 @@ import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
+import dev.tricked.solidverdant.domain.time.isBreakTimeEntry
 import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.domain.time.resolveTimeEntryInterval
 import dev.tricked.solidverdant.domain.time.timeEntryOverlapsLocalDateRange
@@ -54,7 +55,13 @@ object EntryTrustRules {
         }
 
     fun overlaps(first: TimeEntry, second: TimeEntry, now: Instant = Instant.now()): Boolean {
-        if (first.organizationId != second.organizationId || first.id == second.id) return false
+        if (first.organizationId != second.organizationId ||
+            first.id == second.id ||
+            isBreakTimeEntry(first) ||
+            isBreakTimeEntry(second)
+        ) {
+            return false
+        }
         val (firstStart, firstEnd) = resolveTimeEntryInterval(first, now) ?: return false
         val (secondStart, secondEnd) = resolveTimeEntryInterval(second, now) ?: return false
         return firstStart < secondEnd && secondStart < firstEnd

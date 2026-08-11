@@ -15,6 +15,8 @@ object EditTimeEntryTestTags {
     const val START_DATE = "entry_start_date"
     const val END_DATE = "entry_end_date"
     const val DURATION_FIELD = "entry_duration"
+    const val DESCRIPTION_FIELD = "entry_description"
+    const val SAVE_BUTTON = "entry_save"
     const val BILLABLE = "entry_billable"
     const val CANCEL_BUTTON = "entry_cancel"
     const val DELETE_BUTTON = "entry_delete"

@@ -13,6 +13,8 @@ object CalendarTestTags {
     const val WEEK_GRID = "calendar_week_grid"
     const val MODE_MONTH = "calendar_mode_month"
     const val ADD_ENTRY = "calendar_add_entry"
+    const val ADD_BREAK = "calendar_add_break"
+    const val ADD_BREAK_MENU = "calendar_add_break_menu"
     const val SETTINGS = "calendar_settings"
     const val ENTRY_ACTIONS = "calendar_entry_actions"
     const val SPLIT_PICKER = "calendar_split_picker"

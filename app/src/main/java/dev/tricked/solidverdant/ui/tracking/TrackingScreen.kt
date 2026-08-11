@@ -187,6 +187,7 @@ import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.domain.time.clipTimeEntryToLocalDay
 import dev.tricked.solidverdant.domain.time.isCompletedTimeEntry
 import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
+import dev.tricked.solidverdant.domain.time.isWorkTimeEntry
 import dev.tricked.solidverdant.domain.time.timeEntryLocalDaySlices
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.data.repository.EntryTemplate
@@ -2420,7 +2421,7 @@ private fun DateHeader(
     val headerStats = remember(entries, projectsById, date, zone, now) {
         val projectIds = entries.mapNotNull { it.projectId }.toSet()
         val customerCount = projectIds.mapNotNull { projectsById[it]?.clientId }.toSet().size
-        val totalDuration = entries.sumOf { entryDurationOnDay(it, date, zone, now) }
+        val totalDuration = entries.filter(::isWorkTimeEntry).sumOf { entryDurationOnDay(it, date, zone, now) }
         val summary = buildList {
             add(formatCompactDuration(totalDuration))
             if (customerCount > 0) {
@@ -2482,7 +2483,7 @@ private fun CollapsibleTimeEntryGroup(
             .maxByOrNull { it.ordinal }
     }
     val totalDuration = remember(entries, date, zone, now) {
-        entries.sumOf { entryDurationOnDay(it, date, zone, now) }
+        entries.filter(::isWorkTimeEntry).sumOf { entryDurationOnDay(it, date, zone, now) }
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -3747,6 +3748,7 @@ internal fun groupCompletedEntriesByLocalDay(
 ): Map<LocalDate, List<TimeEntry>> = entries
     .asSequence()
     .filter(::isCompletedTimeEntry)
+    .filter(::isWorkTimeEntry)
     .flatMap { entry -> timeEntryLocalDaySlices(entry, zone, now).asSequence().map { it.date to entry } }
     .groupBy({ it.first }, { it.second })
     .toSortedMap(compareByDescending { it })

@@ -66,6 +66,7 @@ import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.data.model.TimeEntryType
 import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.ui.theme.Dimens
 import dev.tricked.solidverdant.ui.tracking.EntryTimeValidator
@@ -94,6 +95,7 @@ fun EditTimeEntryDialog(
     suggestedStart: ZonedDateTime? = null,
     suggestedEnd: ZonedDateTime? = null,
     onDelete: (() -> Unit)? = null,
+    isBreak: Boolean = false,
 ) {
     var description by remember(entry?.id) { mutableStateOf(entry?.description ?: "") }
     var projectId by remember(entry?.id) { mutableStateOf(entry?.projectId) }
@@ -103,6 +105,7 @@ fun EditTimeEntryDialog(
     val isRunningEntry = remember(entry?.id, entry?.end, entry?.duration) {
         entry?.let(::isRunningTimeEntry) == true
     }
+    val isBreakEntry = isBreak || entry?.type == TimeEntryType.BREAK
     val originalStart = remember(entry?.id, suggestedStart, zone) {
         entry?.let { ZonedDateTime.parse(it.start, DateTimeFormatter.ISO_DATE_TIME).withZoneSameInstant(zone) }
             ?: (suggestedStart ?: ZonedDateTime.now(zone).minusHours(1))
@@ -128,7 +131,7 @@ fun EditTimeEntryDialog(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val overlaps = remember(startTime, endTime, existingEntries, isRunningEntry) {
-        if (isRunningEntry || existingEntries.isEmpty()) {
+        if (isBreakEntry || isRunningEntry || existingEntries.isEmpty()) {
             false
         } else {
             val candidate = (
@@ -175,7 +178,13 @@ fun EditTimeEntryDialog(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                text = stringResource(if (entry == null) R.string.add_time_entry else R.string.edit_time_entry),
+                text = stringResource(
+                    when {
+                        isBreakEntry -> R.string.break_entry_title
+                        entry == null -> R.string.add_time_entry
+                        else -> R.string.edit_time_entry
+                    },
+                ),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -318,50 +327,52 @@ fun EditTimeEntryDialog(
                 value = description,
                 onValueChange = { description = it },
                 label = { Text(stringResource(R.string.description)) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag(EditTimeEntryTestTags.DESCRIPTION_FIELD),
                 shape = RoundedCornerShape(8.dp),
             )
 
-            TrackingProjectTaskDropdown(
-                selectedProjectId = projectId,
-                selectedTaskId = taskId,
-                projects = projects,
-                tasks = tasks,
-                onSelectionChanged = { newProjectId, newTaskId ->
-                    projectId = newProjectId
-                    taskId = newTaskId
-                },
-                enabled = true,
-            )
-
-            if (tags.isNotEmpty()) {
-                TagsSelector(
-                    selectedTagIds = selectedTags,
-                    availableTags = tags,
-                    onTagsChanged = { selectedTags = it },
+            if (!isBreakEntry) {
+                TrackingProjectTaskDropdown(
+                    selectedProjectId = projectId,
+                    selectedTaskId = taskId,
+                    projects = projects,
+                    tasks = tasks,
+                    onSelectionChanged = { newProjectId, newTaskId ->
+                        projectId = newProjectId
+                        taskId = newTaskId
+                    },
                     enabled = true,
                 )
-            }
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .toggleable(
-                        value = billable,
-                        role = Role.Checkbox,
-                        onValueChange = { billable = it },
-                    ),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Checkbox(
-                    checked = billable,
-                    onCheckedChange = null,
-                )
-                Text(
-                    text = stringResource(R.string.billable),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                if (tags.isNotEmpty()) {
+                    TagsSelector(
+                        selectedTagIds = selectedTags,
+                        availableTags = tags,
+                        onTagsChanged = { selectedTags = it },
+                        enabled = true,
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .toggleable(
+                            value = billable,
+                            role = Role.Checkbox,
+                            onValueChange = { billable = it },
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(
+                        checked = billable,
+                        onCheckedChange = null,
+                    )
+                    Text(
+                        text = stringResource(R.string.billable),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
             }
 
             if (!isRunningEntry) {
@@ -400,16 +411,17 @@ fun EditTimeEntryDialog(
                     onClick = {
                         onSave(
                             description.ifEmpty { null },
-                            projectId,
-                            taskId,
-                            selectedTags,
-                            billable,
+                            projectId.takeUnless { isBreakEntry },
+                            taskId.takeUnless { isBreakEntry },
+                            selectedTags.takeUnless { isBreakEntry }.orEmpty(),
+                            billable && !isBreakEntry,
                             startTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
                             endTime.takeUnless { isRunningEntry }?.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
                         )
                     },
                     enabled = durationIsValid && validation.canSave,
                     shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.testTag(EditTimeEntryTestTags.SAVE_BUTTON),
                 ) {
                     Text(stringResource(R.string.save), fontWeight = FontWeight.SemiBold)
                 }

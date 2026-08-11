@@ -37,6 +37,11 @@
     </plurals>
     <string name="stats_empty">この期間に記録された時間はありません。</string><string name="stats_by_project">プロジェクト別</string><string name="stats_trend">推移</string><string name="stats_last_7_days">過去7日間</string><string name="stats_last_week">先週</string><string name="stats_this_week">今週</string><string name="stats_this_month">今月</string><string name="stats_previous_month">先月</string><string name="stats_custom">カスタム</string><string name="apply">適用</string><string name="stats_total">合計</string><string name="stats_entries">エントリー</string><string name="stats_average_day">1日平均</string><string name="calendar_show_month">月を表示</string><string name="calendar_previous_month">前の月</string><string name="calendar_next_month">次の月</string>
     <string name="calendar_drag_to_create">タップしてエントリーを作成するか、ドラッグして開始時刻と終了時刻を選択します。</string>
+    <string name="calendar_more_actions">その他のカレンダー操作</string>
+    <string name="calendar_add_break">休憩を追加</string>
+    <string name="calendar_break_entry">休憩</string>
+    <string name="calendar_break_with_description">休憩 · %1$s</string>
+    <string name="break_entry_title">休憩を追加</string>
     <string name="calendar_delete_entry_title">時間エントリーを削除しますか？</string>
     <string name="calendar_delete_entry_message">このエントリーはカレンダーから削除され、削除待ちになります。</string>
     <string name="calendar_entry_actions">時間エントリーの操作</string>

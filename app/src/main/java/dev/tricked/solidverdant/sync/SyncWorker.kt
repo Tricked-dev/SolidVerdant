@@ -304,6 +304,7 @@ class SyncWorker @AssistedInject constructor(
                 projectId = payload.projectId,
                 taskId = payload.taskId,
                 billable = payload.billable,
+                type = payload.type,
             )
             remote.createTimeEntry(
                 op.organizationId,
@@ -364,6 +365,7 @@ class SyncWorker @AssistedInject constructor(
             taskId = payload.taskId,
             billable = payload.billable,
             organizationId = op.organizationId,
+            type = payload.type,
         )
         val server = remote.updateTimeEntry(op.organizationId, entry, payload.tagIds).getOrThrow()
         persistSynced(server, payload.tagIds)
@@ -572,4 +574,5 @@ private fun TimeEntry.toConflictSnapshot(): ConflictSnapshot = ConflictSnapshot.
     taskId = taskId,
     billable = billable,
     tagIds = tags.map { it.id },
+    type = type,
 )

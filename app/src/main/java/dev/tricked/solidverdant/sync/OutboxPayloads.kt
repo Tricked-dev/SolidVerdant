@@ -6,6 +6,7 @@
 
 package dev.tricked.solidverdant.sync
 
+import dev.tricked.solidverdant.data.model.TimeEntryType
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -22,6 +23,7 @@ data class StartPayload(
      * offline is stamped with the reconnect time instead of when it was really started.
      */
     val start: String = "",
+    val type: TimeEntryType = TimeEntryType.WORK,
 )
 
 @Serializable
@@ -41,6 +43,7 @@ data class CreatePayload(
      * mistakes the source entry for a response-lost copy.
      */
     val recoveryBaselineEntryIds: List<String>? = null,
+    val type: TimeEntryType = TimeEntryType.WORK,
 )
 
 @Serializable
@@ -53,6 +56,7 @@ data class StopPayload(
      * offline is stamped with the reconnect time instead of when it was really stopped.
      */
     val end: String = "",
+    val type: TimeEntryType = TimeEntryType.WORK,
 )
 
 @Serializable
@@ -65,4 +69,5 @@ data class UpdatePayload(
     val taskId: String?,
     val billable: Boolean,
     val tagIds: List<String>,
+    val type: TimeEntryType = TimeEntryType.WORK,
 )

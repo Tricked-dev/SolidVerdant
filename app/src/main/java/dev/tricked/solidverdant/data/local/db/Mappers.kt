@@ -19,13 +19,13 @@ fun TimeEntry.toEntity(updatedAt: Long, syncState: SyncState = SyncState.SYNCED,
         id = id, description = description, userId = userId, start = start, end = end,
         duration = duration, taskId = taskId, projectId = projectId, billable = billable,
         organizationId = organizationId, updatedAt = updatedAt,
-        syncState = syncState, pendingDelete = pendingDelete,
+        syncState = syncState, pendingDelete = pendingDelete, type = type,
     )
 
 fun TimeEntryEntity.toModel(tags: List<Tag>): TimeEntry = TimeEntry(
     id = id, description = description, userId = userId, start = start, end = end,
     duration = duration, taskId = taskId, projectId = projectId, tags = tags,
-    billable = billable, organizationId = organizationId,
+    billable = billable, organizationId = organizationId, type = type,
 )
 
 fun Project.toEntity(orgId: String) = ProjectEntity(
