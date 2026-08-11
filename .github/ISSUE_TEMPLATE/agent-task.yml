@@ -1,0 +1,79 @@
+name: Agent task
+description: Create a bounded, evidence-driven task for a coding agent
+title: "[Agent] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep this task narrow enough to review. Include acceptance criteria and the evidence that
+        will establish completion.
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Requested mode
+      description: Choose whether the agent should plan, implement, or review.
+      options:
+        - Plan or research only
+        - Implement the change
+        - Review without changing files
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or desired outcome
+      description: Describe the user-visible problem, technical failure, or outcome to achieve.
+      placeholder: What is wrong today, and what should be true afterward?
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Write observable criteria. Include failure, recovery, offline, or accessibility behavior when applicable.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and likely files
+      description: List affected layers, entry points, or known files. The agent may discover additional files.
+      placeholder: |
+        In scope:
+        - app/src/main/...
+        - app/src/test/...
+
+        Out of scope:
+        - ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification and evidence
+      description: State the focused tests, repository gate, device proof, screenshot, or server evidence required.
+      placeholder: |
+        Commands or tests:
+        - ...
+
+        Required evidence:
+        - ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks and boundaries
+      description: Call out account/data ownership, migrations, secrets, irreversible actions, backend policy, or ambiguous decisions.
+      placeholder: None known, or describe the boundary and escalation point.
+    validations:
+      required: false

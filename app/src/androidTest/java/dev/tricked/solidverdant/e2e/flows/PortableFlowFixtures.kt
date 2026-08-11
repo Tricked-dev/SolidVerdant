@@ -6,6 +6,7 @@
 
 package dev.tricked.solidverdant.e2e.flows
 
+import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
@@ -30,7 +31,7 @@ internal fun E2eRule.completedFixtureEntry(
     organizationId = session.organizationId,
 )
 
-internal data class TrackCatalogFixture(val project: Project, val task: Task, val tag: Tag)
+internal data class TrackCatalogFixture(val project: Project, val task: Task, val tag: Tag, val client: Client? = null)
 
 /** Select the deterministic disposable catalogue shared by the mock and live reset account. */
 internal fun E2eRule.catalogFixture(): TrackCatalogFixture {
@@ -41,7 +42,8 @@ internal fun E2eRule.catalogFixture(): TrackCatalogFixture {
         ?: error("Live E2E account has no task fixture named $LIVE_TEST_TASK_NAME for project ${project.id}")
     val tag = catalog.tags.firstOrNull { it.name == LIVE_TEST_TAG_NAME }
         ?: error("Live E2E account has no tag fixture named $LIVE_TEST_TAG_NAME")
-    return TrackCatalogFixture(project, task, tag)
+    val client = project.clientId?.let { clientId -> catalog.clients.firstOrNull { it.id == clientId } }
+    return TrackCatalogFixture(project, task, tag, client)
 }
 
 private const val LIVE_TEST_PROJECT_NAME = "Live Test Project"

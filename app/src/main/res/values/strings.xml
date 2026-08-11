@@ -169,8 +169,18 @@
     <string name="needs_categorization">Needs categorization</string>
     <string name="clear_filters">Clear filters</string>
     <string name="no_project">No Project</string>
+    <string name="no_client">No client</string>
     <string name="description_optional">Description (Optional)</string>
     <string name="no_results_found">No results found</string>
+    <string name="create">Create</string>
+    <string name="create_client">Create client</string>
+    <string name="create_project">Create project</string>
+    <string name="create_task">Create task</string>
+    <string name="create_tag">Create tag</string>
+    <string name="create_project_named">Create project “%1$s”</string>
+    <string name="create_task_named">Create task “%1$s”</string>
+    <string name="catalogue_name">Name</string>
+    <string name="catalogue_create_failed">Could not create this catalogue item.</string>
 
     <!-- New Features -->
     <string name="description">Description</string>

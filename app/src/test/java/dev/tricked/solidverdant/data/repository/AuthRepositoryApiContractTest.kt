@@ -78,6 +78,58 @@ class AuthRepositoryApiContractTest {
     }
 
     @Test
+    fun `catalogue creation trims names and uses the Solidtime write endpoints`() = runTest {
+        val writes = mutableListOf<Pair<String, String>>()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val path = requireNotNull(request.path).substringBefore("?")
+                writes += path to request.body.readUtf8()
+                val body = when {
+                    path.endsWith("/clients") -> """{"data":{"id":"client-new","name":"Client new","is_archived":false}}"""
+                    path.endsWith("/projects") ->
+                        """
+                            {"data":{"id":"project-new","name":"Project new","color":"#6366F1","client_id":"client-new",
+                            "is_archived":false,"is_billable":false,"spent_time":null,"is_public":false}}
+                        """.trimIndent()
+                    path.endsWith("/tasks") ->
+                        """
+                            {"data":{"id":"task-new","name":"Task new","is_done":false,"project_id":"project-new",
+                            "spent_time":null,"created_at":"2026-08-08T08:00:00Z","updated_at":"2026-08-08T08:00:00Z"}}
+                        """.trimIndent()
+                    path.endsWith("/tags") -> """{"data":{"id":"tag-new","name":"Tag new"}}"""
+                    else -> return MockResponse().setResponseCode(404)
+                }
+                return MockResponse().setHeader("Content-Type", "application/json").setBody(body)
+            }
+        }
+
+        assertEquals("client-new", repository.createClient("org", " Client ").getOrThrow().id)
+        val project = repository.createProject("org", " Project ", "client-new").getOrThrow()
+        assertEquals("project-new", project.id)
+        assertEquals(0, project.spentTime)
+        val task = repository.createTask("org", " Task ", "project-new").getOrThrow()
+        assertEquals("task-new", task.id)
+        assertEquals(0, task.spentTime)
+        assertEquals("tag-new", repository.createTag("org", " Tag ").getOrThrow().id)
+
+        assertEquals(4, writes.size)
+        assertTrue(writes[0].second.contains("\"name\":\"Client\""))
+        assertTrue(writes[1].second.contains("\"name\":\"Project\""))
+        assertTrue(writes[1].second.contains("\"client_id\":\"client-new\""))
+        assertTrue(writes[2].second.contains("\"name\":\"Task\""))
+        assertTrue(writes[3].second.contains("\"name\":\"Tag\""))
+    }
+
+    @Test
+    fun `blank catalogue names fail before making a request`() = runTest {
+        assertTrue(repository.createClient("org", "   ").isFailure)
+        assertTrue(repository.createProject("org", "\t").isFailure)
+        assertTrue(repository.createTask("org", "Task", "").isFailure)
+        assertTrue(repository.createTag("org", "   ").isFailure)
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
     fun `official 404 active response means there is no running entry`() = runTest {
         server.enqueue(
             MockResponse()

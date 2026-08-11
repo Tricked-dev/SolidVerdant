@@ -454,6 +454,56 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
         Result.failure(e)
     }
 
+    suspend fun createClient(organizationId: String, name: String): Result<Client> = try {
+        val safeName = name.trim().takeIf { it.isNotEmpty() } ?: error("Client name cannot be blank")
+        val api = apiClientFactory.createApi(authDataStore.getEndpoint())
+        Result.success(api.createClient(organizationId, dev.tricked.solidverdant.data.model.CreateClientRequest(safeName)).data)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Timber.e(e, "Failed to create client")
+        Result.failure(e)
+    }
+
+    suspend fun createProject(organizationId: String, name: String, clientId: String? = null): Result<Project> = try {
+        val safeName = name.trim().takeIf { it.isNotEmpty() } ?: error("Project name cannot be blank")
+        val api = apiClientFactory.createApi(authDataStore.getEndpoint())
+        Result.success(
+            api.createProject(
+                organizationId,
+                dev.tricked.solidverdant.data.model.CreateProjectRequest(name = safeName, clientId = clientId),
+            ).data,
+        )
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Timber.e(e, "Failed to create project")
+        Result.failure(e)
+    }
+
+    suspend fun createTask(organizationId: String, name: String, projectId: String): Result<Task> = try {
+        val safeName = name.trim().takeIf { it.isNotEmpty() } ?: error("Task name cannot be blank")
+        require(projectId.isNotBlank()) { "Task project cannot be blank" }
+        val api = apiClientFactory.createApi(authDataStore.getEndpoint())
+        Result.success(api.createTask(organizationId, dev.tricked.solidverdant.data.model.CreateTaskRequest(safeName, projectId)).data)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Timber.e(e, "Failed to create task")
+        Result.failure(e)
+    }
+
+    suspend fun createTag(organizationId: String, name: String): Result<Tag> = try {
+        val safeName = name.trim().takeIf { it.isNotEmpty() } ?: error("Tag name cannot be blank")
+        val api = apiClientFactory.createApi(authDataStore.getEndpoint())
+        Result.success(api.createTag(organizationId, dev.tricked.solidverdant.data.model.CreateTagRequest(safeName)).data)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Timber.e(e, "Failed to create tag")
+        Result.failure(e)
+    }
+
     /**
      * Get all tasks for an organization
      */

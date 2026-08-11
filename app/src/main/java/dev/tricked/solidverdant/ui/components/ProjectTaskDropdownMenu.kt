@@ -55,6 +55,9 @@ fun ProjectTaskDropdown(
     enabled: Boolean = true,
     showProjectColors: Boolean = false,
     rounded: Boolean = false,
+    selectedProjectId: String? = null,
+    onCreateProject: ((String) -> Unit)? = null,
+    onCreateTask: ((String, String) -> Unit)? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
@@ -96,6 +99,9 @@ fun ProjectTaskDropdown(
             onSelectionChanged = onSelectionChanged,
             onClose = close,
             showProjectColors = showProjectColors,
+            selectedProjectId = selectedProjectId,
+            onCreateProject = onCreateProject,
+            onCreateTask = onCreateTask,
         )
     }
 }
@@ -111,6 +117,9 @@ private fun ProjectTaskPickerDialog(
     onSelectionChanged: (projectId: String?, taskId: String?) -> Unit,
     onClose: () -> Unit,
     showProjectColors: Boolean,
+    selectedProjectId: String?,
+    onCreateProject: ((String) -> Unit)?,
+    onCreateTask: ((String, String) -> Unit)?,
 ) {
     val normalizedQuery = searchQuery.trim()
     val filteredTasks = remember(normalizedQuery, tasks) {
@@ -152,7 +161,8 @@ private fun ProjectTaskPickerDialog(
                         placeholder = { Text(stringResource(R.string.search_placeholder)) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .testTag(EditTimeEntryTestTags.PROJECT_TASK_SEARCH),
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                     )
@@ -209,6 +219,30 @@ private fun ProjectTaskPickerDialog(
                                 },
                             )
                         }
+                    }
+                }
+                if (normalizedQuery.isNotBlank() && onCreateProject != null) {
+                    item {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.create_project_named, normalizedQuery)) },
+                            onClick = {
+                                onCreateProject(normalizedQuery)
+                                onClose()
+                            },
+                            modifier = Modifier.testTag(EditTimeEntryTestTags.CREATE_PROJECT),
+                        )
+                    }
+                }
+                if (normalizedQuery.isNotBlank() && selectedProjectId != null && onCreateTask != null) {
+                    item {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.create_task_named, normalizedQuery)) },
+                            onClick = {
+                                onCreateTask(normalizedQuery, selectedProjectId)
+                                onClose()
+                            },
+                            modifier = Modifier.testTag(EditTimeEntryTestTags.CREATE_TASK),
+                        )
                     }
                 }
                 if (searchQuery.isNotBlank() && filteredProjects.isEmpty()) {

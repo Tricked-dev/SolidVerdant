@@ -82,6 +82,18 @@ class TimeEntryRepository @Inject constructor(
 
     fun observeTags(orgId: String): Flow<List<Tag>> = catalogDao.observeTags(orgId).map { list -> list.map { it.toModel() } }
 
+    suspend fun createProject(organizationId: String, name: String, clientId: String? = null): Result<Project> =
+        remote.createProject(organizationId, name, clientId).onSuccess { catalogDao.upsertProjects(listOf(it.toEntity(organizationId))) }
+
+    suspend fun createClient(organizationId: String, name: String): Result<Client> =
+        remote.createClient(organizationId, name).onSuccess { catalogDao.upsertClients(listOf(it.toEntity(organizationId))) }
+
+    suspend fun createTask(organizationId: String, name: String, projectId: String): Result<Task> =
+        remote.createTask(organizationId, name, projectId).onSuccess { catalogDao.upsertTasks(listOf(it.toEntity(organizationId))) }
+
+    suspend fun createTag(organizationId: String, name: String): Result<Tag> =
+        remote.createTag(organizationId, name).onSuccess { catalogDao.upsertTags(listOf(it.toEntity(organizationId))) }
+
     override fun observeTimeEntries(organizationId: String): Flow<List<TimeEntry>> = combine(
         timeEntryDao.observeVisibleEntries(organizationId),
         catalogDao.observeTags(organizationId),

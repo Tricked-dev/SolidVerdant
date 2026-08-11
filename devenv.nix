@@ -395,10 +395,17 @@ in
       $user = App\Models\User::where("email", "solidverdant-e2e@example.test")->firstOrFail();
       $user->forceFill(["timezone" => "UTC"])->save();
       $member = App\Models\Member::where("user_id", $user->id)->firstOrFail();
+      $client = new App\Models\Client();
+      $client->forceFill([
+        "name" => "Live Test Client",
+        "organization_id" => $member->organization_id,
+        "archived_at" => null,
+      ])->save();
       $project = new App\Models\Project();
       $project->forceFill([
         "name" => "Live Test Project",
         "color" => "#4F46E5",
+        "client_id" => $client->id,
         "organization_id" => $member->organization_id,
         "is_public" => true,
         "is_billable" => true,

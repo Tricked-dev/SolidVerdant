@@ -51,9 +51,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
@@ -82,6 +85,7 @@ fun MonthCalendarView(
     modifier: Modifier = Modifier,
     projects: List<Project> = emptyList(),
     tasks: List<Task> = emptyList(),
+    clients: List<Client> = emptyList(),
     syncStatusByEntryId: Map<String, EntrySyncStatus> = emptyMap(),
 ) {
     var monthExpanded by remember { mutableStateOf(true) }
@@ -135,6 +139,7 @@ fun MonthCalendarView(
             monthExpanded = monthExpanded,
             projects = projects,
             tasks = tasks,
+            clients = clients,
             scrollState = timelineScrollState,
             onEntryClick = onEntryClick,
             onEntryLongPress = onEntryLongPress,
@@ -272,6 +277,7 @@ private fun ColumnScope.SelectedDayEntries(
     monthExpanded: Boolean,
     projects: List<Project>,
     tasks: List<Task>,
+    clients: List<Client>,
     scrollState: ScrollState,
     onEntryClick: (TimeEntry) -> Unit,
     onEntryLongPress: (TimeEntry) -> Unit,
@@ -297,6 +303,7 @@ private fun ColumnScope.SelectedDayEntries(
             entries = emptyList(),
             projects = projects,
             tasks = tasks,
+            clients = clients,
             zone = state.zone,
             settings = settings,
             scrollState = scrollState,
@@ -314,6 +321,7 @@ private fun ColumnScope.SelectedDayEntries(
             entries = entries,
             projects = projects,
             tasks = tasks,
+            clients = clients,
             zone = state.zone,
             settings = settings,
             scrollState = scrollState,
@@ -333,6 +341,7 @@ private fun ColumnScope.SelectedDayEntries(
                     entries = entries,
                     projects = projects,
                     tasks = tasks,
+                    clients = clients,
                     zone = state.zone,
                     settings = settings,
                     scrollState = scrollState,
@@ -360,6 +369,7 @@ fun DayTimeline(
     entries: List<TimeEntry>,
     projects: List<Project>,
     tasks: List<Task>,
+    clients: List<Client> = emptyList(),
     zone: ZoneId,
     now: Instant,
     settings: CalendarGridSettings = CalendarGridSettings(),
@@ -379,6 +389,9 @@ fun DayTimeline(
         (calendarHourHeight(settings) * initialScrollHours).roundToPx()
     }
     val effectiveScrollState = scrollState ?: rememberScrollState(initial = initialScroll)
+    val projectsById = remember(projects) { projects.associateBy { it.id } }
+    val tasksById = remember(tasks) { tasks.associateBy { it.id } }
+    val clientsById = remember(clients) { clients.associateBy { it.id } }
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -398,8 +411,9 @@ fun DayTimeline(
 
             layoutTrackedEntries(entries, day, now, zone, settings).forEach { block ->
                 val entry = block.entry
-                val project = projects.find { it.id == entry.projectId }
-                val task = tasks.find { it.id == entry.taskId }
+                val project = projectsById[entry.projectId]
+                val task = tasksById[entry.taskId]
+                val client = project?.clientId?.let(clientsById::get)
                 val top = block.startFraction
                 val height = block.heightFraction
                 val blockColor = if (entry.type == TimeEntryType.BREAK) {
@@ -407,18 +421,30 @@ fun DayTimeline(
                 } else {
                     project?.color?.let { hexToColor(it) } ?: MaterialTheme.colorScheme.primary
                 }
+                val metadata = calendarEntryMetadata(
+                    entry = entry,
+                    projectName = project?.name,
+                    taskName = task?.name,
+                    clientName = client?.name,
+                )
                 val label = if (entry.type == TimeEntryType.BREAK) {
                     entry.description?.ifBlank { null }?.let { stringResource(R.string.calendar_break_with_description, it) }
                         ?: stringResource(R.string.calendar_break_entry)
                 } else {
-                    entry.description?.ifBlank { null } ?: noDescription
+                    metadata.title ?: noDescription
                 }
                 val subtitle = if (entry.type == TimeEntryType.BREAK) {
                     null
                 } else {
-                    listOfNotNull(project?.name, task?.name)
-                        .joinToString(" · ")
-                        .ifBlank { null }
+                    metadata.subtitle
+                }
+                val duration = metadata.durationSeconds?.let(::formatDuration)
+                    ?: formatDuration(entryDurationSecondsOnDay(entry, day, zone, now))
+                val details = listOfNotNull(subtitle, duration).joinToString(", ")
+                val a11y = if (details.isBlank()) {
+                    stringResource(R.string.calendar_entry_a11y, label)
+                } else {
+                    stringResource(R.string.calendar_entry_a11y_details, label, details)
                 }
                 val entryModifier = calendarEntryDragModifier(
                     modifier = Modifier
@@ -442,13 +468,14 @@ fun DayTimeline(
                     color = blockColor,
                     title = label,
                     subtitle = subtitle,
-                    time = formatDuration(entryDurationSecondsOnDay(entry, day, zone, now)),
+                    time = duration,
                     modifier = entryModifier
                         .combinedClickable(
                             onClick = { onEntryClick(entry) },
                             onLongClick = { onEntryLongPress(entry) },
                         )
-                        .testTag("entry-row-${entry.id}"),
+                        .testTag("entry-row-${entry.id}")
+                        .semantics { contentDescription = a11y },
                     syncStatus = syncStatusByEntryId[entry.id],
                 )
             }

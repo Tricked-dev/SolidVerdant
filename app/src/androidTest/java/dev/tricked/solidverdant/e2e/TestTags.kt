@@ -76,6 +76,18 @@ object TestTags {
     const val TRACK_SHEET_END_DATE = TrackingTestTags.SHEET_END_DATE
     const val ENTRY_DATE_PICKER = EditTimeEntryTestTags.DATE_PICKER
     const val ENTRY_DATE_PICKER_CONFIRM = EditTimeEntryTestTags.DATE_PICKER_CONFIRM
+    const val ENTRY_SAVE = EditTimeEntryTestTags.SAVE_BUTTON
+    const val ENTRY_DESCRIPTION = EditTimeEntryTestTags.DESCRIPTION_FIELD
+    const val ENTRY_PROJECT_TASK_SELECTOR = EditTimeEntryTestTags.PROJECT_TASK_SELECTOR
+    const val CATALOGUE_PROJECT_TASK_SEARCH = EditTimeEntryTestTags.PROJECT_TASK_SEARCH
+    const val CATALOGUE_CLIENT_PICKER = EditTimeEntryTestTags.CLIENT_PICKER
+    const val CATALOGUE_CREATE_PROJECT = EditTimeEntryTestTags.CREATE_PROJECT
+    const val CATALOGUE_CREATE_TASK = EditTimeEntryTestTags.CREATE_TASK
+    const val CATALOGUE_CREATE_TAG = EditTimeEntryTestTags.CREATE_TAG
+    const val CATALOGUE_CREATE_CLIENT = EditTimeEntryTestTags.CREATE_CLIENT
+    const val CATALOGUE_NAME = EditTimeEntryTestTags.CATALOGUE_NAME
+    const val CATALOGUE_CREATE_CONFIRM = EditTimeEntryTestTags.CATALOGUE_CREATE_CONFIRM
+    const val CATALOGUE_CREATE_ERROR = EditTimeEntryTestTags.CATALOGUE_CREATE_ERROR
 
     fun trackEntryTimeRange(entryId: String): String = TrackingTestTags.entryTimeRange(entryId)
 

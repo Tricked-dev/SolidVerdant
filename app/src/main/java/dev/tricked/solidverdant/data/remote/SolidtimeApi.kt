@@ -6,11 +6,19 @@
 
 package dev.tricked.solidverdant.data.remote
 
+import dev.tricked.solidverdant.data.model.ClientResponse
+import dev.tricked.solidverdant.data.model.CreateClientRequest
+import dev.tricked.solidverdant.data.model.CreateProjectRequest
+import dev.tricked.solidverdant.data.model.CreateTagRequest
+import dev.tricked.solidverdant.data.model.CreateTaskRequest
 import dev.tricked.solidverdant.data.model.MembershipsResponse
+import dev.tricked.solidverdant.data.model.ProjectResponse
 import dev.tricked.solidverdant.data.model.ProjectsResponse
 import dev.tricked.solidverdant.data.model.StartTimeEntryRequest
 import dev.tricked.solidverdant.data.model.StopTimeEntryRequest
+import dev.tricked.solidverdant.data.model.TagResponse
 import dev.tricked.solidverdant.data.model.TagsResponse
+import dev.tricked.solidverdant.data.model.TaskResponse
 import dev.tricked.solidverdant.data.model.TasksResponse
 import dev.tricked.solidverdant.data.model.TimeEntriesResponse
 import dev.tricked.solidverdant.data.model.TimeEntryResponse
@@ -37,6 +45,9 @@ interface SolidtimeApi {
         @Path("organization") organizationId: String,
         @Query("page") page: Int = 1,
     ): dev.tricked.solidverdant.data.model.ClientsResponse
+
+    @POST("api/v1/organizations/{organization}/clients")
+    suspend fun createClient(@Path("organization") organizationId: String, @Body request: CreateClientRequest): ClientResponse
 
     /**
      * Exchange authorization code for access and refresh tokens
@@ -102,17 +113,26 @@ interface SolidtimeApi {
     @GET("api/v1/organizations/{organization}/projects?archived=all")
     suspend fun getProjects(@Path("organization") organizationId: String, @Query("page") page: Int = 1): ProjectsResponse
 
+    @POST("api/v1/organizations/{organization}/projects")
+    suspend fun createProject(@Path("organization") organizationId: String, @Body request: CreateProjectRequest): ProjectResponse
+
     /**
      * Get all tasks for an organization
      */
     @GET("api/v1/organizations/{organization}/tasks?done=all")
     suspend fun getTasks(@Path("organization") organizationId: String, @Query("page") page: Int = 1): TasksResponse
 
+    @POST("api/v1/organizations/{organization}/tasks")
+    suspend fun createTask(@Path("organization") organizationId: String, @Body request: CreateTaskRequest): TaskResponse
+
     /**
      * Get all tags for an organization
      */
     @GET("api/v1/organizations/{organization}/tags")
     suspend fun getTags(@Path("organization") organizationId: String, @Query("page") page: Int = 1): TagsResponse
+
+    @POST("api/v1/organizations/{organization}/tags")
+    suspend fun createTag(@Path("organization") organizationId: String, @Body request: CreateTagRequest): TagResponse
 
     /**
      * Get time entries for an organization with optional filters

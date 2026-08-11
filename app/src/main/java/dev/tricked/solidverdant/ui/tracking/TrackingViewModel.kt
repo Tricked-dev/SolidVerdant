@@ -1589,6 +1589,23 @@ class TrackingViewModel @Inject constructor(
         }
     }
 
+    /** Create a catalogue item from a calendar editor and immediately cache the server response. */
+    fun createCalendarProject(organizationId: String, name: String, clientId: String?, onResult: (Result<Project>) -> Unit) {
+        viewModelScope.launch { onResult(timeEntryRepository.createProject(organizationId, name, clientId)) }
+    }
+
+    fun createCalendarClient(organizationId: String, name: String, onResult: (Result<Client>) -> Unit) {
+        viewModelScope.launch { onResult(timeEntryRepository.createClient(organizationId, name)) }
+    }
+
+    fun createCalendarTask(organizationId: String, name: String, projectId: String, onResult: (Result<Task>) -> Unit) {
+        viewModelScope.launch { onResult(timeEntryRepository.createTask(organizationId, name, projectId)) }
+    }
+
+    fun createCalendarTag(organizationId: String, name: String, onResult: (Result<Tag>) -> Unit) {
+        viewModelScope.launch { onResult(timeEntryRepository.createTag(organizationId, name)) }
+    }
+
     /**
      * Update a past time entry
      */

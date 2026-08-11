@@ -59,6 +59,19 @@
   server snapshots, not only optimistic UI state.
 - Mark tests `@BackendPortable` only when they run unchanged against mock and live backends.
 
+## Task and handoff
+
+- Start implementation work by stating the requested scope, affected layers, acceptance criteria,
+  and verification plan. Use `.github/ISSUE_TEMPLATE/agent-task.yml` when creating a new task and
+  `.github/PULL_REQUEST_TEMPLATE.md` when handing off a change for review.
+- Keep non-goals explicit. If product policy, data ownership, or server behavior is materially
+  ambiguous, ask before choosing a smaller or irreversible interpretation.
+- At handoff, report changed files, commands actually run, the result of each verification scope,
+  intentional generated artifacts, and every unrun or blocked check. Do not call a partial result
+  green.
+- For review-only requests, report findings and gaps without changing code. For implementation
+  requests, include focused tests for changed behavior and its important failure or recovery path.
+
 ## Verification
 
 Run the pinned host gate before handing off code changes:
@@ -92,3 +105,12 @@ in `.agents/skills/solidverdant-android-gate/SKILL.md`; performance procedures a
 - Keep patches scoped. Do not discard, overwrite, or broadly reformat another contributor's work.
 - Do not edit generated build output. Commit required Room schemas and intentional screenshot
   baselines.
+
+## Local-only tooling
+
+- `agents.local.md` and the executable helper files under `scripts/` are intentionally ignored and
+  machine-specific. They are optional conveniences, not part of the repository contract.
+- Do not make an agent task, CI job, or cloud environment depend on those files. Use the committed
+  `devenv` tasks and Gradle commands in this guide as the portable source of truth.
+- If a local helper is used, report the equivalent committed command and never include secrets,
+  device data, Nix store paths, or machine-specific paths in committed instructions.

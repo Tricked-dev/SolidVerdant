@@ -54,7 +54,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.calendar.DeviceCalendarEvent
+import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.model.Project
+import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.TimeEntryType
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository.EntrySyncStatus
@@ -94,6 +96,8 @@ fun WeekCalendarView(
     onNext: () -> Unit,
     onToday: () -> Unit,
     projects: List<Project>,
+    tasks: List<Task> = emptyList(),
+    clients: List<Client> = emptyList(),
     syncStatusByEntryId: Map<String, EntrySyncStatus> = emptyMap(),
     modifier: Modifier = Modifier,
 ) {
@@ -117,6 +121,8 @@ fun WeekCalendarView(
             onNext = onNext,
             onToday = onToday,
             projects = projects,
+            tasks = tasks,
+            clients = clients,
             syncStatusByEntryId = syncStatusByEntryId,
         )
     }
@@ -135,6 +141,8 @@ private fun WeekCalendarContent(
     onNext: () -> Unit,
     onToday: () -> Unit,
     projects: List<Project>,
+    tasks: List<Task>,
+    clients: List<Client>,
     syncStatusByEntryId: Map<String, EntrySyncStatus>,
 ) {
     val zone = state.zone
@@ -155,6 +163,9 @@ private fun WeekCalendarContent(
         days.any { state.bucketsByDate[it]?.entries?.isNotEmpty() == true }
     }
     val hasContent = hasTrackedEntries || state.overlayEvents.isNotEmpty()
+    val projectsById = remember(projects) { projects.associateBy { it.id } }
+    val tasksById = remember(tasks) { tasks.associateBy { it.id } }
+    val clientsById = remember(clients) { clients.associateBy { it.id } }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         WeekNavHeader(
@@ -209,7 +220,9 @@ private fun WeekCalendarContent(
                     settings = settings,
                     timedByDay = timedByDay,
                     state = state,
-                    projects = projects,
+                    projectsById = projectsById,
+                    tasksById = tasksById,
+                    clientsById = clientsById,
                     onEntryClick = onEntryClick,
                     onEntryLongPress = onEntryLongPress,
                     onMoveEntry = onMoveEntry,
@@ -230,7 +243,9 @@ private fun WeekGrid(
     settings: CalendarGridSettings,
     timedByDay: Map<LocalDate, List<EventBlock>>,
     state: CalendarUiState,
-    projects: List<Project>,
+    projectsById: Map<String, Project>,
+    tasksById: Map<String, Task>,
+    clientsById: Map<String, Client>,
     onEntryClick: (TimeEntry) -> Unit,
     onEntryLongPress: (TimeEntry) -> Unit,
     onMoveEntry: (TimeEntry, String, String) -> Unit,
@@ -266,7 +281,9 @@ private fun WeekGrid(
                         settings = settings,
                         eventBlocks = timedByDay[day].orEmpty(),
                         entries = state.bucketsByDate[day]?.entries.orEmpty(),
-                        projects = projects,
+                        projectsById = projectsById,
+                        tasksById = tasksById,
+                        clientsById = clientsById,
                         onEntryClick = onEntryClick,
                         onEntryLongPress = onEntryLongPress,
                         onMoveEntry = onMoveEntry,
@@ -425,7 +442,9 @@ private fun DayColumn(
     eventBlocks: List<EventBlock>,
     entries: List<TimeEntry>,
     settings: CalendarGridSettings,
-    projects: List<Project>,
+    projectsById: Map<String, Project>,
+    tasksById: Map<String, Task>,
+    clientsById: Map<String, Client>,
     onEntryClick: (TimeEntry) -> Unit,
     onEntryLongPress: (TimeEntry) -> Unit,
     onMoveEntry: (TimeEntry, String, String) -> Unit,
@@ -491,20 +510,36 @@ private fun DayColumn(
         layoutTrackedEntries(entries, day, now, zone, settings).forEach { block ->
             val entry = block.entry
             val slotWidth = colWidth / block.columnCount.coerceAtLeast(1)
+            val project = projectsById[entry.projectId]
+            val task = tasksById[entry.taskId]
+            val client = project?.clientId?.let(clientsById::get)
             val base = if (entry.type == TimeEntryType.BREAK) {
                 MaterialTheme.colorScheme.tertiary
             } else {
-                projects.firstOrNull { it.id == entry.projectId }?.color
+                project?.color
                     ?.let { hexToColor(it) }
                     ?: MaterialTheme.colorScheme.primary
             }
+            val metadata = calendarEntryMetadata(
+                entry = entry,
+                projectName = project?.name,
+                taskName = task?.name,
+                clientName = client?.name,
+            )
             val label = if (entry.type == TimeEntryType.BREAK) {
                 entry.description?.ifBlank { null }?.let { stringResource(R.string.calendar_break_with_description, it) }
                     ?: stringResource(R.string.calendar_break_entry)
             } else {
-                entry.description?.ifBlank { null } ?: noDescription
+                metadata.title ?: noDescription
             }
-            val a11y = stringResource(R.string.calendar_entry_a11y, label)
+            val subtitle = metadata.subtitle
+            val duration = metadata.durationSeconds?.let(::formatDuration)
+            val details = listOfNotNull(subtitle, duration).joinToString(", ")
+            val a11y = if (details.isBlank()) {
+                stringResource(R.string.calendar_entry_a11y, label)
+            } else {
+                stringResource(R.string.calendar_entry_a11y_details, label, details)
+            }
             val entryModifier = calendarEntryDragModifier(
                 modifier = Modifier
                     .offset(
@@ -530,6 +565,8 @@ private fun DayColumn(
             EntryBlock(
                 color = base,
                 title = label,
+                subtitle = subtitle,
+                time = duration,
                 modifier = entryModifier
                     .combinedClickable(
                         onClick = { onEntryClick(entry) },

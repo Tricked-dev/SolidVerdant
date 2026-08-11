@@ -12,10 +12,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
+import dev.tricked.solidverdant.data.model.Client
+import dev.tricked.solidverdant.data.model.Project
+import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -116,6 +121,55 @@ class WeekCalendarViewTest {
             val range = selected ?: error("tap did not select a range")
             assertEquals(15, java.time.Duration.between(range.start, range.end).toMinutes())
         }
+    }
+
+    @Test
+    fun entryShowsClientProjectTaskAndDurationMetadata() {
+        val date = LocalDate.of(2026, 7, 6)
+        val entry = TimeEntry(
+            id = "entry-metadata",
+            userId = "user-1",
+            organizationId = "org-1",
+            start = "2026-07-06T09:00:00Z",
+            end = "2026-07-06T10:00:00Z",
+            projectId = "project-1",
+            taskId = "task-1",
+        )
+        composeRule.setContent {
+            MaterialTheme {
+                WeekCalendarView(
+                    state = CalendarUiState(
+                        viewMode = CalendarViewMode.WEEK,
+                        zone = ZoneOffset.UTC,
+                        visibleDays = listOf(date),
+                        selectedDate = date,
+                        weekAnchor = date,
+                        isLoading = false,
+                        bucketsByDate = mapOf(date to DayBucket(date, listOf(entry), 3_600)),
+                    ),
+                    onSelectDate = {},
+                    onEntryClick = {},
+                    onPrevious = {},
+                    onNext = {},
+                    onToday = {},
+                    projects = listOf(Project(id = "project-1", name = "Project", color = "#123456", clientId = "client-1")),
+                    clients = listOf(Client(id = "client-1", name = "Client")),
+                    tasks = listOf(
+                        Task(
+                            id = "task-1",
+                            name = "Task",
+                            projectId = "project-1",
+                            createdAt = "2026-07-01T00:00:00Z",
+                            updatedAt = "2026-07-01T00:00:00Z",
+                        ),
+                    ),
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("week-entry-${entry.id}").performScrollTo()
+        composeRule.onNodeWithText("Client · Project · Task").assertIsDisplayed()
+        composeRule.onNodeWithText("1h 00m").assertExists()
     }
 
     @Test

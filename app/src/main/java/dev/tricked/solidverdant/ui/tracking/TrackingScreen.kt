@@ -2314,7 +2314,9 @@ internal fun ProjectTaskDropdown(
     projects: List<Project>,
     tasks: List<Task>,
     onSelectionChanged: (projectId: String?, taskId: String?) -> Unit,
-    enabled: Boolean
+    enabled: Boolean,
+    onCreateProject: ((String) -> Unit)? = null,
+    onCreateTask: ((String, String) -> Unit)? = null,
 ) {
     // Determine current selection
     val selection = remember(selectedProjectId, selectedTaskId, projects, tasks) {
@@ -2354,7 +2356,10 @@ internal fun ProjectTaskDropdown(
         onSelectionChanged = onSelectionChanged,
         enabled = enabled,
         showProjectColors = true,
-        rounded = true
+        rounded = true,
+        selectedProjectId = selectedProjectId,
+        onCreateProject = onCreateProject,
+        onCreateTask = onCreateTask,
     )
 }
 
@@ -2367,7 +2372,8 @@ internal fun TagsSelector(
     selectedTagIds: List<String>,
     availableTags: List<Tag>,
     onTagsChanged: (List<String>) -> Unit,
-    enabled: Boolean
+    enabled: Boolean,
+    onCreateTag: ((String) -> Unit)? = null,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
@@ -2399,6 +2405,15 @@ internal fun TagsSelector(
                     shape = RoundedCornerShape(6.dp),
                     modifier = Modifier.testTag(EditTimeEntryTestTags.tagChip(tag.id)),
                 )
+            }
+        }
+        onCreateTag?.let { createTag ->
+            OutlinedButton(
+                onClick = { createTag("") },
+                enabled = enabled,
+                modifier = Modifier.testTag(EditTimeEntryTestTags.CREATE_TAG),
+            ) {
+                Text(stringResource(R.string.create_tag))
             }
         }
     }

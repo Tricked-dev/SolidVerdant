@@ -7,10 +7,19 @@
 package dev.tricked.solidverdant.data.model
 
 import androidx.compose.runtime.Stable
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonTransformingSerializer
@@ -176,10 +185,28 @@ data class Project(
     @SerialName("estimated_time")
     val estimatedTime: Int? = null,
     @SerialName("spent_time")
+    @Serializable(with = NullToZeroIntSerializer::class)
     val spentTime: Int = 0,
     @SerialName("is_public")
     val isPublic: Boolean = false,
 )
+
+/** Solidtime returns null spent time for a newly created project or task. */
+object NullToZeroIntSerializer : KSerializer<Int> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("NullToZeroInt", PrimitiveKind.INT)
+
+    override fun serialize(encoder: Encoder, value: Int) = encoder.encodeInt(value)
+
+    override fun deserialize(decoder: Decoder): Int {
+        if (decoder !is JsonDecoder) return decoder.decodeInt()
+        val element = decoder.decodeJsonElement()
+        return when (element) {
+            JsonNull -> 0
+            is JsonPrimitive -> element.content.toIntOrNull() ?: throw SerializationException("Expected an integer spent time")
+            else -> throw SerializationException("Expected an integer spent time")
+        }
+    }
+}
 
 @Stable
 @Serializable
@@ -200,6 +227,7 @@ data class Task(
     @SerialName("estimated_time")
     val estimatedTime: Int? = null,
     @SerialName("spent_time")
+    @Serializable(with = NullToZeroIntSerializer::class)
     val spentTime: Int = 0,
     @SerialName("created_at")
     val createdAt: String,
@@ -226,6 +254,32 @@ data class TasksResponse(val data: List<Task>, val meta: TimeEntriesMeta? = null
  */
 @Serializable
 data class TagsResponse(val data: List<Tag>, val meta: TimeEntriesMeta? = null)
+
+/** Small catalogue writes used by the calendar editor's inline creation affordances. */
+@Serializable
+data class CreateProjectRequest(
+    val name: String,
+    val color: String = DEFAULT_PROJECT_COLOR,
+    @SerialName("client_id") val clientId: String? = null,
+    @SerialName("is_billable") val isBillable: Boolean = false,
+)
+
+@Serializable
+data class CreateClientRequest(val name: String)
+
+@Serializable
+data class CreateTaskRequest(val name: String, @SerialName("project_id") val projectId: String)
+
+@Serializable
+data class CreateTagRequest(val name: String)
+
+@Serializable data class ProjectResponse(val data: Project)
+
+@Serializable data class ClientResponse(val data: Client)
+
+@Serializable data class TaskResponse(val data: Task)
+
+@Serializable data class TagResponse(val data: Tag)
 
 /**
  * Response wrapper for multiple time entries
@@ -259,3 +313,5 @@ data class UpdateTimeEntryRequest(
     val tags: List<String> = emptyList(),
     val type: TimeEntryType = TimeEntryType.WORK,
 )
+
+private const val DEFAULT_PROJECT_COLOR = "#6366f1"

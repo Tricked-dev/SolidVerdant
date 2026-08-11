@@ -76,6 +76,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
@@ -102,11 +103,16 @@ fun CalendarScreen(
     initialDate: LocalDate? = null,
     onInitialDateConsumed: () -> Unit = {},
     projects: List<Project>,
+    clients: List<Client> = emptyList(),
     tasks: List<Task>,
     tags: List<Tag>,
     onSaveEntry: (TimeEntry, String?, String?, String?, List<String>, Boolean, String, String?) -> Unit,
     onMoveEntry: (TimeEntry, String, String) -> Unit = { _, _, _ -> },
     onCreateEntry: (String?, String?, String?, List<String>, Boolean, String, String) -> Unit = { _, _, _, _, _, _, _ -> },
+    onCreateProject: ((String, String?, (Result<Project>) -> Unit) -> Unit)? = null,
+    onCreateClient: ((String, (Result<Client>) -> Unit) -> Unit)? = null,
+    onCreateTask: ((String, String, (Result<Task>) -> Unit) -> Unit)? = null,
+    onCreateTag: ((String, (Result<Tag>) -> Unit) -> Unit)? = null,
     breaksEnabled: Boolean = false,
     onCreateBreakEntry: (String?, String, String) -> Unit = { _, _, _ -> },
     onDeleteEntry: (TimeEntry) -> Unit = {},
@@ -243,6 +249,7 @@ fun CalendarScreen(
                         state = state,
                         viewModel = viewModel,
                         projects = projects,
+                        clients = clients,
                         tasks = tasks,
                         onEntryClick = { editing = it },
                         onEntryLongPress = { contextEntry = it },
@@ -263,6 +270,11 @@ fun CalendarScreen(
     contextEntry?.let { entry ->
         CalendarEntryActionsSheet(
             entry = entry,
+            project = projects.firstOrNull { it.id == entry.projectId },
+            task = tasks.firstOrNull { it.id == entry.taskId },
+            client = projects.firstOrNull { it.id == entry.projectId }?.clientId?.let { clientId ->
+                clients.firstOrNull { it.id == clientId }
+            },
             syncOperation = syncOperationByEntryId[entry.id],
             sheetState = entryActionsSheetState,
             onDismiss = { contextEntry = null },
@@ -318,6 +330,7 @@ fun CalendarScreen(
             entry = entry,
             zone = state.zone,
             projects = projects,
+            clients = clients,
             tasks = tasks,
             tags = tags,
             onDismiss = { editing = null },
@@ -328,6 +341,10 @@ fun CalendarScreen(
             existingEntries = state.bucketsByDate.values.flatMap { it.entries }.distinctBy { it.id },
             preventOverlap = preventOverlap,
             isBreak = entry.type == TimeEntryType.BREAK,
+            onCreateProject = onCreateProject,
+            onCreateClient = onCreateClient,
+            onCreateTask = onCreateTask,
+            onCreateTag = onCreateTag,
             onDelete = {
                 editing = null
                 deleteTarget = entry
@@ -340,12 +357,17 @@ fun CalendarScreen(
             entry = null,
             zone = state.zone,
             projects = projects,
+            clients = clients,
             tasks = tasks,
             tags = tags,
             suggestedStart = range.start,
             suggestedEnd = range.end,
             existingEntries = state.bucketsByDate.values.flatMap { it.entries }.distinctBy { it.id },
             preventOverlap = preventOverlap,
+            onCreateProject = onCreateProject,
+            onCreateClient = onCreateClient,
+            onCreateTask = onCreateTask,
+            onCreateTag = onCreateTag,
             onDismiss = { creatingRange = null },
             onSave = { desc, projectId, taskId, tagIds, billable, start, end ->
                 end?.let {
@@ -361,6 +383,7 @@ fun CalendarScreen(
             entry = null,
             zone = state.zone,
             projects = emptyList(),
+            clients = emptyList(),
             tasks = emptyList(),
             tags = emptyList(),
             suggestedStart = range.start,
@@ -452,6 +475,9 @@ fun CalendarScreen(
 @Composable
 private fun CalendarEntryActionsSheet(
     entry: TimeEntry,
+    project: Project?,
+    task: Task?,
+    client: Client?,
     syncOperation: TimeEntryRepository.SyncOperation?,
     sheetState: androidx.compose.material3.SheetState,
     onDismiss: () -> Unit,
@@ -484,6 +510,25 @@ private fun CalendarEntryActionsSheet(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = Dimens.Space4),
             )
+            calendarEntryMetadata(entry, project?.name, task?.name, client?.name).let { metadata ->
+                metadata.subtitle?.let { subtitle ->
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = Dimens.Space4),
+                    )
+                }
+                metadata.durationSeconds?.let { duration ->
+                    Text(
+                        text = "${stringResource(R.string.total_time)}: ${formatDuration(duration)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             Spacer(Modifier.heightIn(min = Dimens.Space8))
             syncOperation?.let { operation ->
                 Column(
@@ -883,6 +928,7 @@ private fun CalendarBody(
     state: CalendarUiState,
     viewModel: CalendarViewModel,
     projects: List<Project>,
+    clients: List<Client>,
     tasks: List<Task>,
     onEntryClick: (TimeEntry) -> Unit,
     onEntryLongPress: (TimeEntry) -> Unit,
@@ -904,6 +950,7 @@ private fun CalendarBody(
             onCreateRange = onCreateRange,
             projects = projects,
             tasks = tasks,
+            clients = clients,
             modifier = modifier.fillMaxWidth(),
         )
 
@@ -928,6 +975,8 @@ private fun CalendarBody(
                 onNext = viewModel::pageForward,
                 onToday = viewModel::jumpToToday,
                 projects = projects,
+                tasks = tasks,
+                clients = clients,
             )
         }
     }

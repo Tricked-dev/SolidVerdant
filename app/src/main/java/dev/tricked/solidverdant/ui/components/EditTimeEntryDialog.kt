@@ -35,15 +35,19 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTimePickerState
@@ -62,6 +66,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
@@ -85,6 +90,7 @@ fun EditTimeEntryDialog(
     entry: TimeEntry?,
     zone: ZoneId,
     projects: List<Project>,
+    clients: List<Client> = emptyList(),
     tasks: List<Task>,
     tags: List<Tag>,
     onDismiss: () -> Unit,
@@ -96,6 +102,10 @@ fun EditTimeEntryDialog(
     suggestedEnd: ZonedDateTime? = null,
     onDelete: (() -> Unit)? = null,
     isBreak: Boolean = false,
+    onCreateProject: ((String, String?, (Result<Project>) -> Unit) -> Unit)? = null,
+    onCreateClient: ((String, (Result<Client>) -> Unit) -> Unit)? = null,
+    onCreateTask: ((String, String, (Result<Task>) -> Unit) -> Unit)? = null,
+    onCreateTag: ((String, (Result<Tag>) -> Unit) -> Unit)? = null,
 ) {
     var description by remember(entry?.id) { mutableStateOf(entry?.description ?: "") }
     var projectId by remember(entry?.id) { mutableStateOf(entry?.projectId) }
@@ -127,6 +137,12 @@ fun EditTimeEntryDialog(
     }
     var editingTime by remember { mutableStateOf<TimeField?>(null) }
     var editingDate by remember { mutableStateOf<TimeField?>(null) }
+    var catalogCreation by remember(entry?.id) { mutableStateOf<CatalogCreationRequest?>(null) }
+    var catalogName by remember(entry?.id) { mutableStateOf("") }
+    var catalogClientId by remember(entry?.id) { mutableStateOf<String?>(null) }
+    var catalogError by remember(entry?.id) { mutableStateOf<String?>(null) }
+    var catalogSaving by remember(entry?.id) { mutableStateOf(false) }
+    var returnToProjectName by remember(entry?.id) { mutableStateOf("") }
     val durationIsValid = isRunningEntry || durationMinutes.toLongOrNull()?.let { it > 0 } == true
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -164,6 +180,24 @@ fun EditTimeEntryDialog(
         val safeMinutes = minutes.coerceAtLeast(1)
         durationMinutes = safeMinutes.toString()
         endTime = startTime.plusMinutes(safeMinutes)
+    }
+
+    fun beginCatalogCreation(
+        kind: CatalogCreationKind,
+        suggestedName: String,
+        projectId: String? = null,
+        returnToProject: Boolean = false,
+    ) {
+        catalogCreation = CatalogCreationRequest(
+            kind = kind,
+            projectId = projectId,
+            returnToProject = returnToProject,
+        )
+        catalogName = suggestedName
+        catalogClientId = null
+        catalogError = null
+        catalogSaving = false
+        if (!returnToProject) returnToProjectName = ""
     }
 
     val sheetContent: @Composable () -> Unit = {
@@ -342,14 +376,21 @@ fun EditTimeEntryDialog(
                         taskId = newTaskId
                     },
                     enabled = true,
+                    onCreateProject = onCreateProject?.let { { name -> beginCatalogCreation(CatalogCreationKind.PROJECT, name) } },
+                    onCreateTask = onCreateTask?.let {
+                        { name, selectedId ->
+                            beginCatalogCreation(CatalogCreationKind.TASK, name, selectedId)
+                        }
+                    },
                 )
 
-                if (tags.isNotEmpty()) {
+                if (tags.isNotEmpty() || onCreateTag != null) {
                     TagsSelector(
                         selectedTagIds = selectedTags,
                         availableTags = tags,
                         onTagsChanged = { selectedTags = it },
                         enabled = true,
+                        onCreateTag = onCreateTag?.let { { name -> beginCatalogCreation(CatalogCreationKind.TAG, name) } },
                     )
                 }
 
@@ -501,9 +542,199 @@ fun EditTimeEntryDialog(
             },
         )
     }
+
+    catalogCreation?.let { request ->
+        val catalogueCreateFailed = stringResource(R.string.catalogue_create_failed)
+        val title = when (request.kind) {
+            CatalogCreationKind.CLIENT -> R.string.create_client
+            CatalogCreationKind.PROJECT -> R.string.create_project
+            CatalogCreationKind.TASK -> R.string.create_task
+            CatalogCreationKind.TAG -> R.string.create_tag
+        }
+        val canSave = catalogName.trim().isNotEmpty() &&
+            (request.kind != CatalogCreationKind.TASK || !request.projectId.isNullOrBlank()) &&
+            !catalogSaving
+        AlertDialog(
+            onDismissRequest = {
+                if (!catalogSaving) {
+                    catalogCreation = null
+                    catalogError = null
+                }
+            },
+            title = { Text(stringResource(title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = catalogName,
+                        onValueChange = {
+                            catalogName = it
+                            catalogError = null
+                        },
+                        label = { Text(stringResource(R.string.catalogue_name)) },
+                        singleLine = true,
+                        enabled = !catalogSaving,
+                        modifier = Modifier.fillMaxWidth().testTag(EditTimeEntryTestTags.CATALOGUE_NAME),
+                    )
+                    if (request.kind == CatalogCreationKind.PROJECT) {
+                        CatalogClientPicker(
+                            clients = clients,
+                            selectedClientId = catalogClientId,
+                            enabled = !catalogSaving,
+                            onSelected = { catalogClientId = it },
+                            onCreateClient = onCreateClient?.let {
+                                {
+                                    returnToProjectName = catalogName
+                                    beginCatalogCreation(CatalogCreationKind.CLIENT, "", returnToProject = true)
+                                }
+                            },
+                        )
+                    }
+                    catalogError?.let { error ->
+                        Text(
+                            text = error,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.testTag(EditTimeEntryTestTags.CATALOGUE_CREATE_ERROR),
+                        )
+                    }
+                    if (catalogSaving) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val safeName = catalogName.trim()
+                        catalogSaving = true
+                        when (request.kind) {
+                            CatalogCreationKind.CLIENT -> onCreateClient?.invoke(safeName) { result ->
+                                result.onSuccess { client ->
+                                    catalogSaving = false
+                                    if (request.returnToProject) {
+                                        catalogClientId = client.id
+                                        catalogName = returnToProjectName
+                                        catalogCreation = CatalogCreationRequest(CatalogCreationKind.PROJECT)
+                                    } else {
+                                        catalogCreation = null
+                                    }
+                                }.onFailure { error ->
+                                    catalogSaving = false
+                                    catalogError = catalogueCreateFailed
+                                }
+                            }
+                            CatalogCreationKind.PROJECT -> onCreateProject?.invoke(safeName, catalogClientId) { result ->
+                                result.onSuccess { project ->
+                                    projectId = project.id
+                                    taskId = null
+                                    catalogSaving = false
+                                    catalogCreation = null
+                                }.onFailure { error ->
+                                    catalogSaving = false
+                                    catalogError = catalogueCreateFailed
+                                }
+                            }
+                            CatalogCreationKind.TASK -> onCreateTask?.invoke(safeName, requireNotNull(request.projectId)) { result ->
+                                result.onSuccess { task ->
+                                    projectId = task.projectId
+                                    taskId = task.id
+                                    catalogSaving = false
+                                    catalogCreation = null
+                                }.onFailure { error ->
+                                    catalogSaving = false
+                                    catalogError = catalogueCreateFailed
+                                }
+                            }
+                            CatalogCreationKind.TAG -> onCreateTag?.invoke(safeName) { result ->
+                                result.onSuccess { tag ->
+                                    selectedTags = (selectedTags + tag.id).distinct()
+                                    catalogSaving = false
+                                    catalogCreation = null
+                                }.onFailure { error ->
+                                    catalogSaving = false
+                                    catalogError = catalogueCreateFailed
+                                }
+                            }
+                        }
+                    },
+                    enabled = canSave,
+                    modifier = Modifier.testTag(EditTimeEntryTestTags.CATALOGUE_CREATE_CONFIRM),
+                ) {
+                    Text(stringResource(R.string.create))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        catalogCreation = null
+                        catalogError = null
+                    },
+                    enabled = !catalogSaving,
+                ) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
 }
 
 private enum class TimeField { Start, End }
+
+private enum class CatalogCreationKind { CLIENT, PROJECT, TASK, TAG }
+
+private data class CatalogCreationRequest(
+    val kind: CatalogCreationKind,
+    val projectId: String? = null,
+    val returnToProject: Boolean = false,
+)
+
+@Composable
+private fun CatalogClientPicker(
+    clients: List<Client>,
+    selectedClientId: String?,
+    enabled: Boolean,
+    onSelected: (String?) -> Unit,
+    onCreateClient: (() -> Unit)?,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedName = clients.firstOrNull { it.id == selectedClientId }?.name
+        ?: stringResource(R.string.no_client)
+    Box {
+        OutlinedButton(
+            onClick = { expanded = true },
+            enabled = enabled,
+            modifier = Modifier.fillMaxWidth().testTag(EditTimeEntryTestTags.CLIENT_PICKER),
+        ) {
+            Text("${stringResource(R.string.client)}: $selectedName")
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.no_client)) },
+                onClick = {
+                    onSelected(null)
+                    expanded = false
+                },
+            )
+            clients.filterNot { it.isArchived }.forEach { client ->
+                DropdownMenuItem(
+                    text = { Text(client.name) },
+                    onClick = {
+                        onSelected(client.id)
+                        expanded = false
+                    },
+                )
+            }
+            onCreateClient?.let { createClient ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.create_client)) },
+                    onClick = {
+                        expanded = false
+                        createClient()
+                    },
+                    modifier = Modifier.testTag(EditTimeEntryTestTags.CREATE_CLIENT),
+                )
+            }
+        }
+    }
+}
 
 @Composable
 private fun TimeFieldButton(label: String, value: ZonedDateTime, onClick: () -> Unit, modifier: Modifier = Modifier) {

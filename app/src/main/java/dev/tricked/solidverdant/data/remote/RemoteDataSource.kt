@@ -32,6 +32,14 @@ interface RemoteDataSource {
     suspend fun getClients(organizationId: String): Result<List<Client>>
     suspend fun getTasks(organizationId: String): Result<List<Task>>
     suspend fun getTags(organizationId: String): Result<List<Tag>>
+    suspend fun createProject(organizationId: String, name: String, clientId: String? = null): Result<Project> =
+        Result.failure(UnsupportedOperationException("Project creation is unavailable"))
+    suspend fun createClient(organizationId: String, name: String): Result<Client> =
+        Result.failure(UnsupportedOperationException("Client creation is unavailable"))
+    suspend fun createTask(organizationId: String, name: String, projectId: String): Result<Task> =
+        Result.failure(UnsupportedOperationException("Task creation is unavailable"))
+    suspend fun createTag(organizationId: String, name: String): Result<Tag> =
+        Result.failure(UnsupportedOperationException("Tag creation is unavailable"))
     suspend fun getActiveTimeEntry(): Result<TimeEntry?>
     suspend fun getMyMemberships(): Result<List<Membership>>
     suspend fun startTimeEntry(
@@ -78,6 +86,12 @@ class AuthRemoteDataSource @Inject constructor(private val authRepository: AuthR
     override suspend fun getClients(organizationId: String) = authRepository.getClients(organizationId)
     override suspend fun getTasks(organizationId: String) = authRepository.getTasks(organizationId)
     override suspend fun getTags(organizationId: String) = authRepository.getTags(organizationId)
+    override suspend fun createProject(organizationId: String, name: String, clientId: String?) =
+        authRepository.createProject(organizationId, name, clientId)
+    override suspend fun createClient(organizationId: String, name: String) = authRepository.createClient(organizationId, name)
+    override suspend fun createTask(organizationId: String, name: String, projectId: String) =
+        authRepository.createTask(organizationId, name, projectId)
+    override suspend fun createTag(organizationId: String, name: String) = authRepository.createTag(organizationId, name)
     override suspend fun getActiveTimeEntry() = authRepository.getActiveTimeEntry()
     override suspend fun getMyMemberships() = authRepository.getMyMemberships()
     override suspend fun startTimeEntry(

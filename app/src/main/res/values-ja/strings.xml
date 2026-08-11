@@ -154,8 +154,18 @@
     <string name="project_task">プロジェクト / タスク</string>
     <string name="search_placeholder">検索…</string>
     <string name="no_project">プロジェクトなし</string>
+    <string name="no_client">クライアントなし</string>
     <string name="description_optional">説明（任意）</string>
     <string name="no_results_found">結果が見つかりません</string>
+    <string name="create">作成</string>
+    <string name="create_client">クライアントを作成</string>
+    <string name="create_project">プロジェクトを作成</string>
+    <string name="create_task">タスクを作成</string>
+    <string name="create_tag">タグを作成</string>
+    <string name="create_project_named">プロジェクト「%1$s」を作成</string>
+    <string name="create_task_named">タスク「%1$s」を作成</string>
+    <string name="catalogue_name">名前</string>
+    <string name="catalogue_create_failed">カタログ項目を作成できませんでした。</string>
 
     <!-- New Features -->
     <string name="description">説明</string>

@@ -164,8 +164,18 @@
     <string name="project_task">Project / Taak</string>
     <string name="search_placeholder">Zoeken…</string>
     <string name="no_project">Geen Project</string>
+    <string name="no_client">Geen klant</string>
     <string name="description_optional">Beschrijving (Optioneel)</string>
     <string name="no_results_found">Geen resultaten gevonden</string>
+    <string name="create">Maken</string>
+    <string name="create_client">Klant maken</string>
+    <string name="create_project">Project maken</string>
+    <string name="create_task">Taak maken</string>
+    <string name="create_tag">Tag maken</string>
+    <string name="create_project_named">Project “%1$s” maken</string>
+    <string name="create_task_named">Taak “%1$s” maken</string>
+    <string name="catalogue_name">Naam</string>
+    <string name="catalogue_create_failed">Dit catalogusitem kon niet worden gemaakt.</string>
 
     <!-- New Features -->
     <string name="description">Beschrijving</string>

@@ -7,16 +7,24 @@
 package dev.tricked.solidverdant.e2e.mock
 
 import dev.tricked.solidverdant.data.model.Client
+import dev.tricked.solidverdant.data.model.ClientResponse
 import dev.tricked.solidverdant.data.model.ClientsResponse
+import dev.tricked.solidverdant.data.model.CreateClientRequest
+import dev.tricked.solidverdant.data.model.CreateProjectRequest
+import dev.tricked.solidverdant.data.model.CreateTagRequest
+import dev.tricked.solidverdant.data.model.CreateTaskRequest
 import dev.tricked.solidverdant.data.model.Membership
 import dev.tricked.solidverdant.data.model.MembershipsResponse
 import dev.tricked.solidverdant.data.model.Organization
 import dev.tricked.solidverdant.data.model.Project
+import dev.tricked.solidverdant.data.model.ProjectResponse
 import dev.tricked.solidverdant.data.model.ProjectsResponse
 import dev.tricked.solidverdant.data.model.StartTimeEntryRequest
 import dev.tricked.solidverdant.data.model.Tag
+import dev.tricked.solidverdant.data.model.TagResponse
 import dev.tricked.solidverdant.data.model.TagsResponse
 import dev.tricked.solidverdant.data.model.Task
+import dev.tricked.solidverdant.data.model.TaskResponse
 import dev.tricked.solidverdant.data.model.TasksResponse
 import dev.tricked.solidverdant.data.model.TimeEntriesMeta
 import dev.tricked.solidverdant.data.model.TimeEntriesResponse
@@ -81,6 +89,7 @@ class MockSolidtimeServer {
     var activeEntry: TimeEntry? = null
 
     private var timeEntriesRequestsFailing = false
+    private var catalogueWritesFailing = false
     private var nextTimeEntriesResponseGate: CountDownLatch? = null
     private val responseGate = ThreadLocal<CountDownLatch?>()
 
@@ -129,6 +138,7 @@ class MockSolidtimeServer {
         timeEntries.clear()
         seededEntry?.let { timeEntries += it }
         timeEntriesRequestsFailing = false
+        catalogueWritesFailing = false
     }
 
     fun addTimeEntry(entry: TimeEntry) {
@@ -202,6 +212,11 @@ class MockSolidtimeServer {
         synchronized(lock) { timeEntriesRequestsFailing = failing }
     }
 
+    /** Make catalogue POSTs fail until the test restores the healthy response path. */
+    fun setCatalogueWritesFailing(failing: Boolean) {
+        synchronized(lock) { catalogueWritesFailing = failing }
+    }
+
     /** Hold one history response until the test has completed a concurrent local edit and sync. */
     fun delayNextTimeEntriesResponseUntilReleased(): CountDownLatch = CountDownLatch(1).also { gate ->
         synchronized(lock) { nextTimeEntriesResponseGate = gate }
@@ -244,6 +259,18 @@ class MockSolidtimeServer {
         method == "GET" && path == "/api/v1/users/me/time-entries/active" ->
             ok(json.encodeToString(TimeEntryResponse(data = activeEntry)))
 
+        method == "POST" && path.endsWith("/projects") ->
+            handleCreateProject(organizationIdFromPath(path), body)
+
+        method == "POST" && path.endsWith("/tasks") ->
+            handleCreateTask(organizationIdFromPath(path), body)
+
+        method == "POST" && path.endsWith("/tags") ->
+            handleCreateTag(organizationIdFromPath(path), body)
+
+        method == "POST" && path.endsWith("/clients") ->
+            handleCreateClient(organizationIdFromPath(path), body)
+
         method == "GET" && path.endsWith("/projects") ->
             ok(json.encodeToString(ProjectsResponse(data = projects.toList())))
 
@@ -279,6 +306,58 @@ class MockSolidtimeServer {
         }
 
         else -> notFound()
+    }
+
+    private fun organizationIdFromPath(path: String): String = path.substringAfter("/organizations/").substringBefore("/")
+
+    private fun handleCreateProject(organizationId: String, body: String): MockResponse {
+        if (catalogueWritesFailing) return serviceUnavailable()
+        val request = runCatching { json.decodeFromString<CreateProjectRequest>(body) }.getOrNull()
+            ?: return validationError("name")
+        val project = Project(
+            id = "project-${idCounter.getAndIncrement()}",
+            name = request.name,
+            color = request.color,
+            clientId = request.clientId,
+            isBillable = request.isBillable,
+            isPublic = false,
+        )
+        projects += project
+        return created(json.encodeToString(ProjectResponse(data = project)))
+    }
+
+    private fun handleCreateClient(organizationId: String, body: String): MockResponse {
+        if (catalogueWritesFailing) return serviceUnavailable()
+        val request = runCatching { json.decodeFromString<CreateClientRequest>(body) }.getOrNull()
+            ?: return validationError("name")
+        val client = Client(id = "client-${idCounter.getAndIncrement()}", name = request.name)
+        clients += client
+        return created(json.encodeToString(ClientResponse(data = client)))
+    }
+
+    private fun handleCreateTask(organizationId: String, body: String): MockResponse {
+        if (catalogueWritesFailing) return serviceUnavailable()
+        val request = runCatching { json.decodeFromString<CreateTaskRequest>(body) }.getOrNull()
+            ?: return validationError("name")
+        val now = "2026-08-11T00:00:00Z"
+        val task = Task(
+            id = "task-${idCounter.getAndIncrement()}",
+            name = request.name,
+            projectId = request.projectId,
+            createdAt = now,
+            updatedAt = now,
+        )
+        tasks += task
+        return created(json.encodeToString(TaskResponse(data = task)))
+    }
+
+    private fun handleCreateTag(organizationId: String, body: String): MockResponse {
+        if (catalogueWritesFailing) return serviceUnavailable()
+        val request = runCatching { json.decodeFromString<CreateTagRequest>(body) }.getOrNull()
+            ?: return validationError("name")
+        val tag = Tag(id = "tag-${idCounter.getAndIncrement()}", name = request.name)
+        tags += tag
+        return created(json.encodeToString(TagResponse(data = tag)))
     }
 
     /**
@@ -386,6 +465,8 @@ class MockSolidtimeServer {
         .setResponseCode(200)
         .setHeader("Content-Type", "application/json")
         .setBody(bodyJson)
+
+    private fun created(bodyJson: String): MockResponse = ok(bodyJson).setResponseCode(201)
 
     private fun notFound(): MockResponse = MockResponse().setResponseCode(404).setBody("""{"message":"not found"}""")
 

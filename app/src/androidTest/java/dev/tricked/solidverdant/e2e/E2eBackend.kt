@@ -7,6 +7,7 @@
 package dev.tricked.solidverdant.e2e
 
 import android.content.Context
+import dev.tricked.solidverdant.data.model.Client
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
@@ -36,7 +37,7 @@ data class E2eSession(
 )
 
 /** Catalogue records available to the selected Solidtime account for metadata-edit workflows. */
-data class E2eCatalog(val projects: List<Project>, val tasks: List<Task>, val tags: List<Tag>)
+data class E2eCatalog(val projects: List<Project>, val tasks: List<Task>, val tags: List<Tag>, val clients: List<Client> = emptyList())
 
 /** A complete initial server world for one portable flow. */
 sealed interface E2eFixture {
@@ -127,6 +128,7 @@ internal class MockE2eBackend : E2eBackend {
         projects = synchronized(server.projects) { server.projects.toList() },
         tasks = synchronized(server.tasks) { server.tasks.toList() },
         tags = synchronized(server.tags) { server.tags.toList() },
+        clients = synchronized(server.clients) { server.clients.toList() },
     )
 
     override suspend fun snapshot(): E2eServerSnapshot {
@@ -168,11 +170,14 @@ internal class MockE2eBackend : E2eBackend {
     )
 
     private fun presetTestCatalogue() {
+        server.clients.clear()
+        server.clients += Client(TEST_CLIENT_ID, "Live Test Client")
         server.projects.clear()
         server.projects += Project(
             id = TEST_PROJECT_ID,
             name = "Live Test Project",
             color = "#4F46E5",
+            clientId = TEST_CLIENT_ID,
             isPublic = true,
             isBillable = true,
         )
@@ -189,6 +194,7 @@ internal class MockE2eBackend : E2eBackend {
     }
 
     companion object {
+        private const val TEST_CLIENT_ID = "live-test-client"
         private const val TEST_PROJECT_ID = "live-test-project"
         private const val TEST_TASK_ID = "live-test-task"
         private const val TEST_TAG_ID = "live-test-tag"
@@ -216,6 +222,7 @@ internal class RealSolidtimeE2eBackend(private val context: Context, private val
         projects = controlCallRetrier.run { remoteDataSource.getProjects(session.organizationId) },
         tasks = controlCallRetrier.run { remoteDataSource.getTasks(session.organizationId) },
         tags = controlCallRetrier.run { remoteDataSource.getTags(session.organizationId) },
+        clients = controlCallRetrier.run { remoteDataSource.getClients(session.organizationId) },
     )
 
     override suspend fun snapshot(): E2eServerSnapshot = E2eServerSnapshot(

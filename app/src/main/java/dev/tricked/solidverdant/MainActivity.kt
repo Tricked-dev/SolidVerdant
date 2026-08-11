@@ -465,6 +465,7 @@ fun SolidVerdantApp(
                             initialDate = calendarInitialDate,
                             onInitialDateConsumed = onCalendarInitialDateConsumed,
                             projects = trackingUiState.projects,
+                            clients = trackingUiState.clients,
                             tasks = trackingUiState.tasks,
                             tags = trackingUiState.tags,
                             breaksEnabled = currentMembership.organization.breaksEnabled,
@@ -524,6 +525,36 @@ fun SolidVerdantApp(
                                         end = end,
                                     )
                                 }
+                            },
+                            onCreateProject = { name, clientId, onResult ->
+                                trackingViewModel.createCalendarProject(
+                                    currentMembership.organizationId,
+                                    name,
+                                    clientId,
+                                    onResult,
+                                )
+                            },
+                            onCreateClient = { name, onResult ->
+                                trackingViewModel.createCalendarClient(
+                                    currentMembership.organizationId,
+                                    name,
+                                    onResult,
+                                )
+                            },
+                            onCreateTask = { name, projectId, onResult ->
+                                trackingViewModel.createCalendarTask(
+                                    currentMembership.organizationId,
+                                    name,
+                                    projectId,
+                                    onResult,
+                                )
+                            },
+                            onCreateTag = { name, onResult ->
+                                trackingViewModel.createCalendarTag(
+                                    currentMembership.organizationId,
+                                    name,
+                                    onResult,
+                                )
                             },
                             onDeleteEntry = trackingViewModel::deleteTimeEntry,
                             onDuplicateEntry = trackingViewModel::duplicateTimeEntry,

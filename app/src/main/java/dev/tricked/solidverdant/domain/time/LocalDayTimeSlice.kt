@@ -85,7 +85,8 @@ fun resolveTimeEntryInterval(entry: TimeEntry, now: Instant): Pair<Instant, Inst
 
 /** Solidtime represents a running timer with no end and a null or zero duration. */
 fun isRunningTimeEntry(entry: TimeEntry): Boolean = entry.type == TimeEntryType.WORK &&
-    entry.end == null && (entry.duration ?: 0) <= 0
+    entry.end == null &&
+    (entry.duration ?: 0) <= 0
 
 /** Breaks are completed calendar intervals and never count as active work timers. */
 fun isBreakTimeEntry(entry: TimeEntry): Boolean = entry.type == TimeEntryType.BREAK
