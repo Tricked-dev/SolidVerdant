@@ -19,7 +19,8 @@ import javax.inject.Singleton
  */
 @Singleton
 class TestClock @Inject constructor() : Clock {
-    // 2026-07-07T00:00:00Z, matching the harness's fixed "today".
+    // 2026-07-07T12:00:00Z, matching the harness's fixed "today" while keeping the default
+    // two-hour fixture interval inside the visible day on narrow three-day calendars.
     @Volatile
     var nowMs: Long = DEFAULT_NOW_MS
 
@@ -34,6 +35,6 @@ class TestClock @Inject constructor() : Clock {
     }
 
     companion object {
-        const val DEFAULT_NOW_MS: Long = 1_783_382_400_000L // 2026-07-07T00:00:00Z
+        const val DEFAULT_NOW_MS: Long = 1_783_425_600_000L // 2026-07-07T12:00:00Z
     }
 }

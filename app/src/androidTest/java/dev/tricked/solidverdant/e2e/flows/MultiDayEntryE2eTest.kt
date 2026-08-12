@@ -27,6 +27,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
@@ -98,7 +99,7 @@ class MultiDayEntryE2eTest {
     @Test
     fun shorteningMultiDayEntryToOneDaySyncsWithSolidtimeUtcTimestamps() {
         val zone = e2e.session.zone
-        val startDate = YearMonth.now(zone).atDay(1)
+        val startDate = testMonth(zone).atDay(1)
         val start = startDate.atTime(10, 0).atZone(zone).toInstant()
         val originalEnd = start.plusSeconds(48 * 60 * 60L)
         val entry = TimeEntry(
@@ -137,7 +138,7 @@ class MultiDayEntryE2eTest {
     @Test
     fun shorteningOneAndAHalfDayEntryToOneDayByDurationSyncsWithSolidtime() {
         val zone = e2e.session.zone
-        val startDate = YearMonth.now(zone).atDay(1)
+        val startDate = testMonth(zone).atDay(1)
         val start = startDate.atTime(10, 0).atZone(zone).toInstant()
         val entry = TimeEntry(
             id = ENTRY_ID,
@@ -175,7 +176,7 @@ class MultiDayEntryE2eTest {
     fun delayedRefreshCannotRestoreTheOldDurationAfterEditSyncs() {
         val mock = e2e.requireMockBackend()
         val zone = e2e.session.zone
-        val startDate = YearMonth.now(zone).atDay(1)
+        val startDate = testMonth(zone).atDay(1)
         val start = startDate.atTime(10, 0).atZone(zone).toInstant()
         val oldEnd = start.plusSeconds(36 * 60 * 60L)
         val newEnd = start.plusSeconds(24 * 60 * 60L)
@@ -240,7 +241,7 @@ class MultiDayEntryE2eTest {
     }
 
     private fun multiDayFixture(zone: ZoneId): MultiDayFixture {
-        val startDate = YearMonth.now(zone).atDay(1)
+        val startDate = testMonth(zone).atDay(1)
         val start = startDate.atTime(23, 0).atZone(zone).toInstant()
         val end = start.plusSeconds(MULTI_DAY_SECONDS.toLong())
         return MultiDayFixture(
@@ -258,6 +259,10 @@ class MultiDayEntryE2eTest {
     }
 
     private data class MultiDayFixture(val startDate: LocalDate, val entry: TimeEntry)
+
+    private fun testMonth(zone: ZoneId): YearMonth = YearMonth.from(
+        Instant.ofEpochMilli(e2e.testClock.nowMs).atZone(zone),
+    )
 
     companion object {
         private const val ENTRY_ID = "multi-day-entry"

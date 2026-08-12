@@ -32,7 +32,7 @@ class SyncDetailsNavigationE2eTest {
             E2eFixture.Completed(
                 e2e.completedFixtureEntry(
                     logicalId = "sync-details-entry",
-                    start = Instant.now().minusSeconds(3_600),
+                    start = Instant.ofEpochMilli(e2e.testClock.nowMs).minusSeconds(3_600),
                 ),
             ),
         )

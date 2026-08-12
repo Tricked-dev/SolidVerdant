@@ -107,6 +107,7 @@ class CalendarViewModel @Inject constructor(
     private var syncOperationsJob: Job? = null
     private var visibleLoadJob: Job? = null
     private var visibleLoadGeneration = 0L
+    private var calendarSettingsWritesInFlight = 0
 
     // Account temporal policy (zone + week start). Seeded synchronously from the provider's cached
     // read so the first frame already uses the account zone/week-start (see StatisticsViewModel);
@@ -188,7 +189,12 @@ class CalendarViewModel @Inject constructor(
                         .getOrDefault(CalendarGridDensity.COMFORTABLE),
                 ).normalized()
             }.collect { settings ->
-                _uiState.update { it.copy(calendarSettings = settings) }
+                // A DataStore collector can deliver its initial default after an optimistic
+                // control tap. Do not let that stale emission roll the visible selection back
+                // while a user change is still being persisted.
+                if (calendarSettingsWritesInFlight == 0) {
+                    _uiState.update { it.copy(calendarSettings = settings) }
+                }
             }
         }
         // Load the picker's calendar list only while the overlay is on and permission is granted.
@@ -410,13 +416,18 @@ class CalendarViewModel @Inject constructor(
     fun updateCalendarSetting(transform: (CalendarGridSettings) -> CalendarGridSettings) {
         val normalized = transform(_uiState.value.calendarSettings).normalized()
         _uiState.update { it.copy(calendarSettings = normalized) }
+        calendarSettingsWritesInFlight++
         viewModelScope.launch {
-            overlaySettings.setCalendarGridSettings(
-                snapMinutes = normalized.snapMinutes,
-                startHour = normalized.startHour,
-                endHour = normalized.endHour,
-                density = normalized.density.name,
-            )
+            try {
+                overlaySettings.setCalendarGridSettings(
+                    snapMinutes = normalized.snapMinutes,
+                    startHour = normalized.startHour,
+                    endHour = normalized.endHour,
+                    density = normalized.density.name,
+                )
+            } finally {
+                calendarSettingsWritesInFlight--
+            }
         }
     }
 

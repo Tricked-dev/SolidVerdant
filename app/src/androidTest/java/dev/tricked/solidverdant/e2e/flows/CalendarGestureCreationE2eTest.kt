@@ -26,7 +26,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.time.LocalDate
+import java.time.Instant
 import java.util.UUID
 
 @HiltAndroidTest
@@ -103,7 +103,9 @@ class CalendarGestureCreationE2eTest {
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_WEEK_GRID), WAIT_MS)
     }
 
-    private fun selectionTag(): String = TestTags.calendarSelection(LocalDate.now(e2e.session.zone))
+    private fun selectionTag(): String = TestTags.calendarSelection(
+        Instant.ofEpochMilli(e2e.testClock.nowMs).atZone(e2e.session.zone).toLocalDate(),
+    )
 
     private companion object {
         const val WAIT_MS = 15_000L

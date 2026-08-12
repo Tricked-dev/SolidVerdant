@@ -39,7 +39,7 @@ class LargeDataScrollE2eTest {
     fun largeDatasetScrollsAcrossPrimaryScreens() {
         // Calendar uses the device clock, so keep the stress window in the current week instead
         // of relying on the old fixed fixture date.
-        e2e.requireMockBackend().presetStressWorld(newest = Instant.now())
+        e2e.requireMockBackend().presetStressWorld(newest = Instant.ofEpochMilli(e2e.testClock.nowMs))
         e2e.seedTemplates()
         e2e.launchApp()
 
