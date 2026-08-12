@@ -90,7 +90,10 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
     fun openSyncDetails(): TrackRobot = apply {
         scrollHistoryTo(TestTags.TRACK_SYNC_DETAILS_BUTTON)
         waitUntilEnabledTagExists(TestTags.TRACK_SYNC_DETAILS_BUTTON)
-        firstEnabledNodeWithTag(TestTags.TRACK_SYNC_DETAILS_BUTTON).assertIsDisplayed().performClick()
+        firstEnabledNodeWithTag(TestTags.TRACK_SYNC_DETAILS_BUTTON)
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
         composeRule.waitForIdle()
         waitUntilTagExists(TestTags.SYNC_STATUS_SCREEN)
     }
