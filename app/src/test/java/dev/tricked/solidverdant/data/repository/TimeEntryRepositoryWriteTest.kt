@@ -891,6 +891,23 @@ class TimeEntryRepositoryWriteTest {
         assertTrue(db.outboxDao().peekAll().isEmpty())
     }
 
+    @Test fun split_rejects_malformed_instant_without_mutating_the_original() = runTest {
+        val entry = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = "2026-07-07T10:00:00Z",
+            description = "x",
+        )
+        db.timeEntryDao().upsert(entry.toEntity(1L, SyncState.SYNCED))
+
+        assertTrue(repo.splitEntry(entry.id, "not-an-instant", "member1").isFailure)
+
+        assertEquals(entry.end, db.timeEntryDao().getById(entry.id)?.end)
+        assertTrue(db.outboxDao().peekAll().isEmpty())
+    }
+
     @Test fun split_accepts_duration_only_multi_day_server_response() = runTest {
         val entry = TimeEntry(
             id = "duration-only",

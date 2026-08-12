@@ -527,49 +527,107 @@ class TimeEntryRepository @Inject constructor(
     }
 
     /**
-     * Roadmap #13/#64: split a completed entry at [atIso] into two adjacent halves. The original is
-     * shortened to end at `at` via [updateEntry] and a new completed entry covering `[at, end]` is
-     * created via [createCompletedEntry]; both mutations flow through the outbox (no sync bypass).
-     * Metadata (description/project/task/tags/billable) is preserved on both halves.
+     * Roadmap #13/#64: split a completed entry at [atIso] into two adjacent halves. Both Room
+     * rows and both outbox operations are committed in one transaction, so a failed split cannot
+     * leave only the shortened first half behind. Metadata (description/project/task/tags/billable)
+     * is preserved on both halves.
      *
      * `at` must fall strictly inside the entry (`start < at < end`) — a half-open interval, so
      * `at == start` or `at == end` is rejected. Running and CONFLICT (SV-027) entries cannot split.
      * Returns the new second-half entry id so the caller can open it for immediate editing.
      */
     suspend fun splitEntry(entryId: String, atIso: String, memberId: String): Result<String> = try {
-        val source = timeEntryDao.getById(entryId)
-            ?: error("Entry not found")
-        check(source.syncState != SyncState.CONFLICT) {
-            "Resolve the sync conflict in Review before splitting this entry"
-        }
-        val end = completedEndIso(source) ?: error("Cannot split a running entry")
-        // Parse as OffsetDateTime->Instant so mixed "Z"/"+02:00" offsets compare correctly.
-        val startInstant = java.time.OffsetDateTime.parse(source.start).toInstant()
-        val endInstant = java.time.OffsetDateTime.parse(end).toInstant()
-        val atInstant = java.time.OffsetDateTime.parse(atIso).toInstant()
-        require(atInstant.isAfter(startInstant) && atInstant.isBefore(endInstant)) {
-            "Split time must be strictly between the entry's start and end"
-        }
-        val tagIds = timeEntryDao.tagIdsFor(entryId)
-        val original = source.toModel(tagIds.map { Tag(it) })
-        // First half: shorten the original to end at `at` (keeps its id, tags and base snapshot).
-        updateEntry(original.copy(end = atIso), tagIds)
-        // Second half: [at, originalEnd] as a brand-new completed entry with identical metadata.
-        Result.success(
-            createCompletedEntry(
-                organizationId = source.organizationId,
-                memberId = memberId,
+        val secondHalfId = "local-create-${java.util.UUID.randomUUID()}"
+        database.withTransaction {
+            val source = timeEntryDao.getById(entryId)
+                ?: error("Entry not found")
+            check(source.syncState != SyncState.CONFLICT) {
+                "Resolve the sync conflict in Review before splitting this entry"
+            }
+            val end = completedEndIso(source) ?: error("Cannot split a running entry")
+            // Parse as OffsetDateTime->Instant so mixed "Z"/"+02:00" offsets compare correctly.
+            val startInstant = java.time.OffsetDateTime.parse(source.start).toInstant()
+            val endInstant = java.time.OffsetDateTime.parse(end).toInstant()
+            val atInstant = java.time.OffsetDateTime.parse(atIso).toInstant()
+            require(atInstant.isAfter(startInstant) && atInstant.isBefore(endInstant)) {
+                "Split time must be strictly between the entry's start and end"
+            }
+            val tagIds = timeEntryDao.tagIdsFor(entryId)
+            val now = clock.nowMs()
+            val base = captureBaseSnapshot(entryId)
+            val firstHalf = source.toModel(tagIds.map { Tag(it) })
+                .copy(end = atIso)
+                .withDerivedCompletedDuration()
+            val secondHalf = TimeEntry(
+                id = secondHalfId,
+                description = source.description,
                 userId = source.userId,
-                description = source.description ?: "",
-                projectId = source.projectId,
-                taskId = source.taskId,
-                tagIds = tagIds,
-                billable = source.billable,
                 start = atIso,
                 end = end,
+                duration = completedDurationSeconds(atIso, end),
+                taskId = source.taskId,
+                projectId = source.projectId,
+                tags = tagIds.map { Tag(it) },
+                billable = source.billable,
+                organizationId = source.organizationId,
                 type = source.type,
-            ).id,
-        )
+            )
+
+            // First half: shorten the original while retaining its server identity and base.
+            timeEntryDao.upsert(firstHalf.toEntity(updatedAt = now, syncState = SyncState.PENDING))
+            timeEntryDao.replaceTagRefs(entryId, tagIds)
+            outboxDao.insert(
+                OutboxEntity(
+                    opType = OutboxOpType.UPDATE,
+                    organizationId = source.organizationId,
+                    timeEntryId = entryId,
+                    createdAtMs = now,
+                    clientId = newClientId(),
+                    payloadJson = json.encodeToString(
+                        UpdatePayload(
+                            firstHalf.userId,
+                            firstHalf.start,
+                            firstHalf.end,
+                            firstHalf.description,
+                            firstHalf.projectId,
+                            firstHalf.taskId,
+                            firstHalf.billable,
+                            tagIds,
+                            type = firstHalf.type,
+                        ),
+                    ),
+                    baseSnapshotJson = base,
+                ),
+            )
+
+            // Second half: create a new local row and its matching server mutation atomically.
+            timeEntryDao.upsert(secondHalf.toEntity(updatedAt = now, syncState = SyncState.PENDING))
+            timeEntryDao.replaceTagRefs(secondHalfId, tagIds)
+            outboxDao.insert(
+                OutboxEntity(
+                    opType = OutboxOpType.CREATE,
+                    organizationId = source.organizationId,
+                    timeEntryId = secondHalfId,
+                    createdAtMs = now,
+                    clientId = newClientId(),
+                    payloadJson = json.encodeToString(
+                        CreatePayload(
+                            memberId,
+                            source.userId,
+                            atIso,
+                            end,
+                            source.description.orEmpty(),
+                            source.projectId,
+                            source.taskId,
+                            source.billable,
+                            tagIds,
+                            type = source.type,
+                        ),
+                    ),
+                ),
+            )
+        }
+        Result.success(secondHalfId)
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
