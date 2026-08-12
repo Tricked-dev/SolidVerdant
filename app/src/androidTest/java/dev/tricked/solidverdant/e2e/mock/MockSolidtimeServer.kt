@@ -433,7 +433,9 @@ class MockSolidtimeServer {
         )
         timeEntries.removeAll { it.id == id }
         timeEntries += updated
-        if (updated.end != null && activeEntry?.id == id) activeEntry = null
+        if (activeEntry?.id == id) {
+            activeEntry = updated.takeUnless { it.end != null }
+        }
         return ok(json.encodeToString(TimeEntryResponse(data = updated)))
     }
 

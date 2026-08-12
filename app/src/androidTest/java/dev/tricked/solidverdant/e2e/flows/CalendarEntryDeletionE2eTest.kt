@@ -15,6 +15,7 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.waitUntilAtLeastOneExists
 import androidx.compose.ui.test.waitUntilDoesNotExist
@@ -104,6 +105,7 @@ class CalendarEntryDeletionE2eTest {
     private fun deleteEntry(serverId: String?) {
         requireNotNull(serverId)
         e2e.composeRule.onNodeWithTag("week-entry-$serverId", useUnmergedTree = true)
+            .performScrollTo()
             .performTouchInput { longClick() }
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_ENTRY_ACTIONS), WAIT_MS)
         e2e.composeRule.onNodeWithTag(TestTags.CALENDAR_DELETE_ENTRY, useUnmergedTree = true).performClick()

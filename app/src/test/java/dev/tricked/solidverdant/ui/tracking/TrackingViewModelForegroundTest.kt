@@ -204,8 +204,13 @@ class TrackingViewModelForegroundTest {
         // If Room delivered the pending operation from its executor after the first virtual-time
         // flush, the reveal delay starts at that later scheduler instant. Give that continuation
         // one full reveal window to run without making the pre-threshold assertions weaker.
-        dispatcher.scheduler.advanceTimeBy(SYNC_STATUS_REVEAL_DELAY_MS)
-        dispatcher.scheduler.runCurrent()
+        repeat(3) {
+            if (!vm.uiState.value.syncStatusVisible) {
+                dispatcher.scheduler.advanceTimeBy(SYNC_STATUS_REVEAL_DELAY_MS)
+                shadowOf(Looper.getMainLooper()).idle()
+                dispatcher.scheduler.runCurrent()
+            }
+        }
         assertTrue(
             "Expected delayed sync visibility; operations=${vm.uiState.value.syncOperations.size}, " +
                 "statuses=${vm.uiState.value.syncOperations.map { it.status }}, " +
