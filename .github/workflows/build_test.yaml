@@ -14,8 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
+      fail-fast: false
       matrix:
         api-level: [29]
+        test-shard: [0, 1, 2]
 
     steps:
       - uses: actions/checkout@v6
@@ -50,7 +52,12 @@ jobs:
           api-level: ${{ matrix.api-level }}
           arch: x86
           disable-animations: true
-          script: ./gradlew :app:connectedCheck --stacktrace
+          # Keep the full Android suite, but split it across independent emulator jobs so a
+          # growing E2E suite cannot exceed the single-job wall-clock limit.
+          script: >-
+            ./gradlew :app:connectedCheck --stacktrace
+            -Pandroid.testInstrumentationRunnerArguments.numShards=3
+            -Pandroid.testInstrumentationRunnerArguments.shardIndex=${{ matrix.test-shard }}
 
       - name: Upload test reports
         if: always()
