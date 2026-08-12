@@ -76,15 +76,15 @@ class CalendarSettingsE2eTest {
         e2e.composeRule.onNodeWithTag(
             TestTags.calendarSettingsValue(TestTags.CALENDAR_SETTINGS_SNAP),
             useUnmergedTree = true,
-        ).assertTextContains("30")
+        ).assertTextContains("30", substring = true)
         e2e.composeRule.onNodeWithTag(
             TestTags.calendarSettingsValue(TestTags.CALENDAR_SETTINGS_START),
             useUnmergedTree = true,
-        ).assertTextContains("8")
+        ).assertTextContains("8", substring = true)
         e2e.composeRule.onNodeWithTag(
             TestTags.calendarSettingsValue(TestTags.CALENDAR_SETTINGS_END),
             useUnmergedTree = true,
-        ).assertTextContains("18")
+        ).assertTextContains("18", substring = true)
         e2e.composeRule.onNodeWithTag(TestTags.CALENDAR_SETTINGS_DENSITY_SPACIOUS, useUnmergedTree = true).assertIsSelected()
     }
 

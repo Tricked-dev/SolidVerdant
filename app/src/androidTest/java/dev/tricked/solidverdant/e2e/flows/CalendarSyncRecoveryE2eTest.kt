@@ -12,6 +12,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidTest
@@ -55,7 +56,9 @@ class CalendarSyncRecoveryE2eTest {
         // rendered Room entry instead of allowing the first refresh to race the fixture setup.
         e2e.seedFailedSync(serverId)
         e2e.composeRule.waitForIdle()
-        e2e.composeRule.onNodeWithTag(entryTag, useUnmergedTree = true).performTouchInput { longClick() }
+        e2e.composeRule.onNodeWithTag(entryTag, useUnmergedTree = true)
+            .performScrollTo()
+            .performTouchInput { longClick() }
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_ENTRY_ACTIONS), WAIT_MS)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_ENTRY_SYNC_STATUS), WAIT_MS)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_ENTRY_SYNC_DISCARD), WAIT_MS)
@@ -98,7 +101,9 @@ class CalendarSyncRecoveryE2eTest {
             ),
         )
         e2e.composeRule.waitForIdle()
-        e2e.composeRule.onNodeWithTag(entryTag, useUnmergedTree = true).performTouchInput { longClick() }
+        e2e.composeRule.onNodeWithTag(entryTag, useUnmergedTree = true)
+            .performScrollTo()
+            .performTouchInput { longClick() }
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_ENTRY_ACTIONS), WAIT_MS)
         e2e.composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CALENDAR_ENTRY_SYNC_RETRY), WAIT_MS)
 

@@ -8,6 +8,7 @@
 
 package dev.tricked.solidverdant.e2e.flows
 
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -15,6 +16,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.waitUntilAtLeastOneExists
+import androidx.compose.ui.test.waitUntilDoesNotExist
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidTest
 import dev.tricked.solidverdant.e2e.BackendPortable
@@ -61,7 +63,12 @@ class CalendarEntryEditE2eTest {
         descriptionField.performTextInput("Calendar after edit")
         e2e.composeRule.onNodeWithTag(TestTags.ENTRY_SAVE, useUnmergedTree = true)
             .performScrollTo()
+            .assertIsEnabled()
             .performClick()
+        e2e.composeRule.waitUntilDoesNotExist(hasTestTag(TestTags.ENTRY_SAVE), WAIT_MS)
+        e2e.awaitLocalEntry(requireNotNull(fixture.serverId), WAIT_MS) { entry ->
+            entry.description == "Calendar after edit"
+        }
 
         val persisted = requireNotNull(
             e2e.awaitServer(WAIT_MS, driveSync = true) { snapshot ->
