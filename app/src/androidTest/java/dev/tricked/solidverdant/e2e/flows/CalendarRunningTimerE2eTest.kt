@@ -65,7 +65,6 @@ class CalendarRunningTimerE2eTest {
         val original = e2e.completedFixtureEntry(
             logicalId = "calendar-editable-running-entry",
             description = "Calendar editable timer",
-            start = Instant.now().minusSeconds(60),
         ).copy(end = null, duration = null)
         val originalHandle = e2e.prepare(E2eFixture.Active(original))
         e2e.launchApp()
@@ -101,7 +100,6 @@ class CalendarRunningTimerE2eTest {
         val original = e2e.completedFixtureEntry(
             logicalId = "calendar-start-correction",
             description = "Calendar start correction",
-            start = Instant.now().minusSeconds(60),
         ).copy(end = null, duration = null)
         val originalHandle = e2e.prepare(E2eFixture.Active(original))
         e2e.launchApp()

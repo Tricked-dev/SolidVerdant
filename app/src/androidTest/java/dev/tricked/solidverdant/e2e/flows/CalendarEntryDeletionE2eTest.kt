@@ -30,7 +30,6 @@ import org.junit.Assert.assertNotNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.time.Instant
 
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
@@ -49,7 +48,6 @@ class CalendarEntryDeletionE2eTest {
                 e2e.completedFixtureEntry(
                     logicalId = "calendar-delete-entry",
                     description = "Calendar delete",
-                    start = Instant.now().minusSeconds(7_200),
                 ),
             ),
         )
@@ -72,7 +70,6 @@ class CalendarEntryDeletionE2eTest {
                 e2e.completedFixtureEntry(
                     logicalId = "calendar-undo-delete-entry",
                     description = "Calendar undo delete",
-                    start = Instant.now().minusSeconds(7_200),
                 ),
             ),
         )

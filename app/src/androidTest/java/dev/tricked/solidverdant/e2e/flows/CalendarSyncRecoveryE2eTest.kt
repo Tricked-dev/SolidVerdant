@@ -28,7 +28,6 @@ import org.junit.Assert.assertNotNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.time.Instant
 
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
@@ -40,11 +39,9 @@ class CalendarSyncRecoveryE2eTest {
     @BackendPortable
     @Test
     fun failed_calendar_entry_exposes_status_and_discard_recovery() {
-        // Calendar pages use the device's wall-clock date, while the harness clock is fixed for
-        // deterministic sync assertions. Anchor this visual fixture to the device's current day.
         val fixture = e2e.prepare(
             E2eFixture.Completed(
-                e2e.completedFixtureEntry(start = Instant.now().minusSeconds(7_200)),
+                e2e.completedFixtureEntry(),
             ),
         )
         val serverId = requireNotNull(fixture.serverId)
@@ -75,7 +72,6 @@ class CalendarSyncRecoveryE2eTest {
         val original = e2e.completedFixtureEntry(
             logicalId = "calendar-retry-entry",
             description = "Calendar before retry",
-            start = Instant.now().minusSeconds(7_200),
         )
         val fixture = e2e.prepare(E2eFixture.Completed(original))
         val serverId = requireNotNull(fixture.serverId)

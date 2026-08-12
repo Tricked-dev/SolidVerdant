@@ -450,7 +450,7 @@ fun CalendarScreen(
         CalendarSettingsSheet(
             settings = state.calendarSettings,
             sheetState = settingsSheetState,
-            onSettingsChanged = viewModel::updateCalendarSettings,
+            onSettingsChanged = viewModel::updateCalendarSetting,
             onDismiss = { showSettingsSheet = false },
         )
     }
@@ -935,7 +935,7 @@ private fun CalendarToolbar(
 private fun CalendarSettingsSheet(
     settings: CalendarGridSettings,
     sheetState: androidx.compose.material3.SheetState,
-    onSettingsChanged: (CalendarGridSettings) -> Unit,
+    onSettingsChanged: (((CalendarGridSettings) -> CalendarGridSettings) -> Unit),
     onDismiss: () -> Unit,
 ) {
     val snapOptions = CalendarGridSettings.SNAP_MINUTES.map { minutes ->
@@ -960,7 +960,7 @@ private fun CalendarSettingsSheet(
                 label = stringResource(R.string.calendar_settings_snap),
                 value = stringResource(R.string.calendar_settings_minutes, settings.snapMinutes),
                 options = snapOptions,
-                onSelected = { minutes -> onSettingsChanged(settings.copy(snapMinutes = minutes)) },
+                onSelected = { minutes -> onSettingsChanged { current -> current.copy(snapMinutes = minutes) } },
                 controlTestTag = CalendarTestTags.SETTINGS_SNAP,
             )
             Spacer(Modifier.heightIn(min = Dimens.Space12))
@@ -980,7 +980,9 @@ private fun CalendarSettingsSheet(
                         hour to stringResource(R.string.calendar_settings_hour, hour)
                     },
                     onSelected = { hour ->
-                        onSettingsChanged(settings.copy(startHour = hour.coerceAtMost(settings.endHour - 1)))
+                        onSettingsChanged { current ->
+                            current.copy(startHour = hour.coerceAtMost(current.endHour - 1))
+                        }
                     },
                     controlTestTag = CalendarTestTags.SETTINGS_START,
                     modifier = Modifier.weight(1f),
@@ -991,7 +993,7 @@ private fun CalendarSettingsSheet(
                     options = ((settings.startHour + 1)..CalendarGridSettings.MAX_END_HOUR).map { hour ->
                         hour to stringResource(R.string.calendar_settings_hour, hour)
                     },
-                    onSelected = { hour -> onSettingsChanged(settings.copy(endHour = hour)) },
+                    onSelected = { hour -> onSettingsChanged { current -> current.copy(endHour = hour) } },
                     controlTestTag = CalendarTestTags.SETTINGS_END,
                     modifier = Modifier.weight(1f),
                 )
@@ -1006,7 +1008,7 @@ private fun CalendarSettingsSheet(
                 densityOptions.forEachIndexed { index, (density, label) ->
                     SegmentedButton(
                         selected = settings.density == density,
-                        onClick = { onSettingsChanged(settings.copy(density = density)) },
+                        onClick = { onSettingsChanged { current -> current.copy(density = density) } },
                         shape = SegmentedButtonDefaults.itemShape(index = index, count = densityOptions.size),
                         modifier = Modifier
                             .weight(1f)

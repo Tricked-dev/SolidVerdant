@@ -120,7 +120,6 @@ class ExternalTimerSurfacesE2eTest {
         val original = e2e.completedFixtureEntry(
             logicalId = "externally-started",
             description = "External timer",
-            start = Instant.now().minusSeconds(60),
         ).copy(end = null, duration = null)
         val originalHandle = e2e.prepare(E2eFixture.Active(original))
         grantNotificationPermission()
@@ -148,7 +147,6 @@ class ExternalTimerSurfacesE2eTest {
         val original = e2e.completedFixtureEntry(
             logicalId = "track-editable-running-entry",
             description = "Track editable timer",
-            start = Instant.now().minusSeconds(60),
         ).copy(end = null, duration = null)
         val originalHandle = e2e.prepare(E2eFixture.Active(original))
         e2e.launchApp()
@@ -166,7 +164,6 @@ class ExternalTimerSurfacesE2eTest {
         val original = e2e.completedFixtureEntry(
             logicalId = "track-start-correction",
             description = "Track start correction",
-            start = Instant.now().minusSeconds(60),
         ).copy(end = null, duration = null)
         val originalHandle = e2e.prepare(E2eFixture.Active(original))
         e2e.launchApp()

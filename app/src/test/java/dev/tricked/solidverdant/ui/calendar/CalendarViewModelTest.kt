@@ -17,6 +17,7 @@ import dev.tricked.solidverdant.data.repository.TimeEntryReader
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.domain.time.TemporalPolicy
 import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
+import dev.tricked.solidverdant.util.SystemClock
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -171,7 +172,7 @@ class CalendarViewModelTest {
         source: CalendarEventSource = FakeEventSource(),
         settings: CalendarOverlaySettings = FakeOverlaySettings(),
         temporalPolicyProvider: TemporalPolicyProvider = policyProvider(),
-    ) = CalendarViewModel(reader, source, settings, temporalPolicyProvider).also { viewModels += it }
+    ) = CalendarViewModel(reader, source, settings, temporalPolicyProvider, SystemClock()).also { viewModels += it }
 
     @Test
     fun buildsBucketsAndTotalsPerDay() = runTest {

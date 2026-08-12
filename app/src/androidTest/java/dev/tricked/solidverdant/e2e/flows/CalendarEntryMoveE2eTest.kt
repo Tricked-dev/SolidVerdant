@@ -42,7 +42,6 @@ class CalendarEntryMoveE2eTest {
         val original = e2e.completedFixtureEntry(
             logicalId = "calendar-move-entry",
             description = "Calendar move",
-            start = Instant.now().minusSeconds(14_400),
             durationSeconds = 3_600,
         )
         val fixture = e2e.prepare(E2eFixture.Completed(original))

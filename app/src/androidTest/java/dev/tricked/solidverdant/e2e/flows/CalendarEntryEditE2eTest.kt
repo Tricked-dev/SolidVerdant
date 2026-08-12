@@ -40,7 +40,6 @@ class CalendarEntryEditE2eTest {
         val original = e2e.completedFixtureEntry(
             logicalId = "calendar-edit-entry",
             description = "Calendar before edit",
-            start = Instant.now().minusSeconds(7_200),
         )
         val fixture = e2e.prepare(E2eFixture.Completed(original))
         e2e.launchApp()

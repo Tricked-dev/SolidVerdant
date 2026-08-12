@@ -20,6 +20,7 @@ import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.domain.time.TemporalPolicy
 import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import dev.tricked.solidverdant.domain.time.isWorkTimeEntry
+import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -97,6 +98,7 @@ class CalendarViewModel @Inject constructor(
     private val eventSource: CalendarEventSource,
     private val overlaySettings: CalendarOverlaySettings,
     private val temporalPolicyProvider: TemporalPolicyProvider,
+    private val clock: Clock,
 ) : ViewModel() {
 
     private var organizationId: String? = null
@@ -113,21 +115,23 @@ class CalendarViewModel @Inject constructor(
     private var currentPolicy: TemporalPolicy = runBlocking { temporalPolicyProvider.current() }
     private val zone: ZoneId get() = currentPolicy.zone
     private val weekStart: DayOfWeek get() = currentPolicy.firstDayOfWeek
+    private fun nowInstant(): Instant = Instant.ofEpochMilli(clock.nowMs())
+    private fun today(): LocalDate = nowInstant().atZone(zone).toLocalDate()
 
     private val _uiState = MutableStateFlow(
         CalendarUiState(
             zone = currentPolicy.zone,
             weekStart = currentPolicy.firstDayOfWeek,
-            visibleMonth = YearMonth.now(currentPolicy.zone),
-            selectedDate = LocalDate.now(currentPolicy.zone),
-            weekAnchor = LocalDate.now(currentPolicy.zone),
+            visibleMonth = YearMonth.from(nowInstant().atZone(currentPolicy.zone)),
+            selectedDate = today(),
+            weekAnchor = today(),
         ),
     )
     val uiState: StateFlow<CalendarUiState> = _uiState.asStateFlow()
 
     // Overlay query inputs kept as flows so event queries react without recollecting time entries.
     private val viewModeInput = MutableStateFlow(CalendarViewMode.WEEK)
-    private val weekAnchorInput = MutableStateFlow(LocalDate.now(currentPolicy.zone))
+    private val weekAnchorInput = MutableStateFlow(today())
     private val dayCountInput = MutableStateFlow(FULL_WEEK_DAYS)
     private val hasPermissionInput = MutableStateFlow(false)
     private val retryCounter = MutableStateFlow(0)
@@ -246,7 +250,7 @@ class CalendarViewModel @Inject constructor(
                 // Aggregate off the main thread: a large month can hold thousands of entries and
                 // groupBy/sumOf here would otherwise jank or ANR the UI thread.
                 val buckets = withContext(Dispatchers.Default) {
-                    val now = Instant.now()
+                    val now = nowInstant()
                     entries
                         .flatMap { entry -> entryDaySlices(entry, zone, now).map { slice -> slice to entry } }
                         .groupBy({ it.first.date }, { it })
@@ -326,7 +330,7 @@ class CalendarViewModel @Inject constructor(
     }
 
     fun jumpToToday() {
-        val today = LocalDate.now(zone)
+        val today = today()
         weekAnchorInput.value = today
         _uiState.update {
             it.copy(
@@ -399,7 +403,12 @@ class CalendarViewModel @Inject constructor(
     }
 
     fun updateCalendarSettings(settings: CalendarGridSettings) {
-        val normalized = settings.normalized()
+        updateCalendarSetting { settings }
+    }
+
+    /** Apply one control change to the latest UI snapshot so rapid selections cannot overwrite one another. */
+    fun updateCalendarSetting(transform: (CalendarGridSettings) -> CalendarGridSettings) {
+        val normalized = transform(_uiState.value.calendarSettings).normalized()
         _uiState.update { it.copy(calendarSettings = normalized) }
         viewModelScope.launch {
             overlaySettings.setCalendarGridSettings(

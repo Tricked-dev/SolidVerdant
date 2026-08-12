@@ -43,7 +43,6 @@ class CalendarContextActionsE2eTest {
         val original = e2e.completedFixtureEntry(
             logicalId = "calendar-context-duplicate",
             description = "Calendar context duplicate",
-            start = Instant.now().minusSeconds(7_200),
             durationSeconds = 3_600,
         )
         val fixture = e2e.prepare(E2eFixture.Completed(original))
@@ -73,7 +72,6 @@ class CalendarContextActionsE2eTest {
         val original = e2e.completedFixtureEntry(
             logicalId = "calendar-context-split",
             description = "Calendar context split",
-            start = Instant.now().minusSeconds(10_800),
             durationSeconds = 7_200,
         )
         val fixture = e2e.prepare(E2eFixture.Completed(original))
@@ -110,7 +108,6 @@ class CalendarContextActionsE2eTest {
         val original = e2e.completedFixtureEntry(
             logicalId = "calendar-context-stop",
             description = "Calendar context stop",
-            start = Instant.now().minusSeconds(60),
         ).copy(end = null, duration = null)
         val fixture = e2e.prepare(E2eFixture.Active(original))
         e2e.launchApp()

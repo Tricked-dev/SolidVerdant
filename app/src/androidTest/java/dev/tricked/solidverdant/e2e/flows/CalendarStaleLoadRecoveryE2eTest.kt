@@ -26,7 +26,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.time.Instant
 
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
@@ -45,7 +44,6 @@ class CalendarStaleLoadRecoveryE2eTest {
                 e2e.completedFixtureEntry(
                     logicalId = "calendar-stale-entry",
                     description = "Calendar cached entry",
-                    start = Instant.now().minusSeconds(7_200),
                 ),
             ),
         )

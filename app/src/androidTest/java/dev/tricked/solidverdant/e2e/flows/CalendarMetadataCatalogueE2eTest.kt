@@ -33,7 +33,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.time.Instant
 import java.util.UUID
 
 @HiltAndroidTest
@@ -51,7 +50,6 @@ class CalendarMetadataCatalogueE2eTest {
         val metadataEntry = e2e.completedFixtureEntry(
             logicalId = "calendar-metadata-entry",
             description = "Calendar metadata",
-            start = Instant.now().minusSeconds(7_200),
             durationSeconds = 3_600,
         ).copy(
             projectId = existing.project.id,

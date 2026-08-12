@@ -84,6 +84,7 @@ class OfflineCreateSyncE2eTest {
         assertNotNull("The completed CREATE operation must reach Solidtime", persisted)
         val serverEntry = requireNotNull(persisted)
         assertTrue("The created entry must be completed, not a second active timer", serverEntry.end != null)
+        e2e.composeRule.waitUntil(WAIT_MS) { e2e.pendingOutboxCount() == 0 }
         assertEquals("The CREATE outbox operation must be drained", 0, e2e.pendingOutboxCount())
         e2e.awaitLocalEntry(serverEntry.id, WAIT_MS) {
             it.end != null && it.syncState == SyncState.SYNCED
