@@ -29,10 +29,9 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.ui.localization.appLocale
 import dev.tricked.solidverdant.ui.theme.Dimens
 import java.time.format.DateTimeFormatter
-
-private val drillDateFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM")
 
 /**
  * Lists the individual entries behind a tapped chart slice. Uses a [LazyColumn] with a bounded
@@ -43,6 +42,7 @@ private val drillDateFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d
 @Composable
 fun StatDrillDownSheet(state: DrillDownUiState, onDismiss: () -> Unit) {
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
+        val locale = appLocale()
         val title = when (val t = state.target) {
             is DrillDownTarget.ProjectSlice -> t.projectName ?: stringResource(R.string.stats2_no_project)
             is DrillDownTarget.TrendSlice -> t.label
@@ -108,7 +108,7 @@ fun StatDrillDownSheet(state: DrillDownUiState, onDismiss: () -> Unit) {
                             .heightIn(max = 460.dp),
                     ) {
                         items(state.rows, key = { it.entryId }) { row ->
-                            DrillDownRowItem(row)
+                            DrillDownRowItem(row, locale)
                             HorizontalDivider()
                         }
                     }
@@ -119,7 +119,7 @@ fun StatDrillDownSheet(state: DrillDownUiState, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun DrillDownRowItem(row: DrillDownRow) {
+private fun DrillDownRowItem(row: DrillDownRow, locale: java.util.Locale) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -141,7 +141,7 @@ private fun DrillDownRowItem(row: DrillDownRow) {
             val meta = buildList {
                 add(row.projectName ?: noProjectLabel)
                 row.taskName?.let { add(it) }
-                add(row.startDate.format(drillDateFmt))
+                add(row.startDate.format(DateTimeFormatter.ofPattern("EEE d MMM", locale)))
             }.joinToString(" · ")
             Text(
                 text = meta,

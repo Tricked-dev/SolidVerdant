@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.ui.localization.appLocale
 import dev.tricked.solidverdant.ui.theme.Dimens
 import java.time.Instant
 import java.time.LocalDate
@@ -36,10 +37,9 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
-private val entryDateFieldFormatter = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
-
 @Composable
 fun EntryDateFieldButton(label: String, date: LocalDate, onClick: () -> Unit, modifier: Modifier = Modifier, testTag: String? = null) {
+    val locale = appLocale()
     OutlinedButton(
         onClick = onClick,
         modifier = modifier
@@ -51,7 +51,10 @@ fun EntryDateFieldButton(label: String, date: LocalDate, onClick: () -> Unit, mo
         Spacer(Modifier.width(Dimens.Space8))
         Column(horizontalAlignment = Alignment.Start) {
             Text(label, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
-            Text(date.format(entryDateFieldFormatter), style = androidx.compose.material3.MaterialTheme.typography.titleSmall)
+            Text(
+                date.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale)),
+                style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
+            )
         }
     }
 }

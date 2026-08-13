@@ -43,7 +43,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -63,12 +62,14 @@ import dev.tricked.solidverdant.data.repository.TimeEntryRepository.EntrySyncSta
 import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.ui.components.EntryBlock
 import dev.tricked.solidverdant.ui.components.LoadingState
+import dev.tricked.solidverdant.ui.localization.appLocale
 import dev.tricked.solidverdant.ui.statistics.hexToColor
 import dev.tricked.solidverdant.ui.theme.Dimens
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.time.format.TextStyle
 import java.util.Locale
 
@@ -153,7 +154,7 @@ private fun WeekCalendarContent(
     }
     val now = rememberCalendarNow(secondPrecision = hasRunningEntries)
     val today = now.atZone(zone).toLocalDate()
-    val locale = LocalLocale.current.platformLocale
+    val locale = appLocale()
 
     // Precompute the per-day layouts once per data change rather than inside the render loop.
     val timedByDay = remember(state.overlayEvents, days, settings) {
@@ -670,10 +671,8 @@ private fun rangeLabel(days: List<LocalDate>, viewMode: CalendarViewMode, locale
     val first = days.first()
     val last = days.last()
     if (viewMode == CalendarViewMode.DAY || first == last) {
-        return first.format(DateTimeFormatter.ofPattern("EEE, d MMM yyyy", locale))
+        return first.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).withLocale(locale))
     }
-    val dayMonth = DateTimeFormatter.ofPattern("d MMM", locale)
-    val startLabel = if (first.month == last.month) first.dayOfMonth.toString() else first.format(dayMonth)
-    val endLabel = last.format(DateTimeFormatter.ofPattern("d MMM yyyy", locale))
-    return "$startLabel – $endLabel"
+    val rangeFormat = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale)
+    return "${first.format(rangeFormat)} – ${last.format(rangeFormat)}"
 }

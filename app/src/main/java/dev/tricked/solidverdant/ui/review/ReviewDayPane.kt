@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.ui.localization.appLocale
 import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.LocalTime
@@ -59,6 +60,7 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import java.util.Locale
 
 /**
  * The compact, guided end-of-day review (gap analysis #18). Shows the day's facts (tracked time,
@@ -198,8 +200,9 @@ internal fun ReviewContent(
 @Composable
 private fun SummaryCard(state: ReviewDayUiState) {
     val date = remember(state.dateEpochDay) { LocalDate.ofEpochDay(state.dateEpochDay) }
-    val dateLabel = remember(date) {
-        date.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL))
+    val locale = appLocale()
+    val dateLabel = remember(date, locale) {
+        date.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).withLocale(locale))
     }
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -362,7 +365,8 @@ private fun EntryDescription(description: String?) {
 
 @Composable
 private fun StartedAt(startIso: String, zone: ZoneId) {
-    val time = remember(startIso, zone) { formatClock(startIso, zone) }
+    val locale = appLocale()
+    val time = remember(startIso, zone, locale) { formatClock(startIso, zone, locale) }
     if (time != null) {
         Text(
             text = stringResource(R.string.review_started_at, time),
@@ -374,8 +378,9 @@ private fun StartedAt(startIso: String, zone: ZoneId) {
 
 @Composable
 private fun TimeRange(startIso: String?, endIso: String?, zone: ZoneId) {
-    val start = remember(startIso, zone) { startIso?.let { formatClock(it, zone) } }
-    val end = remember(endIso, zone) { endIso?.let { formatClock(it, zone) } }
+    val locale = appLocale()
+    val start = remember(startIso, zone, locale) { startIso?.let { formatClock(it, zone, locale) } }
+    val end = remember(endIso, zone, locale) { endIso?.let { formatClock(it, zone, locale) } }
     if (start != null && end != null) {
         Text(
             text = stringResource(R.string.review_time_range, start, end),
@@ -476,11 +481,11 @@ private const val MESSAGE_DISMISS_DELAY_MS = 3500L
 private const val SECONDS_PER_HOUR = 3600
 private const val SECONDS_PER_MINUTE = 60
 
-private val CLOCK_FORMAT: DateTimeFormatter = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
-
 /** Format an ISO instant string as a local wall-clock time, or null if it cannot be parsed. */
-private fun formatClock(iso: String, zone: ZoneId): String? = runCatching {
-    OffsetDateTime.parse(iso).atZoneSameInstant(zone).toLocalTime().format(CLOCK_FORMAT)
+private fun formatClock(iso: String, zone: ZoneId, locale: Locale): String? = runCatching {
+    OffsetDateTime.parse(iso).atZoneSameInstant(zone).toLocalTime()
+        .format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale))
 }.recoverCatching {
-    java.time.Instant.parse(iso).atZone(zone).toLocalTime().format(CLOCK_FORMAT)
+    java.time.Instant.parse(iso).atZone(zone).toLocalTime()
+        .format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale))
 }.getOrNull()

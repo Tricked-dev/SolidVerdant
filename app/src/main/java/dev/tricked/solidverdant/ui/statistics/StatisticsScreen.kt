@@ -67,12 +67,14 @@ import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.ui.components.EmptyState
 import dev.tricked.solidverdant.ui.components.LoadingState
 import dev.tricked.solidverdant.ui.components.SectionCard
+import dev.tricked.solidverdant.ui.localization.appLocale
 import dev.tricked.solidverdant.ui.statistics.charts.DonutChart
 import dev.tricked.solidverdant.ui.theme.Dimens
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
 
 /** Diameter of the by-project donut. A chart dimension owned by the caller, not screen chrome. */
 private val DonutSize = 140.dp
@@ -114,6 +116,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
     val drillDown by viewModel.drillDown.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
+    val locale = appLocale()
     val snackbarHostState = remember { SnackbarHostState() }
     val chooserTitle = stringResource(R.string.stats2_export_chooser_title)
     val emptyMsg = stringResource(R.string.stats2_export_empty)
@@ -218,11 +221,19 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
                             s.perProject.forEach { p ->
                                 val pct = if (s.totalSeconds > 0) p.seconds * PERCENT_SCALE_INT / s.totalSeconds else 0
                                 ProjectLegendRow(
-                                    projectName = p.projectName,
+                                    projectName = if (p.projectId == null) {
+                                        stringResource(R.string.stats2_no_project)
+                                    } else {
+                                        p.projectName
+                                    },
                                     colorHex = p.colorHex,
                                     valueText = "${formatDuration(p.seconds)} ($pct%)",
                                     onClick = {
-                                        viewModel.openProjectDrillDown(p.projectId, p.projectName, p.colorHex)
+                                        viewModel.openProjectDrillDown(
+                                            p.projectId,
+                                            p.projectName.takeUnless { p.projectId == null },
+                                            p.colorHex,
+                                        )
                                     },
                                 )
                             }
@@ -245,6 +256,13 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
                                 viewModel.openTrendDrillDown(bucket.label, bucket.startDate, end)
                             },
                             modifier = Modifier.fillMaxWidth(),
+                            labelFor = { bucket ->
+                                if (state.granularity == TrendGranularity.DAY) {
+                                    bucket.startDate.dayOfWeek.getDisplayName(TextStyle.SHORT, locale)
+                                } else {
+                                    bucket.label
+                                }
+                            },
                         )
                     }
                 }
@@ -418,6 +436,7 @@ internal fun ProjectSwatch(color: Color) {
 @Composable
 private fun RangeChips(current: StatRange, onSelect: (StatRange) -> Unit) {
     var showPicker by remember { mutableStateOf(false) }
+    val locale = appLocale()
     val options = listOf(
         R.string.today to StatRange.Today,
         R.string.yesterday to StatRange.Yesterday,
@@ -438,8 +457,8 @@ private fun RangeChips(current: StatRange, onSelect: (StatRange) -> Unit) {
                 Text(
                     if (current is StatRange.Custom) {
                         "${current.start.format(
-                            DateTimeFormatter.ofPattern("d MMM"),
-                        )} – ${current.end.format(DateTimeFormatter.ofPattern("d MMM"))}"
+                            DateTimeFormatter.ofPattern("d MMM", locale),
+                        )} – ${current.end.format(DateTimeFormatter.ofPattern("d MMM", locale))}"
                     } else {
                         stringResource(R.string.stats_custom)
                     },

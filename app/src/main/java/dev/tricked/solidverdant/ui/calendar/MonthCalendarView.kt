@@ -48,7 +48,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -65,12 +64,14 @@ import dev.tricked.solidverdant.data.repository.TimeEntryRepository.EntrySyncSta
 import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.ui.components.EntryBlock
 import dev.tricked.solidverdant.ui.components.LoadingState
+import dev.tricked.solidverdant.ui.localization.appLocale
 import dev.tricked.solidverdant.ui.statistics.hexToColor
 import dev.tricked.solidverdant.ui.theme.Dimens
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.time.format.TextStyle
 
 @Composable
@@ -90,7 +91,7 @@ fun MonthCalendarView(
     syncStatusByEntryId: Map<String, EntrySyncStatus> = emptyMap(),
 ) {
     var monthExpanded by remember { mutableStateOf(true) }
-    val locale = LocalLocale.current.platformLocale
+    val locale = appLocale()
     val selectedEntries = state.bucketsByDate[state.selectedDate]?.entries.orEmpty()
     val now = rememberCalendarNow(secondPrecision = selectedEntries.any(::isRunningTimeEntry))
     val initialScrollHours = calendarInitialScrollHours(now, state.zone, state.calendarSettings).toFloat()
@@ -109,7 +110,7 @@ fun MonthCalendarView(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    state.selectedDate.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy")),
+                    state.selectedDate.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).withLocale(locale)),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -176,7 +177,11 @@ private fun MonthCalendarGrid(
                 )
             }
             Text(
-                text = "${state.visibleMonth.month.getDisplayName(TextStyle.FULL, locale)} ${state.visibleMonth.year}",
+                text = stringResource(
+                    R.string.calendar_month_header,
+                    state.visibleMonth.month.getDisplayName(TextStyle.FULL, locale),
+                    state.visibleMonth.year,
+                ),
                 style = MaterialTheme.typography.titleMedium,
             )
             IconButton(onClick = onNextMonth) {
@@ -292,7 +297,11 @@ private fun ColumnScope.SelectedDayEntries(
     val entries = state.bucketsByDate[state.selectedDate]?.entries.orEmpty()
     if (monthExpanded) {
         Text(
-            text = state.selectedDate.format(DateTimeFormatter.ofPattern("EEEE, d MMMM")),
+            text = state.selectedDate.format(
+                DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).withLocale(
+                    appLocale(),
+                ),
+            ),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(top = Dimens.Space16, bottom = Dimens.Space8),

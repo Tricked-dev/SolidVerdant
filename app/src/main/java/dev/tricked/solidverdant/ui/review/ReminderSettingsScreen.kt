@@ -48,6 +48,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.ui.localization.appLocale
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -67,11 +68,12 @@ fun ReminderSettingsScreen(onBack: () -> Unit = {}) {
     val state by viewModel.state.collectAsState()
     val permission = rememberNotificationPermissionState()
     val context = LocalContext.current
+    val locale = appLocale()
     var showTimePicker by remember { mutableStateOf(false) }
 
-    val timeLabel = remember(state.minuteOfDay) {
+    val timeLabel = remember(state.minuteOfDay, locale) {
         LocalTime.of(state.minuteOfDay / MINUTES_PER_HOUR, state.minuteOfDay % MINUTES_PER_HOUR)
-            .format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))
+            .format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale))
     }
 
     Scaffold(

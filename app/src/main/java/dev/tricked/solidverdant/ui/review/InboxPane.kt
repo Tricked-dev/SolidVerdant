@@ -75,11 +75,14 @@ import dev.tricked.solidverdant.domain.inbox.InboxIssue
 import dev.tricked.solidverdant.domain.inbox.InboxIssueType
 import dev.tricked.solidverdant.domain.inbox.MissingField
 import dev.tricked.solidverdant.ui.components.EditTimeEntryDialog
+import dev.tricked.solidverdant.ui.localization.appLocale
 import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
 
 /**
  * Time Inbox (gap analysis #16/#17). Renders the deterministic review checks derived by
@@ -131,6 +134,7 @@ fun InboxPane() {
     }
 
     val zone = state.zone
+    val locale = appLocale()
     val projectsById = remember(state.projects) { state.projects.associateBy { it.id } }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -139,7 +143,7 @@ fun InboxPane() {
                 issueCount = state.issues.size,
                 isRefreshing = state.isRefreshing,
                 showHorizonChip = state.horizonChosen,
-                horizonLabel = horizonChipLabel(state.horizonStartMs, zone),
+                horizonLabel = horizonChipLabel(state.horizonStartMs, zone, locale),
                 onHorizonChipClick = { showSettings = true },
                 onRefresh = viewModel::refresh,
                 onOpenSettings = { showSettings = true },
@@ -292,6 +296,7 @@ private fun IssueCard(
 private fun InboxDayHeader(date: LocalDate, onDismissAll: () -> Unit, onDismissBefore: () -> Unit) {
     var menuOpen by remember { mutableStateOf(false) }
     val moreCd = stringResource(R.string.inbox_day_more_cd)
+    val locale = appLocale()
     Surface(color = MaterialTheme.colorScheme.surface) {
         Row(
             modifier = Modifier
@@ -300,7 +305,11 @@ private fun InboxDayHeader(date: LocalDate, onDismissAll: () -> Unit, onDismissB
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = date.format(DAY_HEADER_FORMAT),
+                text = stringResource(
+                    R.string.inbox_day_header_format,
+                    date.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale)),
+                    date.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, locale),
+                ),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),
@@ -335,6 +344,7 @@ internal fun InboxHeader(
     onRefresh: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
+    val locale = appLocale()
     val horizonChipCd = stringResource(R.string.inbox_horizon_chip_cd)
     Row(
         modifier = Modifier
@@ -549,6 +559,8 @@ private fun InboxIssueContent(
     onQuickFix: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val locale = appLocale()
+    val dateTimeTemplate = stringResource(R.string.inbox_date_time_format)
     val title: String
     val body: String
     val actionLabel: String
@@ -587,7 +599,7 @@ private fun InboxIssueContent(
             Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(4.dp))
             Text(
-                text = timeRangeText(issue.startMs, issue.endMs, zone),
+                text = timeRangeText(issue.startMs, issue.endMs, zone, locale, dateTimeTemplate),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -693,25 +705,27 @@ private fun entrySubject(entry: TimeEntry, projectsById: Map<String, Project>): 
     return description ?: project ?: stringResource(R.string.inbox_entry_untitled)
 }
 
-private val TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-private val DATE_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM, HH:mm")
-private val HORIZON_DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM")
-private val DAY_HEADER_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM yyyy")
-
 /** Chip text for the current horizon: "Everything" when unbounded, else "Since <short date>". */
 @Composable
-private fun horizonChipLabel(horizonStartMs: Long?, zone: ZoneId): String = if (horizonStartMs == null) {
+private fun horizonChipLabel(horizonStartMs: Long?, zone: ZoneId, locale: Locale): String = if (horizonStartMs == null) {
     stringResource(R.string.inbox_horizon_everything)
 } else {
-    val date = OffsetDateTime.ofInstant(Instant.ofEpochMilli(horizonStartMs), zone).format(HORIZON_DATE_FORMAT)
+    val date = OffsetDateTime.ofInstant(Instant.ofEpochMilli(horizonStartMs), zone)
+        .format(DateTimeFormatter.ofPattern("d MMM", locale))
     stringResource(R.string.inbox_horizon_chip_since, date)
 }
 
-private fun timeRangeText(startMs: Long, endMs: Long, zone: ZoneId): String {
+private fun timeRangeText(startMs: Long, endMs: Long, zone: ZoneId, locale: Locale, dateTimeTemplate: String): String {
     val start = OffsetDateTime.ofInstant(Instant.ofEpochMilli(startMs), zone)
     val end = OffsetDateTime.ofInstant(Instant.ofEpochMilli(endMs), zone)
-    val startText = start.format(DATE_TIME_FORMAT)
-    val endText = if (start.toLocalDate() == end.toLocalDate()) end.format(TIME_FORMAT) else end.format(DATE_TIME_FORMAT)
+    val timeFormat = DateTimeFormatter.ofPattern("HH:mm", locale)
+    val dateFormat = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale)
+    val startText = dateTimeTemplate.format(start.format(dateFormat), start.format(timeFormat))
+    val endText = if (start.toLocalDate() == end.toLocalDate()) {
+        end.format(timeFormat)
+    } else {
+        dateTimeTemplate.format(end.format(dateFormat), end.format(timeFormat))
+    }
     return "$startText – $endText"
 }
 

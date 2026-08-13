@@ -80,16 +80,8 @@ fun StatFilterBar(
                 Spacer(Modifier.width(Dimens.Space8))
                 Text(stringResource(R.string.stats2_filters))
             }
+            Spacer(Modifier.weight(1f))
             if (filters.isActive) {
-                Text(
-                    pluralStringResource(
-                        R.plurals.stats2_active_filters,
-                        filters.activeCount,
-                        filters.activeCount,
-                    ),
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.weight(1f),
-                )
                 TextButton(
                     onClick = onClearFilters,
                     modifier = Modifier.heightIn(min = Dimens.MinTouchTarget),
@@ -102,15 +94,22 @@ fun StatFilterBar(
                     Spacer(Modifier.width(Dimens.Space4))
                     Text(stringResource(R.string.stats2_clear_filters))
                 }
-            } else {
-                Text(
-                    stringResource(R.string.stats2_active_scope_none),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
             }
         }
+        Text(
+            text = if (filters.isActive) {
+                pluralStringResource(
+                    R.plurals.stats2_active_filters,
+                    filters.activeCount,
+                    filters.activeCount,
+                )
+            } else {
+                stringResource(R.string.stats2_active_scope_none)
+            },
+            style = if (filters.isActive) MaterialTheme.typography.labelLarge else MaterialTheme.typography.bodySmall,
+            color = if (filters.isActive) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth(),
+        )
         if (filters.isActive) {
             ActiveFilterChips(filters, catalog, onFiltersChange)
         }

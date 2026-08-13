@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.tricked.solidverdant.data.calendar.DeviceCalendarEvent
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
@@ -38,6 +39,7 @@ import dev.tricked.solidverdant.ui.calendar.DayBucket
 import dev.tricked.solidverdant.ui.calendar.MonthCalendarView
 import dev.tricked.solidverdant.ui.calendar.WeekCalendarView
 import dev.tricked.solidverdant.ui.components.EditTimeEntryDialog
+import dev.tricked.solidverdant.ui.localization.appLocale
 import dev.tricked.solidverdant.ui.review.InboxHeader
 import dev.tricked.solidverdant.ui.review.InboxIssueCard
 import dev.tricked.solidverdant.ui.review.InboxIssueCardActions
@@ -73,6 +75,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
+import java.time.format.TextStyle
 import dev.tricked.solidverdant.ui.navigation.Screen as NavScreen
 
 /**
@@ -98,35 +101,20 @@ class ReadmeScreenshotsTest {
     @Test
     fun captureReadmeAndMatrix() {
         val screens = buildScreens()
-        for (device in ScreenshotMatrix.devices) {
-            for (theme in ScreenshotMatrix.themes) {
-                for (screen in screens) {
-                    ScreenshotHost.capture(
-                        theme = theme,
-                        device = device,
-                        filePath = ScreenshotHost.outputPath(
-                            ".github",
-                            "screenshots",
-                            "generated",
-                            "${screen.name}-${theme.id}-${device.id}.png",
-                        ),
-                        content = {
-                            ScreenshotHost.AppShell(
-                                destination = destinationFor(screen.name),
-                                inboxBadgeCount = if (screen.name == "inbox") 4 else 0,
-                                content = screen.content,
-                            )
-                        },
-                    )
-                    if (theme == ScreenshotMatrix.readmeTheme && device == ScreenshotMatrix.readmeDevice) {
+        for (locale in ScreenshotMatrix.locales) {
+            for (device in ScreenshotMatrix.devices) {
+                for (theme in ScreenshotMatrix.themes) {
+                    for (screen in screens) {
+                        val localeSuffix = if (locale == LocaleAxis.ENGLISH) "" else "-${locale.id}"
                         ScreenshotHost.capture(
                             theme = theme,
                             device = device,
+                            locale = locale,
                             filePath = ScreenshotHost.outputPath(
                                 ".github",
                                 "screenshots",
-                                "readme",
-                                "${screen.name}.png",
+                                "generated",
+                                "${screen.name}-${theme.id}-${device.id}$localeSuffix.png",
                             ),
                             content = {
                                 ScreenshotHost.AppShell(
@@ -136,6 +124,29 @@ class ReadmeScreenshotsTest {
                                 )
                             },
                         )
+                        if (locale == LocaleAxis.ENGLISH &&
+                            theme == ScreenshotMatrix.readmeTheme &&
+                            device == ScreenshotMatrix.readmeDevice
+                        ) {
+                            ScreenshotHost.capture(
+                                theme = theme,
+                                device = device,
+                                locale = locale,
+                                filePath = ScreenshotHost.outputPath(
+                                    ".github",
+                                    "screenshots",
+                                    "readme",
+                                    "${screen.name}.png",
+                                ),
+                                content = {
+                                    ScreenshotHost.AppShell(
+                                        destination = destinationFor(screen.name),
+                                        inboxBadgeCount = if (screen.name == "inbox") 4 else 0,
+                                        content = screen.content,
+                                    )
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -381,6 +392,7 @@ class ReadmeScreenshotsTest {
         },
         // 5. Statistics — filter bar + KPI grid + charts.
         Screen("statistics") {
+            val locale = appLocale()
             val summary = StatisticsSummary(
                 totalSeconds = 5 * 3600 + 45 * 60,
                 entryCount = 18,
@@ -419,6 +431,12 @@ class ReadmeScreenshotsTest {
                     bars = summary.trend,
                     barColor = MaterialTheme.colorScheme.primary,
                     onBarClick = {},
+                    labelFor = { bucket ->
+                        bucket.startDate.dayOfWeek.getDisplayName(
+                            TextStyle.SHORT,
+                            locale,
+                        )
+                    },
                 )
             }
         },
@@ -464,7 +482,7 @@ class ReadmeScreenshotsTest {
                     issueCount = issues.size,
                     isRefreshing = false,
                     showHorizonChip = true,
-                    horizonLabel = "Everything",
+                    horizonLabel = stringResource(dev.tricked.solidverdant.R.string.inbox_horizon_everything),
                     onHorizonChipClick = {},
                     onRefresh = {},
                     onOpenSettings = {},

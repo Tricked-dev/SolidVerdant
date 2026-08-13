@@ -23,13 +23,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.ui.components.DeltaBadge
 import dev.tricked.solidverdant.ui.components.SectionCard
+import dev.tricked.solidverdant.ui.localization.appLocale
 import dev.tricked.solidverdant.ui.theme.Dimens
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToLong
-
-private val comparisonDateFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM")
 
 /** Tabular figures so stacked metric values and deltas keep their digits aligned. */
 private val tabularBodyMedium
@@ -47,6 +47,7 @@ fun signedPercentValue(delta: MetricDelta): Long? = delta.percentChange()?.round
 
 @Composable
 fun StatComparisonCard(comparison: PeriodComparison, modifier: Modifier = Modifier) {
+    val locale = appLocale()
     SectionCard(
         modifier = modifier,
         title = stringResource(R.string.stats2_comparison_title),
@@ -55,8 +56,8 @@ fun StatComparisonCard(comparison: PeriodComparison, modifier: Modifier = Modifi
         Text(
             stringResource(
                 R.string.stats2_comparison_range,
-                comparison.previousStart.formatComparison(),
-                comparison.previousEnd.formatComparison(),
+                comparison.previousStart.formatComparison(locale),
+                comparison.previousEnd.formatComparison(locale),
             ),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -150,4 +151,4 @@ private fun ProjectChangeRow(change: ProjectChange) {
     }
 }
 
-private fun LocalDate.formatComparison(): String = format(comparisonDateFmt)
+private fun LocalDate.formatComparison(locale: Locale): String = format(DateTimeFormatter.ofPattern("d MMM", locale))

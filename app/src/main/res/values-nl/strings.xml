@@ -31,13 +31,13 @@
     <string name="all_items">Alle %1$s</string>
     <string name="minutes_short">min</string>
     <string name="nav_track">Registreren</string><string name="nav_calendar">Kalender</string><string name="nav_stats">Statistieken</string>
-    <string name="running_entries">Lopend</string>
+    <string name="running_entries">Lopend</string><string name="tracking_now">nu</string>
     <string name="enable_notifications">Meldingen inschakelen</string>
     <plurals name="collapse_entries">
         <item quantity="one">%1$d boeking inklappen</item>
         <item quantity="other">%1$d boekingen inklappen</item>
     </plurals>
-    <string name="stats_empty">Geen geregistreerde tijd in deze periode.</string><string name="stats_by_project">Per project</string><string name="stats_trend">Trend</string><string name="stats_last_7_days">Afgelopen 7 dagen</string><string name="stats_last_week">Vorige week</string><string name="stats_this_week">Deze week</string><string name="stats_this_month">Deze maand</string><string name="stats_previous_month">Vorige maand</string><string name="stats_custom">Aangepast</string><string name="apply">Toepassen</string><string name="stats_total">Totaal</string><string name="stats_entries">Boekingen</string><string name="stats_average_day">Gem. / dag</string><string name="calendar_show_month">Maand tonen</string><string name="calendar_previous_month">Vorige maand</string><string name="calendar_next_month">Volgende maand</string>
+    <string name="stats_empty">Geen geregistreerde tijd in deze periode.</string><string name="stats_by_project">Per project</string><string name="stats_trend">Trend</string><string name="stats_last_7_days">Afgelopen 7 dagen</string><string name="stats_last_week">Vorige week</string><string name="stats_this_week">Deze week</string><string name="stats_this_month">Deze maand</string><string name="stats_previous_month">Vorige maand</string><string name="stats_custom">Aangepast</string><string name="apply">Toepassen</string><string name="stats_total">Totaal</string><string name="stats_entries">Boekingen</string><string name="stats_average_day">Gem. / dag</string><string name="calendar_show_month">Maand tonen</string><string name="calendar_previous_month">Vorige maand</string><string name="calendar_next_month">Volgende maand</string><string name="calendar_month_header">%1$s %2$d</string>
     <string name="calendar_drag_to_create">Tik om een boeking te maken of sleep om een start- en eindtijd te selecteren.</string>
     <string name="calendar_more_actions">Meer kalenderacties</string>
     <string name="calendar_timer_running">Lopende timer</string>

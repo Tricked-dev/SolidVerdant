@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -208,6 +209,7 @@ import dev.tricked.solidverdant.ui.components.EntryDatePickerDialog
 import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
 import dev.tricked.solidverdant.ui.components.SectionCard
 import dev.tricked.solidverdant.ui.components.SyncChip
+import dev.tricked.solidverdant.ui.localization.appLocale
 import dev.tricked.solidverdant.ui.theme.Dimens
 import dev.tricked.solidverdant.util.IsoTimes
 import dev.tricked.solidverdant.util.NotificationPermissionHelper
@@ -494,9 +496,10 @@ fun TrackingScreen(
                                 Column(Modifier.padding(start = 12.dp)) {
                                     Text(account.name, style = MaterialTheme.typography.titleMedium)
                                     Text(account.email, style = MaterialTheme.typography.bodySmall)
-                                    val weekStart = remember(account.weekStart) {
+                                    val locale = appLocale()
+                                    val weekStart = remember(account.weekStart, locale) {
                                         runCatching { DayOfWeek.valueOf(account.weekStart.uppercase()) }
-                                            .getOrNull()?.getDisplayName(TextStyle.FULL, Locale.getDefault())
+                                            .getOrNull()?.getDisplayName(TextStyle.FULL, locale)
                                     }
                                     val profileDetails = listOfNotNull(
                                         account.timezone.takeIf { it.isNotBlank() }, weekStart,
@@ -1197,7 +1200,7 @@ fun TrackingScreen(
                     Text(
                         text = stringResource(
                             R.string.finding_date_entries,
-                            formatDate(targetDate, LocalContext.current, uiState.zone)
+                            formatDate(targetDate, LocalContext.current, uiState.zone, appLocale())
                         ),
                         style = MaterialTheme.typography.titleMedium
                     )
@@ -1979,9 +1982,15 @@ internal fun TrackingControls(
                         onClick = onUpdate,
                         modifier = Modifier.weight(1f),
                         enabled = !uiState.isMutating,
+                        contentPadding = PaddingValues(horizontal = Dimens.Space8),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text(stringResource(R.string.update), fontWeight = FontWeight.SemiBold)
+                        Text(
+                            stringResource(R.string.update),
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false,
+                        )
                     }
                     Button(
                         onClick = {
@@ -1990,6 +1999,7 @@ internal fun TrackingControls(
                         },
                         modifier = Modifier.weight(1f),
                         enabled = !uiState.isMutating,
+                        contentPadding = PaddingValues(horizontal = Dimens.Space8),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.tertiary,
                             contentColor = MaterialTheme.colorScheme.onTertiary
@@ -2002,7 +2012,12 @@ internal fun TrackingControls(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(4.dp))
-                        Text(stringResource(R.string.pause), fontWeight = FontWeight.SemiBold)
+                        Text(
+                            stringResource(R.string.pause),
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false,
+                        )
                     }
                     Button(
                         onClick = {
@@ -2011,6 +2026,7 @@ internal fun TrackingControls(
                         },
                         modifier = Modifier.weight(1f).testTag(TrackingTestTags.STOP_BUTTON),
                         enabled = !uiState.isMutating,
+                        contentPadding = PaddingValues(horizontal = Dimens.Space8),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error,
                             contentColor = MaterialTheme.colorScheme.onError
@@ -2023,7 +2039,12 @@ internal fun TrackingControls(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(4.dp))
-                        Text(stringResource(R.string.stop), fontWeight = FontWeight.SemiBold)
+                        Text(
+                            stringResource(R.string.stop),
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false,
+                        )
                     }
                 } else if (uiState.isPaused) {
                     Button(
@@ -2033,6 +2054,7 @@ internal fun TrackingControls(
                         },
                         modifier = Modifier.weight(1f),
                         enabled = !uiState.isMutating,
+                        contentPadding = PaddingValues(horizontal = Dimens.Space8),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Icon(
@@ -2041,7 +2063,12 @@ internal fun TrackingControls(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(4.dp))
-                        Text(stringResource(R.string.resume), fontWeight = FontWeight.SemiBold)
+                        Text(
+                            stringResource(R.string.resume),
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false,
+                        )
                     }
                     Button(
                         onClick = {
@@ -2050,6 +2077,7 @@ internal fun TrackingControls(
                         },
                         modifier = Modifier.weight(1f).testTag(TrackingTestTags.STOP_BUTTON),
                         enabled = !uiState.isMutating,
+                        contentPadding = PaddingValues(horizontal = Dimens.Space8),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error,
                             contentColor = MaterialTheme.colorScheme.onError
@@ -2062,7 +2090,12 @@ internal fun TrackingControls(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(4.dp))
-                        Text(stringResource(R.string.stop), fontWeight = FontWeight.SemiBold)
+                        Text(
+                            stringResource(R.string.stop),
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false,
+                        )
                     }
                 } else {
                     Button(
@@ -2452,6 +2485,7 @@ private fun DateHeader(
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
+    val locale = appLocale()
     val resources = LocalResources.current
     val now = remember { Instant.now() }
     val headerStats = remember(entries, projectsById, date, zone, now) {
@@ -2479,7 +2513,7 @@ private fun DateHeader(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
-            text = formatDate(date, context, zone),
+            text = formatDate(date, context, zone, locale),
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -2716,7 +2750,11 @@ private fun CompactTimeEntryRow(
     isIndented: Boolean = false
 ) {
     val now = remember { Instant.now() }
-    val timeRange = remember(entry.start, entry.end, zone) { formatTimeRange(entry.start, entry.end, zone) }
+    val locale = appLocale()
+    val nowLabel = stringResource(R.string.tracking_now)
+    val timeRange = remember(entry.start, entry.end, zone, locale, nowLabel) {
+        formatTimeRange(entry.start, entry.end, zone, locale, nowLabel)
+    }
     val durationText = remember(totalDuration, entry, date, zone, now) {
         formatDuration(totalDuration ?: entryDurationOnDay(entry, date, zone, now))
     }
@@ -3726,24 +3764,29 @@ internal fun EntryValidationBanner(result: EntryTimeValidator.Result, durationHo
 /**
  * Format date for display
  */
-private fun formatDate(date: LocalDate, context: android.content.Context, zone: ZoneId): String {
+private fun formatDate(date: LocalDate, context: android.content.Context, zone: ZoneId, locale: Locale): String {
     val today = LocalDate.now(zone)
     return when {
         date == today -> context.getString(R.string.today)
         date == today.minusDays(1) -> context.getString(R.string.yesterday)
-        else -> date.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))
+        else -> date.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale))
     }
 }
 
 // Shared formatter instances: DateTimeFormatter.ofPattern() builds a new parser every call,
 // which is measurable when every visible history row formats its time range during a scroll.
 private val hourMinuteFormatter = DateTimeFormatter.ofPattern("HH:mm")
-private val entryDateFormatter = DateTimeFormatter.ofPattern("EEE, d MMM yyyy")
 
 /**
  * Format time range
  */
-internal fun formatTimeRange(start: String, end: String?, zone: ZoneId): String {
+internal fun formatTimeRange(
+    start: String,
+    end: String?,
+    zone: ZoneId,
+    locale: Locale = Locale.getDefault(),
+    nowLabel: String = "now",
+): String {
     val startValue = runCatching { ZonedDateTime.parse(start).withZoneSameInstant(zone) }.getOrNull()
         ?: return "Invalid time"
     val startFormatted = startValue.format(hourMinuteFormatter)
@@ -3756,11 +3799,11 @@ internal fun formatTimeRange(start: String, end: String?, zone: ZoneId): String 
         if (startDate == endDate) {
             "$startFormatted - $endFormatted"
         } else {
-            "${startDate.format(entryDateFormatter)} $startFormatted - " +
-                "${endDate.format(entryDateFormatter)} $endFormatted"
+            "${startDate.format(DateTimeFormatter.ofPattern("EEE, d MMM yyyy", locale))} $startFormatted - " +
+                "${endDate.format(DateTimeFormatter.ofPattern("EEE, d MMM yyyy", locale))} $endFormatted"
         }
     } else {
-        "$startFormatted - now"
+        "$startFormatted - $nowLabel"
     }
 }
 

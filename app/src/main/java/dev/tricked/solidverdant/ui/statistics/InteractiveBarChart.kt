@@ -49,7 +49,13 @@ private val BarChartHeight = 140.dp
  * width and the row scrolls horizontally when a long range produces more bars than fit.
  */
 @Composable
-fun InteractiveBarChart(bars: List<TrendBucket>, barColor: Color, onBarClick: (TrendBucket) -> Unit, modifier: Modifier = Modifier) {
+fun InteractiveBarChart(
+    bars: List<TrendBucket>,
+    barColor: Color,
+    onBarClick: (TrendBucket) -> Unit,
+    modifier: Modifier = Modifier,
+    labelFor: (TrendBucket) -> String = { it.label },
+) {
     if (bars.isEmpty()) return
     val max = bars.maxOf { it.seconds }.coerceAtLeast(1L)
     BoxWithConstraints(modifier.fillMaxWidth()) {
@@ -64,9 +70,10 @@ fun InteractiveBarChart(bars: List<TrendBucket>, barColor: Color, onBarClick: (T
         ) {
             bars.forEach { bucket ->
                 val fraction = (bucket.seconds.toFloat() / max.toFloat()).coerceIn(0f, 1f)
+                val displayLabel = labelFor(bucket)
                 val label = stringResource(
                     R.string.stats2_drilldown_bucket_content_description,
-                    "${bucket.label}: ${formatDuration(bucket.seconds)}",
+                    "$displayLabel: ${formatDuration(bucket.seconds)}",
                 )
                 Column(
                     modifier = Modifier
@@ -93,7 +100,7 @@ fun InteractiveBarChart(bars: List<TrendBucket>, barColor: Color, onBarClick: (T
                         )
                     }
                     Text(
-                        text = bucket.label,
+                        text = displayLabel,
                         style = MaterialTheme.typography.labelSmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,

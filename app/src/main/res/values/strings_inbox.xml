@@ -104,6 +104,8 @@
     <string name="inbox_horizon_this_week">This week</string>
     <string name="inbox_horizon_last_30_days">Last 30 days</string>
     <string name="inbox_horizon_everything">Everything</string>
+    <string name="inbox_date_time_format">%1$s, %2$s</string>
+    <string name="inbox_day_header_format">%2$s %1$s</string>
     <string name="inbox_horizon_chip_since">Since %1$s</string>
     <string name="inbox_horizon_chip_cd">Change how far back Review looks</string>
     <string name="inbox_settings_horizon">How far back to review</string>

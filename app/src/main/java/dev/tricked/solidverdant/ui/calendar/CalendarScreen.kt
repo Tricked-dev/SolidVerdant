@@ -93,6 +93,7 @@ import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.ui.components.EditTimeEntryDialog
 import dev.tricked.solidverdant.ui.components.ErrorState
 import dev.tricked.solidverdant.ui.components.SyncChip
+import dev.tricked.solidverdant.ui.localization.appLocale
 import dev.tricked.solidverdant.ui.theme.Dimens
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -101,6 +102,7 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -721,6 +723,7 @@ private fun CalendarRunningTimerCard(entry: TimeEntry, elapsedSeconds: StateFlow
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CalendarSplitDialog(entry: TimeEntry, zone: java.time.ZoneId, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    val locale = appLocale()
     val originalStart = remember(entry.id, entry.start, zone) {
         runCatching {
             ZonedDateTime.parse(entry.start, DateTimeFormatter.ISO_DATE_TIME).withZoneSameInstant(zone)
@@ -789,7 +792,13 @@ private fun CalendarSplitDialog(entry: TimeEntry, zone: java.time.ZoneId, onDism
                     onClick = { showDatePicker = true },
                     modifier = Modifier.fillMaxWidth().heightIn(min = Dimens.MinTouchTarget),
                 ) {
-                    Text(selectedDate.format(java.time.format.DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM)))
+                    Text(
+                        selectedDate.format(
+                            DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(
+                                locale,
+                            ),
+                        ),
+                    )
                 }
                 TimePicker(state = timeState, modifier = Modifier.testTag(CalendarTestTags.SPLIT_PICKER))
                 if (invalid) {

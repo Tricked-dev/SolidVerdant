@@ -6,6 +6,8 @@
 
 package dev.tricked.solidverdant.screenshots
 
+import android.content.Context
+import android.content.res.Configuration
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -32,6 +34,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,9 +42,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
 import com.github.takahirom.roborazzi.RoborazziComposeOptions
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -51,6 +57,7 @@ import dev.tricked.solidverdant.ui.navigation.MainNavigationBar
 import dev.tricked.solidverdant.ui.navigation.Screen
 import dev.tricked.solidverdant.ui.theme.SolidVerdantTheme
 import java.io.File
+import java.util.Locale
 
 /**
  * Pure-JVM (Robolectric + Roborazzi) screenshot host.
@@ -73,10 +80,16 @@ enum class DeviceAxis(val id: String, val widthDp: Int, val heightDp: Int) {
     TABLET("tablet", 800, 1280),
 }
 
+enum class LocaleAxis(val id: String, val locale: Locale) {
+    ENGLISH("en", Locale.ENGLISH),
+    JAPANESE("ja", Locale.JAPANESE),
+}
+
 /** The single list to edit. Cartesian product of these axes is rendered for every screen. */
 object ScreenshotMatrix {
     val themes: List<ThemeAxis> = listOf(ThemeAxis.LIGHT, ThemeAxis.DARK)
     val devices: List<DeviceAxis> = listOf(DeviceAxis.PHONE, DeviceAxis.TABLET)
+    val locales: List<LocaleAxis> = listOf(LocaleAxis.ENGLISH, LocaleAxis.JAPANESE)
 
     /** The cohesive README hero style: Neo dark + phone. */
     val readmeTheme: ThemeAxis = ThemeAxis.DARK
@@ -262,16 +275,38 @@ object ScreenshotHost {
      * many times inside a single test method.
      */
     @OptIn(ExperimentalRoborazziApi::class)
-    fun capture(theme: ThemeAxis, device: DeviceAxis, filePath: String, content: @Composable () -> Unit) {
-        captureRoboImage(
-            filePath = filePath,
-            roborazziComposeOptions = RoborazziComposeOptions {
-                size(widthDp = device.widthDp, heightDp = device.heightDp)
-            },
-        ) {
-            SolidVerdantTheme(themeMode = theme.mode) {
-                AndroidShell(content)
+    fun capture(
+        theme: ThemeAxis,
+        device: DeviceAxis,
+        filePath: String,
+        locale: LocaleAxis = LocaleAxis.ENGLISH,
+        content: @Composable () -> Unit,
+    ) {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+        val configuration = Configuration(baseContext.resources.configuration).apply {
+            setLocale(locale.locale)
+        }
+        val localizedContext = baseContext.createConfigurationContext(configuration)
+        val previousLocale = Locale.getDefault()
+        Locale.setDefault(locale.locale)
+        try {
+            captureRoboImage(
+                filePath = filePath,
+                roborazziComposeOptions = RoborazziComposeOptions {
+                    size(widthDp = device.widthDp, heightDp = device.heightDp)
+                },
+            ) {
+                CompositionLocalProvider(
+                    LocalContext provides localizedContext,
+                    LocalConfiguration provides configuration,
+                ) {
+                    SolidVerdantTheme(themeMode = theme.mode) {
+                        AndroidShell(content)
+                    }
+                }
             }
+        } finally {
+            Locale.setDefault(previousLocale)
         }
     }
 }
