@@ -77,6 +77,47 @@ class TimeEntryRepositoryReadTest {
         assertEquals(setOf("a", "b"), observed.map { it.id }.toSet())
     }
 
+    @Test fun refresh_adopts_a_server_active_entry_into_room() = runTest {
+        val serverActive = srv("server-active").copy(end = null, duration = null)
+        remote.entries = listOf(serverActive)
+
+        assertTrue(repo.refreshAll("org1", "member1").isSuccess)
+
+        val stored = requireNotNull(db.timeEntryDao().getById(serverActive.id))
+        assertEquals(SyncState.SYNCED, stored.syncState)
+        assertEquals(serverActive.id, repo.observeActiveEntry("org1").first()?.id)
+    }
+
+    @Test fun refresh_replaces_a_cached_active_entry_with_the_server_stop() = runTest {
+        val cachedActive = srv("server-active").copy(end = null, duration = null)
+        val serverStopped = cachedActive.copy(end = "2026-01-01T10:15:00Z", duration = 4500)
+        db.timeEntryDao().upsert(cachedActive.toEntity(updatedAt = 1L, syncState = SyncState.SYNCED))
+        remote.entries = listOf(serverStopped)
+
+        assertTrue(repo.refreshAll("org1", "member1").isSuccess)
+
+        val stored = requireNotNull(db.timeEntryDao().getById(serverStopped.id))
+        assertEquals(serverStopped.end, stored.end)
+        assertEquals(serverStopped.duration, stored.duration)
+        assertEquals(SyncState.SYNCED, stored.syncState)
+        assertNull(repo.observeActiveEntry("org1").first())
+    }
+
+    @Test fun refresh_does_not_resurrect_a_locally_stopped_pending_entry() = runTest {
+        val serverActive = srv("server-active").copy(end = null, duration = null)
+        val localStopped = serverActive.copy(end = "2026-01-01T10:05:00Z", duration = 3900)
+        db.timeEntryDao().upsert(localStopped.toEntity(updatedAt = 2L, syncState = SyncState.PENDING))
+        remote.entries = listOf(serverActive)
+
+        assertTrue(repo.refreshAll("org1", "member1").isSuccess)
+
+        val stored = requireNotNull(db.timeEntryDao().getById(localStopped.id))
+        assertEquals(localStopped.end, stored.end)
+        assertEquals(localStopped.duration, stored.duration)
+        assertEquals(SyncState.PENDING, stored.syncState)
+        assertNull(repo.observeActiveEntry("org1").first())
+    }
+
     @Test fun refresh_does_not_clobber_newer_pending_local_edit() = runTest {
         // Local edit made at t=5000 (newer)
         db.timeEntryDao().upsert(srv("a").copy(description = "local").toEntity(updatedAt = 5000L, syncState = SyncState.PENDING))

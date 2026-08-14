@@ -317,7 +317,18 @@ class TimeEntryRepository @Inject constructor(
         // SV-026: the optimistic Room write and its outbox enqueue must commit atomically, or a
         // crash between them yields an entry Room shows but the outbox never learns to sync (or
         // vice versa).
-        database.withTransaction {
+        val existingActive = database.withTransaction<TimeEntry?> {
+            // Start is account-wide on the server. Keep the local source of truth equally strict:
+            // a repeated tap, a stale callback, or two app surfaces racing must not create a
+            // second local active row. A different user's entry can exist in the same organization
+            // when the server exposes organization-wide history, so only adopt this user's row.
+            val active = timeEntryDao.getActive(organizationId)?.takeIf { it.userId == userId }
+            if (active != null) {
+                return@withTransaction active.toModel(
+                    timeEntryDao.tagIdsFor(active.id).map(::Tag),
+                )
+            }
+
             timeEntryDao.upsert(entry.toEntity(updatedAt = now, syncState = SyncState.PENDING))
             timeEntryDao.replaceTagRefs(localId, tagIds)
             outboxDao.insert(
@@ -332,14 +343,20 @@ class TimeEntryRepository @Inject constructor(
                     ),
                 ),
             )
+            null
         }
-        return entry
+        return existingActive ?: entry
     }
 
     suspend fun stopEntry(entry: TimeEntry, userId: String) {
         val now = clock.nowMs()
         val end = nowIso()
         database.withTransaction {
+            // A stale UI callback may arrive after the first stop already committed. Stopping a
+            // completed row again must be a no-op: re-enqueuing STOP would overwrite the captured
+            // end time and make one user action look like multiple adjacent entries remotely.
+            if (entry.end != null) return@withTransaction
+
             // START reconciliation replaces a local id with the server id. The UI can still hold
             // the retired local snapshot for one frame and hand it back here. Resolve that narrow
             // race to the matching active row so Stop cannot create an orphaned completed local
@@ -351,6 +368,7 @@ class TimeEntryRepository @Inject constructor(
             val targetId = current?.id ?: entry.id
             val targetOrganizationId = current?.organizationId ?: entry.organizationId
             val targetStart = current?.start ?: entry.start
+            if (current?.end != null) return@withTransaction
             if (current?.syncState == SyncState.CONFLICT) {
                 // Stopping is the one mutation allowed on a conflicted row: time capture must not
                 // be blocked. Keep the row conflicted and preserve the server recovery copy, but

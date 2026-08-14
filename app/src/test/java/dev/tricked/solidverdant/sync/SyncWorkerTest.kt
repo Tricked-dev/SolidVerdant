@@ -20,6 +20,7 @@ import dev.tricked.solidverdant.data.model.Organization
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.remote.FakeRemoteDataSource
 import dev.tricked.solidverdant.data.remote.RemoteDataSource
+import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.util.Clock
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -29,6 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
@@ -1381,6 +1383,45 @@ class SyncWorkerTest {
         assertEquals(server.description, stored.description)
         assertEquals(SyncState.SYNCED, stored.syncState)
         assertTrue("Adopting an already-known active entry must not POST a duplicate", remote.started.isEmpty())
+    }
+
+    @Test fun server_pull_then_start_sync_rekeys_the_optimistic_room_row_without_a_duplicate() = runTest {
+        val repository = TimeEntryRepository(
+            db.timeEntryDao(),
+            db.catalogDao(),
+            db.outboxDao(),
+            db.syncMetaDao(),
+            remote,
+            clock,
+            json,
+            db,
+        )
+        val local = repository.startEntry(
+            organizationId = "org1",
+            memberId = "m1",
+            userId = "u1",
+            projectId = null,
+            taskId = null,
+            description = "started in the app",
+            tagIds = emptyList(),
+        )
+        val server = local.copy(id = "server-active", description = "started elsewhere", end = null)
+        remote.entries = listOf(server)
+        remote.active = server
+
+        assertTrue(repository.refreshAll("org1", "m1").isSuccess)
+        assertEquals(
+            setOf(local.id, server.id),
+            db.timeEntryDao().observeEntries("org1").first().map { it.id }.toSet(),
+        )
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        val roomRows = db.timeEntryDao().observeEntries("org1").first()
+        assertEquals(listOf(server.id), roomRows.map { it.id })
+        assertEquals(SyncState.SYNCED, roomRows.single().syncState)
+        assertTrue("The worker should adopt the pulled server timer", remote.started.isEmpty())
+        assertTrue(db.outboxDao().peekAll().isEmpty())
     }
 
     // SV-025: a dead-lettered UPDATE that is revived (deadLettered reset for retry) but has since

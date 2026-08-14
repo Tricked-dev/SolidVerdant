@@ -259,6 +259,11 @@ class TrackingViewModel @Inject constructor(
     private var activePollOverrideOrganizationId: String? = null
     private var activePollOverride: TimeEntry? = null
     private val locallyStoppingEntryIds = mutableSetOf<String>()
+
+    // Room emissions can arrive before a mutation coroutine reaches its success/failure branch.
+    // Keep this guard separate from [TrackingUiState.isLoading] so a collector cannot re-enable
+    // Start/Stop and allow a second callback while the first write is still in flight.
+    private var timerMutationInProgress = false
     private var historyOrganizationId: String? = null
     private var historyMemberId: String? = null
     private var historyRequestGeneration = 0L
@@ -504,7 +509,7 @@ class TrackingViewModel @Inject constructor(
                         currentState.hasMoreTimeEntries
                     },
                     cachedContinueEntry = continueEntry,
-                    isLoading = false,
+                    isLoading = currentState.isLoading || timerMutationInProgress,
                     // Only reset in-progress edits when the active entry itself changes,
                     // so a user's typing is not clobbered by a background emission.
                     editingDescription = if (activeChanged) active?.description.orEmpty() else currentState.editingDescription,
@@ -1265,9 +1270,13 @@ class TrackingViewModel @Inject constructor(
      * Start a new time entry with current editing state
      */
     fun startTimeEntry(organizationId: String, memberId: String, userId: String) {
+        if (_uiState.value.currentTimeEntry != null || _uiState.value.isTracking || _uiState.value.isPaused) {
+            Timber.d("Ignoring start while a timer is already active or paused")
+            return
+        }
+        if (!beginTimerMutation()) return
         clearActivePollOverride()
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
                 // Optimistic local write + outbox enqueue. The Room collector surfaces the
                 // new active entry and starts the timer.
@@ -1307,9 +1316,10 @@ class TrackingViewModel @Inject constructor(
                 TimeTrackingWidget.requestUpdate(context)
 
                 _uiState.value = _uiState.value.copy(isLoading = false, isTracking = true)
+                timerMutationInProgress = false
                 Timber.d("Time entry started successfully (optimistic)")
             } catch (e: Exception) {
-                handleMutationFailure(e, "Failed to start time entry")
+                handleTimerMutationFailure(e, "Failed to start time entry")
             }
         }
     }
@@ -1405,13 +1415,14 @@ class TrackingViewModel @Inject constructor(
             return
         }
 
+        if (!beginTimerMutation()) return
+
         // Active polling can complete between the local STOP transaction and the outbox observer
         // emission. Suppress that exact server id synchronously while the STOP is being queued.
         locallyStoppingEntryIds += currentEntry.id
         clearActivePollOverride()
 
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
                 // Optimistic local stop + outbox enqueue. The collector clears the active entry.
                 timeEntryRepository.stopEntry(currentEntry, currentEntry.userId)
@@ -1439,9 +1450,10 @@ class TrackingViewModel @Inject constructor(
                 TimeTrackingWidget.requestUpdate(context)
 
                 _uiState.value = _uiState.value.copy(isLoading = false)
+                timerMutationInProgress = false
             } catch (e: Exception) {
                 locallyStoppingEntryIds.remove(currentEntry.id)
-                handleMutationFailure(e, "Failed to stop time entry")
+                handleTimerMutationFailure(e, "Failed to stop time entry")
             }
         }
     }
@@ -1457,9 +1469,10 @@ class TrackingViewModel @Inject constructor(
             return
         }
 
+        if (!beginTimerMutation()) return
+
         clearActivePollOverride()
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
                 // Optimistic local stop + outbox enqueue; keep editing state for resume.
                 timeEntryRepository.stopEntry(currentEntry, currentEntry.userId)
@@ -1471,6 +1484,7 @@ class TrackingViewModel @Inject constructor(
                     isPaused = true,
                     currentTimeEntry = null,
                 )
+                timerMutationInProgress = false
                 stopTimer()
                 lastCollectedActiveId = null
                 Timber.d("Time entry paused successfully (optimistic)")
@@ -1482,7 +1496,7 @@ class TrackingViewModel @Inject constructor(
                 settingsDataStore.setWidgetTrackingState(isTracking = false)
                 TimeTrackingWidget.requestUpdate(context)
             } catch (e: Exception) {
-                handleMutationFailure(e, "Failed to pause time entry")
+                handleTimerMutationFailure(e, "Failed to pause time entry")
             }
         }
     }
@@ -1491,10 +1505,15 @@ class TrackingViewModel @Inject constructor(
      * Resume tracking after pause - starts a new time entry with the same project/task/description
      */
     fun resumeTimeEntry(organizationId: String, memberId: String, userId: String) {
+        if (!_uiState.value.isPaused || _uiState.value.currentTimeEntry != null) {
+            Timber.d("Ignoring resume without a paused timer")
+            return
+        }
+        if (!beginTimerMutation()) return
         clearActivePollOverride()
         val wasPaused = _uiState.value.isPaused
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null, isPaused = false)
+            _uiState.value = _uiState.value.copy(isPaused = false)
             try {
                 val timeEntry = timeEntryRepository.startEntry(
                     organizationId = organizationId,
@@ -1532,10 +1551,11 @@ class TrackingViewModel @Inject constructor(
                 TimeTrackingWidget.requestUpdate(context)
 
                 _uiState.value = _uiState.value.copy(isLoading = false, isTracking = true)
+                timerMutationInProgress = false
                 Timber.d("Time entry resumed successfully with new entry (optimistic)")
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(isPaused = wasPaused)
-                handleMutationFailure(e, "Failed to resume time entry")
+                handleTimerMutationFailure(e, "Failed to resume time entry")
             }
         }
     }
@@ -1805,6 +1825,21 @@ class TrackingViewModel @Inject constructor(
             isLoading = false,
             error = error.message ?: fallbackMessage,
         )
+    }
+
+    private fun beginTimerMutation(): Boolean {
+        if (timerMutationInProgress) {
+            Timber.d("Ignoring repeated timer mutation while the first is in flight")
+            return false
+        }
+        timerMutationInProgress = true
+        _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+        return true
+    }
+
+    private fun handleTimerMutationFailure(error: Exception, fallbackMessage: String) {
+        timerMutationInProgress = false
+        handleMutationFailure(error, fallbackMessage)
     }
 
     /**

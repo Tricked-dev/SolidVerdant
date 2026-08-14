@@ -132,6 +132,15 @@ class TimeEntryRepositoryWriteTest {
         assertEquals(entry.id, ops.first().timeEntryId)
     }
 
+    @Test fun repeated_start_reuses_the_existing_local_active_entry() = runTest {
+        val first = repo.startEntry("org1", "member1", "u1", null, null, "work", emptyList())
+        val second = repo.startEntry("org1", "member1", "u1", null, null, "work again", emptyList())
+
+        assertEquals(first.id, second.id)
+        assertEquals(first.id, repo.observeActiveEntry("org1").first()?.id)
+        assertEquals(listOf(OutboxOpType.START), db.outboxDao().peekAll().map { it.opType })
+    }
+
     @Test fun delete_of_never_synced_entry_cancels_create_and_enqueues_no_delete() = runTest {
         // SV-008: deleting an entry that never reached the server (local- id) must cancel its queued
         // START/CREATE and enqueue NO server DELETE - otherwise the START uploads first on the next
@@ -513,6 +522,25 @@ class TimeEntryRepositoryWriteTest {
         val stop = db.outboxDao().peekAll().single()
         assertEquals(OutboxOpType.STOP, stop.opType)
         assertEquals(reconciled.id, stop.timeEntryId)
+    }
+
+    @Test fun repeated_stop_is_idempotent_and_preserves_the_first_end_time() = runTest {
+        val entry = TimeEntry(
+            id = "server-1",
+            userId = "u",
+            organizationId = "org1",
+            start = "2026-07-07T08:00:00Z",
+            end = null,
+            description = "running",
+        )
+        db.timeEntryDao().upsert(entry.toEntity(1L, SyncState.SYNCED))
+
+        repo.stopEntry(entry, "u")
+        val firstEnd = db.timeEntryDao().getById(entry.id)?.end
+        repo.stopEntry(entry, "u")
+
+        assertEquals(firstEnd, db.timeEntryDao().getById(entry.id)?.end)
+        assertEquals(1, db.outboxDao().peekAll().count { it.opType == OutboxOpType.STOP })
     }
 
     @Test fun delete_captures_base_despite_pending_flag() = runTest {

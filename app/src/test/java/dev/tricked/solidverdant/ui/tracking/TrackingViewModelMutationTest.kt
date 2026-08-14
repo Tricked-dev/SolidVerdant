@@ -19,6 +19,7 @@ import dev.tricked.solidverdant.util.Clock
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.TestDispatcher
@@ -29,6 +30,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -109,6 +111,71 @@ class TrackingViewModelMutationTest {
 
         assertFalse(viewModel.uiState.value.isLoading)
         assertEquals("network disappeared", viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun repeated_start_is_ignored_while_the_first_mutation_is_in_flight() = runTest(dispatcher.scheduler) {
+        val release = CompletableDeferred<Unit>()
+        val started = CompletableDeferred<Unit>()
+        val entry = TimeEntry(
+            id = "local-start",
+            userId = "user",
+            organizationId = "org",
+            start = "2026-08-10T08:00:00Z",
+        )
+        val repository = mockk<TimeEntryRepository>(relaxed = true)
+        coEvery { repository.startEntry(any(), any(), any(), any(), any(), any(), any()) } coAnswers {
+            started.complete(Unit)
+            release.await()
+            entry
+        }
+        val viewModel = viewModel(repository)
+
+        viewModel.startTimeEntry("org", "member", "user")
+        assertTrue(started.isCompleted)
+        viewModel.startTimeEntry("org", "member", "user")
+
+        coVerify(exactly = 1) { repository.startEntry(any(), any(), any(), any(), any(), any(), any()) }
+        release.complete(Unit)
+        dispatcher.scheduler.runCurrent()
+    }
+
+    @Test
+    fun repeated_stop_is_ignored_while_the_first_mutation_is_in_flight() = runTest(dispatcher.scheduler) {
+        val release = CompletableDeferred<Unit>()
+        val stopped = CompletableDeferred<Unit>()
+        val active = TimeEntry(
+            id = "active",
+            userId = "user",
+            organizationId = "org",
+            start = "2026-08-10T08:00:00Z",
+            description = "work",
+        )
+        val repository = mockk<TimeEntryRepository>(relaxed = true)
+        coEvery { repository.stopEntry(any(), any()) } coAnswers {
+            stopped.complete(Unit)
+            release.await()
+        }
+        settings.cacheTrackingState(
+            SettingsDataStore.CachedTrackingState(
+                organizationId = "org",
+                timeEntries = listOf(active),
+                projects = emptyList(),
+                clients = emptyList(),
+                tasks = emptyList(),
+                tags = emptyList(),
+                activeEntry = active,
+            ),
+        )
+        val viewModel = viewModel(repository)
+
+        viewModel.stopTimeEntry()
+        assertTrue(stopped.isCompleted)
+        viewModel.stopTimeEntry()
+
+        coVerify(exactly = 1) { repository.stopEntry(any(), any()) }
+        release.complete(Unit)
+        dispatcher.scheduler.runCurrent()
     }
 
     @Test
