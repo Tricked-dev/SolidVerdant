@@ -27,7 +27,7 @@ object TestTags {
     const val TRACK_ENTRY_ROW = TrackingTestTags.ENTRY_ROW
     const val TRACK_START_BUTTON = TrackingTestTags.START_BUTTON
     const val TRACK_RESET_FIELDS_BUTTON = TrackingTestTags.RESET_FIELDS_BUTTON
-    const val TRACK_KEEP_FIELDS_SWITCH = TrackingTestTags.KEEP_FIELDS_SWITCH
+    const val TRACK_AUTO_CLEAR_FIELDS_SWITCH = TrackingTestTags.AUTO_CLEAR_FIELDS_SWITCH
     const val TRACK_STOP_BUTTON = TrackingTestTags.STOP_BUTTON
     const val TRACK_SETTINGS_BUTTON = TrackingTestTags.SETTINGS_BUTTON
     const val TRACK_LIVE_UPDATE_SWITCH = TrackingTestTags.LIVE_UPDATE_SWITCH

@@ -21,13 +21,13 @@ class SettingsDataStoreTrackingRetentionTest {
     private val settingsDataStore = SettingsDataStore(ApplicationProvider.getApplicationContext())
 
     @Test
-    fun keep_entry_fields_setting_round_trips_through_flow_and_first_frame_cache() = runTest {
-        settingsDataStore.setKeepEntryFieldsAfterStop(false)
-        assertFalse(settingsDataStore.keepEntryFieldsAfterStop.first())
-        assertFalse(settingsDataStore.getCachedKeepEntryFieldsAfterStop())
+    fun auto_clear_entry_fields_setting_round_trips_through_flow_and_first_frame_cache() = runTest {
+        settingsDataStore.setAutoClearEntryFieldsAfterStop(false)
+        assertFalse(settingsDataStore.autoClearEntryFieldsAfterStop.first())
+        assertFalse(settingsDataStore.getCachedAutoClearEntryFieldsAfterStop())
 
-        settingsDataStore.setKeepEntryFieldsAfterStop(true)
-        assertTrue(settingsDataStore.keepEntryFieldsAfterStop.first())
-        assertTrue(settingsDataStore.getCachedKeepEntryFieldsAfterStop())
+        settingsDataStore.setAutoClearEntryFieldsAfterStop(true)
+        assertTrue(settingsDataStore.autoClearEntryFieldsAfterStop.first())
+        assertTrue(settingsDataStore.getCachedAutoClearEntryFieldsAfterStop())
     }
 }

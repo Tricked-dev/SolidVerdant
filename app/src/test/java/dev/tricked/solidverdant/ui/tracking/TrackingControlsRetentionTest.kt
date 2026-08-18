@@ -40,6 +40,7 @@ class TrackingControlsRetentionTest {
                     onProjectChange = {},
                     onTaskChange = {},
                     onResetEntryFields = { resetClicked = true },
+                    autoClearEntryFieldsAfterStop = false,
                     onTagsChange = {},
                     onBillableChange = {},
                     onStart = {},
@@ -67,6 +68,30 @@ class TrackingControlsRetentionTest {
                     onDescriptionChange = {},
                     onProjectChange = {},
                     onTaskChange = {},
+                    onTagsChange = {},
+                    onBillableChange = {},
+                    onStart = {},
+                    onStop = {},
+                    onPause = {},
+                    onResume = {},
+                    onUpdate = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(TrackingTestTags.RESET_FIELDS_BUTTON).assertDoesNotExist()
+    }
+
+    @Test
+    fun auto_clear_enabled_hides_reset_even_when_fields_have_values() {
+        composeRule.setContent {
+            MaterialTheme {
+                TrackingControls(
+                    uiState = TrackingUiState(editingDescription = "Prepared work"),
+                    onDescriptionChange = {},
+                    onProjectChange = {},
+                    onTaskChange = {},
+                    autoClearEntryFieldsAfterStop = true,
                     onTagsChange = {},
                     onBillableChange = {},
                     onStart = {},

@@ -257,8 +257,8 @@
     <string name="live_timer_status_working">Bezig</string>
     <string name="optimistic_refresh">Optimistisch vernieuwen</string>
     <string name="optimistic_refresh_description">Haal gegevens direct op met opgeslagen accountinformatie; gebruikt enkele extra API-aanroepen</string>
-    <string name="keep_entry_fields_after_stop">Invoervelden behouden na stoppen</string>
-    <string name="keep_entry_fields_after_stop_description">Behoud de beschrijving, het project en de taak voor je volgende invoer</string>
+    <string name="auto_clear_entry_fields_after_stop">Invoervelden automatisch wissen</string>
+    <string name="auto_clear_entry_fields_after_stop_description">Wis de beschrijving, het project en de taak wanneer de timer stopt</string>
     <string name="reset_entry_fields">Invoervelden wissen</string>
     <string name="theme">Thema</string>
     <string name="theme_description">Kies de kleurstijl van de app</string>

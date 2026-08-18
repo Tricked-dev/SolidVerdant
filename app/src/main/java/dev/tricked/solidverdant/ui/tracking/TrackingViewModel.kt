@@ -187,7 +187,7 @@ class TrackingViewModel @Inject constructor(
     private val cachedTrackingState = settingsDataStore.getCachedTrackingState()
     private val cachedTrackingDraft = settingsDataStore.getCachedTrackingDraft()
         ?.takeIf { draft -> draft.organizationId == cachedTrackingState?.organizationId }
-    private var keepEntryFieldsAfterStopEnabled = settingsDataStore.getCachedKeepEntryFieldsAfterStop()
+    private var autoClearEntryFieldsAfterStopEnabled = settingsDataStore.getCachedAutoClearEntryFieldsAfterStop()
     private val _uiState = MutableStateFlow(
         cachedTrackingState?.let { cached ->
             TrackingUiState(
@@ -230,7 +230,7 @@ class TrackingViewModel @Inject constructor(
     val appTheme = settingsDataStore.appTheme
     val optimisticRefresh = settingsDataStore.optimisticRefresh
     val liveUpdateEnabled = settingsDataStore.liveUpdateEnabled
-    val keepEntryFieldsAfterStop = settingsDataStore.keepEntryFieldsAfterStop
+    val autoClearEntryFieldsAfterStop = settingsDataStore.autoClearEntryFieldsAfterStop
     val longTimerHours = settingsDataStore.longTimerHours
     private val _snapshotHydrated = MutableStateFlow(false)
     val snapshotHydrated: StateFlow<Boolean> = _snapshotHydrated.asStateFlow()
@@ -308,8 +308,8 @@ class TrackingViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            settingsDataStore.keepEntryFieldsAfterStop.collect { enabled ->
-                keepEntryFieldsAfterStopEnabled = enabled
+            settingsDataStore.autoClearEntryFieldsAfterStop.collect { enabled ->
+                autoClearEntryFieldsAfterStopEnabled = enabled
             }
         }
     }
@@ -336,9 +336,9 @@ class TrackingViewModel @Inject constructor(
         viewModelScope.launch { settingsDataStore.setLiveUpdateEnabled(enabled) }
     }
 
-    fun setKeepEntryFieldsAfterStop(enabled: Boolean) {
-        keepEntryFieldsAfterStopEnabled = enabled
-        viewModelScope.launch { settingsDataStore.setKeepEntryFieldsAfterStop(enabled) }
+    fun setAutoClearEntryFieldsAfterStop(enabled: Boolean) {
+        autoClearEntryFieldsAfterStopEnabled = enabled
+        viewModelScope.launch { settingsDataStore.setAutoClearEntryFieldsAfterStop(enabled) }
     }
 
     fun setLongTimerHours(hours: Int) {
@@ -529,21 +529,21 @@ class TrackingViewModel @Inject constructor(
                     // so a user's typing is not clobbered by a background emission.
                     editingDescription = if (activeChanged && active != null) {
                         active.description.orEmpty()
-                    } else if (activeChanged && !keepEntryFieldsAfterStopEnabled) {
+                    } else if (activeChanged && autoClearEntryFieldsAfterStopEnabled) {
                         ""
                     } else {
                         currentState.editingDescription
                     },
                     editingProjectId = if (activeChanged && active != null) {
                         active.projectId
-                    } else if (activeChanged && !keepEntryFieldsAfterStopEnabled) {
+                    } else if (activeChanged && autoClearEntryFieldsAfterStopEnabled) {
                         null
                     } else {
                         currentState.editingProjectId
                     },
                     editingTaskId = if (activeChanged && active != null) {
                         active.taskId
-                    } else if (activeChanged && !keepEntryFieldsAfterStopEnabled) {
+                    } else if (activeChanged && autoClearEntryFieldsAfterStopEnabled) {
                         null
                     } else {
                         currentState.editingTaskId
@@ -1464,9 +1464,9 @@ class TrackingViewModel @Inject constructor(
             val currentState = _uiState.value
             _uiState.value = currentState.copy(
                 isPaused = false,
-                editingDescription = if (keepEntryFieldsAfterStopEnabled) currentState.editingDescription else "",
-                editingProjectId = if (keepEntryFieldsAfterStopEnabled) currentState.editingProjectId else null,
-                editingTaskId = if (keepEntryFieldsAfterStopEnabled) currentState.editingTaskId else null,
+                editingDescription = if (autoClearEntryFieldsAfterStopEnabled) "" else currentState.editingDescription,
+                editingProjectId = if (autoClearEntryFieldsAfterStopEnabled) null else currentState.editingProjectId,
+                editingTaskId = if (autoClearEntryFieldsAfterStopEnabled) null else currentState.editingTaskId,
                 editingTags = emptyList(),
                 editingBillable = false,
             )
@@ -1503,9 +1503,9 @@ class TrackingViewModel @Inject constructor(
                     isTracking = false,
                     isPaused = false,
                     currentTimeEntry = null,
-                    editingDescription = if (keepEntryFieldsAfterStopEnabled) currentState.editingDescription else "",
-                    editingProjectId = if (keepEntryFieldsAfterStopEnabled) currentState.editingProjectId else null,
-                    editingTaskId = if (keepEntryFieldsAfterStopEnabled) currentState.editingTaskId else null,
+                    editingDescription = if (autoClearEntryFieldsAfterStopEnabled) "" else currentState.editingDescription,
+                    editingProjectId = if (autoClearEntryFieldsAfterStopEnabled) null else currentState.editingProjectId,
+                    editingTaskId = if (autoClearEntryFieldsAfterStopEnabled) null else currentState.editingTaskId,
                     editingTags = emptyList(),
                     editingBillable = false,
                 )

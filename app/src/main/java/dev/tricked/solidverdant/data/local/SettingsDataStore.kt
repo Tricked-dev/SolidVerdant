@@ -80,7 +80,8 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         private const val MEMBERSHIPS_JSON = "memberships_json"
         private const val CURRENT_MEMBERSHIP_ID = "current_membership_id"
         private const val CACHED_APP_THEME = "app_theme"
-        private const val CACHED_KEEP_ENTRY_FIELDS_AFTER_STOP = "keep_entry_fields_after_stop"
+        private const val CACHED_AUTO_CLEAR_ENTRY_FIELDS_AFTER_STOP = "auto_clear_entry_fields_after_stop"
+        private const val LEGACY_CACHED_KEEP_ENTRY_FIELDS_AFTER_STOP = "keep_entry_fields_after_stop"
         private const val TRACKING_STATE_JSON = "tracking_state_json"
         private const val TRACKING_DRAFT_JSON = "tracking_draft_json"
         private const val REVIEW_BADGE_COUNT_PREFIX = "review_badge_count_"
@@ -88,7 +89,8 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         private val APP_THEME = stringPreferencesKey("app_theme")
         private val OPTIMISTIC_REFRESH = booleanPreferencesKey("optimistic_refresh")
         private val LIVE_UPDATE_ENABLED = booleanPreferencesKey("live_update_enabled")
-        private val KEEP_ENTRY_FIELDS_AFTER_STOP = booleanPreferencesKey("keep_entry_fields_after_stop")
+        private val AUTO_CLEAR_ENTRY_FIELDS_AFTER_STOP = booleanPreferencesKey("auto_clear_entry_fields_after_stop")
+        private val LEGACY_KEEP_ENTRY_FIELDS_AFTER_STOP = booleanPreferencesKey("keep_entry_fields_after_stop")
         private val LONG_TIMER_HOURS = intPreferencesKey("long_timer_hours")
         private val LONG_TIMER_WARNING_DEADLINE_EPOCH_MS = longPreferencesKey("long_timer_warning_deadline_epoch_ms")
         private val LONG_TIMER_WARNING_ENTRY_START_EPOCH_MS = longPreferencesKey("long_timer_warning_entry_start_epoch_ms")
@@ -271,12 +273,20 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         preferences[LIVE_UPDATE_ENABLED] ?: false
     }.distinctUntilChanged()
 
-    /** Keep description, project, and task ready for the next entry after stopping. */
-    val keepEntryFieldsAfterStop: Flow<Boolean> = dataStore.data.map { preferences ->
-        preferences[KEEP_ENTRY_FIELDS_AFTER_STOP] ?: true
+    /** Clear description, project, and task after stopping. Defaults on. */
+    val autoClearEntryFieldsAfterStop: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[AUTO_CLEAR_ENTRY_FIELDS_AFTER_STOP]
+            ?: preferences[LEGACY_KEEP_ENTRY_FIELDS_AFTER_STOP]?.not()
+            ?: true
     }.distinctUntilChanged()
 
-    fun getCachedKeepEntryFieldsAfterStop(): Boolean = immediateCache.getBoolean(CACHED_KEEP_ENTRY_FIELDS_AFTER_STOP, true)
+    fun getCachedAutoClearEntryFieldsAfterStop(): Boolean = when {
+        immediateCache.contains(CACHED_AUTO_CLEAR_ENTRY_FIELDS_AFTER_STOP) ->
+            immediateCache.getBoolean(CACHED_AUTO_CLEAR_ENTRY_FIELDS_AFTER_STOP, true)
+        immediateCache.contains(LEGACY_CACHED_KEEP_ENTRY_FIELDS_AFTER_STOP) ->
+            !immediateCache.getBoolean(LEGACY_CACHED_KEEP_ENTRY_FIELDS_AFTER_STOP, false)
+        else -> true
+    }
 
     val longTimerHours: Flow<Int> = dataStore.data.map { it[LONG_TIMER_HOURS] ?: DEFAULT_LONG_TIMER_HOURS }.distinctUntilChanged()
 
@@ -334,9 +344,15 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         dataStore.edit { preferences -> preferences[LIVE_UPDATE_ENABLED] = enabled }
     }
 
-    suspend fun setKeepEntryFieldsAfterStop(enabled: Boolean) {
-        immediateCache.edit().putBoolean(CACHED_KEEP_ENTRY_FIELDS_AFTER_STOP, enabled).apply()
-        dataStore.edit { preferences -> preferences[KEEP_ENTRY_FIELDS_AFTER_STOP] = enabled }
+    suspend fun setAutoClearEntryFieldsAfterStop(enabled: Boolean) {
+        immediateCache.edit()
+            .putBoolean(CACHED_AUTO_CLEAR_ENTRY_FIELDS_AFTER_STOP, enabled)
+            .remove(LEGACY_CACHED_KEEP_ENTRY_FIELDS_AFTER_STOP)
+            .apply()
+        dataStore.edit { preferences ->
+            preferences[AUTO_CLEAR_ENTRY_FIELDS_AFTER_STOP] = enabled
+            preferences.remove(LEGACY_KEEP_ENTRY_FIELDS_AFTER_STOP)
+        }
     }
 
     suspend fun setLongTimerHours(hours: Int) {

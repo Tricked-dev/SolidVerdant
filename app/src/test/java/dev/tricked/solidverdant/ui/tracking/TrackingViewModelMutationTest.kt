@@ -114,8 +114,8 @@ class TrackingViewModelMutationTest {
     }
 
     @Test
-    fun stop_keeps_description_project_and_task_when_preference_is_enabled() = runTest(dispatcher.scheduler) {
-        settings.setKeepEntryFieldsAfterStop(true)
+    fun stop_keeps_description_project_and_task_when_auto_clear_is_disabled() = runTest(dispatcher.scheduler) {
+        settings.setAutoClearEntryFieldsAfterStop(false)
         val active = activeEntry()
         val repository = mockk<TimeEntryRepository>(relaxed = true)
         cacheActiveEntry(active)
@@ -132,8 +132,8 @@ class TrackingViewModelMutationTest {
     }
 
     @Test
-    fun stop_clears_entry_fields_when_preference_is_disabled() = runTest(dispatcher.scheduler) {
-        settings.setKeepEntryFieldsAfterStop(false)
+    fun stop_clears_entry_fields_when_auto_clear_is_enabled() = runTest(dispatcher.scheduler) {
+        settings.setAutoClearEntryFieldsAfterStop(true)
         val active = activeEntry()
         val repository = mockk<TimeEntryRepository>(relaxed = true)
         cacheActiveEntry(active)
@@ -149,7 +149,7 @@ class TrackingViewModelMutationTest {
 
     @Test
     fun reset_clears_only_reusable_entry_fields() = runTest(dispatcher.scheduler) {
-        settings.setKeepEntryFieldsAfterStop(true)
+        settings.setAutoClearEntryFieldsAfterStop(false)
         val repository = mockk<TimeEntryRepository>(relaxed = true)
         cacheActiveEntry(activeEntry())
         val viewModel = viewModel(repository)

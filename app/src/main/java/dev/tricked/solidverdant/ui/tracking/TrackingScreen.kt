@@ -251,7 +251,7 @@ fun TrackingScreen(
     appTheme: AppThemeMode,
     optimisticRefresh: Boolean,
     liveUpdateEnabled: Boolean,
-    keepEntryFieldsAfterStop: Boolean,
+    autoClearEntryFieldsAfterStop: Boolean,
     longTimerHours: Int,
     editActiveEntryRequested: Boolean,
     onEditActiveEntryConsumed: () -> Unit,
@@ -259,7 +259,7 @@ fun TrackingScreen(
     onAppThemeChange: (AppThemeMode) -> Unit,
     onOptimisticRefreshChange: (Boolean) -> Unit,
     onLiveUpdateEnabledChange: (Boolean) -> Unit,
-    onKeepEntryFieldsAfterStopChange: (Boolean) -> Unit,
+    onAutoClearEntryFieldsAfterStopChange: (Boolean) -> Unit,
     onLongTimerHoursChange: (Int) -> Unit,
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
@@ -698,19 +698,19 @@ fun TrackingScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    stringResource(R.string.keep_entry_fields_after_stop),
+                                    stringResource(R.string.auto_clear_entry_fields_after_stop),
                                     style = MaterialTheme.typography.bodyLarge,
                                 )
                                 Text(
-                                    stringResource(R.string.keep_entry_fields_after_stop_description),
+                                    stringResource(R.string.auto_clear_entry_fields_after_stop_description),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             Switch(
-                                checked = keepEntryFieldsAfterStop,
-                                onCheckedChange = onKeepEntryFieldsAfterStopChange,
-                                modifier = Modifier.testTag(TrackingTestTags.KEEP_FIELDS_SWITCH),
+                                checked = autoClearEntryFieldsAfterStop,
+                                onCheckedChange = onAutoClearEntryFieldsAfterStopChange,
+                                modifier = Modifier.testTag(TrackingTestTags.AUTO_CLEAR_FIELDS_SWITCH),
                             )
                         }
 
@@ -982,6 +982,7 @@ fun TrackingScreen(
                                 onProjectChange = onProjectChange,
                                 onTaskChange = onTaskChange,
                                 onResetEntryFields = onResetEntryFields,
+                                autoClearEntryFieldsAfterStop = autoClearEntryFieldsAfterStop,
                                 onTagsChange = onTagsChange,
                                 onBillableChange = onBillableChange,
                                 onStart = onStartTracking,
@@ -1855,6 +1856,7 @@ internal fun TrackingControls(
     onProjectChange: (String?) -> Unit,
     onTaskChange: (String?) -> Unit,
     onResetEntryFields: () -> Unit = {},
+    autoClearEntryFieldsAfterStop: Boolean = true,
     onTagsChange: (List<String>) -> Unit,
     onBillableChange: (Boolean) -> Unit,
     onStart: () -> Unit,
@@ -1957,7 +1959,7 @@ internal fun TrackingControls(
                 enabled = !uiState.isMutating
             )
 
-            if (!uiState.isTracking && !uiState.isPaused &&
+            if (!autoClearEntryFieldsAfterStop && !uiState.isTracking && !uiState.isPaused &&
                 (uiState.editingDescription.isNotEmpty() || uiState.editingProjectId != null || uiState.editingTaskId != null)) {
                 OutlinedButton(
                     onClick = onResetEntryFields,
