@@ -218,6 +218,7 @@ fun SolidVerdantApp(
     val appTheme by trackingViewModel.appTheme.collectAsState(initial = AppThemeMode.SYSTEM)
     val optimisticRefresh by trackingViewModel.optimisticRefresh.collectAsState(initial = true)
     val liveUpdateEnabled by trackingViewModel.liveUpdateEnabled.collectAsState(initial = false)
+    val keepEntryFieldsAfterStop by trackingViewModel.keepEntryFieldsAfterStop.collectAsState(initial = true)
     val longTimerHours by trackingViewModel.longTimerHours.collectAsState(initial = 4)
     val hasSnapshot by trackingViewModel.hasSnapshot.collectAsState()
     val snapshotHydrated by trackingViewModel.snapshotHydrated.collectAsState()
@@ -317,6 +318,7 @@ fun SolidVerdantApp(
                         appTheme = appTheme,
                         optimisticRefresh = optimisticRefresh,
                         liveUpdateEnabled = liveUpdateEnabled,
+                        keepEntryFieldsAfterStop = keepEntryFieldsAfterStop,
                         longTimerHours = longTimerHours,
                         editActiveEntryRequested = editActiveEntryRequested,
                         onEditActiveEntryConsumed = onEditActiveEntryConsumed,
@@ -326,6 +328,7 @@ fun SolidVerdantApp(
                         onAppThemeChange = trackingViewModel::setAppTheme,
                         onOptimisticRefreshChange = trackingViewModel::setOptimisticRefresh,
                         onLiveUpdateEnabledChange = trackingViewModel::setLiveUpdateEnabled,
+                        onKeepEntryFieldsAfterStopChange = trackingViewModel::setKeepEntryFieldsAfterStop,
                         onLongTimerHoursChange = trackingViewModel::setLongTimerHours,
                         onRefresh = {
                             authUiState.currentMembership?.let { membership ->
@@ -373,6 +376,7 @@ fun SolidVerdantApp(
                         onTaskChange = { taskId ->
                             trackingViewModel.updateTask(taskId)
                         },
+                        onResetEntryFields = trackingViewModel::resetEntryFields,
                         onTagsChange = { tags ->
                             trackingViewModel.updateTags(tags)
                         },

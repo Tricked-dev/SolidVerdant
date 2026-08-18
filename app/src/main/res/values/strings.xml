@@ -266,6 +266,9 @@
     <string name="live_timer_status_working">Working</string>
     <string name="optimistic_refresh">Optimistic refresh</string>
     <string name="optimistic_refresh_description">Fetch data immediately using cached account info; uses a few extra API calls</string>
+    <string name="keep_entry_fields_after_stop">Keep entry fields after stopping</string>
+    <string name="keep_entry_fields_after_stop_description">Keep the description, project, and task ready for your next entry</string>
+    <string name="reset_entry_fields">Reset entry fields</string>
     <string name="theme">Theme</string>
     <string name="theme_description">Choose the app color style</string>
     <string name="theme_system">System</string>

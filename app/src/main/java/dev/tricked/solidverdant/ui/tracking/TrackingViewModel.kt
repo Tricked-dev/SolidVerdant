@@ -185,6 +185,9 @@ class TrackingViewModel @Inject constructor(
     private var currentPolicy: TemporalPolicy = runBlocking { temporalPolicyProvider.current() }
 
     private val cachedTrackingState = settingsDataStore.getCachedTrackingState()
+    private val cachedTrackingDraft = settingsDataStore.getCachedTrackingDraft()
+        ?.takeIf { draft -> draft.organizationId == cachedTrackingState?.organizationId }
+    private var keepEntryFieldsAfterStopEnabled = settingsDataStore.getCachedKeepEntryFieldsAfterStop()
     private val _uiState = MutableStateFlow(
         cachedTrackingState?.let { cached ->
             TrackingUiState(
@@ -200,9 +203,9 @@ class TrackingViewModel @Inject constructor(
                 clients = cached.clients,
                 tasks = cached.tasks,
                 tags = cached.tags,
-                editingDescription = cached.activeEntry?.description.orEmpty(),
-                editingProjectId = cached.activeEntry?.projectId,
-                editingTaskId = cached.activeEntry?.taskId,
+                editingDescription = cached.activeEntry?.description ?: cachedTrackingDraft?.description.orEmpty(),
+                editingProjectId = cached.activeEntry?.projectId ?: cachedTrackingDraft?.projectId,
+                editingTaskId = cached.activeEntry?.taskId ?: cachedTrackingDraft?.taskId,
                 editingTags = cached.activeEntry?.tags?.map { it.id }.orEmpty(),
                 editingBillable = cached.activeEntry?.billable ?: false,
                 zone = currentPolicy.zone,
@@ -227,6 +230,7 @@ class TrackingViewModel @Inject constructor(
     val appTheme = settingsDataStore.appTheme
     val optimisticRefresh = settingsDataStore.optimisticRefresh
     val liveUpdateEnabled = settingsDataStore.liveUpdateEnabled
+    val keepEntryFieldsAfterStop = settingsDataStore.keepEntryFieldsAfterStop
     val longTimerHours = settingsDataStore.longTimerHours
     private val _snapshotHydrated = MutableStateFlow(false)
     val snapshotHydrated: StateFlow<Boolean> = _snapshotHydrated.asStateFlow()
@@ -247,6 +251,7 @@ class TrackingViewModel @Inject constructor(
     private var syncVisibilityJob: Job? = null
     private var latestSyncOperations: List<TimeEntryRepository.SyncOperation> = emptyList()
     private var firstFrameCacheJob: Job? = null
+    private var trackingDraftCacheJob: Job? = null
     private var hasCachedContinueEntry = false
     private var lastCachedContinueEntry: TimeEntry? = null
     private var collectingOrganizationId: String? = null
@@ -302,6 +307,11 @@ class TrackingViewModel @Inject constructor(
                 }
             }
         }
+        viewModelScope.launch {
+            settingsDataStore.keepEntryFieldsAfterStop.collect { enabled ->
+                keepEntryFieldsAfterStopEnabled = enabled
+            }
+        }
     }
 
     /**
@@ -324,6 +334,11 @@ class TrackingViewModel @Inject constructor(
 
     fun setLiveUpdateEnabled(enabled: Boolean) {
         viewModelScope.launch { settingsDataStore.setLiveUpdateEnabled(enabled) }
+    }
+
+    fun setKeepEntryFieldsAfterStop(enabled: Boolean) {
+        keepEntryFieldsAfterStopEnabled = enabled
+        viewModelScope.launch { settingsDataStore.setKeepEntryFieldsAfterStop(enabled) }
     }
 
     fun setLongTimerHours(hours: Int) {
@@ -489,7 +504,7 @@ class TrackingViewModel @Inject constructor(
                 if (mode == HistoryWindowMode.RECENT) {
                     historyOffset = data.entries.size
                 }
-                _uiState.value = currentState.copy(
+                val nextState = currentState.copy(
                     timeEntries = displayedEntries,
                     overlapCount = overlapCount,
                     projects = data.projects,
@@ -512,12 +527,32 @@ class TrackingViewModel @Inject constructor(
                     isLoading = currentState.isLoading || timerMutationInProgress,
                     // Only reset in-progress edits when the active entry itself changes,
                     // so a user's typing is not clobbered by a background emission.
-                    editingDescription = if (activeChanged) active?.description.orEmpty() else currentState.editingDescription,
-                    editingProjectId = if (activeChanged) active?.projectId else currentState.editingProjectId,
-                    editingTaskId = if (activeChanged) active?.taskId else currentState.editingTaskId,
+                    editingDescription = if (activeChanged && active != null) {
+                        active.description.orEmpty()
+                    } else if (activeChanged && !keepEntryFieldsAfterStopEnabled) {
+                        ""
+                    } else {
+                        currentState.editingDescription
+                    },
+                    editingProjectId = if (activeChanged && active != null) {
+                        active.projectId
+                    } else if (activeChanged && !keepEntryFieldsAfterStopEnabled) {
+                        null
+                    } else {
+                        currentState.editingProjectId
+                    },
+                    editingTaskId = if (activeChanged && active != null) {
+                        active.taskId
+                    } else if (activeChanged && !keepEntryFieldsAfterStopEnabled) {
+                        null
+                    } else {
+                        currentState.editingTaskId
+                    },
                     editingTags = if (activeChanged) active?.tags?.map { it.id }.orEmpty() else currentState.editingTags,
                     editingBillable = if (activeChanged) (active?.billable ?: false) else currentState.editingBillable,
                 )
+                _uiState.value = nextState
+                if (activeChanged && active == null) cacheTrackingDraft(nextState)
                 // Both caches JSON-encode sizable object graphs; keep that (and the
                 // SharedPreferences write) off the main thread, and skip no-op continue writes.
                 if (!hasCachedContinueEntry || continueEntry != lastCachedContinueEntry) {
@@ -623,6 +658,8 @@ class TrackingViewModel @Inject constructor(
             editingBillable = false,
             conflictedEntryIds = emptySet(),
         )
+        trackingDraftCacheJob?.cancel()
+        viewModelScope.launch(Dispatchers.IO) { settingsDataStore.cacheTrackingDraft(null) }
     }
 
     private fun isCurrentHistoryRequest(organizationId: String, memberId: String, generation: Long): Boolean =
@@ -1232,6 +1269,7 @@ class TrackingViewModel @Inject constructor(
      */
     fun updateDescription(description: String) {
         _uiState.value = _uiState.value.copy(editingDescription = description)
+        cacheTrackingDraft(_uiState.value)
     }
 
     /**
@@ -1243,6 +1281,7 @@ class TrackingViewModel @Inject constructor(
             // Clear task if project changed
             editingTaskId = if (projectId != _uiState.value.editingProjectId) null else _uiState.value.editingTaskId,
         )
+        cacheTrackingDraft(_uiState.value)
     }
 
     /**
@@ -1250,6 +1289,35 @@ class TrackingViewModel @Inject constructor(
      */
     fun updateTask(taskId: String?) {
         _uiState.value = _uiState.value.copy(editingTaskId = taskId)
+        cacheTrackingDraft(_uiState.value)
+    }
+
+    /** Clear only the reusable entry identity fields; tags and billable remain unchanged. */
+    fun resetEntryFields() {
+        val currentState = _uiState.value
+        if (currentState.isTracking || currentState.isPaused) return
+        _uiState.value = currentState.copy(
+            editingDescription = "",
+            editingProjectId = null,
+            editingTaskId = null,
+        )
+        cacheTrackingDraft(_uiState.value)
+    }
+
+    private fun cacheTrackingDraft(state: TrackingUiState) {
+        val organizationId = collectingOrganizationId ?: cachedTrackingState?.organizationId ?: return
+        trackingDraftCacheJob?.cancel()
+        trackingDraftCacheJob = viewModelScope.launch(Dispatchers.IO) {
+            delay(TRACKING_DRAFT_CACHE_DEBOUNCE_MS)
+            settingsDataStore.cacheTrackingDraft(
+                SettingsDataStore.CachedTrackingDraft(
+                    organizationId = organizationId,
+                    description = state.editingDescription,
+                    projectId = state.editingProjectId,
+                    taskId = state.editingTaskId,
+                ),
+            )
+        }
     }
 
     /**
@@ -1393,14 +1461,16 @@ class TrackingViewModel @Inject constructor(
 
         // If paused, the entry is already stopped - just clear the paused state
         if (currentEntry == null && _uiState.value.isPaused) {
-            _uiState.value = _uiState.value.copy(
+            val currentState = _uiState.value
+            _uiState.value = currentState.copy(
                 isPaused = false,
-                editingDescription = "",
-                editingProjectId = null,
-                editingTaskId = null,
+                editingDescription = if (keepEntryFieldsAfterStopEnabled) currentState.editingDescription else "",
+                editingProjectId = if (keepEntryFieldsAfterStopEnabled) currentState.editingProjectId else null,
+                editingTaskId = if (keepEntryFieldsAfterStopEnabled) currentState.editingTaskId else null,
                 editingTags = emptyList(),
                 editingBillable = false,
             )
+            cacheTrackingDraft(_uiState.value)
             viewModelScope.launch {
                 updateNotificationState()
                 settingsDataStore.setWidgetTrackingState(isTracking = false)
@@ -1428,16 +1498,18 @@ class TrackingViewModel @Inject constructor(
                 timeEntryRepository.stopEntry(currentEntry, currentEntry.userId)
                 syncTrigger.requestSync()
 
-                _uiState.value = _uiState.value.copy(
+                val currentState = _uiState.value
+                _uiState.value = currentState.copy(
                     isTracking = false,
                     isPaused = false,
                     currentTimeEntry = null,
-                    editingDescription = "",
-                    editingProjectId = null,
-                    editingTaskId = null,
+                    editingDescription = if (keepEntryFieldsAfterStopEnabled) currentState.editingDescription else "",
+                    editingProjectId = if (keepEntryFieldsAfterStopEnabled) currentState.editingProjectId else null,
+                    editingTaskId = if (keepEntryFieldsAfterStopEnabled) currentState.editingTaskId else null,
                     editingTags = emptyList(),
                     editingBillable = false,
                 )
+                cacheTrackingDraft(_uiState.value)
                 stopTimer()
                 lastCollectedActiveId = null
                 Timber.d("Time entry stopped successfully (optimistic)")
@@ -1449,8 +1521,8 @@ class TrackingViewModel @Inject constructor(
                 settingsDataStore.setWidgetTrackingState(isTracking = false)
                 TimeTrackingWidget.requestUpdate(context)
 
-                _uiState.value = _uiState.value.copy(isLoading = false)
                 timerMutationInProgress = false
+                _uiState.value = _uiState.value.copy(isLoading = false)
             } catch (e: Exception) {
                 locallyStoppingEntryIds.remove(currentEntry.id)
                 handleTimerMutationFailure(e, "Failed to stop time entry")
@@ -1878,6 +1950,7 @@ class TrackingViewModel @Inject constructor(
         const val HISTORY_REFRESH_LIMIT = 250
         const val FIRST_FRAME_ENTRY_LIMIT = 30
         const val FIRST_FRAME_CACHE_DEBOUNCE_MS = 500L
+        const val TRACKING_DRAFT_CACHE_DEBOUNCE_MS = 300L
         const val DELETE_UNDO_WINDOW_MS = 5_000L
     }
 }

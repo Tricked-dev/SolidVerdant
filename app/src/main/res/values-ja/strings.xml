@@ -245,6 +245,9 @@
     <string name="live_timer_status_working">作業中</string>
     <string name="optimistic_refresh">楽観的な更新</string>
     <string name="optimistic_refresh_description">保存済みのアカウント情報ですぐに取得します。API 呼び出しが少し増えます</string>
+    <string name="keep_entry_fields_after_stop">停止後も入力内容を保持</string>
+    <string name="keep_entry_fields_after_stop_description">次の入力用に説明、プロジェクト、タスクを保持します</string>
+    <string name="reset_entry_fields">入力内容をリセット</string>
     <string name="theme">テーマ</string>
     <string name="theme_description">アプリの配色を選択</string>
     <string name="theme_system">システム</string>

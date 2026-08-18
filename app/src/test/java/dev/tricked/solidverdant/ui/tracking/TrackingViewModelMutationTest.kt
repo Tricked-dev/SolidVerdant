@@ -114,6 +114,60 @@ class TrackingViewModelMutationTest {
     }
 
     @Test
+    fun stop_keeps_description_project_and_task_when_preference_is_enabled() = runTest(dispatcher.scheduler) {
+        settings.setKeepEntryFieldsAfterStop(true)
+        val active = activeEntry()
+        val repository = mockk<TimeEntryRepository>(relaxed = true)
+        cacheActiveEntry(active)
+        val viewModel = viewModel(repository)
+
+        viewModel.stopTimeEntry()
+        dispatcher.scheduler.runCurrent()
+
+        assertEquals("Precision setup", viewModel.uiState.value.editingDescription)
+        assertEquals("project-1", viewModel.uiState.value.editingProjectId)
+        assertEquals("task-1", viewModel.uiState.value.editingTaskId)
+        assertFalse(viewModel.uiState.value.editingBillable)
+        coVerify(exactly = 1) { repository.stopEntry(active, "user") }
+    }
+
+    @Test
+    fun stop_clears_entry_fields_when_preference_is_disabled() = runTest(dispatcher.scheduler) {
+        settings.setKeepEntryFieldsAfterStop(false)
+        val active = activeEntry()
+        val repository = mockk<TimeEntryRepository>(relaxed = true)
+        cacheActiveEntry(active)
+        val viewModel = viewModel(repository)
+
+        viewModel.stopTimeEntry()
+        dispatcher.scheduler.runCurrent()
+
+        assertEquals("", viewModel.uiState.value.editingDescription)
+        assertEquals(null, viewModel.uiState.value.editingProjectId)
+        assertEquals(null, viewModel.uiState.value.editingTaskId)
+    }
+
+    @Test
+    fun reset_clears_only_reusable_entry_fields() = runTest(dispatcher.scheduler) {
+        settings.setKeepEntryFieldsAfterStop(true)
+        val repository = mockk<TimeEntryRepository>(relaxed = true)
+        cacheActiveEntry(activeEntry())
+        val viewModel = viewModel(repository)
+        viewModel.stopTimeEntry()
+        dispatcher.scheduler.runCurrent()
+        viewModel.updateTags(listOf("tag-1"))
+        viewModel.updateBillable(true)
+
+        viewModel.resetEntryFields()
+
+        assertEquals("", viewModel.uiState.value.editingDescription)
+        assertEquals(null, viewModel.uiState.value.editingProjectId)
+        assertEquals(null, viewModel.uiState.value.editingTaskId)
+        assertEquals(listOf("tag-1"), viewModel.uiState.value.editingTags)
+        assertTrue(viewModel.uiState.value.editingBillable)
+    }
+
+    @Test
     fun repeated_start_is_ignored_while_the_first_mutation_is_in_flight() = runTest(dispatcher.scheduler) {
         val release = CompletableDeferred<Unit>()
         val started = CompletableDeferred<Unit>()
@@ -229,4 +283,29 @@ class TrackingViewModelMutationTest {
         context = context,
         clock = clock,
     ).also { viewModels += it }
+
+    private fun activeEntry() = TimeEntry(
+        id = "active",
+        userId = "user",
+        organizationId = "org",
+        start = "2026-08-10T08:00:00Z",
+        description = "Precision setup",
+        projectId = "project-1",
+        taskId = "task-1",
+        billable = true,
+    )
+
+    private fun cacheActiveEntry(active: TimeEntry) {
+        settings.cacheTrackingState(
+            SettingsDataStore.CachedTrackingState(
+                organizationId = "org",
+                timeEntries = listOf(active),
+                projects = emptyList(),
+                clients = emptyList(),
+                tasks = emptyList(),
+                tags = emptyList(),
+                activeEntry = active,
+            ),
+        )
+    }
 }

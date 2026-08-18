@@ -251,6 +251,7 @@ fun TrackingScreen(
     appTheme: AppThemeMode,
     optimisticRefresh: Boolean,
     liveUpdateEnabled: Boolean,
+    keepEntryFieldsAfterStop: Boolean,
     longTimerHours: Int,
     editActiveEntryRequested: Boolean,
     onEditActiveEntryConsumed: () -> Unit,
@@ -258,6 +259,7 @@ fun TrackingScreen(
     onAppThemeChange: (AppThemeMode) -> Unit,
     onOptimisticRefreshChange: (Boolean) -> Unit,
     onLiveUpdateEnabledChange: (Boolean) -> Unit,
+    onKeepEntryFieldsAfterStopChange: (Boolean) -> Unit,
     onLongTimerHoursChange: (Int) -> Unit,
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
@@ -269,6 +271,7 @@ fun TrackingScreen(
     onDescriptionChange: (String) -> Unit,
     onProjectChange: (String?) -> Unit,
     onTaskChange: (String?) -> Unit,
+    onResetEntryFields: () -> Unit,
     onTagsChange: (List<String>) -> Unit,
     onBillableChange: (Boolean) -> Unit,
     onUpdateCurrentEntry: () -> Unit,
@@ -691,6 +694,29 @@ fun TrackingScreen(
                         HorizontalDivider()
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    stringResource(R.string.keep_entry_fields_after_stop),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                )
+                                Text(
+                                    stringResource(R.string.keep_entry_fields_after_stop_description),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Switch(
+                                checked = keepEntryFieldsAfterStop,
+                                onCheckedChange = onKeepEntryFieldsAfterStopChange,
+                                modifier = Modifier.testTag(TrackingTestTags.KEEP_FIELDS_SWITCH),
+                            )
+                        }
+
+                        HorizontalDivider()
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
@@ -955,6 +981,7 @@ fun TrackingScreen(
                                 onDescriptionChange = onDescriptionChange,
                                 onProjectChange = onProjectChange,
                                 onTaskChange = onTaskChange,
+                                onResetEntryFields = onResetEntryFields,
                                 onTagsChange = onTagsChange,
                                 onBillableChange = onBillableChange,
                                 onStart = onStartTracking,
@@ -1827,6 +1854,7 @@ internal fun TrackingControls(
     onDescriptionChange: (String) -> Unit,
     onProjectChange: (String?) -> Unit,
     onTaskChange: (String?) -> Unit,
+    onResetEntryFields: () -> Unit = {},
     onTagsChange: (List<String>) -> Unit,
     onBillableChange: (Boolean) -> Unit,
     onStart: () -> Unit,
@@ -1928,6 +1956,23 @@ internal fun TrackingControls(
                 },
                 enabled = !uiState.isMutating
             )
+
+            if (!uiState.isTracking && !uiState.isPaused &&
+                (uiState.editingDescription.isNotEmpty() || uiState.editingProjectId != null || uiState.editingTaskId != null)) {
+                OutlinedButton(
+                    onClick = onResetEntryFields,
+                    enabled = !uiState.isMutating,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = Dimens.MinTouchTarget)
+                        .testTag(TrackingTestTags.RESET_FIELDS_BUTTON),
+                    shape = RoundedCornerShape(Dimens.CornerRadius),
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null)
+                    Spacer(Modifier.width(Dimens.Space8))
+                    Text(stringResource(R.string.reset_entry_fields))
+                }
+            }
 
             // Tags selector
             if (uiState.tags.isNotEmpty()) {
