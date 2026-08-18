@@ -38,7 +38,9 @@ object TestTags {
     const val TRACK_CONTINUE_BUTTON = TrackingTestTags.CONTINUE_BUTTON
     const val TRACK_SHEET = TrackingTestTags.SHEET
     const val TRACK_SHEET_PROJECT_TASK_SELECTOR = TrackingTestTags.SHEET_PROJECT_TASK_SELECTOR
+    const val TRACK_SHEET_TASK_SELECTOR = TrackingTestTags.SHEET_TASK_SELECTOR
     const val TRACK_PROJECT_TASK_LIST = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.PROJECT_TASK_LIST
+    const val TRACK_TASK_LIST = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.TASK_LIST
     const val TRACK_SHEET_START_TIME = TrackingTestTags.SHEET_START_TIME
     const val TRACK_SHEET_END_TIME = TrackingTestTags.SHEET_END_TIME
     const val TRACK_SHEET_DESCRIPTION_FIELD = TrackingTestTags.SHEET_DESCRIPTION_FIELD
@@ -108,7 +110,9 @@ object TestTags {
     const val ENTRY_SAVE = EditTimeEntryTestTags.SAVE_BUTTON
     const val ENTRY_DESCRIPTION = EditTimeEntryTestTags.DESCRIPTION_FIELD
     const val ENTRY_PROJECT_TASK_SELECTOR = EditTimeEntryTestTags.PROJECT_TASK_SELECTOR
+    const val ENTRY_TASK_SELECTOR = EditTimeEntryTestTags.TASK_SELECTOR
     const val CATALOGUE_PROJECT_TASK_SEARCH = EditTimeEntryTestTags.PROJECT_TASK_SEARCH
+    const val CATALOGUE_TASK_SEARCH = EditTimeEntryTestTags.TASK_SEARCH
     const val CATALOGUE_CLIENT_PICKER = EditTimeEntryTestTags.CLIENT_PICKER
     const val CATALOGUE_CREATE_PROJECT = EditTimeEntryTestTags.CREATE_PROJECT
     const val CATALOGUE_CREATE_TASK = EditTimeEntryTestTags.CREATE_TASK

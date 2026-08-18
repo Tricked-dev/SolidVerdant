@@ -233,15 +233,6 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 /**
- * Represents a selection of project and/or task
- */
-sealed class ProjectTaskSelection {
-    object NoProject : ProjectTaskSelection()
-    data class ProjectOnly(val project: Project) : ProjectTaskSelection()
-    data class ProjectWithTask(val project: Project, val task: Task) : ProjectTaskSelection()
-}
-
-/**
  * Tracking screen displaying current time tracking state and history
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -2357,10 +2348,7 @@ private fun DescriptionFieldWithSuggestions(
     }
 }
 
-/**
- * Combined Project/Task dropdown selector
- */
-@OptIn(ExperimentalMaterial3Api::class)
+/** Separately searchable project and task selectors shared by Track entry forms. */
 @Composable
 internal fun ProjectTaskDropdown(
     selectedProjectId: String?,
@@ -2372,46 +2360,15 @@ internal fun ProjectTaskDropdown(
     onCreateProject: ((String) -> Unit)? = null,
     onCreateTask: ((String, String) -> Unit)? = null,
 ) {
-    // Determine current selection
-    val selection = remember(selectedProjectId, selectedTaskId, projects, tasks) {
-        when {
-            selectedProjectId == null -> ProjectTaskSelection.NoProject
-            selectedTaskId == null -> {
-                projects.find { it.id == selectedProjectId }?.let {
-                    ProjectTaskSelection.ProjectOnly(it)
-                } ?: ProjectTaskSelection.NoProject
-            }
-
-            else -> {
-                val project = projects.find { it.id == selectedProjectId }
-                val task = tasks.find { it.id == selectedTaskId }
-                if (project != null && task != null) {
-                    ProjectTaskSelection.ProjectWithTask(project, task)
-                } else if (project != null) {
-                    ProjectTaskSelection.ProjectOnly(project)
-                } else {
-                    ProjectTaskSelection.NoProject
-                }
-            }
-        }
-    }
-
-    // Build display text
-    val displayText = when (selection) {
-        is ProjectTaskSelection.NoProject -> stringResource(R.string.no_project)
-        is ProjectTaskSelection.ProjectOnly -> selection.project.name
-        is ProjectTaskSelection.ProjectWithTask -> "${selection.project.name} - ${selection.task.name}"
-    }
-
     SharedProjectTaskDropdown(
         projects = projects,
         tasks = tasks,
-        displayText = displayText,
+        selectedProjectId = selectedProjectId,
+        selectedTaskId = selectedTaskId,
         onSelectionChanged = onSelectionChanged,
         enabled = enabled,
         showProjectColors = true,
         rounded = true,
-        selectedProjectId = selectedProjectId,
         onCreateProject = onCreateProject,
         onCreateTask = onCreateTask,
     )

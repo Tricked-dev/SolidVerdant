@@ -58,4 +58,6 @@ object Dimens {
     val ControlHeightLarge = 64.dp
     val IconMedium = 24.dp
     val NarrowCalendarWidth = 600.dp
+    val PickerMaxWidth = 560.dp
+    val PickerMaxHeight = 640.dp
 }

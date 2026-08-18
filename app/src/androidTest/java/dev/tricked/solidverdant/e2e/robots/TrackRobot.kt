@@ -240,14 +240,14 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
     }
 
     fun selectSheetProjectTask(taskName: String): TrackRobot = apply {
-        firstSheetNodeWithTag(TestTags.TRACK_SHEET_PROJECT_TASK_SELECTOR).performScrollTo().performClick()
-        waitUntilTagExists(TestTags.TRACK_PROJECT_TASK_LIST)
+        firstSheetNodeWithTag(TestTags.TRACK_SHEET_TASK_SELECTOR).performScrollTo().performClick()
+        waitUntilTagExists(TestTags.TRACK_TASK_LIST)
         val taskMatcher = hasText(taskName, substring = false)
-        // Tasks live in a LazyColumn below the project rows. Wait for the target to be composed by
-        // scrolling the picker, rather than clicking a node that may not exist on small emulators.
+        // Wait for the target to be composed by scrolling the lazy task picker rather than
+        // clicking a node that may not exist on small emulators.
         composeRule.waitUntil(DEFAULT_TIMEOUT_MS) {
             runCatching {
-                firstNodeWithTag(TestTags.TRACK_PROJECT_TASK_LIST).performScrollToNode(taskMatcher)
+                firstNodeWithTag(TestTags.TRACK_TASK_LIST).performScrollToNode(taskMatcher)
                 composeRule.onAllNodes(taskMatcher, useUnmergedTree = true)
                     .fetchSemanticsNodes()
                     .isNotEmpty()

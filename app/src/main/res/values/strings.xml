@@ -164,6 +164,7 @@
     <string name="error_format">Error: %1$s</string>
     <string name="retry">Retry</string>
     <string name="close">Close</string>
+    <string name="clear_search">Clear search</string>
     <string name="start_time_tracking">Start Time Tracking</string>
     <string name="project_task">Project / Task</string>
     <string name="search_placeholder">Search…</string>
@@ -171,6 +172,14 @@
     <string name="needs_categorization">Needs categorization</string>
     <string name="clear_filters">Clear filters</string>
     <string name="no_project">No Project</string>
+    <string name="no_task">No task</string>
+    <string name="select_project">Select project</string>
+    <string name="select_task">Select task</string>
+    <string name="select_project_first">Select a project first</string>
+    <string name="search_projects">Search projects…</string>
+    <string name="search_tasks">Search tasks…</string>
+    <string name="no_projects_available">No projects available</string>
+    <string name="no_tasks_available">No tasks available for this project</string>
     <string name="no_client">No client</string>
     <string name="description_optional">Description (Optional)</string>
     <string name="no_results_found">No results found</string>

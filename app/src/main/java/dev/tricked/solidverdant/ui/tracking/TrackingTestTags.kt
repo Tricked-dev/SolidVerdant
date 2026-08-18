@@ -29,6 +29,7 @@ object TrackingTestTags {
     const val CONTINUE_BUTTON = "track_continue_last"
     const val SHEET = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.SHEET
     const val SHEET_PROJECT_TASK_SELECTOR = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.PROJECT_TASK_SELECTOR
+    const val SHEET_TASK_SELECTOR = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.TASK_SELECTOR
     const val SHEET_START_TIME = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.START_TIME
     const val SHEET_END_TIME = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.END_TIME
     const val SHEET_DESCRIPTION_FIELD = "track_sheet_description"
