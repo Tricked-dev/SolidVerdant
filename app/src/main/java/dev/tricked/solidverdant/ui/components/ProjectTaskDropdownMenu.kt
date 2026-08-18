@@ -108,6 +108,35 @@ fun ProjectTaskDropdown(
 
 private val OutlinedTextFieldDefaultsShape = RoundedCornerShape(4.dp)
 
+internal data class ProjectTaskSearchResults(val projects: List<Project>, val tasksByProject: Map<String, List<Task>>)
+
+internal fun filterProjectsAndTasks(projects: List<Project>, tasks: List<Task>, query: String): ProjectTaskSearchResults {
+    val normalizedQuery = query.trim()
+    if (normalizedQuery.isBlank()) {
+        return ProjectTaskSearchResults(projects, tasks.groupBy { it.projectId })
+    }
+
+    val directlyMatchingProjectIds = projects
+        .asSequence()
+        .filter { it.name.contains(normalizedQuery, ignoreCase = true) }
+        .map { it.id }
+        .toSet()
+    val filteredTasks = tasks.filter { task ->
+        task.projectId in directlyMatchingProjectIds ||
+            task.name.contains(normalizedQuery, ignoreCase = true)
+    }
+    val matchingTaskProjectIds = filteredTasks
+        .asSequence()
+        .filter { it.name.contains(normalizedQuery, ignoreCase = true) }
+        .map { it.projectId }
+        .toSet()
+    val filteredProjects = projects.filter { project ->
+        project.id in directlyMatchingProjectIds || project.id in matchingTaskProjectIds
+    }
+
+    return ProjectTaskSearchResults(filteredProjects, filteredTasks.groupBy { it.projectId })
+}
+
 @Composable
 private fun ProjectTaskPickerDialog(
     projects: List<Project>,
@@ -122,20 +151,9 @@ private fun ProjectTaskPickerDialog(
     onCreateTask: ((String, String) -> Unit)?,
 ) {
     val normalizedQuery = searchQuery.trim()
-    val filteredTasks = remember(normalizedQuery, tasks) {
-        tasks.filter { normalizedQuery.isBlank() || it.name.contains(normalizedQuery, true) }
+    val searchResults = remember(normalizedQuery, projects, tasks) {
+        filterProjectsAndTasks(projects, tasks, normalizedQuery)
     }
-    val matchingTaskProjectIds = remember(filteredTasks, normalizedQuery) {
-        if (normalizedQuery.isBlank()) emptySet() else filteredTasks.map { it.projectId }.toSet()
-    }
-    val filteredProjects = remember(normalizedQuery, projects, matchingTaskProjectIds) {
-        projects.filter {
-            normalizedQuery.isBlank() ||
-                it.name.contains(normalizedQuery, true) ||
-                it.id in matchingTaskProjectIds
-        }
-    }
-    val filteredTasksByProject = remember(filteredTasks) { filteredTasks.groupBy { it.projectId } }
     Dialog(onDismissRequest = onClose) {
         Surface(
             modifier = Modifier
@@ -176,7 +194,7 @@ private fun ProjectTaskPickerDialog(
                         },
                     )
                 }
-                filteredProjects.forEach { project ->
+                searchResults.projects.forEach { project ->
                     item(key = "project_${project.id}") {
                         DropdownMenuItem(
                             text = {
@@ -200,7 +218,7 @@ private fun ProjectTaskPickerDialog(
                         )
                     }
 
-                    filteredTasksByProject[project.id].orEmpty().forEach { task ->
+                    searchResults.tasksByProject[project.id].orEmpty().forEach { task ->
                         item(key = "task_${task.id}") {
                             DropdownMenuItem(
                                 text = {
@@ -245,7 +263,7 @@ private fun ProjectTaskPickerDialog(
                         )
                     }
                 }
-                if (searchQuery.isNotBlank() && filteredProjects.isEmpty()) {
+                if (searchQuery.isNotBlank() && searchResults.projects.isEmpty()) {
                     item {
                         DropdownMenuItem(
                             text = {
