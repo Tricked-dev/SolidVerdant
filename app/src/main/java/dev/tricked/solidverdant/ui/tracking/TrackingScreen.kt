@@ -2429,7 +2429,7 @@ internal fun TagsSelector(
     enabled: Boolean,
     onCreateTag: ((String) -> Unit)? = null,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.SHEET_TAGS_SELECTOR)) {
         Text(
             text = stringResource(R.string.tags),
             style = MaterialTheme.typography.labelMedium,
@@ -2437,7 +2437,7 @@ internal fun TagsSelector(
             modifier = Modifier.padding(bottom = 8.dp)
         )
         LazyRow(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.SHEET_TAGS_LIST),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(availableTags, key = { it.id }) { tag ->

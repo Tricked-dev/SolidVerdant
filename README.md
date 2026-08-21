@@ -219,6 +219,10 @@ generated session file. The disposable API and database containers may remain av
 task for diagnosis; remove them and the host bridge with
 `devenv tasks run solidtime:clean-stale` when they are no longer needed.
 
+Run only one live-stack command at a time. Do not run `devenv up -d`, `solidtime:reset`, or another
+`solidtime:test` concurrently: they intentionally share fixed container, network, proxy, and port
+names. `solidtime:test` already owns the reset and process lifecycle required for a complete run.
+
 The reset removes all time entries from the disposable account and seeds `Live Test Project`, `Live
 Test Task`, and `Live Test Tag` for metadata-edit tests. It is also available explicitly with
 `devenv tasks run solidtime:reset`. `devenv tasks run android:e2e` is the mock-suite alias, and

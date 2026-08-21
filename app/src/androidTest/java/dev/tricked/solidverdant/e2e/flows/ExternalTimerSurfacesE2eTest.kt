@@ -26,6 +26,7 @@ import dev.tricked.solidverdant.data.local.db.SyncState
 import dev.tricked.solidverdant.e2e.BackendPortable
 import dev.tricked.solidverdant.e2e.E2eFixture
 import dev.tricked.solidverdant.e2e.E2eRule
+import dev.tricked.solidverdant.e2e.E2eServerSnapshot
 import dev.tricked.solidverdant.e2e.TestTags
 import dev.tricked.solidverdant.e2e.robots.TrackRobot
 import dev.tricked.solidverdant.service.TimeTrackingNotificationService
@@ -55,6 +56,10 @@ class ExternalTimerSurfacesE2eTest {
 
     @Before
     fun resetExternalSurfaces() {
+        // Android rejects an ongoing chronometer notification whose timestamp is too old. Keep
+        // this notification-focused class near the device clock; calendar tests retain the fixed
+        // harness date used for deterministic day layouts.
+        e2e.testClock.nowMs = Instant.now().truncatedTo(ChronoUnit.SECONDS).toEpochMilli()
         shell("cmd statusbar remove-tile $tileComponent")
         // The service is intentionally non-exported, so shell `am stopservice` is denied on the
         // device. Stop it through the app context or a previous test can leak its coroutine scope
@@ -141,19 +146,21 @@ class ExternalTimerSurfacesE2eTest {
         e2e.awaitServer(TEST_TIMEOUT_MS) { it.activeEntry == null }
     }
 
+    @BackendPortable
     @Test
     fun stale_quick_start_surface_does_not_create_a_second_server_timer() {
+        val originalStart = Instant.ofEpochMilli(e2e.testClock.nowMs).minus(7, ChronoUnit.HOURS)
         val original = e2e.completedFixtureEntry(
             logicalId = "external-before-quick-start",
             description = "External timer",
+            start = originalStart,
         ).copy(end = null, duration = null)
         val originalHandle = e2e.prepare(E2eFixture.Active(original))
-        val server = e2e.requireMockBackend()
+        val originalServerId = requireNotNull(originalHandle.serverId)
         grantNotificationPermission()
         e2e.launchApp()
-        TrackRobot(e2e.composeRule).waitForHistory().assertStopButtonVisible()
-        val activeLookupsBefore = server.callsMatching("GET", "/users/me/time-entries/active").size
-        val startCallsBefore = server.callsMatching("POST", "/time-entries").size
+        val robot = TrackRobot(e2e.composeRule).waitForHistory().assertStopButtonVisible()
+        waitForNotificationAction(R.string.pause, originalStart)
 
         TimeTrackingNotificationService.quickStart(
             context = context,
@@ -164,11 +171,71 @@ class ExternalTimerSurfacesE2eTest {
             taskName = null,
         )
 
-        e2e.composeRule.waitUntil(TEST_TIMEOUT_MS) {
-            server.callsMatching("GET", "/users/me/time-entries/active").size > activeLookupsBefore
+        // Quick Start first publishes optimistic state. Observe that new timestamp, then wait for
+        // the original seven-hour timestamp to return. This proves the authoritative active-entry
+        // recheck completed before we inspect the server, rather than letting an immediate
+        // snapshot pass before the service coroutine ran.
+        waitForNotificationStartOtherThan(originalStart)
+        waitForNotificationAction(R.string.pause, originalStart)
+        val unchanged = e2e.awaitServer(TEST_TIMEOUT_MS) { snapshot ->
+            snapshot.activeEntry?.id == originalServerId &&
+                snapshot.distinctEntryIds() == setOf(originalServerId)
         }
-        assertEquals(startCallsBefore, server.callsMatching("POST", "/time-entries").size)
-        assertEquals(originalHandle.serverId, e2e.serverSnapshot().activeEntry?.id)
+        assertEquals(originalServerId, unchanged.activeEntry?.id)
+
+        robot.tapStop()
+        val stopped = e2e.awaitServer(TEST_TIMEOUT_MS, driveSync = true) { snapshot ->
+            snapshot.activeEntry == null &&
+                snapshot.distinctEntryIds() == setOf(originalServerId) &&
+                snapshot.entries.firstOrNull { it.id == originalServerId }?.end != null
+        }
+        assertEquals(setOf(originalServerId), stopped.distinctEntryIds())
+    }
+
+    @BackendPortable
+    @Test
+    fun stale_resume_uses_a_newer_external_timer_instead_of_creating_another_one() {
+        val now = Instant.ofEpochMilli(e2e.testClock.nowMs)
+        val originalStart = now.minus(7, ChronoUnit.HOURS)
+        val original = e2e.completedFixtureEntry(
+            logicalId = "paused-before-external-replacement",
+            description = "Original external timer",
+            start = originalStart,
+        ).copy(end = null, duration = null)
+        val originalHandle = e2e.prepare(E2eFixture.Active(original))
+        val originalServerId = requireNotNull(originalHandle.serverId)
+        grantNotificationPermission()
+        e2e.launchApp()
+        TrackRobot(e2e.composeRule).waitForHistory().assertStopButtonVisible()
+
+        waitForNotificationAction(R.string.pause, originalStart).send()
+        e2e.awaitServer(TEST_TIMEOUT_MS) { it.activeEntry == null }
+        val staleResume = waitForNotificationAction(R.string.resume)
+
+        val replacementStart = now.minus(150, ChronoUnit.MINUTES)
+        val replacement = e2e.completedFixtureEntry(
+            logicalId = "newer-external-replacement",
+            description = "Newer external timer",
+            start = replacementStart,
+        ).copy(end = null, duration = null)
+        val replacementHandle = e2e.createOnServer(replacement)
+        val replacementServerId = requireNotNull(replacementHandle.serverId)
+
+        staleResume.send()
+        val stopReplacement = waitForNotificationAction(R.string.stop_tracking, replacementStart)
+        val unchanged = e2e.awaitServer(TEST_TIMEOUT_MS) { snapshot ->
+            snapshot.activeEntry?.id == replacementServerId &&
+                snapshot.distinctEntryIds() == setOf(originalServerId, replacementServerId)
+        }
+        assertEquals(replacementServerId, unchanged.activeEntry?.id)
+
+        stopReplacement.send()
+        val stopped = e2e.awaitServer(TEST_TIMEOUT_MS) { snapshot ->
+            snapshot.activeEntry == null &&
+                snapshot.distinctEntryIds() == setOf(originalServerId, replacementServerId) &&
+                snapshot.entries.count { it.end != null } == 2
+        }
+        assertEquals(setOf(originalServerId, replacementServerId), stopped.distinctEntryIds())
     }
 
     @BackendPortable
@@ -274,15 +341,19 @@ class ExternalTimerSurfacesE2eTest {
         waitForPendingOutboxToDrain()
     }
 
-    private fun waitForNotificationAction(labelRes: Int): PendingIntent {
+    private fun waitForNotificationAction(labelRes: Int, expectedStart: Instant? = null): PendingIntent {
         var pendingIntent: PendingIntent? = null
         val expectedLabel = context.getString(labelRes)
         var observedLabels = emptyList<String>()
         try {
             e2e.composeRule.waitUntil(TEST_TIMEOUT_MS) {
-                val actions = notificationManager.activeNotifications
+                val notifications = notificationManager.activeNotifications
                     .asSequence()
-                    .flatMap { it.notification.actions.orEmpty().asSequence() }
+                    .filter { expectedStart == null || it.notification.`when` == expectedStart.toEpochMilli() }
+                    .toList()
+                val actions = notifications
+                    .asSequence()
+                    .flatMap { status -> status.notification.actions.orEmpty().asSequence() }
                     .toList()
                 observedLabels = actions.map { it.title.toString() }
                 pendingIntent = actions.firstOrNull { it.title.toString() == expectedLabel }?.actionIntent
@@ -295,6 +366,18 @@ class ExternalTimerSurfacesE2eTest {
             )
         }
         return requireNotNull(pendingIntent)
+    }
+
+    private fun waitForNotificationStartOtherThan(originalStart: Instant) {
+        val pauseLabel = context.getString(R.string.pause)
+        e2e.composeRule.waitUntil(TEST_TIMEOUT_MS) {
+            notificationManager.activeNotifications.any { status ->
+                status.notification.`when` != originalStart.toEpochMilli() &&
+                    status.notification.actions.orEmpty().any { action ->
+                        action.title.toString() == pauseLabel
+                    }
+            }
+        }
     }
 
     private fun grantNotificationPermission() {
@@ -310,6 +393,11 @@ class ExternalTimerSurfacesE2eTest {
     }
 
     private fun shell(command: String): String = device.executeShellCommand(command)
+
+    private fun E2eServerSnapshot.distinctEntryIds(): Set<String> = buildSet {
+        entries.mapTo(this) { it.id }
+        activeEntry?.id?.let(::add)
+    }
 
     private companion object {
         const val TEST_TIMEOUT_MS = 15_000L

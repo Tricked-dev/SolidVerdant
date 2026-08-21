@@ -60,13 +60,16 @@ class TrackingLifecycleE2eTest {
         val robot = TrackRobot(e2e.composeRule).waitForHistory()
 
         robot.tapStart().assertStopButtonVisible()
+        e2e.awaitServer(WAIT_MS, driveSync = true) { it.activeEntry != null }
 
         scenario.recreate()
 
         // The recreated activity must come back in the running state (ViewModel + Room state),
         // and the timer must still be stoppable.
         robot.assertStopButtonVisible()
-        robot.tapStop().assertStartButtonVisible()
+        robot.tapStop()
+        e2e.awaitServer(WAIT_MS, driveSync = true) { it.activeEntry == null }
+        robot.assertStartButtonVisible()
     }
 
     companion object {

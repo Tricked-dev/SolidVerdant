@@ -442,6 +442,9 @@ in
       $user = App\Models\User::where("email", "solidverdant-e2e@example.test")->firstOrFail();
       $user->forceFill(["timezone" => "UTC"])->save();
       $member = App\Models\Member::where("user_id", $user->id)->firstOrFail();
+      Illuminate\Support\Facades\DB::table("organizations")
+        ->where("id", $member->organization_id)
+        ->update(["breaks_enabled" => true]);
       $client = new App\Models\Client();
       $client->forceFill([
         "name" => "Live Test Client",
