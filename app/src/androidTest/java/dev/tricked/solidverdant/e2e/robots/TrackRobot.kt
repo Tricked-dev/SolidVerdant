@@ -173,7 +173,10 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
 
     fun closeHistoryFilters(): TrackRobot = apply {
         firstEnabledNodeWithTag(TestTags.TRACK_FILTER_CLOSE_BUTTON).performClick()
-        waitUntilTagIsGone(TestTags.TRACK_FILTER_SEARCH_FIELD)
+        // API 29 can retain the outgoing text-field semantics after the collapsed control is
+        // available. The enabled collapsed control is the authoritative state and is also the
+        // control the next step must interact with.
+        waitUntilEnabledTagExists(TestTags.TRACK_FILTER_OPEN_BUTTON)
     }
 
     fun assertHistorySearch(text: String): TrackRobot = apply {
