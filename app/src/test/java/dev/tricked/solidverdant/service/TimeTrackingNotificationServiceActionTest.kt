@@ -194,11 +194,31 @@ class TimeTrackingNotificationServiceActionTest {
     }
 
     @Test
+    fun quick_start_does_not_post_when_the_account_already_has_an_external_timer() {
+        val authRepository = mockk<AuthRepository>(relaxed = true) {
+            coEvery { getCurrentMembership() } returns membership
+            coEvery { getCurrentUser() } returns Result.success(user)
+            coEvery { getActiveTimeEntry() } returns Result.success(activeEntry)
+            coEvery { startTimeEntry(any(), any(), any(), any(), any(), any()) } returns Result.success(
+                activeEntry.copy(id = "duplicate-entry-id", start = "2026-08-10T10:30:00Z"),
+            )
+        }
+        val service = createService(authRepository)
+
+        service.onStartCommand(quickStartIntent(), 0, 1)
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+
+        coVerify(exactly = 1) { authRepository.getActiveTimeEntry() }
+        coVerify(exactly = 0) { authRepository.startTimeEntry(any(), any(), any(), any(), any(), any()) }
+    }
+
+    @Test
     fun failed_quick_start_releases_the_guard_and_allows_a_retry() {
         val resumedEntry = activeEntry.copy(start = "2026-08-10T10:00:00Z")
         val authRepository = mockk<AuthRepository>(relaxed = true) {
             coEvery { getCurrentMembership() } returns membership
             coEvery { getCurrentUser() } returns Result.success(user)
+            coEvery { getActiveTimeEntry() } returns Result.success(null)
             coEvery { startTimeEntry(any(), any(), any(), any(), any(), any()) } returnsMany listOf(
                 Result.failure(RuntimeException("network failure")),
                 Result.success(resumedEntry),
@@ -436,6 +456,7 @@ class TimeTrackingNotificationServiceActionTest {
         val authRepository = mockk<AuthRepository>(relaxed = true) {
             coEvery { getCurrentUser() } returns Result.success(user)
             coEvery { getCurrentMembership() } returns membership
+            coEvery { getActiveTimeEntry() } returns Result.success(null)
             coEvery { getProjects(organization.id) } returns Result.success(listOf(project))
             coEvery { getTasks(organization.id) } returns Result.success(listOf(task))
             coEvery { startTimeEntry(any(), any(), any(), any(), any(), any()) } coAnswers {
@@ -464,6 +485,37 @@ class TimeTrackingNotificationServiceActionTest {
         assertEquals(
             externalStart.toEpochMilli(),
             nextPause.getLongExtra(TimeTrackingNotificationService.EXTRA_START_TIME, -1L),
+        )
+    }
+
+    @Test
+    fun resume_does_not_post_when_the_account_already_has_an_external_timer() {
+        val replacement = activeEntry.copy(
+            id = "external-replacement-id",
+            start = "2026-08-10T10:30:00Z",
+        )
+        val authRepository = mockk<AuthRepository>(relaxed = true) {
+            coEvery { getCurrentUser() } returns Result.success(user)
+            coEvery { getCurrentMembership() } returns membership
+            coEvery { getActiveTimeEntry() } returns Result.success(replacement)
+            coEvery { startTimeEntry(any(), any(), any(), any(), any(), any()) } returns Result.success(
+                activeEntry.copy(id = "duplicate-entry-id", start = "2026-08-10T10:31:00Z"),
+            )
+        }
+        val service = createService(authRepository)
+        service.onStartCommand(startTrackingIntent(), 0, 1)
+        service.onStartCommand(actionIntent(TimeTrackingNotificationService.ACTION_SHOW_PAUSED), 0, 2)
+
+        service.onStartCommand(pausedActionIntent(R.string.resume), 0, 3)
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+
+        coVerify(exactly = 1) { authRepository.getActiveTimeEntry() }
+        coVerify(exactly = 0) { authRepository.startTimeEntry(any(), any(), any(), any(), any(), any()) }
+        val notification = checkNotNull(shadowOf(service).lastForegroundNotification)
+        val nextStop = notificationActionIntent(notification, R.string.stop_tracking)
+        assertEquals(
+            Instant.parse(replacement.start).toEpochMilli(),
+            nextStop.getLongExtra(TimeTrackingNotificationService.EXTRA_START_TIME, -1L),
         )
     }
 
@@ -751,6 +803,7 @@ class TimeTrackingNotificationServiceActionTest {
         val authRepository = mockk<AuthRepository>(relaxed = true) {
             coEvery { getCurrentUser() } returns Result.success(user)
             coEvery { getCurrentMembership() } returns membership
+            coEvery { getActiveTimeEntry() } returns Result.success(null)
             coEvery { getProjects(organization.id) } returns Result.success(listOf(project))
             coEvery { getTasks(organization.id) } returns Result.success(listOf(task))
             coEvery {
@@ -798,6 +851,7 @@ class TimeTrackingNotificationServiceActionTest {
         val authRepository = mockk<AuthRepository>(relaxed = true) {
             coEvery { getCurrentUser() } returns Result.success(user)
             coEvery { getCurrentMembership() } returns membership
+            coEvery { getActiveTimeEntry() } returns Result.success(null)
             coEvery { getProjects(organization.id) } returns Result.success(listOf(wrongProject, project))
             coEvery { getTasks(organization.id) } returns Result.success(listOf(wrongTask, task))
             coEvery { startTimeEntry(any(), any(), any(), any(), any(), any()) } returns Result.success(resumedEntry)
@@ -827,6 +881,7 @@ class TimeTrackingNotificationServiceActionTest {
         val authRepository = mockk<AuthRepository>(relaxed = true) {
             coEvery { getCurrentUser() } returns Result.success(user)
             coEvery { getCurrentMembership() } returns membership
+            coEvery { getActiveTimeEntry() } returns Result.success(null)
             coEvery { getProjects(organization.id) } returns Result.success(listOf(project))
             coEvery { getTasks(organization.id) } returns Result.success(listOf(task))
             coEvery { startTimeEntry(any(), any(), any(), any(), any(), any()) } returns Result.success(resumedEntry)

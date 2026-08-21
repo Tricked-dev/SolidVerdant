@@ -22,6 +22,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import dev.tricked.solidverdant.MainActivity
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.local.SettingsDataStore
+import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.ui.tile.ProjectSelectionActivity
 import kotlinx.coroutines.CoroutineScope
@@ -250,6 +251,34 @@ class TimeTrackingNotificationService : Service() {
             }
             organizationId = membership.organizationId
 
+            // Quick Start can be launched from an idle notification or the tile picker after
+            // another client has started a timer. Recheck the account-wide endpoint immediately
+            // before POSTing: a stale local surface must not create a second active entry.
+            val existingActive = authRepository.getActiveTimeEntry().getOrElse { error ->
+                mutationInProgress = false
+                Timber.e(error, "Quick start failed while checking for an active timer")
+                if (stateGeneration == quickStartGeneration) stopService()
+                return@launch
+            }
+            if (stateGeneration != quickStartGeneration) {
+                mutationInProgress = false
+                return@launch
+            }
+            if (existingActive != null) {
+                mutationInProgress = false
+                organizationId = existingActive.organizationId
+                projectId = existingActive.projectId
+                taskId = existingActive.taskId
+                projectName = projectName.takeIf { existingActive.projectId == intent.getStringExtra(EXTRA_PROJECT_ID) }
+                taskName = taskName.takeIf { existingActive.taskId == intent.getStringExtra(EXTRA_TASK_ID) }
+                description = existingActive.description
+                startTime = Instant.parse(existingActive.start)
+                cancelLongTimerWarning()
+                publishNotification()
+                scheduleLongTimerWarning()
+                return@launch
+            }
+
             authRepository.startTimeEntry(
                 organizationId = membership.organizationId,
                 memberId = membership.id,
@@ -412,13 +441,14 @@ class TimeTrackingNotificationService : Service() {
         requestedProjectName: String?,
         requestedTaskName: String?,
         requestedDescription: String?,
-    ): Result<Instant> = runCatching {
+    ): Result<TimeEntry> = runCatching {
         val user = authRepository.getCurrentUser().getOrThrow()
         val membership = authRepository.getCurrentMembership()
             ?: error("No current membership")
         check(requestedOrganizationId == null || membership.organizationId == requestedOrganizationId) {
             "The paused timer belongs to a different organization"
         }
+        authRepository.getActiveTimeEntry().getOrThrow()?.let { return@runCatching it }
         // Exact IDs survive duplicate names and catalogue renames. Name lookup remains only for
         // notification PendingIntents created by an older app version before IDs were included.
         val resolvedProjectId = requestedProjectId ?: authRepository.getProjects(membership.organizationId)
@@ -438,7 +468,7 @@ class TimeTrackingNotificationService : Service() {
             taskId = resolvedTaskId,
             description = requestedDescription.orEmpty(),
         ).getOrThrow()
-        Instant.parse(entry.start)
+        entry
     }
 
     /** Stop the account-wide active entry. Used only by explicit notification actions. */
@@ -583,17 +613,17 @@ class TimeTrackingNotificationService : Service() {
                 requestedTaskName,
                 requestedDescription,
             ).fold(
-                onSuccess = { resumedAt ->
+                onSuccess = { resumedEntry ->
                     mutationInProgress = false
                     notificationManager.cancel(NOTIFICATION_ID_ERROR)
                     if (stateGeneration == resumeGeneration) {
-                        organizationId = requestedOrganizationId
-                        projectId = requestedProjectId
-                        taskId = requestedTaskId
-                        projectName = requestedProjectName
-                        taskName = requestedTaskName
-                        description = requestedDescription
-                        startTime = resumedAt
+                        organizationId = resumedEntry.organizationId
+                        projectId = resumedEntry.projectId
+                        taskId = resumedEntry.taskId
+                        projectName = requestedProjectName.takeIf { resumedEntry.projectId == requestedProjectId }
+                        taskName = requestedTaskName.takeIf { resumedEntry.taskId == requestedTaskId }
+                        description = resumedEntry.description
+                        startTime = Instant.parse(resumedEntry.start)
                         isPaused = false
                         isTracking = true
                         clearPersistedPausedStart()

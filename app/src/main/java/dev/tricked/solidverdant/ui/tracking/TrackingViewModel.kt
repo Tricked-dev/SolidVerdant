@@ -115,6 +115,22 @@ internal fun shouldDeferServerActiveWhileStopping(entryId: String, operations: L
     }
 
 /**
+ * A poll may return an older active row after sync has already written a replacement into Room.
+ * Keep the newer timer visible when the ids differ; for the same id, the server response remains
+ * authoritative so start-time edits and metadata refreshes still surface immediately.
+ */
+internal fun selectVisibleActiveEntry(roomActive: TimeEntry?, polledActive: TimeEntry?): TimeEntry? {
+    if (roomActive == null || polledActive == null || roomActive.id == polledActive.id) return polledActive
+    val roomStart = parseTimeEntryInstant(roomActive.start) ?: return polledActive
+    val polledStart = parseTimeEntryInstant(polledActive.start) ?: return roomActive
+    return if (roomStart > polledStart) {
+        roomActive
+    } else {
+        polledActive
+    }
+}
+
+/**
  * UI state for tracking screen
  */
 @Stable
@@ -587,7 +603,7 @@ class TrackingViewModel @Inject constructor(
 
     private fun activePollOverrideFor(organizationId: String, roomActive: TimeEntry?): TimeEntry? =
         if (hasActivePollOverride && activePollOverrideOrganizationId == organizationId) {
-            activePollOverride
+            selectVisibleActiveEntry(roomActive, activePollOverride)
         } else {
             roomActive
         }
@@ -769,7 +785,7 @@ class TrackingViewModel @Inject constructor(
                 // organization currently selected in the app.
                 val serverTimeEntry = timeEntry?.takeIf { it.organizationId == organizationId }
                 if (serverTimeEntry == null) locallyStoppingEntryIds.clear()
-                val currentTimeEntry = serverTimeEntry
+                val polledTimeEntry = serverTimeEntry
                     ?.takeUnless {
                         it.id in locallyStoppingEntryIds ||
                             shouldDeferServerActiveWhileStopping(it.id, _uiState.value.syncOperations)
@@ -779,12 +795,13 @@ class TrackingViewModel @Inject constructor(
                 // entry" must not clear it, or the user's running timer silently disappears
                 // until the next sync (found by TrackingLifecycleE2eTest recreation flow).
                 val local = _uiState.value.currentTimeEntry
-                if (currentTimeEntry == null &&
+                if (polledTimeEntry == null &&
                     local != null &&
                     shouldPreserveLocallyStartedEntry(local.id, _uiState.value.syncOperations)
                 ) {
                     return@onSuccess
                 }
+                val currentTimeEntry = selectVisibleActiveEntry(local, polledTimeEntry)
                 setActivePollOverride(organizationId, currentTimeEntry)
                 if (onlyIfChanged &&
                     currentTimeEntry?.id == _uiState.value.currentTimeEntry?.id

@@ -141,6 +141,36 @@ class ExternalTimerSurfacesE2eTest {
         e2e.awaitServer(TEST_TIMEOUT_MS) { it.activeEntry == null }
     }
 
+    @Test
+    fun stale_quick_start_surface_does_not_create_a_second_server_timer() {
+        val original = e2e.completedFixtureEntry(
+            logicalId = "external-before-quick-start",
+            description = "External timer",
+        ).copy(end = null, duration = null)
+        val originalHandle = e2e.prepare(E2eFixture.Active(original))
+        val server = e2e.requireMockBackend()
+        grantNotificationPermission()
+        e2e.launchApp()
+        TrackRobot(e2e.composeRule).waitForHistory().assertStopButtonVisible()
+        val activeLookupsBefore = server.callsMatching("GET", "/users/me/time-entries/active").size
+        val startCallsBefore = server.callsMatching("POST", "/time-entries").size
+
+        TimeTrackingNotificationService.quickStart(
+            context = context,
+            projectId = null,
+            taskId = null,
+            description = "Stale quick start",
+            projectName = null,
+            taskName = null,
+        )
+
+        e2e.composeRule.waitUntil(TEST_TIMEOUT_MS) {
+            server.callsMatching("GET", "/users/me/time-entries/active").size > activeLookupsBefore
+        }
+        assertEquals(startCallsBefore, server.callsMatching("POST", "/time-entries").size)
+        assertEquals(originalHandle.serverId, e2e.serverSnapshot().activeEntry?.id)
+    }
+
     @BackendPortable
     @Test
     fun track_timer_edit_button_opens_running_entry_editor_without_stopping_timer() {
