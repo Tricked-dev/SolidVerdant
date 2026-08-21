@@ -192,6 +192,8 @@ an isolated local Solidtime server:
 ```bash
 # macOS: start Apple's container runtime once per host boot/login.
 container system start
+# Optional when multiple physical devices are attached:
+# export ANDROID_SERIAL=<serial from adb devices>
 devenv tasks run solidtime:test
 ```
 
@@ -206,13 +208,16 @@ Docker service-name route used by the upstream stack, so the task resolves Postg
 container address and injects it into the API configuration for each reset.
 The Apple published-port bridge is reset-prone for long-lived HTTP clients, so the task publishes
 the API to a disposable Unix socket under `/tmp`, forwards it through a small PHP/Ruby bridge to
-`127.0.0.1:18080`, and removes that bridge with the test process.
+`127.0.0.1:18080`, and replaces any bridge recorded by the previous run before starting another.
 
 The live task starts the official Solidtime container with disposable PostgreSQL data, resets its
 test account, and runs only E2E tests marked `@BackendPortable`. It requires one authorized physical
 Android device; emulator serials are rejected. Set `ANDROID_SERIAL` if more than one physical device
 is connected. The task uses `adb reverse` and removes the temporary test session from the device
-afterward. Do not use a personal Solidtime account or print the generated session file.
+afterward, including after a failed test. Do not use a personal Solidtime account or print the
+generated session file. The disposable API and database containers may remain available after the
+task for diagnosis; remove them and the host bridge with
+`devenv tasks run solidtime:clean-stale` when they are no longer needed.
 
 The reset removes all time entries from the disposable account and seeds `Live Test Project`, `Live
 Test Task`, and `Live Test Tag` for metadata-edit tests. It is also available explicitly with
@@ -227,8 +232,12 @@ and start it with `container system start` before retrying. If a restricted deve
 cannot open the Gradle distribution lock, rerun the same pinned `devenv` task with the approved
 elevated container/build permission. These errors are environment restrictions, not Solidtime test
 results.
-Read the JUnit instrumentation summary to determine pass/fail; do not rely on a task wrapper's shell
-exit code when it suppresses the instrumentation transcript.
+The task prints the raw instrumentation transcript (the task runner may buffer it until completion)
+and succeeds only when the final JUnit result contains `OK (N tests)` with `N` greater than zero. It
+exits nonzero for `FAILURES!!!`, an adb/runner failure, or a missing/empty summary. This explicit check
+is required because Android's `am instrument` shell command can itself exit successfully after JUnit
+failures. Use the printed failing test names and stacks for diagnosis; never infer a pass from only
+the `devenv` wrapper's elapsed-time line.
 
 ## Verification
 

@@ -63,6 +63,27 @@ let
     install_e2e_apk "$app_apk" dev.tricked.solidverdant.dev
     install_e2e_apk "$test_apk" dev.tricked.solidverdant.dev.test
   '';
+  runAndroidInstrumentation = ''
+    run_android_instrumentation() {
+      instrumentation_output="$(mktemp "''${TMPDIR:-/tmp}/solidverdant-instrumentation.XXXXXX")"
+      if ! adb -s "$device_serial" shell am instrument -w -r "$@" | tee "$instrumentation_output" >&2; then
+        rm -f "$instrumentation_output"
+        printf '%s\n' "Android instrumentation transport failed" >&2
+        return 1
+      fi
+      if grep -Eq '^OK \([1-9][0-9]* tests?\)$' "$instrumentation_output"; then
+        rm -f "$instrumentation_output"
+        return 0
+      fi
+      if grep -q '^FAILURES!!!$' "$instrumentation_output"; then
+        printf '%s\n' "Android instrumentation reported test failures" >&2
+      else
+        printf '%s\n' "Android instrumentation did not report a successful non-empty JUnit summary" >&2
+      fi
+      rm -f "$instrumentation_output"
+      return 1
+    }
+  '';
 in
 {
   android = {
@@ -115,6 +136,22 @@ in
   tasks."solidtime:clean-stale" = {
     after = [ "solidtime:network" ];
     exec = ''
+      proxy_pid_file="$DEVENV_STATE/solidtime/api-proxy.pid"
+      if [ -s "$proxy_pid_file" ]; then
+        stale_proxy_pid="$(sed -n '1p' "$proxy_pid_file")"
+        case "$stale_proxy_pid" in
+          ""|*[!0-9]*) ;;
+          *)
+            stale_proxy_command="$(ps -p "$stale_proxy_pid" -o command= 2>/dev/null || true)"
+            case "$stale_proxy_command" in
+              *solidverdant-solidtime-host-proxy*)
+                kill "$stale_proxy_pid" >/dev/null 2>&1 || true
+                ;;
+            esac
+            ;;
+        esac
+        rm -f "$proxy_pid_file"
+      fi
       "$SOLIDTIME_CONTAINER_ENGINE" rm -f \
         ${solidtimeApiContainer} ${solidtimeDatabaseContainer} >/dev/null 2>&1 || true
       "$SOLIDTIME_CONTAINER_ENGINE" network rm ${solidtimeNetwork} >/dev/null 2>&1 || true
@@ -241,11 +278,15 @@ in
       image="solidtime/solidtime:''${SOLIDTIME_IMAGE_TAG:-latest}"
       "$SOLIDTIME_CONTAINER_ENGINE" rm -f ${solidtimeApiContainer} >/dev/null 2>&1 || true
       api_socket="/tmp/solidverdant-solidtime-api.sock"
+      proxy_pid_file="$DEVENV_STATE/solidtime/api-proxy.pid"
       rm -f "$api_socket"
       proxy_pid=""
       cleanup() {
         if [ -n "$proxy_pid" ]; then
           kill "$proxy_pid" >/dev/null 2>&1 || true
+        fi
+        if [ -s "$proxy_pid_file" ] && [ "$(sed -n '1p' "$proxy_pid_file")" = "$proxy_pid" ]; then
+          rm -f "$proxy_pid_file"
         fi
         "$SOLIDTIME_CONTAINER_ENGINE" stop -t 3 ${solidtimeApiContainer} >/dev/null 2>&1 || true
       }
@@ -359,8 +400,14 @@ in
             end
           end
         end
-      ' &
+      ' solidverdant-solidtime-host-proxy &
       proxy_pid=$!
+      printf '%s\n' "$proxy_pid" >"$proxy_pid_file"
+      sleep 1
+      if ! kill -0 "$proxy_pid" >/dev/null 2>&1; then
+        printf '%s\n' "Solidtime host API proxy did not stay running" >&2
+        exit 1
+      fi
       while true; do
         api_state=$("$SOLIDTIME_CONTAINER_ENGINE" inspect ${solidtimeApiContainer} |
           jq -r '.[0].status.state' || true)
@@ -445,7 +492,8 @@ in
     set -euo pipefail
     ${resolvePhysicalAndroidDevice}
     ${assembleAndInstallAndroidE2e}
-    adb -s "$device_serial" shell am instrument -w \
+    ${runAndroidInstrumentation}
+    run_android_instrumentation \
       -e e2eBackend mock \
       dev.tricked.solidverdant.dev.test/dev.tricked.solidverdant.HiltTestRunner
   '';
@@ -469,6 +517,7 @@ in
       }
       trap cleanup_session EXIT
       ${assembleAndInstallAndroidE2e}
+      ${runAndroidInstrumentation}
       cleanup_session
       adb -s "$device_serial" reverse tcp:18080 tcp:18080
       adb -s "$device_serial" push "$DEVENV_STATE/solidtime/session.properties" \
@@ -480,7 +529,7 @@ in
       adb -s "$device_serial" shell rm -f /data/local/tmp/solidtime-live-e2e.properties
       adb -s "$device_serial" shell run-as dev.tricked.solidverdant.dev \
         chmod 600 files/solidtime-live-e2e.properties
-      adb -s "$device_serial" shell am instrument -w \
+      run_android_instrumentation \
         -e e2eBackend real \
         -e annotation ${backendPortableE2eAnnotation} \
         dev.tricked.solidverdant.dev.test/dev.tricked.solidverdant.HiltTestRunner
