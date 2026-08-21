@@ -268,6 +268,8 @@
     <string name="optimistic_refresh_description">Fetch data immediately using cached account info; uses a few extra API calls</string>
     <string name="auto_clear_entry_fields_after_stop">Auto-clear entry fields</string>
     <string name="auto_clear_entry_fields_after_stop_description">Clear the description, project, and task when the timer stops</string>
+    <string name="clear_description_after_stop">Clear description after stop</string>
+    <string name="clear_description_after_stop_description">Keep the project and task selected for the next entry</string>
     <string name="reset_entry_fields">Reset entry fields</string>
     <string name="theme">Theme</string>
     <string name="theme_description">Choose the app color style</string>

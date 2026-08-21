@@ -9,12 +9,15 @@ package dev.tricked.solidverdant.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -46,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.window.Dialog
@@ -363,16 +367,27 @@ private fun PickerDialog(
         onDismissRequest = onClose,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        Box(
-            modifier = Modifier.fillMaxWidth().padding(Dimens.Space16),
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center,
         ) {
+            val compact = maxWidth < Dimens.NarrowCalendarWidth
             Surface(
-                modifier = Modifier.fillMaxWidth().widthIn(max = Dimens.PickerMaxWidth).heightIn(max = Dimens.PickerMaxHeight),
-                shape = MaterialTheme.shapes.extraLarge,
-                tonalElevation = Dimens.Space8,
+                modifier = if (compact) {
+                    Modifier.fillMaxSize()
+                } else {
+                    Modifier.fillMaxWidth().widthIn(max = Dimens.PickerMaxWidth).heightIn(max = Dimens.PickerMaxHeight)
+                },
+                shape = if (compact) RectangleShape else MaterialTheme.shapes.extraLarge,
+                tonalElevation = if (compact) Dimens.Space1 else Dimens.Space8,
             ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = if (compact) {
+                        Modifier.fillMaxSize().safeDrawingPadding()
+                    } else {
+                        Modifier.fillMaxWidth()
+                    },
+                ) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(start = Dimens.Space24, end = Dimens.Space8, top = Dimens.Space8),
                         verticalAlignment = Alignment.CenterVertically,
@@ -408,7 +423,7 @@ private fun PickerDialog(
                         shape = MaterialTheme.shapes.medium,
                     )
                     LazyColumn(
-                        modifier = Modifier.fillMaxWidth().weight(1f, fill = false).testTag(listTestTag),
+                        modifier = Modifier.fillMaxWidth().weight(1f).testTag(listTestTag),
                         content = content,
                     )
                     Spacer(Modifier.size(Dimens.Space8))

@@ -219,6 +219,7 @@ fun SolidVerdantApp(
     val optimisticRefresh by trackingViewModel.optimisticRefresh.collectAsState(initial = true)
     val liveUpdateEnabled by trackingViewModel.liveUpdateEnabled.collectAsState(initial = false)
     val autoClearEntryFieldsAfterStop by trackingViewModel.autoClearEntryFieldsAfterStop.collectAsState(initial = true)
+    val clearDescriptionAfterStop by trackingViewModel.clearDescriptionAfterStop.collectAsState(initial = false)
     val longTimerHours by trackingViewModel.longTimerHours.collectAsState(initial = 4)
     val hasSnapshot by trackingViewModel.hasSnapshot.collectAsState()
     val snapshotHydrated by trackingViewModel.snapshotHydrated.collectAsState()
@@ -319,6 +320,7 @@ fun SolidVerdantApp(
                         optimisticRefresh = optimisticRefresh,
                         liveUpdateEnabled = liveUpdateEnabled,
                         autoClearEntryFieldsAfterStop = autoClearEntryFieldsAfterStop,
+                        clearDescriptionAfterStop = clearDescriptionAfterStop,
                         longTimerHours = longTimerHours,
                         editActiveEntryRequested = editActiveEntryRequested,
                         onEditActiveEntryConsumed = onEditActiveEntryConsumed,
@@ -329,6 +331,7 @@ fun SolidVerdantApp(
                         onOptimisticRefreshChange = trackingViewModel::setOptimisticRefresh,
                         onLiveUpdateEnabledChange = trackingViewModel::setLiveUpdateEnabled,
                         onAutoClearEntryFieldsAfterStopChange = trackingViewModel::setAutoClearEntryFieldsAfterStop,
+                        onClearDescriptionAfterStopChange = trackingViewModel::setClearDescriptionAfterStop,
                         onLongTimerHoursChange = trackingViewModel::setLongTimerHours,
                         onRefresh = {
                             authUiState.currentMembership?.let { membership ->

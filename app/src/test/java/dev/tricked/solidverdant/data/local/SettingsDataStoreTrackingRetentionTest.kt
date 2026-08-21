@@ -30,4 +30,15 @@ class SettingsDataStoreTrackingRetentionTest {
         assertTrue(settingsDataStore.autoClearEntryFieldsAfterStop.first())
         assertTrue(settingsDataStore.getCachedAutoClearEntryFieldsAfterStop())
     }
+
+    @Test
+    fun clear_description_setting_round_trips_through_flow_and_first_frame_cache() = runTest {
+        settingsDataStore.setClearDescriptionAfterStop(true)
+        assertTrue(settingsDataStore.clearDescriptionAfterStop.first())
+        assertTrue(settingsDataStore.getCachedClearDescriptionAfterStop())
+
+        settingsDataStore.setClearDescriptionAfterStop(false)
+        assertFalse(settingsDataStore.clearDescriptionAfterStop.first())
+        assertFalse(settingsDataStore.getCachedClearDescriptionAfterStop())
+    }
 }

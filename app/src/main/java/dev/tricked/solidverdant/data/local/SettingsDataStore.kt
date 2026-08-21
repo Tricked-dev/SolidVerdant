@@ -81,6 +81,7 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         private const val CURRENT_MEMBERSHIP_ID = "current_membership_id"
         private const val CACHED_APP_THEME = "app_theme"
         private const val CACHED_AUTO_CLEAR_ENTRY_FIELDS_AFTER_STOP = "auto_clear_entry_fields_after_stop"
+        private const val CACHED_CLEAR_DESCRIPTION_AFTER_STOP = "clear_description_after_stop"
         private const val LEGACY_CACHED_KEEP_ENTRY_FIELDS_AFTER_STOP = "keep_entry_fields_after_stop"
         private const val TRACKING_STATE_JSON = "tracking_state_json"
         private const val TRACKING_DRAFT_JSON = "tracking_draft_json"
@@ -90,6 +91,7 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         private val OPTIMISTIC_REFRESH = booleanPreferencesKey("optimistic_refresh")
         private val LIVE_UPDATE_ENABLED = booleanPreferencesKey("live_update_enabled")
         private val AUTO_CLEAR_ENTRY_FIELDS_AFTER_STOP = booleanPreferencesKey("auto_clear_entry_fields_after_stop")
+        private val CLEAR_DESCRIPTION_AFTER_STOP = booleanPreferencesKey("clear_description_after_stop")
         private val LEGACY_KEEP_ENTRY_FIELDS_AFTER_STOP = booleanPreferencesKey("keep_entry_fields_after_stop")
         private val LONG_TIMER_HOURS = intPreferencesKey("long_timer_hours")
         private val LONG_TIMER_WARNING_DEADLINE_EPOCH_MS = longPreferencesKey("long_timer_warning_deadline_epoch_ms")
@@ -288,6 +290,13 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         else -> true
     }
 
+    /** Clear only the description after stopping when full auto-clear is disabled. Defaults off. */
+    val clearDescriptionAfterStop: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[CLEAR_DESCRIPTION_AFTER_STOP] ?: false
+    }.distinctUntilChanged()
+
+    fun getCachedClearDescriptionAfterStop(): Boolean = immediateCache.getBoolean(CACHED_CLEAR_DESCRIPTION_AFTER_STOP, false)
+
     val longTimerHours: Flow<Int> = dataStore.data.map { it[LONG_TIMER_HOURS] ?: DEFAULT_LONG_TIMER_HOURS }.distinctUntilChanged()
 
     /**
@@ -353,6 +362,11 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
             preferences[AUTO_CLEAR_ENTRY_FIELDS_AFTER_STOP] = enabled
             preferences.remove(LEGACY_KEEP_ENTRY_FIELDS_AFTER_STOP)
         }
+    }
+
+    suspend fun setClearDescriptionAfterStop(enabled: Boolean) {
+        immediateCache.edit().putBoolean(CACHED_CLEAR_DESCRIPTION_AFTER_STOP, enabled).apply()
+        dataStore.edit { preferences -> preferences[CLEAR_DESCRIPTION_AFTER_STOP] = enabled }
     }
 
     suspend fun setLongTimerHours(hours: Int) {

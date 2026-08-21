@@ -116,6 +116,7 @@ class TrackingViewModelMutationTest {
     @Test
     fun stop_keeps_description_project_and_task_when_auto_clear_is_disabled() = runTest(dispatcher.scheduler) {
         settings.setAutoClearEntryFieldsAfterStop(false)
+        settings.setClearDescriptionAfterStop(false)
         val active = activeEntry()
         val repository = mockk<TimeEntryRepository>(relaxed = true)
         cacheActiveEntry(active)
@@ -128,6 +129,24 @@ class TrackingViewModelMutationTest {
         assertEquals("project-1", viewModel.uiState.value.editingProjectId)
         assertEquals("task-1", viewModel.uiState.value.editingTaskId)
         assertFalse(viewModel.uiState.value.editingBillable)
+        coVerify(exactly = 1) { repository.stopEntry(active, "user") }
+    }
+
+    @Test
+    fun stop_clears_only_description_when_description_clear_is_enabled() = runTest(dispatcher.scheduler) {
+        settings.setAutoClearEntryFieldsAfterStop(false)
+        settings.setClearDescriptionAfterStop(true)
+        val active = activeEntry()
+        val repository = mockk<TimeEntryRepository>(relaxed = true)
+        cacheActiveEntry(active)
+        val viewModel = viewModel(repository)
+
+        viewModel.stopTimeEntry()
+        dispatcher.scheduler.runCurrent()
+
+        assertEquals("", viewModel.uiState.value.editingDescription)
+        assertEquals("project-1", viewModel.uiState.value.editingProjectId)
+        assertEquals("task-1", viewModel.uiState.value.editingTaskId)
         coVerify(exactly = 1) { repository.stopEntry(active, "user") }
     }
 

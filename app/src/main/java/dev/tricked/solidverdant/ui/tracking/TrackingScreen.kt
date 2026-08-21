@@ -252,6 +252,7 @@ fun TrackingScreen(
     optimisticRefresh: Boolean,
     liveUpdateEnabled: Boolean,
     autoClearEntryFieldsAfterStop: Boolean,
+    clearDescriptionAfterStop: Boolean,
     longTimerHours: Int,
     editActiveEntryRequested: Boolean,
     onEditActiveEntryConsumed: () -> Unit,
@@ -260,6 +261,7 @@ fun TrackingScreen(
     onOptimisticRefreshChange: (Boolean) -> Unit,
     onLiveUpdateEnabledChange: (Boolean) -> Unit,
     onAutoClearEntryFieldsAfterStopChange: (Boolean) -> Unit,
+    onClearDescriptionAfterStopChange: (Boolean) -> Unit,
     onLongTimerHoursChange: (Int) -> Unit,
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
@@ -692,27 +694,12 @@ fun TrackingScreen(
                         }
 
                         HorizontalDivider()
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    stringResource(R.string.auto_clear_entry_fields_after_stop),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                )
-                                Text(
-                                    stringResource(R.string.auto_clear_entry_fields_after_stop_description),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            Switch(
-                                checked = autoClearEntryFieldsAfterStop,
-                                onCheckedChange = onAutoClearEntryFieldsAfterStopChange,
-                                modifier = Modifier.testTag(TrackingTestTags.AUTO_CLEAR_FIELDS_SWITCH),
-                            )
-                        }
+                        AutoClearEntryFieldsSettings(
+                            autoClearEntryFieldsAfterStop = autoClearEntryFieldsAfterStop,
+                            clearDescriptionAfterStop = clearDescriptionAfterStop,
+                            onAutoClearEntryFieldsAfterStopChange = onAutoClearEntryFieldsAfterStopChange,
+                            onClearDescriptionAfterStopChange = onClearDescriptionAfterStopChange,
+                        )
 
                         HorizontalDivider()
                         Row(
@@ -915,9 +902,7 @@ fun TrackingScreen(
                             if (entries.isEmpty()) null else HistoryDay(
                                 date = date,
                                 entries = entries,
-                                groups = entries.groupBy {
-                                    "${it.projectId}_${it.taskId}_${it.description.orEmpty()}"
-                                }.values.toList(),
+                                groups = historyEntryGroups(entries),
                             )
                         }
                         PreparedHistory(
@@ -1293,6 +1278,80 @@ internal fun LiveUpdateSettingRow(
     }
 }
 
+/** Full field clearing plus the description-only fallback shown when full clearing is disabled. */
+@Composable
+internal fun AutoClearEntryFieldsSettings(
+    autoClearEntryFieldsAfterStop: Boolean,
+    clearDescriptionAfterStop: Boolean,
+    onAutoClearEntryFieldsAfterStopChange: (Boolean) -> Unit,
+    onClearDescriptionAfterStopChange: (Boolean) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Dimens.Space16, vertical = Dimens.Space12),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.auto_clear_entry_fields_after_stop),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Text(
+                    text = stringResource(R.string.auto_clear_entry_fields_after_stop_description),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = autoClearEntryFieldsAfterStop,
+                onCheckedChange = onAutoClearEntryFieldsAfterStopChange,
+                modifier = Modifier
+                    .testTag(TrackingTestTags.AUTO_CLEAR_FIELDS_SWITCH)
+                    .heightIn(min = Dimens.MinTouchTarget),
+            )
+        }
+
+        AnimatedVisibility(
+            visible = !autoClearEntryFieldsAfterStop,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = Dimens.Space32,
+                        top = Dimens.Space8,
+                        end = Dimens.Space16,
+                        bottom = Dimens.Space12,
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.clear_description_after_stop),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        text = stringResource(R.string.clear_description_after_stop_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = clearDescriptionAfterStop,
+                    onCheckedChange = onClearDescriptionAfterStopChange,
+                    modifier = Modifier
+                        .testTag(TrackingTestTags.CLEAR_DESCRIPTION_AFTER_STOP_SWITCH)
+                        .heightIn(min = Dimens.MinTouchTarget),
+                )
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 @Suppress("LongMethod")
@@ -1609,9 +1668,7 @@ private fun historyHeaderIndex(
     var index = 0
     for ((date, entries) in groups) {
         if (date == targetDate) return index
-        index += 1 + entries.groupBy {
-            "${it.projectId}_${it.taskId}_${it.description ?: ""}"
-        }.size
+        index += 1 + historyEntryGroups(entries).size
     }
     return -1
 }
@@ -1719,9 +1776,7 @@ internal fun LazyListScope.trackingHistoryItems(
                 val day = HistoryDay(
                     date = date,
                     entries = completed,
-                    groups = completed.groupBy {
-                        "${it.projectId}_${it.taskId}_${it.description.orEmpty()}"
-                    }.values.toList(),
+                    groups = historyEntryGroups(completed),
                 )
                 add(HistoryListItem.Header(day))
                 day.groups.forEach { add(HistoryListItem.Group(day.date, it)) }
@@ -1756,6 +1811,10 @@ internal fun LazyListScope.trackingHistoryItems(
     @Immutable
      data class Group(val date: LocalDate, val entries: List<TimeEntry>) : HistoryListItem
  }
+
+/** Keep every punch visible, even when multiple entries share the same project/task/description. */
+internal fun historyEntryGroups(entries: List<TimeEntry>): List<List<TimeEntry>> =
+    entries.map(::listOf)
 
 @Immutable
  private data class PreparedHistory(

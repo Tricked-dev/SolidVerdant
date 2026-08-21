@@ -105,4 +105,41 @@ class TrackingControlsRetentionTest {
 
         composeRule.onNodeWithTag(TrackingTestTags.RESET_FIELDS_BUTTON).assertDoesNotExist()
     }
+
+    @Test
+    fun description_only_setting_is_shown_when_full_auto_clear_is_disabled() {
+        var enabled = false
+        composeRule.setContent {
+            MaterialTheme {
+                AutoClearEntryFieldsSettings(
+                    autoClearEntryFieldsAfterStop = false,
+                    clearDescriptionAfterStop = false,
+                    onAutoClearEntryFieldsAfterStopChange = {},
+                    onClearDescriptionAfterStopChange = { enabled = it },
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(TrackingTestTags.CLEAR_DESCRIPTION_AFTER_STOP_SWITCH)
+            .assertIsDisplayed()
+            .performClick()
+
+        assertTrue(enabled)
+    }
+
+    @Test
+    fun description_only_setting_is_hidden_when_full_auto_clear_is_enabled() {
+        composeRule.setContent {
+            MaterialTheme {
+                AutoClearEntryFieldsSettings(
+                    autoClearEntryFieldsAfterStop = true,
+                    clearDescriptionAfterStop = true,
+                    onAutoClearEntryFieldsAfterStopChange = {},
+                    onClearDescriptionAfterStopChange = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(TrackingTestTags.CLEAR_DESCRIPTION_AFTER_STOP_SWITCH).assertDoesNotExist()
+    }
 }

@@ -247,6 +247,8 @@
     <string name="optimistic_refresh_description">保存済みのアカウント情報ですぐに取得します。API 呼び出しが少し増えます</string>
     <string name="auto_clear_entry_fields_after_stop">入力内容を自動消去</string>
     <string name="auto_clear_entry_fields_after_stop_description">タイマー停止時に説明、プロジェクト、タスクを消去します</string>
+    <string name="clear_description_after_stop">停止時に説明を消去</string>
+    <string name="clear_description_after_stop_description">次の入力用にプロジェクトとタスクを保持します</string>
     <string name="reset_entry_fields">入力内容をリセット</string>
     <string name="theme">テーマ</string>
     <string name="theme_description">アプリの配色を選択</string>

@@ -29,6 +29,7 @@
 
     <!-- フィルターバーとフィルターシート。 -->
     <string name="stats2_filters">フィルター</string>
+    <string name="stats2_date_range">日付範囲</string>
     <string name="stats2_filters_content_description">統計フィルターを編集</string>
     <string name="stats2_filter_sheet_title">統計をフィルター</string>
     <string name="stats2_active_scope_none">すべての記録時間を表示中</string>

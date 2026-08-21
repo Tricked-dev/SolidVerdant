@@ -75,6 +75,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.TextStyle
 import dev.tricked.solidverdant.ui.navigation.Screen as NavScreen
 
@@ -310,11 +311,20 @@ class ReadmeScreenshotsTest {
             val d09 = LocalDate.of(2026, 6, 9)
             val state = CalendarUiState(
                 viewMode = CalendarViewMode.MONTH,
+                zone = ZoneOffset.UTC,
                 visibleMonth = YearMonth.of(2026, 6),
                 selectedDate = d10,
                 isLoading = false,
                 bucketsByDate = mapOf(
-                    d10 to DayBucket(d10, historyEntries.filter { it.start.startsWith("2026-06-10") }, 13_800),
+                    d10 to DayBucket(
+                        d10,
+                        historyEntries.filter { it.start.startsWith("2026-06-10") } +
+                            listOf(
+                                entry("m-short-1", "Setup", "2026-06-10T13:36:00Z", "2026-06-10T13:39:00Z", 180),
+                                entry("m-short-2", "Run", "2026-06-10T13:41:00Z", "2026-06-10T13:42:00Z", 60),
+                            ),
+                        14_040,
+                    ),
                     d09 to DayBucket(d09, historyEntries.filter { it.start.startsWith("2026-06-09") }, 8_100),
                 ),
             )
@@ -335,6 +345,7 @@ class ReadmeScreenshotsTest {
             val tue = week[1]
             val state = CalendarUiState(
                 viewMode = CalendarViewMode.WEEK,
+                zone = ZoneOffset.UTC,
                 selectedDate = mon,
                 weekStart = DayOfWeek.MONDAY,
                 dayCount = 7,
@@ -347,8 +358,10 @@ class ReadmeScreenshotsTest {
                         listOf(
                             entry("w1", "Deep work", "2026-06-08T09:00:00Z", "2026-06-08T12:00:00Z", 10_800, taskId = "t1"),
                             entry("w3", "Design review", "2026-06-08T10:00:00Z", "2026-06-08T11:30:00Z", 5_400, taskId = "t2"),
+                            entry("w-short-1", "Setup", "2026-06-08T13:36:00Z", "2026-06-08T13:39:00Z", 180, taskId = "t1"),
+                            entry("w-short-2", "Run", "2026-06-08T13:41:00Z", "2026-06-08T13:42:00Z", 60, taskId = "t1"),
                         ),
-                        16_200,
+                        16_440,
                     ),
                     tue to
                         DayBucket(

@@ -215,6 +215,22 @@ class WeekCalendarLayoutTest {
     }
 
     @Test
+    fun layoutTrackedEntries_shortAdjacentEntriesUseSeparateLanesWhenVisibleBlocksOverlap() {
+        val day = LocalDate.of(2026, 8, 20)
+        val entries = listOf(
+            entry("first", "2026-08-20T13:36:00Z", "2026-08-20T13:39:00Z"),
+            entry("second", "2026-08-20T13:41:00Z", "2026-08-20T13:42:00Z"),
+        )
+
+        val blocks = layoutTrackedEntries(entries, day, Instant.parse("2026-08-20T14:30:00Z"), utc)
+
+        assertEquals(2, blocks[0].columnCount)
+        assertEquals(2, blocks[1].columnCount)
+        assertEquals(0, blocks[0].column)
+        assertEquals(1, blocks[1].column)
+    }
+
+    @Test
     fun layoutTrackedEntries_usesPositiveDurationFallbackAcrossMidnight() {
         val entry = entry("duration", "2026-07-06T23:00:00Z", null).copy(duration = 3 * 3600)
 

@@ -185,7 +185,16 @@ class TrackingViewModelForegroundTest {
         val vm = viewModel()
         vm.loadAllData(ORG, MEMBER)
 
-        vm.uiState.first { it.syncOperations.isNotEmpty() }
+        // Do not suspend with Flow.first here: runTest may auto-advance virtual time to the next
+        // delayed task while Room delivers from its executor, which would skip the reveal window
+        // this test is proving. Pump only work at the current virtual timestamp instead.
+        val deadlineNanos = System.nanoTime() + 5_000_000_000L
+        while (vm.uiState.value.syncOperations.isEmpty() && System.nanoTime() < deadlineNanos) {
+            shadowOf(Looper.getMainLooper()).idle()
+            dispatcher.scheduler.runCurrent()
+            Thread.yield()
+        }
+        assertTrue("Timed out waiting for pending sync operations", vm.uiState.value.syncOperations.isNotEmpty())
         shadowOf(Looper.getMainLooper()).idle()
         dispatcher.scheduler.runCurrent()
         assertFalse(vm.uiState.value.syncStatusVisible)
