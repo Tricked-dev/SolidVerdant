@@ -76,13 +76,15 @@ class SyncCenterViewModelTest {
 
     @After
     fun teardown() {
-        viewModels.forEach { it.cancelScopeForTest() }
-        // Drain the requested cancellations (including the WhileSubscribed sharing job) before
-        // resetMain, so no Main-bound continuation straggles into "Main is used concurrently".
+        val scopeJobs = viewModels.mapNotNull { it.cancelScopeForTest() }
+        viewModels.clear()
+        // Drain and join the requested cancellations (including the WhileSubscribed sharing job)
+        // before resetMain, so a Room continuation cannot concurrently read Main during reset.
         dispatcher.scheduler.advanceUntilIdle()
-        db.close()
+        kotlinx.coroutines.runBlocking { scopeJobs.forEach { it.join() } }
         shadowOf(Looper.getMainLooper()).idle()
         dispatcher.scheduler.advanceUntilIdle()
+        if (::db.isInitialized) db.close()
         kotlinx.coroutines.Dispatchers.resetMain()
     }
 

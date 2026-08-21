@@ -125,11 +125,14 @@ class SyncCenterViewModel @Inject constructor(
     /**
      * Cancels [viewModelScope] for unit tests that install a test Main dispatcher; mirrors the
      * statistics VM's teardown so no Main-bound collector straggles past `Dispatchers.resetMain()`.
+     * Returns the canceled scope job so tests can await all child collectors before resetting Main.
      * Not used in production.
      */
     @VisibleForTesting
-    internal fun cancelScopeForTest() {
-        viewModelScope.coroutineContext[Job]?.cancel()
+    internal fun cancelScopeForTest(): Job? {
+        val scopeJob = viewModelScope.coroutineContext[Job]
+        scopeJob?.cancel()
+        return scopeJob
     }
 
     private companion object {
