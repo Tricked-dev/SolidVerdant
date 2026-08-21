@@ -104,8 +104,8 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
         waitUntilTagExists(TestTags.TRACK_HISTORY_LIST)
     }
 
-    fun assertStopButtonVisible(): TrackRobot = apply {
-        waitUntilTagExists(TestTags.TRACK_STOP_BUTTON)
+    fun assertStopButtonVisible(timeoutMs: Long = DEFAULT_TIMEOUT_MS): TrackRobot = apply {
+        waitUntilTagExists(TestTags.TRACK_STOP_BUTTON, timeoutMs)
         firstNodeWithTag(TestTags.TRACK_STOP_BUTTON).performScrollTo().assertIsDisplayed()
     }
 

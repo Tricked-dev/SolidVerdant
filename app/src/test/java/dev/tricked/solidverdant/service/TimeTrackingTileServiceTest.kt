@@ -209,14 +209,16 @@ class TimeTrackingTileServiceTest {
 
     @Test
     fun failed_stop_can_be_retried_from_the_tile() {
-        val firstStopFinished = CompletableDeferred<Unit>()
+        val firstStopEntered = CompletableDeferred<Unit>()
+        val releaseFirstStop = CompletableDeferred<Unit>()
         val secondStopFinished = CompletableDeferred<Unit>()
         val stopAttempts = AtomicInteger()
         val authRepository = loggedInRepository().also {
             coEvery { it.getActiveTimeEntry() } returns Result.success(activeEntry)
             coEvery { it.stopTimeEntry(any(), any(), any(), any()) } coAnswers {
                 if (stopAttempts.incrementAndGet() == 1) {
-                    firstStopFinished.complete(Unit)
+                    firstStopEntered.complete(Unit)
+                    releaseFirstStop.await()
                     Result.failure(IllegalStateException("offline"))
                 } else {
                     secondStopFinished.complete(Unit)
@@ -227,15 +229,15 @@ class TimeTrackingTileServiceTest {
         val service = createService(authRepository)
 
         service.onClick()
-        runBlocking { withTimeout(TIMEOUT_MS) { firstStopFinished.await() } }
-        awaitCondition {
-            if (secondStopFinished.isCompleted) {
-                true
-            } else {
-                service.onClick()
-                false
-            }
-        }
+        runBlocking { withTimeout(TIMEOUT_MS) { firstStopEntered.await() } }
+
+        service.onClick()
+        coVerify(exactly = 1) { authRepository.stopTimeEntry(any(), any(), any(), any()) }
+
+        releaseFirstStop.complete(Unit)
+        awaitCondition { !service.isProcessingForTest() }
+
+        service.onClick()
 
         runBlocking { withTimeout(TIMEOUT_MS) { secondStopFinished.await() } }
         coVerify(timeout = TIMEOUT_MS, exactly = 2) { authRepository.stopTimeEntry(any(), any(), any(), any()) }

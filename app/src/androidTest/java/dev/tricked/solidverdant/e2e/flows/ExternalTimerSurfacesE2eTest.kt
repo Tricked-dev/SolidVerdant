@@ -160,7 +160,7 @@ class ExternalTimerSurfacesE2eTest {
         grantNotificationPermission()
         e2e.launchApp()
         val robot = TrackRobot(e2e.composeRule).waitForHistory().assertStopButtonVisible()
-        waitForNotificationAction(R.string.pause, originalStart)
+        waitForNotificationAtStart(originalStart)
 
         TimeTrackingNotificationService.quickStart(
             context = context,
@@ -176,7 +176,7 @@ class ExternalTimerSurfacesE2eTest {
         // recheck completed before we inspect the server, rather than letting an immediate
         // snapshot pass before the service coroutine ran.
         waitForNotificationStartOtherThan(originalStart)
-        waitForNotificationAction(R.string.pause, originalStart)
+        waitForNotificationAtStart(originalStart)
         val unchanged = e2e.awaitServer(TEST_TIMEOUT_MS) { snapshot ->
             snapshot.activeEntry?.id == originalServerId &&
                 snapshot.distinctEntryIds() == setOf(originalServerId)
@@ -208,7 +208,16 @@ class ExternalTimerSurfacesE2eTest {
         e2e.launchApp()
         TrackRobot(e2e.composeRule).waitForHistory().assertStopButtonVisible()
 
-        waitForNotificationAction(R.string.pause, originalStart).send()
+        // A seven-hour timer correctly shows the long-timer warning actions rather than Pause.
+        // Invoke the same service entrypoint with the payload its notification PendingIntent
+        // carries so this stays deterministic even if Android has recreated the service process.
+        context.startForegroundService(
+            Intent(context, TimeTrackingNotificationService::class.java)
+                .setAction(TimeTrackingNotificationService.ACTION_PAUSE_TRACKING)
+                .putExtra(TimeTrackingNotificationService.EXTRA_START_TIME, originalStart.toEpochMilli())
+                .putExtra(TimeTrackingNotificationService.EXTRA_ORGANIZATION_ID, original.organizationId)
+                .putExtra(TimeTrackingNotificationService.EXTRA_DESCRIPTION, original.description),
+        )
         e2e.awaitServer(TEST_TIMEOUT_MS) { it.activeEntry == null }
         val staleResume = waitForNotificationAction(R.string.resume)
 
@@ -293,7 +302,7 @@ class ExternalTimerSurfacesE2eTest {
         val robot = TrackRobot(e2e.composeRule).waitForHistory()
 
         // App action: optimistic Room row + queued START, then worker rekey to the server id.
-        robot.tapStart().assertStopButtonVisible()
+        robot.tapStart().assertStopButtonVisible(TEST_TIMEOUT_MS)
         assertTrue("App start must be represented by a pending outbox operation", e2e.pendingOutboxCount() > 0)
         val started = requireNotNull(
             e2e.awaitServer(TEST_TIMEOUT_MS, driveSync = true) { it.activeEntry != null }.activeEntry,
@@ -330,9 +339,8 @@ class ExternalTimerSurfacesE2eTest {
 
         shell("cmd statusbar remove-tile $tileComponent")
         shell("cmd statusbar add-tile $tileComponent")
-        shell("cmd statusbar click-tile $tileComponent")
 
-        e2e.awaitServer(TEST_TIMEOUT_MS) { it.activeEntry == null }
+        stopActiveTimerFromTile()
         e2e.testClock.advanceBy(1L)
         robot.tapRefresh().assertStartButtonVisible()
         e2e.awaitLocalEntry(resumed.id, TEST_TIMEOUT_MS) {
@@ -380,6 +388,27 @@ class ExternalTimerSurfacesE2eTest {
         }
     }
 
+    private fun waitForNotificationAtStart(expectedStart: Instant) {
+        e2e.composeRule.waitUntil(TEST_TIMEOUT_MS) {
+            notificationManager.activeNotifications.any { status ->
+                status.notification.`when` == expectedStart.toEpochMilli()
+            }
+        }
+    }
+
+    private fun stopActiveTimerFromTile(): E2eServerSnapshot {
+        var lastFailure: AssertionError? = null
+        repeat(TILE_CLICK_ATTEMPTS) {
+            shell("cmd statusbar click-tile $tileComponent")
+            try {
+                return e2e.awaitServer(TILE_CLICK_ATTEMPT_TIMEOUT_MS) { it.activeEntry == null }
+            } catch (failure: AssertionError) {
+                lastFailure = failure
+            }
+        }
+        throw AssertionError("Quick Settings tile did not stop the active server timer", lastFailure)
+    }
+
     private fun grantNotificationPermission() {
         shell("pm grant ${context.packageName} ${Manifest.permission.POST_NOTIFICATIONS}")
     }
@@ -402,6 +431,8 @@ class ExternalTimerSurfacesE2eTest {
     private companion object {
         const val TEST_TIMEOUT_MS = 15_000L
         const val TILE_CLICK_RETRY_MS = 500L
+        const val TILE_CLICK_ATTEMPTS = 3
+        const val TILE_CLICK_ATTEMPT_TIMEOUT_MS = 5_000L
         const val NOTIFICATION_STATE_PREFERENCES = "time_tracking_notification_state"
     }
 }

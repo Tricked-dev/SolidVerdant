@@ -210,6 +210,7 @@ class TrackingViewModelForegroundTest {
             listOf(TimeEntryRepository.EntrySyncStatus.PENDING),
             revealed.syncOperations.map { it.status },
         )
+        assertTrue(vm.uiState.value.syncStatusVisible)
     }
 
     @Test

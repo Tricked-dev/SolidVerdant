@@ -19,6 +19,7 @@ import android.graphics.drawable.Icon
 import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
+import androidx.annotation.VisibleForTesting
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
@@ -30,6 +31,7 @@ import dev.tricked.solidverdant.data.remote.ApiClientFactory
 import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.ui.tile.ProjectSelectionActivity
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -323,6 +325,8 @@ class TimeTrackingTileService : TileService() {
                 showNotification("Failed to stop tracking", error.message ?: "Unknown error")
                 refreshTile()
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.e(e, "Error stopping tracking")
             clearOptimisticState()
@@ -368,6 +372,8 @@ class TimeTrackingTileService : TileService() {
                 showNotification("Failed to stop tracking", error.message ?: "Unknown error")
                 refreshTile()
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.e(e, "Error stopping tracking (from cache)")
             clearOptimisticState()
@@ -375,6 +381,9 @@ class TimeTrackingTileService : TileService() {
             refreshTile()
         }
     }
+
+    @VisibleForTesting
+    internal fun isProcessingForTest(): Boolean = isProcessing.get()
 
     /**
      * Update tile state with debouncing and cache-first approach.
