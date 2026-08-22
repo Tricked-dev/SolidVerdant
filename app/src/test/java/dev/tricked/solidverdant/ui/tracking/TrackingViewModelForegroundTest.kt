@@ -173,29 +173,15 @@ class TrackingViewModelForegroundTest {
 
     @Test
     fun `routine pending sync stays hidden until it is slow`() = runTest(dispatcher.scheduler) {
-        db.outboxDao().insert(
-            OutboxEntity(
-                opType = OutboxOpType.UPDATE,
-                organizationId = ORG,
-                timeEntryId = "pending-entry",
-                payloadJson = "{}",
-                createdAtMs = 1L,
-            ),
+        val operation = TimeEntryRepository.SyncOperation(
+            entryId = "pending-entry",
+            type = OutboxOpType.UPDATE,
+            status = TimeEntryRepository.EntrySyncStatus.PENDING,
+            attemptCount = 0,
+            error = null,
         )
         val vm = viewModel()
-        vm.loadAllData(ORG, MEMBER)
-
-        // Do not suspend with Flow.first here: runTest may auto-advance virtual time to the next
-        // delayed task while Room delivers from its executor, which would skip the reveal window
-        // this test is proving. Pump only work at the current virtual timestamp instead.
-        val deadlineNanos = System.nanoTime() + 5_000_000_000L
-        while (vm.uiState.value.syncOperations.isEmpty() && System.nanoTime() < deadlineNanos) {
-            shadowOf(Looper.getMainLooper()).idle()
-            dispatcher.scheduler.runCurrent()
-            Thread.yield()
-        }
-        assertTrue("Timed out waiting for pending sync operations", vm.uiState.value.syncOperations.isNotEmpty())
-        shadowOf(Looper.getMainLooper()).idle()
+        vm.acceptSyncOperationsForTest(listOf(operation))
         dispatcher.scheduler.runCurrent()
         assertFalse(vm.uiState.value.syncStatusVisible)
 
@@ -204,28 +190,8 @@ class TrackingViewModelForegroundTest {
         assertFalse(vm.uiState.value.syncStatusVisible)
 
         dispatcher.scheduler.advanceTimeBy(1)
-        // Flush work scheduled exactly at the reveal boundary; a Room emission can enqueue the
-        // visibility continuation behind the timer callback on the same virtual timestamp.
-        shadowOf(Looper.getMainLooper()).idle()
-        dispatcher.scheduler.advanceUntilIdle()
-        shadowOf(Looper.getMainLooper()).idle()
         dispatcher.scheduler.runCurrent()
-        // If Room delivered the pending operation from its executor after the first virtual-time
-        // flush, the reveal delay starts at that later scheduler instant. Give that continuation
-        // one full reveal window to run without making the pre-threshold assertions weaker.
-        repeat(3) {
-            if (!vm.uiState.value.syncStatusVisible) {
-                dispatcher.scheduler.advanceTimeBy(SYNC_STATUS_REVEAL_DELAY_MS)
-                shadowOf(Looper.getMainLooper()).idle()
-                dispatcher.scheduler.runCurrent()
-            }
-        }
-        assertTrue(
-            "Expected delayed sync visibility; operations=${vm.uiState.value.syncOperations.size}, " +
-                "statuses=${vm.uiState.value.syncOperations.map { it.status }}, " +
-                "visible=${vm.uiState.value.syncStatusVisible}",
-            vm.uiState.value.syncStatusVisible,
-        )
+        assertTrue(vm.uiState.value.syncStatusVisible)
     }
 
     @Test

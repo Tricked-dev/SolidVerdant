@@ -22,12 +22,12 @@ class SearchFilterE2eTest {
     val e2e = E2eRule(this)
 
     @Test
-    fun wideSearchControlExpandsInlineAndClosePreservesTheQuery() {
+    fun searchStaysAvailableWhileOptionsCollapseAndPreserveTheQuery() {
         e2e.requireMockBackend().presetLoggedInWorld()
         e2e.launchApp()
         val robot = TrackRobot(e2e.composeRule).waitForHistory()
 
-        assertTrue("Collapsed search control should span most of history", robot.historyFilterOpenWidthRatio() >= 0.8f)
+        assertTrue("Search options control should span most of history", robot.historyFilterOpenWidthRatio() >= 0.8f)
         robot.openHistoryFilters()
             .enterHistorySearch("Seeded")
             .closeHistoryFilters()

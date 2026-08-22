@@ -173,7 +173,8 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
 
     fun closeHistoryFilters(): TrackRobot = apply {
         firstEnabledNodeWithTag(TestTags.TRACK_FILTER_CLOSE_BUTTON).performClick()
-        waitUntilTagIsGone(TestTags.TRACK_FILTER_SEARCH_FIELD)
+        waitUntilTagIsGone(TestTags.TRACK_FILTER_CLOSE_BUTTON)
+        waitUntilTagExists(TestTags.TRACK_FILTER_SEARCH_FIELD)
     }
 
     fun assertHistorySearch(text: String): TrackRobot = apply {

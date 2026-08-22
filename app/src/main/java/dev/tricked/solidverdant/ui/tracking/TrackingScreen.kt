@@ -88,6 +88,7 @@ import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Close
@@ -208,6 +209,7 @@ import dev.tricked.solidverdant.ui.components.EntryDateFieldButton
 import dev.tricked.solidverdant.ui.components.EntryDatePickerDialog
 import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
 import dev.tricked.solidverdant.ui.components.SectionCard
+import dev.tricked.solidverdant.ui.components.SearchableSingleSelectDialog
 import dev.tricked.solidverdant.ui.components.SyncChip
 import dev.tricked.solidverdant.ui.localization.appLocale
 import dev.tricked.solidverdant.ui.theme.Dimens
@@ -1356,64 +1358,58 @@ internal fun AutoClearEntryFieldsSettings(
 @Composable
 @Suppress("LongMethod")
 private fun HistoryFilters(filter: HistoryFilter, uiState: TrackingUiState, onChange: (HistoryFilter) -> Unit) {
-    var expanded by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var optionsExpanded by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     var showDateRangePicker by remember { mutableStateOf(false) }
-    val activeCount = listOfNotNull(
-        filter.query.takeIf { it.isNotBlank() }, filter.billable, filter.runningOnly.takeIf { it },
+    val activeOptionsCount = listOfNotNull(
+        filter.billable, filter.runningOnly.takeIf { it },
         filter.syncStatus, filter.startDate, filter.endDate, filter.clientId, filter.projectId, filter.taskId, filter.tagId,
         filter.missingProjectOnly.takeIf { it }, filter.missingDescriptionOnly.takeIf { it },
         filter.needsCategorization.takeIf { it },
     ).size
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (expanded) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
-            ) {
-                OutlinedTextField(
-                    value = filter.query,
-                    onValueChange = { onChange(filter.copy(query = it)) },
-                    label = { Text(stringResource(R.string.search_history)) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f).testTag(TrackingTestTags.FILTER_SEARCH_FIELD),
-                )
-                IconButton(
-                    onClick = { expanded = false },
-                    modifier = Modifier.testTag(TrackingTestTags.FILTER_CLOSE_BUTTON),
-                ) {
-                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close))
-                }
-            }
-        } else {
-            OutlinedButton(
-                onClick = { expanded = true },
-                modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.FILTER_OPEN_BUTTON),
-            ) {
-                Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(Dimens.IconMedium))
-                Spacer(Modifier.width(Dimens.Space8))
-                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
-                    Text(stringResource(R.string.search_and_filter), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    when {
-                        filter.query.isNotBlank() -> Text(
-                            filter.query,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        activeCount > 0 -> Text(
-                            pluralStringResource(R.plurals.active_filters_count, activeCount, activeCount),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
+        OutlinedTextField(
+            value = filter.query,
+            onValueChange = { onChange(filter.copy(query = it)) },
+            label = { Text(stringResource(R.string.search_history)) },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = if (filter.query.isNotBlank()) {
+                {
+                    IconButton(onClick = { onChange(filter.copy(query = "")) }) {
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear_search))
                     }
                 }
+            } else {
+                null
+            },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.FILTER_SEARCH_FIELD),
+        )
+        OutlinedButton(
+            onClick = { optionsExpanded = !optionsExpanded },
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(
+                    if (optionsExpanded) TrackingTestTags.FILTER_CLOSE_BUTTON else TrackingTestTags.FILTER_OPEN_BUTTON,
+                ),
+        ) {
+            Icon(Icons.Default.FilterList, contentDescription = null, modifier = Modifier.size(Dimens.IconMedium))
+            Spacer(Modifier.width(Dimens.Space8))
+            Text(
+                stringResource(if (optionsExpanded) R.string.hide_search_options else R.string.search_options),
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (activeOptionsCount > 0) {
+                Text(
+                    pluralStringResource(R.plurals.active_filters_count, activeOptionsCount, activeOptionsCount),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
         AnimatedVisibility(
-            visible = expanded,
+            visible = optionsExpanded,
             enter = fadeIn(tween(FILTER_ENTER_DURATION_MS)) + expandVertically(tween(FILTER_EXPAND_DURATION_MS)),
             exit = fadeOut(tween(FILTER_EXIT_DURATION_MS)) + shrinkVertically(tween(FILTER_COLLAPSE_DURATION_MS)),
         ) {
@@ -1546,21 +1542,27 @@ private fun FilterDropdown(
 ) {
     if (options.isEmpty()) return
     var expanded by remember { mutableStateOf(false) }
-    Box {
-        FilterChip(
-            selected = selectedId != null,
-            onClick = { expanded = true },
-            label = { Text(options.firstOrNull { it.first == selectedId }?.second ?: label, maxLines = 1) },
-        )
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.all_items, label)) },
-                onClick = { onSelect(null); expanded = false },
+    FilterChip(
+        selected = selectedId != null,
+        onClick = { expanded = true },
+        label = {
+            Text(
+                options.firstOrNull { it.first == selectedId }?.second ?: label,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            options.forEach { (id, name) ->
-                DropdownMenuItem(text = { Text(name) }, onClick = { onSelect(id); expanded = false })
-            }
-        }
+        },
+    )
+    if (expanded) {
+        SearchableSingleSelectDialog(
+            title = label,
+            searchPlaceholder = stringResource(R.string.search_items, label),
+            allLabel = stringResource(R.string.all_items, label),
+            options = options,
+            selectedId = selectedId,
+            onSelect = onSelect,
+            onDismiss = { expanded = false },
+        )
     }
 }
 

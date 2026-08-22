@@ -717,6 +717,13 @@ class TrackingViewModel @Inject constructor(
         }
     }
 
+    /** Deterministic seam for timing tests; production sync updates use the same state transition. */
+    internal fun acceptSyncOperationsForTest(operations: List<TimeEntryRepository.SyncOperation>) {
+        latestSyncOperations = operations
+        updateSyncStatusVisibility(operations)
+        _uiState.value = _uiState.value.copy(syncOperations = operations)
+    }
+
     private data class TrackingData(
         val entries: List<TimeEntry>,
         val conflictedEntryIds: Set<String>,

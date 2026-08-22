@@ -23,11 +23,14 @@
     <string name="connection_test_failed">接続テストに失敗しました。</string>
     <string name="sync_entry_failed">この変更はサーバーに届いていません。</string>
     <string name="search_and_filter">検索と絞り込み</string>
+    <string name="search_options">検索オプション</string>
+    <string name="hide_search_options">検索オプションを非表示</string>
     <plurals name="active_filters_count">
         <item quantity="other">有効なフィルター: %1$d</item>
     </plurals>
     <string name="long_timer_notification_title">長時間タイマーの確認</string><string name="long_timer_notification_text">このタイマーは設定した時間制限に達しました。</string>
     <string name="all_items">すべての%1$s</string>
+    <string name="search_items">%1$sを検索</string>
     <string name="minutes_short">分</string>
     <string name="nav_track">記録</string><string name="nav_calendar">カレンダー</string><string name="nav_stats">統計</string>
     <string name="running_entries">実行中</string><string name="tracking_now">現在</string>

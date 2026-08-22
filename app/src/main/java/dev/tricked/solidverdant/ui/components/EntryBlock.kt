@@ -78,36 +78,41 @@ fun EntryBlock(
         )
         Spacer(Modifier.width(Dimens.EntryBarGap))
         Column(Modifier.weight(1f)) {
-            Text(
-                text = resolvedTitle,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.Top) {
+                Text(
+                    text = resolvedTitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                if (!time.isNullOrBlank()) {
+                    Spacer(Modifier.width(Dimens.EntryBarGap))
+                    Text(
+                        text = time,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                    )
+                }
+                syncStatus?.let { status ->
+                    Spacer(Modifier.width(Dimens.EntryBarGap))
+                    SyncChip(status = status, showLabel = false)
+                }
+            }
             if (!subtitle.isNullOrBlank()) {
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
-        }
-        if (!time.isNullOrBlank()) {
-            Spacer(Modifier.width(Dimens.EntryBarGap))
-            Text(
-                text = time,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-        }
-        syncStatus?.let { status ->
-            Spacer(Modifier.width(Dimens.EntryBarGap))
-            SyncChip(status = status, showLabel = false)
         }
     }
 }

@@ -23,12 +23,15 @@
     <string name="connection_test_failed">De verbindingstest is mislukt.</string>
     <string name="sync_entry_failed">Deze wijziging heeft de server niet bereikt.</string>
     <string name="search_and_filter">Zoeken en filteren</string>
+    <string name="search_options">Zoekopties</string>
+    <string name="hide_search_options">Zoekopties verbergen</string>
     <plurals name="active_filters_count">
         <item quantity="one">%1$d actief filter</item>
         <item quantity="other">%1$d actieve filters</item>
     </plurals>
     <string name="long_timer_notification_title">Controle lange timer</string><string name="long_timer_notification_text">Deze timer heeft de ingestelde duur bereikt.</string>
     <string name="all_items">Alle %1$s</string>
+    <string name="search_items">Zoek %1$s</string>
     <string name="minutes_short">min</string>
     <string name="nav_track">Registreren</string><string name="nav_calendar">Kalender</string><string name="nav_stats">Statistieken</string>
     <string name="running_entries">Lopend</string><string name="tracking_now">nu</string>
