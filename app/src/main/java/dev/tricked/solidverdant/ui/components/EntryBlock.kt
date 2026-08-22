@@ -108,8 +108,11 @@ fun EntryBlock(
                     text = subtitle,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
+                    // The calendar supplies a finite card height. Let metadata use every line
+                    // that fits inside that height, then rely on the card clip for short slots.
+                    // A fixed line cap wastes most of tall week-view entries.
+                    maxLines = Int.MAX_VALUE,
+                    overflow = TextOverflow.Clip,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
