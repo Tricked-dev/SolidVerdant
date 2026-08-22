@@ -28,7 +28,7 @@ class StatFilterBarInteractionTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun projectSearchIsImmediatelyAvailableAndFiltersOptions() {
+    fun projectHeaderRevealsSearchAndFiltersOptions() {
         val selected = AtomicReference(StatFilters())
         composeRule.setContent {
             MaterialTheme {
@@ -47,6 +47,7 @@ class StatFilterBarInteractionTest {
         }
 
         composeRule.onNodeWithTag(StatisticsFilterTestTags.OPEN).performClick()
+        composeRule.onNodeWithTag(StatisticsFilterTestTags.section(StatFilterSection.PROJECTS)).performClick()
         composeRule.onNodeWithTag(StatisticsFilterTestTags.PROJECT_SEARCH).performTextInput("precision")
 
         composeRule.onNodeWithTag(StatisticsFilterTestTags.projectOption("other")).assertDoesNotExist()

@@ -57,6 +57,7 @@ internal object StatisticsFilterTestTags {
     const val OPEN = "stats_filter_open"
     const val PROJECT_SEARCH = "stats_project_filter_search"
     fun projectOption(id: String) = "stats_project_filter_$id"
+    fun section(section: StatFilterSection) = "stats_filter_section_${section.name.lowercase()}"
 }
 
 internal enum class StatFilterSection { BILLABLE, TASKS, TAGS, CLIENTS, PROJECTS }
@@ -69,13 +70,14 @@ internal val statFilterSectionOrder = listOf(
     StatFilterSection.PROJECTS,
 )
 
-internal fun filterProjectOptions(
-    options: List<Pair<String, String>>,
-    query: String,
-): List<Pair<String, String>> {
+internal fun filterProjectOptions(options: List<Pair<String, String>>, query: String): List<Pair<String, String>> {
     val normalized = query.trim()
-    return if (normalized.isEmpty()) options else options.filter { (_, name) ->
-        name.contains(normalized, ignoreCase = true)
+    return if (normalized.isEmpty()) {
+        options
+    } else {
+        options.filter { (_, name) ->
+            name.contains(normalized, ignoreCase = true)
+        }
     }
 }
 
@@ -248,6 +250,7 @@ private fun StatFilterSheet(
                         selected = selectedSection == section,
                         onClick = { selectedSection = section },
                         label = { Text(statFilterSectionLabel(section)) },
+                        modifier = Modifier.testTag(StatisticsFilterTestTags.section(section)),
                     )
                 }
             }

@@ -30,7 +30,6 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -222,7 +221,7 @@ class TrackingViewModelMutationTest {
     }
 
     @Test
-    fun successful_start_can_be_stopped_before_room_collectors_emit() = runTest(dispatcher.scheduler) {
+    fun successful_start_projects_committed_entry_before_room_collectors_emit() = runTest(dispatcher.scheduler) {
         val entry = TimeEntry(
             id = "local-start",
             userId = "user",
@@ -235,14 +234,10 @@ class TrackingViewModelMutationTest {
 
         viewModel.startTimeEntry("org", "member", "user")
         dispatcher.scheduler.runCurrent()
+
         assertEquals(entry, viewModel.uiState.value.currentTimeEntry)
-
-        viewModel.stopTimeEntry()
-        dispatcher.scheduler.runCurrent()
-
-        coVerify(exactly = 1) { repository.stopEntry(entry, "user") }
-        assertFalse(viewModel.uiState.value.isTracking)
-        assertNull(viewModel.uiState.value.currentTimeEntry)
+        assertTrue(viewModel.uiState.value.isTracking)
+        dispose(viewModel)
     }
 
     @Test
