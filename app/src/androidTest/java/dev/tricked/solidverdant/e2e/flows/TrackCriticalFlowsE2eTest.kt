@@ -52,7 +52,7 @@ class TrackCriticalFlowsE2eTest {
             .tapFirstEntryEdit()
             .assertEditSettingsVisible()
             .replaceSheetDescription("Edited all settings")
-            .selectSheetProjectTask(catalog.task.name)
+            .selectSheetProjectTask(catalog.project.name, catalog.task.name)
             .selectSheetTag(catalog.tag.id)
             .toggleSheetBillable()
             .replaceSheetDuration("90")

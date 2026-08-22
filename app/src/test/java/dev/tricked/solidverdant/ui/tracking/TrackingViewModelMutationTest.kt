@@ -312,10 +312,11 @@ class TrackingViewModelMutationTest {
         clock = clock,
     ).also { viewModels += it }
 
-    private fun dispose(viewModel: TrackingViewModel) {
-        viewModel.cancelScopeForTest()
-        viewModels.remove(viewModel)
+    private suspend fun dispose(viewModel: TrackingViewModel) {
+        val scopeJob = viewModel.cancelScopeForTest()
         dispatcher.scheduler.runCurrent()
+        scopeJob?.join()
+        viewModels.remove(viewModel)
     }
 
     private fun activeEntry() = TimeEntry(

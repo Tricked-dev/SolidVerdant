@@ -160,7 +160,8 @@ class ExternalTimerSurfacesE2eTest {
         grantNotificationPermission()
         e2e.launchApp()
         TrackRobot(e2e.composeRule).waitForHistory().assertStopButtonVisible()
-        val originalStopAction = waitForNotificationAction(R.string.stop_tracking, originalStart)
+        // Seven-hour timers intentionally render the long-timer warning action set.
+        val originalStopAction = waitForNotificationAction(R.string.stop_now, originalStart)
 
         TimeTrackingNotificationService.quickStart(
             context = context,

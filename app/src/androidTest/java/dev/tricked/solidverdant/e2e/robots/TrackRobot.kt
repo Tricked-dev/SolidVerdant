@@ -244,7 +244,20 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
         firstSheetNodeWithTag(TestTags.TRACK_SHEET_DESCRIPTION_FIELD).performTextInput(text)
     }
 
-    fun selectSheetProjectTask(taskName: String): TrackRobot = apply {
+    fun selectSheetProjectTask(projectName: String, taskName: String): TrackRobot = apply {
+        firstSheetNodeWithTag(TestTags.TRACK_SHEET_PROJECT_TASK_SELECTOR).performScrollTo().performClick()
+        waitUntilTagExists(TestTags.TRACK_PROJECT_TASK_LIST)
+        val projectMatcher = hasText(projectName, substring = false)
+        composeRule.waitUntil(DEFAULT_TIMEOUT_MS) {
+            runCatching {
+                firstNodeWithTag(TestTags.TRACK_PROJECT_TASK_LIST).performScrollToNode(projectMatcher)
+                composeRule.onAllNodes(projectMatcher, useUnmergedTree = true)
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
+            }.getOrDefault(false)
+        }
+        composeRule.onAllNodes(projectMatcher, useUnmergedTree = true).onFirst().performClick()
+        waitUntilSheetTagExists(TestTags.TRACK_SHEET_TASK_SELECTOR)
         firstSheetNodeWithTag(TestTags.TRACK_SHEET_TASK_SELECTOR).performScrollTo().performClick()
         waitUntilTagExists(TestTags.TRACK_TASK_LIST)
         val taskMatcher = hasText(taskName, substring = false)
