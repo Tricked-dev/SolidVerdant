@@ -72,6 +72,19 @@ class TrackingLifecycleE2eTest {
         robot.assertStartButtonVisible()
     }
 
+    @Test
+    fun immediateStopAfterFirstStartCreatesLocalHistory() {
+        e2e.requireMockBackend().presetLoggedInWorld(seededEntry = null)
+        e2e.launchApp()
+        val robot = TrackRobot(e2e.composeRule).waitForHistory()
+
+        // Do not wait for START sync or a separate Room collector emission. This reproduces the
+        // first-login window where Stop used to see a null currentTimeEntry and silently return.
+        robot.tapStart().tapStop().assertStartButtonVisible()
+
+        e2e.composeRule.waitUntil(WAIT_MS) { robot.entryRowCount() > 0 }
+    }
+
     companion object {
         private const val WAIT_MS = 15_000L
     }

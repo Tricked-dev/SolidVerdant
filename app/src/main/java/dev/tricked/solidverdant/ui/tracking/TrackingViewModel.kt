@@ -1416,7 +1416,14 @@ class TrackingViewModel @Inject constructor(
                 )
                 TimeTrackingWidget.requestUpdate(context)
 
-                _uiState.value = _uiState.value.copy(isLoading = false, isTracking = true)
+                // startEntry returns the row that was committed to Room. Project that durable
+                // value immediately so an eager Stop tap cannot land before the combined Room
+                // collector has delivered currentTimeEntry on a fresh login.
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    isTracking = true,
+                    currentTimeEntry = timeEntry,
+                )
                 timerMutationInProgress = false
                 Timber.d("Time entry started successfully (optimistic)")
             } catch (e: Exception) {
