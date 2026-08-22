@@ -178,6 +178,41 @@ class TrackingViewModelNetworkRaceTest {
     }
 
     @Test
+    fun stale_older_active_poll_cannot_hide_a_newer_room_timer() = runTest(dispatcher.scheduler) {
+        val newer = entry(
+            id = "newer-room-active",
+            description = "started later",
+            start = "2026-07-07T12:30:00Z",
+        )
+        val older = entry(
+            id = "older-polled-active",
+            description = "started earlier",
+            start = "2026-07-07T08:00:00Z",
+        )
+        val authRepository = mockk<AuthRepository>(relaxed = true)
+        coEvery { authRepository.getActiveTimeEntry() } returns Result.success(older)
+        val viewModel = viewModel(authRepository, SettingsDataStore(context))
+
+        viewModel.loadAllData(ORG, MEMBER)
+        viewModel.uiState.first { it.hasLoadedTimeEntries }
+        db.timeEntryDao().upsert(newer.toEntity(updatedAt = 2L))
+        viewModel.uiState.first { it.currentTimeEntry?.id == newer.id }
+
+        viewModel.onAppForegrounded(ORG, MEMBER, refreshAll = false)
+        dispatcher.scheduler.runCurrent()
+
+        try {
+            assertEquals(
+                "An older active response must not replace a newer timer already synced into Room",
+                newer.id,
+                viewModel.uiState.value.currentTimeEntry?.id,
+            )
+        } finally {
+            viewModel.cancelScopeForTest()
+        }
+    }
+
+    @Test
     fun late_active_response_cannot_overwrite_a_newer_poll_result() = runTest(dispatcher.scheduler) {
         val firstResponse = CompletableDeferred<Result<TimeEntry?>>()
         val secondResponse = CompletableDeferred<Result<TimeEntry?>>()

@@ -209,24 +209,37 @@ class TimeTrackingTileServiceTest {
 
     @Test
     fun failed_stop_can_be_retried_from_the_tile() {
+        val firstStopEntered = CompletableDeferred<Unit>()
+        val releaseFirstStop = CompletableDeferred<Unit>()
+        val secondStopFinished = CompletableDeferred<Unit>()
+        val stopAttempts = AtomicInteger()
         val authRepository = loggedInRepository().also {
             coEvery { it.getActiveTimeEntry() } returns Result.success(activeEntry)
-            coEvery { it.stopTimeEntry(any(), any(), any(), any()) } returnsMany listOf(
-                Result.failure(IllegalStateException("offline")),
-                Result.success(activeEntry.copy(end = "2026-08-10T09:00:00Z")),
-            )
+            coEvery { it.stopTimeEntry(any(), any(), any(), any()) } coAnswers {
+                if (stopAttempts.incrementAndGet() == 1) {
+                    firstStopEntered.complete(Unit)
+                    releaseFirstStop.await()
+                    Result.failure(IllegalStateException("offline"))
+                } else {
+                    secondStopFinished.complete(Unit)
+                    Result.success(activeEntry.copy(end = "2026-08-10T09:00:00Z"))
+                }
+            }
         }
         val service = createService(authRepository)
 
         service.onClick()
-        coVerify(timeout = TIMEOUT_MS, exactly = 1) { authRepository.stopTimeEntry(any(), any(), any(), any()) }
-        awaitCondition {
-            service.onClick()
-            runCatching {
-                coVerify(atLeast = 2) { authRepository.getActiveTimeEntry() }
-            }.isSuccess
-        }
+        runBlocking { withTimeout(TIMEOUT_MS) { firstStopEntered.await() } }
 
+        service.onClick()
+        coVerify(exactly = 1) { authRepository.stopTimeEntry(any(), any(), any(), any()) }
+
+        releaseFirstStop.complete(Unit)
+        awaitCondition { !service.isProcessingForTest() }
+
+        service.onClick()
+
+        runBlocking { withTimeout(TIMEOUT_MS) { secondStopFinished.await() } }
         coVerify(timeout = TIMEOUT_MS, exactly = 2) { authRepository.stopTimeEntry(any(), any(), any(), any()) }
     }
 

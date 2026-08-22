@@ -175,6 +175,72 @@ class AuthRepositoryApiContractTest {
     }
 
     @Test
+    fun `memberships load policy flags from the full organization resource`() = runTest {
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody(
+                    """
+                        {
+                          "data": [{
+                            "id": "membership",
+                            "role": "owner",
+                            "organization": {"id": "org", "name": "Test", "currency": "EUR"}
+                          }]
+                        }
+                    """.trimIndent(),
+                ),
+        )
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody(
+                    """
+                        {
+                          "data": {
+                            "id": "org",
+                            "name": "Test",
+                            "currency": "EUR",
+                            "prevent_overlapping_time_entries": true,
+                            "breaks_enabled": true
+                          }
+                        }
+                    """.trimIndent(),
+                ),
+        )
+
+        val membership = repository.getMyMemberships().getOrThrow().single()
+
+        assertTrue(membership.organization.preventOverlappingTimeEntries)
+        assertTrue(membership.organization.breaksEnabled)
+        assertEquals("/api/v1/users/me/memberships", server.takeRequest().path)
+        assertEquals("/api/v1/organizations/org", server.takeRequest().path)
+    }
+
+    @Test
+    fun `memberships fail when authoritative organization settings cannot be loaded`() = runTest {
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody(
+                    """
+                        {
+                          "data": [{
+                            "id": "membership",
+                            "role": "owner",
+                            "organization": {"id": "org", "name": "Test", "currency": "EUR"}
+                          }]
+                        }
+                    """.trimIndent(),
+                ),
+        )
+        server.enqueue(MockResponse().setResponseCode(503))
+
+        assertTrue(repository.getMyMemberships().isFailure)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
     fun `cancellation from the active endpoint is not converted into a failed result`() {
         val authDataStore = mockk<AuthDataStore>(relaxed = true)
         val api = mockk<SolidtimeApi>()

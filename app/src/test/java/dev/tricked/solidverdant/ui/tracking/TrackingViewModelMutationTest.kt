@@ -80,6 +80,7 @@ class TrackingViewModelMutationTest {
 
         assertFalse(viewModel.uiState.value.isLoading)
         assertEquals("network disappeared", viewModel.uiState.value.error)
+        dispose(viewModel)
     }
 
     @Test
@@ -111,6 +112,7 @@ class TrackingViewModelMutationTest {
 
         assertFalse(viewModel.uiState.value.isLoading)
         assertEquals("network disappeared", viewModel.uiState.value.error)
+        dispose(viewModel)
     }
 
     @Test
@@ -130,6 +132,7 @@ class TrackingViewModelMutationTest {
         assertEquals("task-1", viewModel.uiState.value.editingTaskId)
         assertFalse(viewModel.uiState.value.editingBillable)
         coVerify(exactly = 1) { repository.stopEntry(active, "user") }
+        dispose(viewModel)
     }
 
     @Test
@@ -148,6 +151,7 @@ class TrackingViewModelMutationTest {
         assertEquals("project-1", viewModel.uiState.value.editingProjectId)
         assertEquals("task-1", viewModel.uiState.value.editingTaskId)
         coVerify(exactly = 1) { repository.stopEntry(active, "user") }
+        dispose(viewModel)
     }
 
     @Test
@@ -164,6 +168,7 @@ class TrackingViewModelMutationTest {
         assertEquals("", viewModel.uiState.value.editingDescription)
         assertEquals(null, viewModel.uiState.value.editingProjectId)
         assertEquals(null, viewModel.uiState.value.editingTaskId)
+        dispose(viewModel)
     }
 
     @Test
@@ -184,6 +189,7 @@ class TrackingViewModelMutationTest {
         assertEquals(null, viewModel.uiState.value.editingTaskId)
         assertEquals(listOf("tag-1"), viewModel.uiState.value.editingTags)
         assertTrue(viewModel.uiState.value.editingBillable)
+        dispose(viewModel)
     }
 
     @Test
@@ -211,6 +217,7 @@ class TrackingViewModelMutationTest {
         coVerify(exactly = 1) { repository.startEntry(any(), any(), any(), any(), any(), any(), any()) }
         release.complete(Unit)
         dispatcher.scheduler.runCurrent()
+        dispose(viewModel)
     }
 
     @Test
@@ -249,6 +256,7 @@ class TrackingViewModelMutationTest {
         coVerify(exactly = 1) { repository.stopEntry(any(), any()) }
         release.complete(Unit)
         dispatcher.scheduler.runCurrent()
+        dispose(viewModel)
     }
 
     @Test
@@ -291,6 +299,7 @@ class TrackingViewModelMutationTest {
             repository.updateEntry(match { it.start == newStart && it.end == null }, emptyList())
         }
         assertFalse(viewModel.uiState.value.isLoading)
+        dispose(viewModel)
     }
 
     private fun viewModel(repository: TimeEntryRepository): TrackingViewModel = TrackingViewModel(
@@ -302,6 +311,12 @@ class TrackingViewModelMutationTest {
         context = context,
         clock = clock,
     ).also { viewModels += it }
+
+    private fun dispose(viewModel: TrackingViewModel) {
+        viewModel.cancelScopeForTest()
+        viewModels.remove(viewModel)
+        dispatcher.scheduler.runCurrent()
+    }
 
     private fun activeEntry() = TimeEntry(
         id = "active",

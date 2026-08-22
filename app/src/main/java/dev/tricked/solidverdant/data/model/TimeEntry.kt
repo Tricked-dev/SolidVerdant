@@ -141,6 +141,12 @@ data class UserResponse(val data: User)
 data class MembershipsResponse(val data: List<Membership>)
 
 /**
+ * Response wrapper for organization API calls
+ */
+@Serializable
+data class OrganizationResponse(val data: Organization)
+
+/**
  * Request to start a new time entry, or create a completed one when [end] is set
  */
 @Serializable

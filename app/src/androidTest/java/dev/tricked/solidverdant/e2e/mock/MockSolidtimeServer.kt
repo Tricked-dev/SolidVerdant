@@ -16,6 +16,7 @@ import dev.tricked.solidverdant.data.model.CreateTaskRequest
 import dev.tricked.solidverdant.data.model.Membership
 import dev.tricked.solidverdant.data.model.MembershipsResponse
 import dev.tricked.solidverdant.data.model.Organization
+import dev.tricked.solidverdant.data.model.OrganizationResponse
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.ProjectResponse
 import dev.tricked.solidverdant.data.model.ProjectsResponse
@@ -256,6 +257,14 @@ class MockSolidtimeServer {
         method == "GET" && path == "/api/v1/users/me/memberships" ->
             ok(json.encodeToString(MembershipsResponse(data = memberships.toList())))
 
+        method == "GET" && ORGANIZATION_ITEM_REGEX.matches(path) -> {
+            val organizationId = path.substringAfterLast("/")
+            memberships.firstOrNull { it.organizationId == organizationId }
+                ?.organization
+                ?.let { ok(json.encodeToString(OrganizationResponse(data = it))) }
+                ?: notFound()
+        }
+
         method == "GET" && path == "/api/v1/users/me/time-entries/active" ->
             ok(json.encodeToString(TimeEntryResponse(data = activeEntry)))
 
@@ -486,6 +495,8 @@ class MockSolidtimeServer {
             Regex("""/api/v1/organizations/([^/]+)/time-entries""")
         private val ENTRY_ITEM_REGEX =
             Regex("""/api/v1/organizations/([^/]+)/time-entries/([^/]+)""")
+        private val ORGANIZATION_ITEM_REGEX =
+            Regex("""/api/v1/organizations/([^/]+)""")
         private val SOLIDTIME_UTC_TIMESTAMP =
             Regex("""\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z""")
 

@@ -12,6 +12,7 @@ import dev.tricked.solidverdant.data.model.CreateProjectRequest
 import dev.tricked.solidverdant.data.model.CreateTagRequest
 import dev.tricked.solidverdant.data.model.CreateTaskRequest
 import dev.tricked.solidverdant.data.model.MembershipsResponse
+import dev.tricked.solidverdant.data.model.OrganizationResponse
 import dev.tricked.solidverdant.data.model.ProjectResponse
 import dev.tricked.solidverdant.data.model.ProjectsResponse
 import dev.tricked.solidverdant.data.model.StartTimeEntryRequest
@@ -84,6 +85,12 @@ interface SolidtimeApi {
      */
     @GET("api/v1/users/me/memberships")
     suspend fun getMyMemberships(): MembershipsResponse
+
+    /**
+     * Get the full organization settings omitted from the personal memberships response.
+     */
+    @GET("api/v1/organizations/{organization}")
+    suspend fun getOrganization(@Path("organization") organizationId: String): OrganizationResponse
 
     /**
      * Get the active time entry for the current user

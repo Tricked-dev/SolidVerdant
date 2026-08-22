@@ -167,7 +167,12 @@ class AuthRepository @Inject constructor(private val authDataStore: AuthDataStor
         val endpoint = authDataStore.getEndpoint()
         val api = apiClientFactory.createApi(endpoint)
         val response = api.getMyMemberships()
-        Result.success(response.data)
+        val memberships = response.data.map { membership ->
+            // Solidtime's personal-memberships resource only embeds id/name/currency. Fetch the
+            // authoritative organization resource so policy flags are not silently defaulted.
+            membership.copy(organization = api.getOrganization(membership.organizationId).data)
+        }
+        Result.success(memberships)
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {

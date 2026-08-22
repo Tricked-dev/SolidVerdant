@@ -19,6 +19,7 @@ import android.graphics.drawable.Icon
 import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
+import androidx.annotation.VisibleForTesting
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
@@ -30,6 +31,7 @@ import dev.tricked.solidverdant.data.remote.ApiClientFactory
 import dev.tricked.solidverdant.data.repository.AuthRepository
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository
 import dev.tricked.solidverdant.ui.tile.ProjectSelectionActivity
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -290,95 +292,98 @@ class TimeTrackingTileService : TileService() {
         }
     }
 
-    private fun stopTracking(activeEntry: TimeEntry) {
+    private suspend fun stopTracking(activeEntry: TimeEntry) {
         // Optimistic update
         setOptimisticStopping()
         updateTileImmediate()
 
-        serviceScope.launch {
-            try {
-                val result = authRepository.stopTimeEntry(
-                    organizationId = activeEntry.organizationId,
-                    timeEntryId = activeEntry.id,
-                    userId = activeEntry.userId,
-                    startTime = activeEntry.start,
-                )
+        try {
+            val result = authRepository.stopTimeEntry(
+                organizationId = activeEntry.organizationId,
+                timeEntryId = activeEntry.id,
+                userId = activeEntry.userId,
+                startTime = activeEntry.start,
+            )
 
-                result.onSuccess {
-                    Timber.d("Tracking stopped")
-                    clearOptimisticState()
-                    clearCachedEntry()
-
-                    // Update notification state based on settings
-                    val alwaysShow = settingsDataStore.alwaysShowNotification.first()
-                    if (alwaysShow) {
-                        TimeTrackingNotificationService.showIdle(this@TimeTrackingTileService)
-                    } else {
-                        TimeTrackingNotificationService.hide(this@TimeTrackingTileService)
-                    }
-
-                    refreshTile()
-                }.onFailure { error ->
-                    Timber.e(error, "Failed to stop tracking")
-                    clearOptimisticState()
-                    showNotification("Failed to stop tracking", error.message ?: "Unknown error")
-                    refreshTile()
-                }
-            } catch (e: Exception) {
-                Timber.e(e, "Error stopping tracking")
+            result.onSuccess {
+                Timber.d("Tracking stopped")
                 clearOptimisticState()
-                showNotification("Failed to stop tracking", e.message ?: "Unknown error")
+                clearCachedEntry()
+
+                // Update notification state based on settings
+                val alwaysShow = settingsDataStore.alwaysShowNotification.first()
+                if (alwaysShow) {
+                    TimeTrackingNotificationService.showIdle(this@TimeTrackingTileService)
+                } else {
+                    TimeTrackingNotificationService.hide(this@TimeTrackingTileService)
+                }
+
+                refreshTile()
+            }.onFailure { error ->
+                Timber.e(error, "Failed to stop tracking")
+                clearOptimisticState()
+                showNotification("Failed to stop tracking", error.message ?: "Unknown error")
                 refreshTile()
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.e(e, "Error stopping tracking")
+            clearOptimisticState()
+            showNotification("Failed to stop tracking", e.message ?: "Unknown error")
+            refreshTile()
         }
     }
 
     /**
      * Stop tracking using cached entry data (for when network check failed but we have cache)
      */
-    private fun stopTrackingWithCache(cached: CachedEntry) {
+    private suspend fun stopTrackingWithCache(cached: CachedEntry) {
         // Optimistic update
         setOptimisticStopping()
         updateTileImmediate()
 
-        serviceScope.launch {
-            try {
-                val result = authRepository.stopTimeEntry(
-                    organizationId = cached.organizationId,
-                    timeEntryId = cached.entryId,
-                    userId = cached.userId,
-                    startTime = cached.startTime,
-                )
+        try {
+            val result = authRepository.stopTimeEntry(
+                organizationId = cached.organizationId,
+                timeEntryId = cached.entryId,
+                userId = cached.userId,
+                startTime = cached.startTime,
+            )
 
-                result.onSuccess {
-                    Timber.d("Tracking stopped (from cache)")
-                    clearOptimisticState()
-                    clearCachedEntry()
-
-                    // Update notification state based on settings
-                    val alwaysShow = settingsDataStore.alwaysShowNotification.first()
-                    if (alwaysShow) {
-                        TimeTrackingNotificationService.showIdle(this@TimeTrackingTileService)
-                    } else {
-                        TimeTrackingNotificationService.hide(this@TimeTrackingTileService)
-                    }
-
-                    refreshTile()
-                }.onFailure { error ->
-                    Timber.e(error, "Failed to stop tracking (from cache)")
-                    clearOptimisticState()
-                    // Don't clear cache on failure - entry might still be active
-                    showNotification("Failed to stop tracking", error.message ?: "Unknown error")
-                    refreshTile()
-                }
-            } catch (e: Exception) {
-                Timber.e(e, "Error stopping tracking (from cache)")
+            result.onSuccess {
+                Timber.d("Tracking stopped (from cache)")
                 clearOptimisticState()
-                showNotification("Failed to stop tracking", e.message ?: "Unknown error")
+                clearCachedEntry()
+
+                // Update notification state based on settings
+                val alwaysShow = settingsDataStore.alwaysShowNotification.first()
+                if (alwaysShow) {
+                    TimeTrackingNotificationService.showIdle(this@TimeTrackingTileService)
+                } else {
+                    TimeTrackingNotificationService.hide(this@TimeTrackingTileService)
+                }
+
+                refreshTile()
+            }.onFailure { error ->
+                Timber.e(error, "Failed to stop tracking (from cache)")
+                clearOptimisticState()
+                // Don't clear cache on failure - entry might still be active
+                showNotification("Failed to stop tracking", error.message ?: "Unknown error")
                 refreshTile()
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.e(e, "Error stopping tracking (from cache)")
+            clearOptimisticState()
+            showNotification("Failed to stop tracking", e.message ?: "Unknown error")
+            refreshTile()
         }
     }
+
+    @VisibleForTesting
+    internal fun isProcessingForTest(): Boolean = isProcessing.get()
 
     /**
      * Update tile state with debouncing and cache-first approach.

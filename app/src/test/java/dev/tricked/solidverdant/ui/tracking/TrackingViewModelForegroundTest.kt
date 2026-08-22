@@ -22,6 +22,7 @@ import dev.tricked.solidverdant.domain.time.TemporalPolicyProvider
 import dev.tricked.solidverdant.sync.SyncTrigger
 import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.TestDispatcher
@@ -189,8 +190,16 @@ class TrackingViewModelForegroundTest {
         dispatcher.scheduler.runCurrent()
         assertFalse(vm.uiState.value.syncStatusVisible)
 
+        // Subscribe before crossing the boundary. Reading StateFlow.value repeatedly is racy here:
+        // a later Room emission can replace the state between the assertion message and condition.
+        val visibleState = async { vm.uiState.first { it.syncStatusVisible } }
         dispatcher.scheduler.advanceTimeBy(1)
         dispatcher.scheduler.runCurrent()
+        val revealed = visibleState.await()
+        assertEquals(
+            listOf(TimeEntryRepository.EntrySyncStatus.PENDING),
+            revealed.syncOperations.map { it.status },
+        )
         assertTrue(vm.uiState.value.syncStatusVisible)
     }
 

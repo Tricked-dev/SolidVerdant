@@ -63,6 +63,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-reports-${{ matrix.api-level }}
-          path: ./app/build/reports/androidTests
+          name: test-reports-${{ matrix.api-level }}-${{ matrix.test-shard }}
+          path: |
+            ./app/build/reports/tests
+            ./app/build/test-results
+            ./app/build/reports/androidTests
           if-no-files-found: ignore
