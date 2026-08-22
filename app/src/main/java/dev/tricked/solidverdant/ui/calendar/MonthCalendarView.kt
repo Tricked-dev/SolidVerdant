@@ -16,6 +16,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -26,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -403,13 +405,14 @@ fun DayTimeline(
     val projectsById = remember(projects) { projects.associateBy { it.id } }
     val tasksById = remember(tasks) { tasks.associateBy { it.id } }
     val clientsById = remember(clients) { clients.associateBy { it.id } }
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .then(if (fillViewport) Modifier.fillMaxHeight() else Modifier.height(520.dp))
             .verticalScroll(effectiveScrollState),
     ) {
         val totalHeight = calendarTotalHeight(settings)
+        val entryAreaWidth = maxWidth - CalendarGutterWidth - Dimens.Space2
         Box(modifier = Modifier.fillMaxWidth().height(totalHeight)) {
             HourGridlines(settings = settings)
             CalendarTimeSelectionLayer(
@@ -427,6 +430,7 @@ fun DayTimeline(
                 val client = project?.clientId?.let(clientsById::get)
                 val top = block.startFraction
                 val height = block.heightFraction
+                val slotWidth = entryAreaWidth / block.columnCount.coerceAtLeast(1)
                 val blockColor = if (entry.type == TimeEntryType.BREAK) {
                     MaterialTheme.colorScheme.tertiary
                 } else {
@@ -459,8 +463,12 @@ fun DayTimeline(
                 }
                 val entryModifier = calendarEntryDragModifier(
                     modifier = Modifier
-                        .padding(start = CalendarGutterWidth, end = Dimens.Space2)
-                        .offset(y = totalHeight * top),
+                        .offset(
+                            x = CalendarGutterWidth + (slotWidth * block.column),
+                            y = totalHeight * top,
+                        )
+                        .width(slotWidth)
+                        .padding(end = Dimens.Space1),
                     entry = entry,
                     day = day,
                     zone = zone,
@@ -471,7 +479,7 @@ fun DayTimeline(
                         (totalHeight * height).coerceAtLeast(Dimens.EntryMinHeight).toPx()
                     },
                     gridHeightPx = with(LocalDensity.current) { totalHeight.toPx() },
-                    columnWidthPx = with(LocalDensity.current) { totalHeight.toPx() },
+                    columnWidthPx = with(LocalDensity.current) { entryAreaWidth.toPx() },
                     settings = settings,
                     onMoveEntry = onMoveEntry,
                 )
@@ -481,6 +489,7 @@ fun DayTimeline(
                     subtitle = subtitle,
                     time = duration,
                     modifier = entryModifier
+                        .height((totalHeight * height).coerceAtLeast(Dimens.EntryMinHeight))
                         .combinedClickable(
                             onClick = { onEntryClick(entry) },
                             onLongClick = { onEntryLongPress(entry) },

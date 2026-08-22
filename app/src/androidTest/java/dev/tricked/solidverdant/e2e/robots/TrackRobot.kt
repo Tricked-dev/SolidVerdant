@@ -173,6 +173,8 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
 
     fun closeHistoryFilters(): TrackRobot = apply {
         firstEnabledNodeWithTag(TestTags.TRACK_FILTER_CLOSE_BUTTON).performClick()
+        waitUntilTagIsGone(TestTags.TRACK_FILTER_CLOSE_BUTTON)
+        waitUntilTagExists(TestTags.TRACK_FILTER_SEARCH_FIELD)
         // API 29 can retain the outgoing text-field semantics after the collapsed control is
         // available. The enabled collapsed control is the authoritative state and is also the
         // control the next step must interact with.
@@ -242,15 +244,28 @@ class TrackRobot(composeRule: ComposeTestRule) : Robot(composeRule) {
         firstSheetNodeWithTag(TestTags.TRACK_SHEET_DESCRIPTION_FIELD).performTextInput(text)
     }
 
-    fun selectSheetProjectTask(taskName: String): TrackRobot = apply {
+    fun selectSheetProjectTask(projectName: String, taskName: String): TrackRobot = apply {
         firstSheetNodeWithTag(TestTags.TRACK_SHEET_PROJECT_TASK_SELECTOR).performScrollTo().performClick()
         waitUntilTagExists(TestTags.TRACK_PROJECT_TASK_LIST)
-        val taskMatcher = hasText(taskName, substring = false)
-        // Tasks live in a LazyColumn below the project rows. Wait for the target to be composed by
-        // scrolling the picker, rather than clicking a node that may not exist on small emulators.
+        val projectMatcher = hasText(projectName, substring = false)
         composeRule.waitUntil(DEFAULT_TIMEOUT_MS) {
             runCatching {
-                firstNodeWithTag(TestTags.TRACK_PROJECT_TASK_LIST).performScrollToNode(taskMatcher)
+                firstNodeWithTag(TestTags.TRACK_PROJECT_TASK_LIST).performScrollToNode(projectMatcher)
+                composeRule.onAllNodes(projectMatcher, useUnmergedTree = true)
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
+            }.getOrDefault(false)
+        }
+        composeRule.onAllNodes(projectMatcher, useUnmergedTree = true).onFirst().performClick()
+        waitUntilSheetTagExists(TestTags.TRACK_SHEET_TASK_SELECTOR)
+        firstSheetNodeWithTag(TestTags.TRACK_SHEET_TASK_SELECTOR).performScrollTo().performClick()
+        waitUntilTagExists(TestTags.TRACK_TASK_LIST)
+        val taskMatcher = hasText(taskName, substring = false)
+        // Wait for the target to be composed by scrolling the lazy task picker rather than
+        // clicking a node that may not exist on small emulators.
+        composeRule.waitUntil(DEFAULT_TIMEOUT_MS) {
+            runCatching {
+                firstNodeWithTag(TestTags.TRACK_TASK_LIST).performScrollToNode(taskMatcher)
                 composeRule.onAllNodes(taskMatcher, useUnmergedTree = true)
                     .fetchSemanticsNodes()
                     .isNotEmpty()

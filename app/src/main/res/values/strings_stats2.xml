@@ -29,6 +29,7 @@
 
     <!-- Filter bar and filter sheet. -->
     <string name="stats2_filters">Filters</string>
+    <string name="stats2_date_range">Date range</string>
     <string name="stats2_filters_content_description">Edit statistics filters</string>
     <string name="stats2_filter_sheet_title">Filter statistics</string>
     <string name="stats2_active_scope_none">Showing all tracked time</string>
@@ -36,6 +37,7 @@
     <string name="stats2_clear_filters_content_description">Clear all statistics filters</string>
     <string name="stats2_reset">Reset</string>
     <string name="stats2_filter_projects">Projects</string>
+    <string name="stats2_search_projects">Search projects</string>
     <string name="stats2_filter_clients">Clients</string>
     <string name="stats2_filter_tasks">Tasks</string>
     <string name="stats2_filter_tags">Tags</string>

@@ -66,7 +66,7 @@ class CalendarGestureCreationE2eTest {
 
     @BackendPortable
     @Test
-    fun draggingAnEmptyCalendarRangeUsesTheSelectedInterval() {
+    fun longPressingAndDraggingAnEmptyCalendarRangeUsesTheSelectedInterval() {
         e2e.prepare(E2eFixture.Empty)
         e2e.launchApp()
         openCalendar()
@@ -77,6 +77,7 @@ class CalendarGestureCreationE2eTest {
             .performTouchInput {
                 val start = Offset(center.x, 80f)
                 down(start)
+                advanceEventTime(600L)
                 moveTo(Offset(start.x, start.y + 160f), delayMillis = 250)
                 up()
             }
@@ -95,6 +96,26 @@ class CalendarGestureCreationE2eTest {
             "A dragged calendar range should retain a useful selected duration",
             requireNotNull(persisted.duration) > 15 * 60,
         )
+    }
+
+    @Test
+    fun draggingAnEmptyCalendarRangeScrollsWithoutOpeningCreate() {
+        e2e.prepare(E2eFixture.Empty)
+        e2e.launchApp()
+        openCalendar()
+
+        e2e.composeRule.onNodeWithTag(selectionTag(), useUnmergedTree = true)
+            .performScrollTo()
+            .performTouchInput {
+                val start = Offset(center.x, center.y + 100f)
+                down(start)
+                moveTo(Offset(start.x, start.y - 240f), delayMillis = 150)
+                up()
+            }
+
+        e2e.composeRule.onNodeWithTag(TestTags.ENTRY_SAVE, useUnmergedTree = true).assertDoesNotExist()
+        e2e.composeRule.onNodeWithTag(TestTags.CALENDAR_WEEK_GRID, useUnmergedTree = true)
+            .assertExists()
     }
 
     private fun openCalendar() {

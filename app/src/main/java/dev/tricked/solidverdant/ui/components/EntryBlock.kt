@@ -78,36 +78,44 @@ fun EntryBlock(
         )
         Spacer(Modifier.width(Dimens.EntryBarGap))
         Column(Modifier.weight(1f)) {
-            Text(
-                text = resolvedTitle,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.Top) {
+                Text(
+                    text = resolvedTitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                if (!time.isNullOrBlank()) {
+                    Spacer(Modifier.width(Dimens.EntryBarGap))
+                    Text(
+                        text = time,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                    )
+                }
+                syncStatus?.let { status ->
+                    Spacer(Modifier.width(Dimens.EntryBarGap))
+                    SyncChip(status = status, showLabel = false)
+                }
+            }
             if (!subtitle.isNullOrBlank()) {
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    // The calendar supplies a finite card height. Let metadata use every line
+                    // that fits inside that height, then rely on the card clip for short slots.
+                    // A fixed line cap wastes most of tall week-view entries.
+                    maxLines = Int.MAX_VALUE,
+                    overflow = TextOverflow.Clip,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
-        }
-        if (!time.isNullOrBlank()) {
-            Spacer(Modifier.width(Dimens.EntryBarGap))
-            Text(
-                text = time,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-        }
-        syncStatus?.let { status ->
-            Spacer(Modifier.width(Dimens.EntryBarGap))
-            SyncChip(status = status, showLabel = false)
         }
     }
 }

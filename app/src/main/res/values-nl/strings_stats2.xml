@@ -29,6 +29,7 @@
 
     <!-- Filterbalk en filtervenster. -->
     <string name="stats2_filters">Filters</string>
+    <string name="stats2_date_range">Datumbereik</string>
     <string name="stats2_filters_content_description">Statistiekfilters bewerken</string>
     <string name="stats2_filter_sheet_title">Statistieken filteren</string>
     <string name="stats2_active_scope_none">Alle geregistreerde tijd wordt getoond</string>
@@ -36,6 +37,7 @@
     <string name="stats2_clear_filters_content_description">Alle statistiekfilters wissen</string>
     <string name="stats2_reset">Herstellen</string>
     <string name="stats2_filter_projects">Projecten</string>
+    <string name="stats2_search_projects">Projecten zoeken</string>
     <string name="stats2_filter_clients">Klanten</string>
     <string name="stats2_filter_tasks">Taken</string>
     <string name="stats2_filter_tags">Labels</string>

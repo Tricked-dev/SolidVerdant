@@ -18,8 +18,11 @@ object TrackingTestTags {
     const val ENTRY_ROW = "track_entry_row"
     const val START_BUTTON = "track_start_button"
     const val STOP_BUTTON = "track_stop_button"
+    const val RESET_FIELDS_BUTTON = "track_reset_fields_button"
     const val SETTINGS_BUTTON = "track_settings_button"
     const val LIVE_UPDATE_SWITCH = "track_live_update_switch"
+    const val AUTO_CLEAR_FIELDS_SWITCH = "track_auto_clear_fields_switch"
+    const val CLEAR_DESCRIPTION_AFTER_STOP_SWITCH = "track_clear_description_after_stop_switch"
     const val REFRESH_BUTTON = "track_refresh_button"
     const val ADD_ENTRY_BUTTON = "track_add_entry_button"
     const val EDIT_ACTIVE_ENTRY = "track_edit_active_entry"
@@ -29,6 +32,7 @@ object TrackingTestTags {
     const val CONTINUE_BUTTON = "track_continue_last"
     const val SHEET = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.SHEET
     const val SHEET_PROJECT_TASK_SELECTOR = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.PROJECT_TASK_SELECTOR
+    const val SHEET_TASK_SELECTOR = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.TASK_SELECTOR
     const val SHEET_TAGS_SELECTOR = "track_sheet_tags_selector"
     const val SHEET_TAGS_LIST = "track_sheet_tags_list"
     const val SHEET_START_TIME = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.START_TIME

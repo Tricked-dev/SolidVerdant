@@ -14,14 +14,39 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.util.Locale
 
 class TrackingTimeFormattingTest {
+
+    @Test
+    fun `history keeps repeated punches as separate visible rows`() {
+        val first = TimeEntry(
+            id = "morning",
+            userId = "user",
+            start = "2026-08-20T08:00:00Z",
+            end = "2026-08-20T09:54:00Z",
+            organizationId = "org",
+        )
+        val second = TimeEntry(
+            id = "afternoon",
+            userId = "user",
+            start = "2026-08-20T13:36:00Z",
+            end = "2026-08-20T13:39:00Z",
+            organizationId = "org",
+        )
+
+        val groups = historyEntryGroups(listOf(first, second))
+
+        assertEquals(listOf("morning", "afternoon"), groups.map { it.single().id })
+    }
+
     @Test
     fun `multi-day range includes both dates`() {
         val formatted = formatTimeRange(
             start = "2026-07-06T23:00:00Z",
             end = "2026-07-08T01:00:00Z",
             zone = ZoneOffset.UTC,
+            locale = Locale.ENGLISH,
         )
 
         assertTrue(formatted, formatted.contains("6 Jul 2026"))

@@ -8,14 +8,20 @@ package dev.tricked.solidverdant.ui.components
 
 object EditTimeEntryTestTags {
     const val SHEET = "entry_edit_sheet"
-    const val PROJECT_TASK_SELECTOR = "project_task_selector"
-    const val PROJECT_TASK_LIST = "project_task_list"
+    const val PROJECT_SELECTOR = "project_task_selector"
+    const val TASK_SELECTOR = "task_selector"
+    const val PROJECT_LIST = "project_task_list"
+    const val TASK_LIST = "task_list"
+    const val PROJECT_TASK_SELECTOR = PROJECT_SELECTOR
+    const val PROJECT_TASK_LIST = PROJECT_LIST
     const val CREATE_PROJECT = "create_project"
     const val CREATE_TASK = "create_task"
     const val CREATE_TAG = "create_tag"
     const val CREATE_CLIENT = "create_client"
     const val CLIENT_PICKER = "catalogue_client_picker"
-    const val PROJECT_TASK_SEARCH = "project_task_search"
+    const val PROJECT_SEARCH = "project_task_search"
+    const val TASK_SEARCH = "task_search"
+    const val PROJECT_TASK_SEARCH = PROJECT_SEARCH
     const val CATALOGUE_NAME = "catalogue_name"
     const val CATALOGUE_CREATE_CONFIRM = "catalogue_create_confirm"
     const val CATALOGUE_CREATE_ERROR = "catalogue_create_error"

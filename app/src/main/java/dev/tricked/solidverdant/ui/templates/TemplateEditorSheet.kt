@@ -77,17 +77,6 @@ fun TemplateEditorSheet(
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    val displayText = run {
-        val projectName = projectId?.let { id -> projects.firstOrNull { it.id == id }?.name }
-        val taskName = taskId?.let { id -> tasks.firstOrNull { it.id == id }?.name }
-        when {
-            projectId == null -> stringResource(R.string.templates_no_project)
-            projectName != null && taskName != null -> "$projectName - $taskName"
-            projectName != null -> projectName
-            else -> stringResource(R.string.templates_no_project)
-        }
-    }
-
     val canSave = name.isNotBlank() ||
         projectId != null ||
         description.isNotBlank() ||
@@ -133,7 +122,8 @@ fun TemplateEditorSheet(
             ProjectTaskDropdown(
                 projects = projects.filterNot { it.isArchived },
                 tasks = tasks.filterNot { it.isDone },
-                displayText = displayText,
+                selectedProjectId = projectId,
+                selectedTaskId = taskId,
                 onSelectionChanged = { newProjectId, newTaskId ->
                     projectId = newProjectId
                     taskId = newTaskId

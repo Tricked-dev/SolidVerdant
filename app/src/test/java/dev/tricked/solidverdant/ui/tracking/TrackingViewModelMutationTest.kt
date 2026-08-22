@@ -80,6 +80,7 @@ class TrackingViewModelMutationTest {
 
         assertFalse(viewModel.uiState.value.isLoading)
         assertEquals("network disappeared", viewModel.uiState.value.error)
+        dispose(viewModel)
     }
 
     @Test
@@ -111,6 +112,84 @@ class TrackingViewModelMutationTest {
 
         assertFalse(viewModel.uiState.value.isLoading)
         assertEquals("network disappeared", viewModel.uiState.value.error)
+        dispose(viewModel)
+    }
+
+    @Test
+    fun stop_keeps_description_project_and_task_when_auto_clear_is_disabled() = runTest(dispatcher.scheduler) {
+        settings.setAutoClearEntryFieldsAfterStop(false)
+        settings.setClearDescriptionAfterStop(false)
+        val active = activeEntry()
+        val repository = mockk<TimeEntryRepository>(relaxed = true)
+        cacheActiveEntry(active)
+        val viewModel = viewModel(repository)
+
+        viewModel.stopTimeEntry()
+        dispatcher.scheduler.runCurrent()
+
+        assertEquals("Precision setup", viewModel.uiState.value.editingDescription)
+        assertEquals("project-1", viewModel.uiState.value.editingProjectId)
+        assertEquals("task-1", viewModel.uiState.value.editingTaskId)
+        assertFalse(viewModel.uiState.value.editingBillable)
+        coVerify(exactly = 1) { repository.stopEntry(active, "user") }
+        dispose(viewModel)
+    }
+
+    @Test
+    fun stop_clears_only_description_when_description_clear_is_enabled() = runTest(dispatcher.scheduler) {
+        settings.setAutoClearEntryFieldsAfterStop(false)
+        settings.setClearDescriptionAfterStop(true)
+        val active = activeEntry()
+        val repository = mockk<TimeEntryRepository>(relaxed = true)
+        cacheActiveEntry(active)
+        val viewModel = viewModel(repository)
+
+        viewModel.stopTimeEntry()
+        dispatcher.scheduler.runCurrent()
+
+        assertEquals("", viewModel.uiState.value.editingDescription)
+        assertEquals("project-1", viewModel.uiState.value.editingProjectId)
+        assertEquals("task-1", viewModel.uiState.value.editingTaskId)
+        coVerify(exactly = 1) { repository.stopEntry(active, "user") }
+        dispose(viewModel)
+    }
+
+    @Test
+    fun stop_clears_entry_fields_when_auto_clear_is_enabled() = runTest(dispatcher.scheduler) {
+        settings.setAutoClearEntryFieldsAfterStop(true)
+        val active = activeEntry()
+        val repository = mockk<TimeEntryRepository>(relaxed = true)
+        cacheActiveEntry(active)
+        val viewModel = viewModel(repository)
+
+        viewModel.stopTimeEntry()
+        dispatcher.scheduler.runCurrent()
+
+        assertEquals("", viewModel.uiState.value.editingDescription)
+        assertEquals(null, viewModel.uiState.value.editingProjectId)
+        assertEquals(null, viewModel.uiState.value.editingTaskId)
+        dispose(viewModel)
+    }
+
+    @Test
+    fun reset_clears_only_reusable_entry_fields() = runTest(dispatcher.scheduler) {
+        settings.setAutoClearEntryFieldsAfterStop(false)
+        val repository = mockk<TimeEntryRepository>(relaxed = true)
+        cacheActiveEntry(activeEntry())
+        val viewModel = viewModel(repository)
+        viewModel.stopTimeEntry()
+        dispatcher.scheduler.runCurrent()
+        viewModel.updateTags(listOf("tag-1"))
+        viewModel.updateBillable(true)
+
+        viewModel.resetEntryFields()
+
+        assertEquals("", viewModel.uiState.value.editingDescription)
+        assertEquals(null, viewModel.uiState.value.editingProjectId)
+        assertEquals(null, viewModel.uiState.value.editingTaskId)
+        assertEquals(listOf("tag-1"), viewModel.uiState.value.editingTags)
+        assertTrue(viewModel.uiState.value.editingBillable)
+        dispose(viewModel)
     }
 
     @Test
@@ -138,6 +217,27 @@ class TrackingViewModelMutationTest {
         coVerify(exactly = 1) { repository.startEntry(any(), any(), any(), any(), any(), any(), any()) }
         release.complete(Unit)
         dispatcher.scheduler.runCurrent()
+        dispose(viewModel)
+    }
+
+    @Test
+    fun successful_start_projects_committed_entry_before_room_collectors_emit() = runTest(dispatcher.scheduler) {
+        val entry = TimeEntry(
+            id = "local-start",
+            userId = "user",
+            organizationId = "org",
+            start = "2026-08-10T08:00:00Z",
+        )
+        val repository = mockk<TimeEntryRepository>(relaxed = true)
+        coEvery { repository.startEntry(any(), any(), any(), any(), any(), any(), any()) } returns entry
+        val viewModel = viewModel(repository)
+
+        viewModel.startTimeEntry("org", "member", "user")
+        dispatcher.scheduler.runCurrent()
+
+        assertEquals(entry, viewModel.uiState.value.currentTimeEntry)
+        assertTrue(viewModel.uiState.value.isTracking)
+        dispose(viewModel)
     }
 
     @Test
@@ -176,6 +276,7 @@ class TrackingViewModelMutationTest {
         coVerify(exactly = 1) { repository.stopEntry(any(), any()) }
         release.complete(Unit)
         dispatcher.scheduler.runCurrent()
+        dispose(viewModel)
     }
 
     @Test
@@ -218,6 +319,7 @@ class TrackingViewModelMutationTest {
             repository.updateEntry(match { it.start == newStart && it.end == null }, emptyList())
         }
         assertFalse(viewModel.uiState.value.isLoading)
+        dispose(viewModel)
     }
 
     private fun viewModel(repository: TimeEntryRepository): TrackingViewModel = TrackingViewModel(
@@ -229,4 +331,36 @@ class TrackingViewModelMutationTest {
         context = context,
         clock = clock,
     ).also { viewModels += it }
+
+    private suspend fun dispose(viewModel: TrackingViewModel) {
+        val scopeJob = viewModel.cancelScopeForTest()
+        dispatcher.scheduler.runCurrent()
+        scopeJob?.join()
+        viewModels.remove(viewModel)
+    }
+
+    private fun activeEntry() = TimeEntry(
+        id = "active",
+        userId = "user",
+        organizationId = "org",
+        start = "2026-08-10T08:00:00Z",
+        description = "Precision setup",
+        projectId = "project-1",
+        taskId = "task-1",
+        billable = true,
+    )
+
+    private fun cacheActiveEntry(active: TimeEntry) {
+        settings.cacheTrackingState(
+            SettingsDataStore.CachedTrackingState(
+                organizationId = "org",
+                timeEntries = listOf(active),
+                projects = emptyList(),
+                clients = emptyList(),
+                tasks = emptyList(),
+                tags = emptyList(),
+                activeEntry = active,
+            ),
+        )
+    }
 }

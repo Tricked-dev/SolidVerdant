@@ -14,8 +14,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,11 +31,15 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -155,24 +157,19 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
                 // Persistent controls panel: range, filters and export share one card so they read
                 // as a single tool strip instead of mismatched controls floating on bare background.
                 SectionCard {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
-                    ) {
-                        Box(Modifier.weight(1f)) {
-                            RangeChips(state.range, viewModel::setRange)
-                        }
-                        ExportAction(
-                            exporting = exportState is ExportState.Running,
-                            onExport = viewModel::export,
-                        )
-                    }
+                    RangeSelector(state.range, viewModel::setRange)
                     StatFilterBar(
                         filters = state.filters,
                         catalog = state.catalog,
                         onFiltersChange = viewModel::setFilters,
                         onClearFilters = viewModel::clearFilters,
                     )
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                        ExportAction(
+                            exporting = exportState is ExportState.Running,
+                            onExport = viewModel::export,
+                        )
+                    }
                 }
 
                 if (state.isRefreshing) {
@@ -432,9 +429,10 @@ internal fun ProjectSwatch(color: Color) {
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun RangeChips(current: StatRange, onSelect: (StatRange) -> Unit) {
+internal fun RangeSelector(current: StatRange, onSelect: (StatRange) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
     var showPicker by remember { mutableStateOf(false) }
     val locale = appLocale()
     val options = listOf(
@@ -446,25 +444,38 @@ private fun RangeChips(current: StatRange, onSelect: (StatRange) -> Unit) {
         R.string.stats_this_month to StatRange.ThisMonth,
         R.string.stats_previous_month to StatRange.PreviousMonth,
     )
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
-        options.forEach { (label, range) ->
-            FilterChip(selected = current == range, onClick = { onSelect(range) }, label = { Text(stringResource(label)) })
-        }
-        FilterChip(
-            selected = current is StatRange.Custom,
-            onClick = { showPicker = true },
-            label = {
-                Text(
-                    if (current is StatRange.Custom) {
-                        "${current.start.format(
-                            DateTimeFormatter.ofPattern("d MMM", locale),
-                        )} – ${current.end.format(DateTimeFormatter.ofPattern("d MMM", locale))}"
-                    } else {
-                        stringResource(R.string.stats_custom)
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = rangeLabel(current, locale),
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            label = { Text(stringResource(R.string.stats2_date_range)) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("stats_range_selector")
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { (label, range) ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(label)) },
+                    modifier = Modifier.testTag("stats_range_option_${range.javaClass.simpleName}"),
+                    onClick = {
+                        onSelect(range)
+                        expanded = false
                     },
                 )
-            },
-        )
+            }
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.stats_custom)) },
+                onClick = {
+                    expanded = false
+                    showPicker = true
+                },
+            )
+        }
     }
     if (showPicker) {
         val selected = current as? StatRange.Custom
@@ -487,6 +498,21 @@ private fun RangeChips(current: StatRange, onSelect: (StatRange) -> Unit) {
             },
             dismissButton = { TextButton(onClick = { showPicker = false }) { Text(stringResource(R.string.cancel)) } },
         ) { DateRangePicker(state = pickerState) }
+    }
+}
+
+@Composable
+private fun rangeLabel(range: StatRange, locale: java.util.Locale): String = when (range) {
+    StatRange.Today -> stringResource(R.string.today)
+    StatRange.Yesterday -> stringResource(R.string.yesterday)
+    StatRange.Last7Days -> stringResource(R.string.stats_last_7_days)
+    StatRange.LastWeek -> stringResource(R.string.stats_last_week)
+    StatRange.ThisWeek -> stringResource(R.string.stats_this_week)
+    StatRange.ThisMonth -> stringResource(R.string.stats_this_month)
+    StatRange.PreviousMonth -> stringResource(R.string.stats_previous_month)
+    is StatRange.Custom -> {
+        val formatter = remember(locale) { DateTimeFormatter.ofPattern("d MMM", locale) }
+        "${range.start.format(formatter)} – ${range.end.format(formatter)}"
     }
 }
 

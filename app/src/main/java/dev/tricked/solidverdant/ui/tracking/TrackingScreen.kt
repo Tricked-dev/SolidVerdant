@@ -88,6 +88,7 @@ import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Close
@@ -208,6 +209,7 @@ import dev.tricked.solidverdant.ui.components.EntryDateFieldButton
 import dev.tricked.solidverdant.ui.components.EntryDatePickerDialog
 import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
 import dev.tricked.solidverdant.ui.components.SectionCard
+import dev.tricked.solidverdant.ui.components.SearchableSingleSelectDialog
 import dev.tricked.solidverdant.ui.components.SyncChip
 import dev.tricked.solidverdant.ui.localization.appLocale
 import dev.tricked.solidverdant.ui.theme.Dimens
@@ -233,15 +235,6 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 /**
- * Represents a selection of project and/or task
- */
-sealed class ProjectTaskSelection {
-    object NoProject : ProjectTaskSelection()
-    data class ProjectOnly(val project: Project) : ProjectTaskSelection()
-    data class ProjectWithTask(val project: Project, val task: Task) : ProjectTaskSelection()
-}
-
-/**
  * Tracking screen displaying current time tracking state and history
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -260,6 +253,8 @@ fun TrackingScreen(
     appTheme: AppThemeMode,
     optimisticRefresh: Boolean,
     liveUpdateEnabled: Boolean,
+    autoClearEntryFieldsAfterStop: Boolean,
+    clearDescriptionAfterStop: Boolean,
     longTimerHours: Int,
     editActiveEntryRequested: Boolean,
     onEditActiveEntryConsumed: () -> Unit,
@@ -267,6 +262,8 @@ fun TrackingScreen(
     onAppThemeChange: (AppThemeMode) -> Unit,
     onOptimisticRefreshChange: (Boolean) -> Unit,
     onLiveUpdateEnabledChange: (Boolean) -> Unit,
+    onAutoClearEntryFieldsAfterStopChange: (Boolean) -> Unit,
+    onClearDescriptionAfterStopChange: (Boolean) -> Unit,
     onLongTimerHoursChange: (Int) -> Unit,
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
@@ -278,6 +275,7 @@ fun TrackingScreen(
     onDescriptionChange: (String) -> Unit,
     onProjectChange: (String?) -> Unit,
     onTaskChange: (String?) -> Unit,
+    onResetEntryFields: () -> Unit,
     onTagsChange: (List<String>) -> Unit,
     onBillableChange: (Boolean) -> Unit,
     onUpdateCurrentEntry: () -> Unit,
@@ -698,6 +696,14 @@ fun TrackingScreen(
                         }
 
                         HorizontalDivider()
+                        AutoClearEntryFieldsSettings(
+                            autoClearEntryFieldsAfterStop = autoClearEntryFieldsAfterStop,
+                            clearDescriptionAfterStop = clearDescriptionAfterStop,
+                            onAutoClearEntryFieldsAfterStopChange = onAutoClearEntryFieldsAfterStopChange,
+                            onClearDescriptionAfterStopChange = onClearDescriptionAfterStopChange,
+                        )
+
+                        HorizontalDivider()
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -898,9 +904,7 @@ fun TrackingScreen(
                             if (entries.isEmpty()) null else HistoryDay(
                                 date = date,
                                 entries = entries,
-                                groups = entries.groupBy {
-                                    "${it.projectId}_${it.taskId}_${it.description.orEmpty()}"
-                                }.values.toList(),
+                                groups = historyEntryGroups(entries),
                             )
                         }
                         PreparedHistory(
@@ -964,6 +968,8 @@ fun TrackingScreen(
                                 onDescriptionChange = onDescriptionChange,
                                 onProjectChange = onProjectChange,
                                 onTaskChange = onTaskChange,
+                                onResetEntryFields = onResetEntryFields,
+                                autoClearEntryFieldsAfterStop = autoClearEntryFieldsAfterStop,
                                 onTagsChange = onTagsChange,
                                 onBillableChange = onBillableChange,
                                 onStart = onStartTracking,
@@ -1274,68 +1280,136 @@ internal fun LiveUpdateSettingRow(
     }
 }
 
+/** Full field clearing plus the description-only fallback shown when full clearing is disabled. */
+@Composable
+internal fun AutoClearEntryFieldsSettings(
+    autoClearEntryFieldsAfterStop: Boolean,
+    clearDescriptionAfterStop: Boolean,
+    onAutoClearEntryFieldsAfterStopChange: (Boolean) -> Unit,
+    onClearDescriptionAfterStopChange: (Boolean) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Dimens.Space16, vertical = Dimens.Space12),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.auto_clear_entry_fields_after_stop),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Text(
+                    text = stringResource(R.string.auto_clear_entry_fields_after_stop_description),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = autoClearEntryFieldsAfterStop,
+                onCheckedChange = onAutoClearEntryFieldsAfterStopChange,
+                modifier = Modifier
+                    .testTag(TrackingTestTags.AUTO_CLEAR_FIELDS_SWITCH)
+                    .heightIn(min = Dimens.MinTouchTarget),
+            )
+        }
+
+        AnimatedVisibility(
+            visible = !autoClearEntryFieldsAfterStop,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = Dimens.Space32,
+                        top = Dimens.Space8,
+                        end = Dimens.Space16,
+                        bottom = Dimens.Space12,
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.clear_description_after_stop),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        text = stringResource(R.string.clear_description_after_stop_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = clearDescriptionAfterStop,
+                    onCheckedChange = onClearDescriptionAfterStopChange,
+                    modifier = Modifier
+                        .testTag(TrackingTestTags.CLEAR_DESCRIPTION_AFTER_STOP_SWITCH)
+                        .heightIn(min = Dimens.MinTouchTarget),
+                )
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 @Suppress("LongMethod")
 private fun HistoryFilters(filter: HistoryFilter, uiState: TrackingUiState, onChange: (HistoryFilter) -> Unit) {
-    var expanded by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var optionsExpanded by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     var showDateRangePicker by remember { mutableStateOf(false) }
-    val activeCount = listOfNotNull(
-        filter.query.takeIf { it.isNotBlank() }, filter.billable, filter.runningOnly.takeIf { it },
+    val activeOptionsCount = listOfNotNull(
+        filter.billable, filter.runningOnly.takeIf { it },
         filter.syncStatus, filter.startDate, filter.endDate, filter.clientId, filter.projectId, filter.taskId, filter.tagId,
         filter.missingProjectOnly.takeIf { it }, filter.missingDescriptionOnly.takeIf { it },
         filter.needsCategorization.takeIf { it },
     ).size
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (expanded) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Dimens.Space8),
-            ) {
-                OutlinedTextField(
-                    value = filter.query,
-                    onValueChange = { onChange(filter.copy(query = it)) },
-                    label = { Text(stringResource(R.string.search_history)) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f).testTag(TrackingTestTags.FILTER_SEARCH_FIELD),
-                )
-                IconButton(
-                    onClick = { expanded = false },
-                    modifier = Modifier.testTag(TrackingTestTags.FILTER_CLOSE_BUTTON),
-                ) {
-                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close))
-                }
-            }
-        } else {
-            OutlinedButton(
-                onClick = { expanded = true },
-                modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.FILTER_OPEN_BUTTON),
-            ) {
-                Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(Dimens.IconMedium))
-                Spacer(Modifier.width(Dimens.Space8))
-                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
-                    Text(stringResource(R.string.search_and_filter), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    when {
-                        filter.query.isNotBlank() -> Text(
-                            filter.query,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        activeCount > 0 -> Text(
-                            pluralStringResource(R.plurals.active_filters_count, activeCount, activeCount),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
+        OutlinedTextField(
+            value = filter.query,
+            onValueChange = { onChange(filter.copy(query = it)) },
+            label = { Text(stringResource(R.string.search_history)) },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = if (filter.query.isNotBlank()) {
+                {
+                    IconButton(onClick = { onChange(filter.copy(query = "")) }) {
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear_search))
                     }
                 }
+            } else {
+                null
+            },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().testTag(TrackingTestTags.FILTER_SEARCH_FIELD),
+        )
+        OutlinedButton(
+            onClick = { optionsExpanded = !optionsExpanded },
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(
+                    if (optionsExpanded) TrackingTestTags.FILTER_CLOSE_BUTTON else TrackingTestTags.FILTER_OPEN_BUTTON,
+                ),
+        ) {
+            Icon(Icons.Default.FilterList, contentDescription = null, modifier = Modifier.size(Dimens.IconMedium))
+            Spacer(Modifier.width(Dimens.Space8))
+            Text(
+                stringResource(if (optionsExpanded) R.string.hide_search_options else R.string.search_options),
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (activeOptionsCount > 0) {
+                Text(
+                    pluralStringResource(R.plurals.active_filters_count, activeOptionsCount, activeOptionsCount),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
         AnimatedVisibility(
-            visible = expanded,
+            visible = optionsExpanded,
             enter = fadeIn(tween(FILTER_ENTER_DURATION_MS)) + expandVertically(tween(FILTER_EXPAND_DURATION_MS)),
             exit = fadeOut(tween(FILTER_EXIT_DURATION_MS)) + shrinkVertically(tween(FILTER_COLLAPSE_DURATION_MS)),
         ) {
@@ -1468,21 +1542,27 @@ private fun FilterDropdown(
 ) {
     if (options.isEmpty()) return
     var expanded by remember { mutableStateOf(false) }
-    Box {
-        FilterChip(
-            selected = selectedId != null,
-            onClick = { expanded = true },
-            label = { Text(options.firstOrNull { it.first == selectedId }?.second ?: label, maxLines = 1) },
-        )
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.all_items, label)) },
-                onClick = { onSelect(null); expanded = false },
+    FilterChip(
+        selected = selectedId != null,
+        onClick = { expanded = true },
+        label = {
+            Text(
+                options.firstOrNull { it.first == selectedId }?.second ?: label,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            options.forEach { (id, name) ->
-                DropdownMenuItem(text = { Text(name) }, onClick = { onSelect(id); expanded = false })
-            }
-        }
+        },
+    )
+    if (expanded) {
+        SearchableSingleSelectDialog(
+            title = label,
+            searchPlaceholder = stringResource(R.string.search_items, label),
+            allLabel = stringResource(R.string.all_items, label),
+            options = options,
+            selectedId = selectedId,
+            onSelect = onSelect,
+            onDismiss = { expanded = false },
+        )
     }
 }
 
@@ -1590,9 +1670,7 @@ private fun historyHeaderIndex(
     var index = 0
     for ((date, entries) in groups) {
         if (date == targetDate) return index
-        index += 1 + entries.groupBy {
-            "${it.projectId}_${it.taskId}_${it.description ?: ""}"
-        }.size
+        index += 1 + historyEntryGroups(entries).size
     }
     return -1
 }
@@ -1700,9 +1778,7 @@ internal fun LazyListScope.trackingHistoryItems(
                 val day = HistoryDay(
                     date = date,
                     entries = completed,
-                    groups = completed.groupBy {
-                        "${it.projectId}_${it.taskId}_${it.description.orEmpty()}"
-                    }.values.toList(),
+                    groups = historyEntryGroups(completed),
                 )
                 add(HistoryListItem.Header(day))
                 day.groups.forEach { add(HistoryListItem.Group(day.date, it)) }
@@ -1737,6 +1813,10 @@ internal fun LazyListScope.trackingHistoryItems(
     @Immutable
      data class Group(val date: LocalDate, val entries: List<TimeEntry>) : HistoryListItem
  }
+
+/** Keep every punch visible, even when multiple entries share the same project/task/description. */
+internal fun historyEntryGroups(entries: List<TimeEntry>): List<List<TimeEntry>> =
+    entries.map(::listOf)
 
 @Immutable
  private data class PreparedHistory(
@@ -1836,6 +1916,8 @@ internal fun TrackingControls(
     onDescriptionChange: (String) -> Unit,
     onProjectChange: (String?) -> Unit,
     onTaskChange: (String?) -> Unit,
+    onResetEntryFields: () -> Unit = {},
+    autoClearEntryFieldsAfterStop: Boolean = true,
     onTagsChange: (List<String>) -> Unit,
     onBillableChange: (Boolean) -> Unit,
     onStart: () -> Unit,
@@ -1937,6 +2019,23 @@ internal fun TrackingControls(
                 },
                 enabled = !uiState.isMutating
             )
+
+            if (!autoClearEntryFieldsAfterStop && !uiState.isTracking && !uiState.isPaused &&
+                (uiState.editingDescription.isNotEmpty() || uiState.editingProjectId != null || uiState.editingTaskId != null)) {
+                OutlinedButton(
+                    onClick = onResetEntryFields,
+                    enabled = !uiState.isMutating,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = Dimens.MinTouchTarget)
+                        .testTag(TrackingTestTags.RESET_FIELDS_BUTTON),
+                    shape = RoundedCornerShape(Dimens.CornerRadius),
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null)
+                    Spacer(Modifier.width(Dimens.Space8))
+                    Text(stringResource(R.string.reset_entry_fields))
+                }
+            }
 
             // Tags selector
             if (uiState.tags.isNotEmpty()) {
@@ -2357,10 +2456,7 @@ private fun DescriptionFieldWithSuggestions(
     }
 }
 
-/**
- * Combined Project/Task dropdown selector
- */
-@OptIn(ExperimentalMaterial3Api::class)
+/** Separately searchable project and task selectors shared by Track entry forms. */
 @Composable
 internal fun ProjectTaskDropdown(
     selectedProjectId: String?,
@@ -2372,46 +2468,15 @@ internal fun ProjectTaskDropdown(
     onCreateProject: ((String) -> Unit)? = null,
     onCreateTask: ((String, String) -> Unit)? = null,
 ) {
-    // Determine current selection
-    val selection = remember(selectedProjectId, selectedTaskId, projects, tasks) {
-        when {
-            selectedProjectId == null -> ProjectTaskSelection.NoProject
-            selectedTaskId == null -> {
-                projects.find { it.id == selectedProjectId }?.let {
-                    ProjectTaskSelection.ProjectOnly(it)
-                } ?: ProjectTaskSelection.NoProject
-            }
-
-            else -> {
-                val project = projects.find { it.id == selectedProjectId }
-                val task = tasks.find { it.id == selectedTaskId }
-                if (project != null && task != null) {
-                    ProjectTaskSelection.ProjectWithTask(project, task)
-                } else if (project != null) {
-                    ProjectTaskSelection.ProjectOnly(project)
-                } else {
-                    ProjectTaskSelection.NoProject
-                }
-            }
-        }
-    }
-
-    // Build display text
-    val displayText = when (selection) {
-        is ProjectTaskSelection.NoProject -> stringResource(R.string.no_project)
-        is ProjectTaskSelection.ProjectOnly -> selection.project.name
-        is ProjectTaskSelection.ProjectWithTask -> "${selection.project.name} - ${selection.task.name}"
-    }
-
     SharedProjectTaskDropdown(
         projects = projects,
         tasks = tasks,
-        displayText = displayText,
+        selectedProjectId = selectedProjectId,
+        selectedTaskId = selectedTaskId,
         onSelectionChanged = onSelectionChanged,
         enabled = enabled,
         showProjectColors = true,
         rounded = true,
-        selectedProjectId = selectedProjectId,
         onCreateProject = onCreateProject,
         onCreateTask = onCreateTask,
     )

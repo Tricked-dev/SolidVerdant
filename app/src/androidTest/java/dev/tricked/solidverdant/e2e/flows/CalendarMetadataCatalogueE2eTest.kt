@@ -164,7 +164,11 @@ class CalendarMetadataCatalogueE2eTest {
     }
 
     private fun createTask(composeRule: ComposeTestRule, taskName: String) {
-        openProjectSearch(composeRule, taskName)
+        composeRule.onNodeWithTag(TestTags.ENTRY_TASK_SELECTOR, useUnmergedTree = true)
+            .performScrollTo()
+            .performClick()
+        composeRule.waitUntilAtLeastOneExists(hasTestTag(TestTags.CATALOGUE_TASK_SEARCH), WAIT_MS)
+        composeRule.onNodeWithTag(TestTags.CATALOGUE_TASK_SEARCH, useUnmergedTree = true).performTextInput(taskName)
         composeRule.onNodeWithTag(TestTags.CATALOGUE_CREATE_TASK, useUnmergedTree = true).performClick()
         composeRule.onNodeWithTag(TestTags.CATALOGUE_CREATE_CONFIRM, useUnmergedTree = true).performClick()
         composeRule.waitUntilDoesNotExist(hasTestTag(TestTags.CATALOGUE_NAME), WAIT_MS)

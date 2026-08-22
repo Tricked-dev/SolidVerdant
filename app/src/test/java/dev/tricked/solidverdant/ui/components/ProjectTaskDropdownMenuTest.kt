@@ -21,36 +21,40 @@ class ProjectTaskDropdownMenuTest {
     private val tasks = listOf(turningTask, setupTask, otherTask)
 
     @Test
-    fun `project name match includes every task in that project`() {
-        val results = filterProjectsAndTasks(projects, tasks, "  m5337  ")
+    fun `project search is case insensitive and trims whitespace`() {
+        val results = filterProjects(projects, "  m5337  ")
 
-        assertEquals(listOf(matchingProject), results.projects)
-        assertEquals(listOf(turningTask, setupTask), results.tasksByProject[matchingProject.id])
+        assertEquals(listOf(matchingProject), results)
     }
 
     @Test
-    fun `task name match includes only matching tasks and their project`() {
-        val results = filterProjectsAndTasks(projects, tasks, "TURNING - RUNNING")
+    fun `task search is case insensitive and trims whitespace`() {
+        val results = filterTasks(listOf(turningTask, setupTask), "  TURNING - RUNNING  ")
 
-        assertEquals(listOf(matchingProject), results.projects)
-        assertEquals(listOf(turningTask), results.tasksByProject[matchingProject.id])
+        assertEquals(listOf(turningTask), results)
     }
 
     @Test
-    fun `blank query preserves all projects and tasks`() {
-        val results = filterProjectsAndTasks(projects, tasks, "   ")
-
-        assertEquals(projects, results.projects)
-        assertEquals(listOf(turningTask, setupTask), results.tasksByProject[matchingProject.id])
-        assertEquals(listOf(otherTask), results.tasksByProject[otherProject.id])
+    fun `blank searches preserve their available items`() {
+        assertEquals(projects, filterProjects(projects, "   "))
+        assertEquals(listOf(turningTask, setupTask), filterTasks(listOf(turningTask, setupTask), "   "))
     }
 
     @Test
-    fun `unmatched query returns no projects or tasks`() {
-        val results = filterProjectsAndTasks(projects, tasks, "not present")
+    fun `tasks are grouped once and scoped to their selected project`() {
+        val groupedTasks = groupTasksByProject(tasks)
 
-        assertEquals(emptyList<Project>(), results.projects)
-        assertEquals(emptyMap<String, List<Task>>(), results.tasksByProject)
+        assertEquals(listOf(turningTask, setupTask), groupedTasks[matchingProject.id])
+        assertEquals(listOf(otherTask), groupedTasks[otherProject.id])
+    }
+
+    @Test
+    fun `unmatched searches return no items`() {
+        val filteredProjects = filterProjects(projects, "not present")
+        val filteredTasks = filterTasks(tasks, "not present")
+
+        assertEquals(emptyList<Project>(), filteredProjects)
+        assertEquals(emptyList<Task>(), filteredTasks)
     }
 
     private fun project(id: String, name: String) = Project(id = id, name = name, color = "#000000")

@@ -23,11 +23,14 @@
     <string name="connection_test_failed">接続テストに失敗しました。</string>
     <string name="sync_entry_failed">この変更はサーバーに届いていません。</string>
     <string name="search_and_filter">検索と絞り込み</string>
+    <string name="search_options">検索オプション</string>
+    <string name="hide_search_options">検索オプションを非表示</string>
     <plurals name="active_filters_count">
         <item quantity="other">有効なフィルター: %1$d</item>
     </plurals>
     <string name="long_timer_notification_title">長時間タイマーの確認</string><string name="long_timer_notification_text">このタイマーは設定した時間制限に達しました。</string>
     <string name="all_items">すべての%1$s</string>
+    <string name="search_items">%1$sを検索</string>
     <string name="minutes_short">分</string>
     <string name="nav_track">記録</string><string name="nav_calendar">カレンダー</string><string name="nav_stats">統計</string>
     <string name="running_entries">実行中</string><string name="tracking_now">現在</string>
@@ -36,7 +39,7 @@
         <item quantity="other">%1$d件のエントリーを折りたたむ</item>
     </plurals>
     <string name="stats_empty">この期間に記録された時間はありません。</string><string name="stats_by_project">プロジェクト別</string><string name="stats_trend">推移</string><string name="stats_last_7_days">過去7日間</string><string name="stats_last_week">先週</string><string name="stats_this_week">今週</string><string name="stats_this_month">今月</string><string name="stats_previous_month">先月</string><string name="stats_custom">カスタム</string><string name="apply">適用</string><string name="stats_total">合計</string><string name="stats_entries">エントリー</string><string name="stats_average_day">1日平均</string><string name="calendar_show_month">月を表示</string><string name="calendar_previous_month">前の月</string><string name="calendar_next_month">次の月</string><string name="calendar_month_header">%2$d年%1$s</string>
-    <string name="calendar_drag_to_create">タップしてエントリーを作成するか、ドラッグして開始時刻と終了時刻を選択します。</string>
+    <string name="calendar_drag_to_create">タップしてエントリーを作成するか、長押ししてからドラッグし、開始時刻と終了時刻を選択します。</string>
     <string name="calendar_more_actions">その他のカレンダー操作</string>
     <string name="calendar_timer_running">実行中のタイマー</string>
     <string name="edit_start_time">開始時刻を編集</string>
@@ -152,10 +155,19 @@
     <string name="error_format">エラー: %1$s</string>
     <string name="retry">再試行</string>
     <string name="close">閉じる</string>
+    <string name="clear_search">検索をクリア</string>
     <string name="start_time_tracking">時間追跡を開始</string>
     <string name="project_task">プロジェクト / タスク</string>
     <string name="search_placeholder">検索…</string>
     <string name="no_project">プロジェクトなし</string>
+    <string name="no_task">タスクなし</string>
+    <string name="select_project">プロジェクトを選択</string>
+    <string name="select_task">タスクを選択</string>
+    <string name="select_project_first">先にプロジェクトを選択してください</string>
+    <string name="search_projects">プロジェクトを検索…</string>
+    <string name="search_tasks">タスクを検索…</string>
+    <string name="no_projects_available">利用可能なプロジェクトはありません</string>
+    <string name="no_tasks_available">このプロジェクトに利用可能なタスクはありません</string>
     <string name="no_client">クライアントなし</string>
     <string name="description_optional">説明（任意）</string>
     <string name="no_results_found">結果が見つかりません</string>
@@ -236,6 +248,11 @@
     <string name="live_timer_status_working">作業中</string>
     <string name="optimistic_refresh">楽観的な更新</string>
     <string name="optimistic_refresh_description">保存済みのアカウント情報ですぐに取得します。API 呼び出しが少し増えます</string>
+    <string name="auto_clear_entry_fields_after_stop">入力内容を自動消去</string>
+    <string name="auto_clear_entry_fields_after_stop_description">タイマー停止時に説明、プロジェクト、タスクを消去します</string>
+    <string name="clear_description_after_stop">停止時に説明を消去</string>
+    <string name="clear_description_after_stop_description">次の入力用にプロジェクトとタスクを保持します</string>
+    <string name="reset_entry_fields">入力内容をリセット</string>
     <string name="theme">テーマ</string>
     <string name="theme_description">アプリの配色を選択</string>
     <string name="theme_system">システム</string>

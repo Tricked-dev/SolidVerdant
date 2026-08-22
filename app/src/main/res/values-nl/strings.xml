@@ -23,12 +23,15 @@
     <string name="connection_test_failed">De verbindingstest is mislukt.</string>
     <string name="sync_entry_failed">Deze wijziging heeft de server niet bereikt.</string>
     <string name="search_and_filter">Zoeken en filteren</string>
+    <string name="search_options">Zoekopties</string>
+    <string name="hide_search_options">Zoekopties verbergen</string>
     <plurals name="active_filters_count">
         <item quantity="one">%1$d actief filter</item>
         <item quantity="other">%1$d actieve filters</item>
     </plurals>
     <string name="long_timer_notification_title">Controle lange timer</string><string name="long_timer_notification_text">Deze timer heeft de ingestelde duur bereikt.</string>
     <string name="all_items">Alle %1$s</string>
+    <string name="search_items">Zoek %1$s</string>
     <string name="minutes_short">min</string>
     <string name="nav_track">Registreren</string><string name="nav_calendar">Kalender</string><string name="nav_stats">Statistieken</string>
     <string name="running_entries">Lopend</string><string name="tracking_now">nu</string>
@@ -38,7 +41,7 @@
         <item quantity="other">%1$d boekingen inklappen</item>
     </plurals>
     <string name="stats_empty">Geen geregistreerde tijd in deze periode.</string><string name="stats_by_project">Per project</string><string name="stats_trend">Trend</string><string name="stats_last_7_days">Afgelopen 7 dagen</string><string name="stats_last_week">Vorige week</string><string name="stats_this_week">Deze week</string><string name="stats_this_month">Deze maand</string><string name="stats_previous_month">Vorige maand</string><string name="stats_custom">Aangepast</string><string name="apply">Toepassen</string><string name="stats_total">Totaal</string><string name="stats_entries">Boekingen</string><string name="stats_average_day">Gem. / dag</string><string name="calendar_show_month">Maand tonen</string><string name="calendar_previous_month">Vorige maand</string><string name="calendar_next_month">Volgende maand</string><string name="calendar_month_header">%1$s %2$d</string>
-    <string name="calendar_drag_to_create">Tik om een boeking te maken of sleep om een start- en eindtijd te selecteren.</string>
+    <string name="calendar_drag_to_create">Tik om een boeking te maken, of houd vast en sleep om een start- en eindtijd te selecteren.</string>
     <string name="calendar_more_actions">Meer kalenderacties</string>
     <string name="calendar_timer_running">Lopende timer</string>
     <string name="edit_start_time">Starttijd bewerken</string>
@@ -162,10 +165,19 @@
     <string name="error_format">Fout: %1$s</string>
     <string name="retry">Opnieuw Proberen</string>
     <string name="close">Sluiten</string>
+    <string name="clear_search">Zoekopdracht wissen</string>
     <string name="start_time_tracking">Tijdregistratie Starten</string>
     <string name="project_task">Project / Taak</string>
     <string name="search_placeholder">Zoeken…</string>
     <string name="no_project">Geen Project</string>
+    <string name="no_task">Geen taak</string>
+    <string name="select_project">Project selecteren</string>
+    <string name="select_task">Taak selecteren</string>
+    <string name="select_project_first">Selecteer eerst een project</string>
+    <string name="search_projects">Projecten zoeken…</string>
+    <string name="search_tasks">Taken zoeken…</string>
+    <string name="no_projects_available">Geen projecten beschikbaar</string>
+    <string name="no_tasks_available">Geen taken beschikbaar voor dit project</string>
     <string name="no_client">Geen klant</string>
     <string name="description_optional">Beschrijving (Optioneel)</string>
     <string name="no_results_found">Geen resultaten gevonden</string>
@@ -248,6 +260,11 @@
     <string name="live_timer_status_working">Bezig</string>
     <string name="optimistic_refresh">Optimistisch vernieuwen</string>
     <string name="optimistic_refresh_description">Haal gegevens direct op met opgeslagen accountinformatie; gebruikt enkele extra API-aanroepen</string>
+    <string name="auto_clear_entry_fields_after_stop">Invoervelden automatisch wissen</string>
+    <string name="auto_clear_entry_fields_after_stop_description">Wis de beschrijving, het project en de taak wanneer de timer stopt</string>
+    <string name="clear_description_after_stop">Beschrijving wissen na stoppen</string>
+    <string name="clear_description_after_stop_description">Behoud het project en de taak voor de volgende invoer</string>
+    <string name="reset_entry_fields">Invoervelden wissen</string>
     <string name="theme">Thema</string>
     <string name="theme_description">Kies de kleurstijl van de app</string>
     <string name="theme_system">Systeem</string>

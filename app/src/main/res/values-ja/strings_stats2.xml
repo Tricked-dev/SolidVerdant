@@ -29,6 +29,7 @@
 
     <!-- フィルターバーとフィルターシート。 -->
     <string name="stats2_filters">フィルター</string>
+    <string name="stats2_date_range">日付範囲</string>
     <string name="stats2_filters_content_description">統計フィルターを編集</string>
     <string name="stats2_filter_sheet_title">統計をフィルター</string>
     <string name="stats2_active_scope_none">すべての記録時間を表示中</string>
@@ -36,6 +37,7 @@
     <string name="stats2_clear_filters_content_description">すべての統計フィルターをクリア</string>
     <string name="stats2_reset">リセット</string>
     <string name="stats2_filter_projects">プロジェクト</string>
+    <string name="stats2_search_projects">プロジェクトを検索</string>
     <string name="stats2_filter_clients">クライアント</string>
     <string name="stats2_filter_tasks">タスク</string>
     <string name="stats2_filter_tags">タグ</string>

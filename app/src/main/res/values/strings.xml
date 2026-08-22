@@ -23,12 +23,15 @@
     <string name="connection_test_failed">The connection test failed.</string>
     <string name="sync_entry_failed">This change has not reached the server.</string>
     <string name="search_and_filter">Search &amp; filter</string>
+    <string name="search_options">Search options</string>
+    <string name="hide_search_options">Hide search options</string>
     <plurals name="active_filters_count">
         <item quantity="one">%1$d active filter</item>
         <item quantity="other">%1$d active filters</item>
     </plurals>
     <string name="long_timer_notification_title">Long timer check</string><string name="long_timer_notification_text">This timer reached your configured duration limit.</string>
     <string name="all_items">All %1$s</string>
+    <string name="search_items">Search %1$s</string>
     <string name="minutes_short">min</string>
     <string name="widget_zero_time" translatable="false">00:00:00</string>
     <string name="running_entries">Running</string><string name="tracking_now">now</string>
@@ -38,7 +41,7 @@
         <item quantity="other">Collapse %1$d entries</item>
     </plurals>
     <string name="stats_empty">No tracked time in this range.</string><string name="stats_by_project">By project</string><string name="stats_trend">Trend</string><string name="stats_last_7_days">Last 7 days</string><string name="stats_last_week">Last week</string><string name="stats_this_week">This week</string><string name="stats_this_month">This month</string><string name="stats_previous_month">Previous month</string><string name="stats_custom">Custom</string><string name="apply">Apply</string><string name="stats_total">Total</string><string name="stats_entries">Entries</string><string name="stats_average_day">Avg / day</string><string name="calendar_show_month">Show month</string><string name="calendar_previous_month">Previous month</string><string name="calendar_next_month">Next month</string><string name="calendar_month_header">%1$s %2$d</string>
-    <string name="calendar_drag_to_create">Tap to create an entry, or drag to select a start and end time.</string>
+    <string name="calendar_drag_to_create">Tap to create an entry, or touch and hold before dragging to select a start and end time.</string>
     <string name="calendar_more_actions">More calendar actions</string>
     <string name="calendar_timer_running">Running timer</string>
     <string name="edit_start_time">Edit start time</string>
@@ -164,6 +167,7 @@
     <string name="error_format">Error: %1$s</string>
     <string name="retry">Retry</string>
     <string name="close">Close</string>
+    <string name="clear_search">Clear search</string>
     <string name="start_time_tracking">Start Time Tracking</string>
     <string name="project_task">Project / Task</string>
     <string name="search_placeholder">Search…</string>
@@ -171,6 +175,14 @@
     <string name="needs_categorization">Needs categorization</string>
     <string name="clear_filters">Clear filters</string>
     <string name="no_project">No Project</string>
+    <string name="no_task">No task</string>
+    <string name="select_project">Select project</string>
+    <string name="select_task">Select task</string>
+    <string name="select_project_first">Select a project first</string>
+    <string name="search_projects">Search projects…</string>
+    <string name="search_tasks">Search tasks…</string>
+    <string name="no_projects_available">No projects available</string>
+    <string name="no_tasks_available">No tasks available for this project</string>
     <string name="no_client">No client</string>
     <string name="description_optional">Description (Optional)</string>
     <string name="no_results_found">No results found</string>
@@ -257,6 +269,11 @@
     <string name="live_timer_status_working">Working</string>
     <string name="optimistic_refresh">Optimistic refresh</string>
     <string name="optimistic_refresh_description">Fetch data immediately using cached account info; uses a few extra API calls</string>
+    <string name="auto_clear_entry_fields_after_stop">Auto-clear entry fields</string>
+    <string name="auto_clear_entry_fields_after_stop_description">Clear the description, project, and task when the timer stops</string>
+    <string name="clear_description_after_stop">Clear description after stop</string>
+    <string name="clear_description_after_stop_description">Keep the project and task selected for the next entry</string>
+    <string name="reset_entry_fields">Reset entry fields</string>
     <string name="theme">Theme</string>
     <string name="theme_description">Choose the app color style</string>
     <string name="theme_system">System</string>

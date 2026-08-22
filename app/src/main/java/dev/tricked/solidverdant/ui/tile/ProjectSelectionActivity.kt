@@ -187,13 +187,10 @@ fun StartTrackingForm(
     var selection by remember { mutableStateOf<ProjectTaskSelection>(ProjectTaskSelection.NoProject) }
     var description by remember { mutableStateOf("") }
 
-    val displayText = when (selection) {
-        is ProjectTaskSelection.NoProject -> stringResource(R.string.no_project)
-        is ProjectTaskSelection.ProjectOnly -> (selection as ProjectTaskSelection.ProjectOnly).project.name
-        is ProjectTaskSelection.ProjectWithTask -> {
-            val sel = selection as ProjectTaskSelection.ProjectWithTask
-            "${sel.project.name} - ${sel.task.name}"
-        }
+    val selectedIds = when (val current = selection) {
+        is ProjectTaskSelection.NoProject -> null to null
+        is ProjectTaskSelection.ProjectOnly -> current.project.id to null
+        is ProjectTaskSelection.ProjectWithTask -> current.project.id to current.task.id
     }
 
     Text(
@@ -206,7 +203,8 @@ fun StartTrackingForm(
     ProjectTaskDropdown(
         projects = projects,
         tasks = tasks,
-        displayText = displayText,
+        selectedProjectId = selectedIds.first,
+        selectedTaskId = selectedIds.second,
         onSelectionChanged = { projectId, taskId ->
             val project = projects.find { it.id == projectId }
             val task = tasks.find { it.id == taskId }

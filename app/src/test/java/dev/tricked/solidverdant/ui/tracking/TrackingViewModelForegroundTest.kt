@@ -174,20 +174,15 @@ class TrackingViewModelForegroundTest {
 
     @Test
     fun `routine pending sync stays hidden until it is slow`() = runTest(dispatcher.scheduler) {
-        db.outboxDao().insert(
-            OutboxEntity(
-                opType = OutboxOpType.UPDATE,
-                organizationId = ORG,
-                timeEntryId = "pending-entry",
-                payloadJson = "{}",
-                createdAtMs = 1L,
-            ),
+        val operation = TimeEntryRepository.SyncOperation(
+            entryId = "pending-entry",
+            type = OutboxOpType.UPDATE,
+            status = TimeEntryRepository.EntrySyncStatus.PENDING,
+            attemptCount = 0,
+            error = null,
         )
         val vm = viewModel()
-        vm.loadAllData(ORG, MEMBER)
-
-        vm.uiState.first { it.syncOperations.isNotEmpty() }
-        shadowOf(Looper.getMainLooper()).idle()
+        vm.acceptSyncOperationsForTest(listOf(operation))
         dispatcher.scheduler.runCurrent()
         assertFalse(vm.uiState.value.syncStatusVisible)
 
@@ -199,11 +194,6 @@ class TrackingViewModelForegroundTest {
         // a later Room emission can replace the state between the assertion message and condition.
         val visibleState = async { vm.uiState.first { it.syncStatusVisible } }
         dispatcher.scheduler.advanceTimeBy(1)
-        // Flush work scheduled exactly at the reveal boundary; a Room emission can enqueue the
-        // visibility continuation behind the timer callback on the same virtual timestamp.
-        shadowOf(Looper.getMainLooper()).idle()
-        dispatcher.scheduler.advanceUntilIdle()
-        shadowOf(Looper.getMainLooper()).idle()
         dispatcher.scheduler.runCurrent()
         val revealed = visibleState.await()
         assertEquals(

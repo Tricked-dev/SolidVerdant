@@ -576,6 +576,7 @@ private fun DayColumn(
                 subtitle = subtitle,
                 time = duration,
                 modifier = entryModifier
+                    .height((totalHeight * block.heightFraction).coerceAtLeast(Dimens.EntryMinHeight))
                     .combinedClickable(
                         onClick = { onEntryClick(entry) },
                         onLongClick = { onEntryLongPress(entry) },

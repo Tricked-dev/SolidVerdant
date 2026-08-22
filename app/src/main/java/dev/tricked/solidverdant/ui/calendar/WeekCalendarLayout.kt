@@ -307,15 +307,24 @@ fun layoutTrackedEntries(
             ?.let { (startSec, endSec) -> Clipped(entry, startSec, endSec) }
     }.sortedWith(compareBy({ it.startSec }, { -it.endSec }, { it.entry.id }))
 
-    val packing = packOverlaps(clipped.map { it.startSec to it.endSec })
     val secondsInGrid = calendarGridBounds(day, zone, settings).seconds.toFloat()
+    val minimumVisibleFraction =
+        (Dimens.EntryMinHeight.value / calendarTotalHeight(settings).value)
+            .coerceAtLeast(MIN_ENTRY_HEIGHT_FRACTION)
+    val minimumVisibleSeconds = (secondsInGrid * minimumVisibleFraction).toLong().coerceAtLeast(1L)
+    // Pack using the visible interval, not only the factual interval. A short entry is deliberately
+    // drawn tall enough to read and tap; adjacent short entries therefore need separate lanes when
+    // those minimum-height blocks would otherwise paint over each other.
+    val packing = packOverlaps(
+        clipped.map { item -> item.startSec to maxOf(item.endSec, item.startSec + minimumVisibleSeconds) },
+    )
     return clipped.mapIndexed { index, item ->
         val (column, columnCount) = packing[index]
         TrackedEntryBlock(
             entry = item.entry,
             startFraction = item.startSec.toFloat() / secondsInGrid,
             heightFraction = ((item.endSec - item.startSec).toFloat() / secondsInGrid)
-                .coerceAtLeast(MIN_ENTRY_HEIGHT_FRACTION),
+                .coerceAtLeast(minimumVisibleFraction),
             column = column,
             columnCount = columnCount,
         )
