@@ -39,7 +39,7 @@
         <item quantity="other">%1$d件のエントリーを折りたたむ</item>
     </plurals>
     <string name="stats_empty">この期間に記録された時間はありません。</string><string name="stats_by_project">プロジェクト別</string><string name="stats_trend">推移</string><string name="stats_last_7_days">過去7日間</string><string name="stats_last_week">先週</string><string name="stats_this_week">今週</string><string name="stats_this_month">今月</string><string name="stats_previous_month">先月</string><string name="stats_custom">カスタム</string><string name="apply">適用</string><string name="stats_total">合計</string><string name="stats_entries">エントリー</string><string name="stats_average_day">1日平均</string><string name="calendar_show_month">月を表示</string><string name="calendar_previous_month">前の月</string><string name="calendar_next_month">次の月</string><string name="calendar_month_header">%2$d年%1$s</string>
-    <string name="calendar_drag_to_create">タップしてエントリーを作成するか、ドラッグして開始時刻と終了時刻を選択します。</string>
+    <string name="calendar_drag_to_create">タップしてエントリーを作成するか、長押ししてからドラッグし、開始時刻と終了時刻を選択します。</string>
     <string name="calendar_more_actions">その他のカレンダー操作</string>
     <string name="calendar_timer_running">実行中のタイマー</string>
     <string name="edit_start_time">開始時刻を編集</string>

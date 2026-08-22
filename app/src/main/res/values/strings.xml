@@ -41,7 +41,7 @@
         <item quantity="other">Collapse %1$d entries</item>
     </plurals>
     <string name="stats_empty">No tracked time in this range.</string><string name="stats_by_project">By project</string><string name="stats_trend">Trend</string><string name="stats_last_7_days">Last 7 days</string><string name="stats_last_week">Last week</string><string name="stats_this_week">This week</string><string name="stats_this_month">This month</string><string name="stats_previous_month">Previous month</string><string name="stats_custom">Custom</string><string name="apply">Apply</string><string name="stats_total">Total</string><string name="stats_entries">Entries</string><string name="stats_average_day">Avg / day</string><string name="calendar_show_month">Show month</string><string name="calendar_previous_month">Previous month</string><string name="calendar_next_month">Next month</string><string name="calendar_month_header">%1$s %2$d</string>
-    <string name="calendar_drag_to_create">Tap to create an entry, or drag to select a start and end time.</string>
+    <string name="calendar_drag_to_create">Tap to create an entry, or touch and hold before dragging to select a start and end time.</string>
     <string name="calendar_more_actions">More calendar actions</string>
     <string name="calendar_timer_running">Running timer</string>
     <string name="edit_start_time">Edit start time</string>
