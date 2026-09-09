@@ -72,12 +72,14 @@ import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.TimeEntryType
+import dev.tricked.solidverdant.domain.time.formatTimeEntryInstant
 import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.ui.theme.Dimens
 import dev.tricked.solidverdant.ui.tracking.EntryTimeValidator
 import dev.tricked.solidverdant.ui.tracking.EntryTrustRules
 import dev.tricked.solidverdant.ui.tracking.EntryValidationBanner
 import dev.tricked.solidverdant.ui.tracking.TagsSelector
+import java.time.Duration
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -154,13 +156,13 @@ fun EditTimeEntryDialog(
                 entry ?: TimeEntry(
                     id = "",
                     userId = "",
-                    start = startTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
-                    end = endTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                    start = formatTimeEntryInstant(startTime),
+                    end = formatTimeEntryInstant(endTime),
                     organizationId = existingEntries.firstOrNull()?.organizationId.orEmpty(),
                 )
                 ).copy(
-                start = startTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
-                end = endTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                start = formatTimeEntryInstant(startTime),
+                end = formatTimeEntryInstant(endTime),
             )
             existingEntries.any { it.id != candidate.id && EntryTrustRules.overlaps(candidate, it) }
         }
@@ -457,8 +459,8 @@ fun EditTimeEntryDialog(
                             taskId.takeUnless { isBreakEntry },
                             selectedTags.takeUnless { isBreakEntry }.orEmpty(),
                             billable && !isBreakEntry,
-                            startTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
-                            endTime.takeUnless { isRunningEntry }?.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                            formatTimeEntryInstant(startTime),
+                            endTime.takeUnless { isRunningEntry }?.let(::formatTimeEntryInstant),
                         )
                     },
                     enabled = durationIsValid && validation.canSave,
@@ -505,11 +507,9 @@ fun EditTimeEntryDialog(
             onDismiss = { editingTime = null },
             onConfirm = { hour, minute ->
                 if (field == TimeField.Start) {
-                    startTime = startTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
-                    if (!isRunningEntry) {
-                        val minutes = durationMinutes.toLongOrNull() ?: 1
-                        endTime = startTime.plusMinutes(minutes)
-                    }
+                    val newStart = startTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
+                    if (!isRunningEntry) endTime = retimedEnd(startTime, newStart, endTime)
+                    startTime = newStart
                 } else {
                     val sameDayEnd = endTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
                     // Do not silently roll an earlier clock-time into a ~24h entry: only a plausible
@@ -530,11 +530,9 @@ fun EditTimeEntryDialog(
             onDismiss = { editingDate = null },
             onConfirm = { date ->
                 if (field == TimeField.Start) {
-                    startTime = startTime.with(date)
-                    if (!isRunningEntry) {
-                        val minutes = durationMinutes.toLongOrNull() ?: 1
-                        endTime = startTime.plusMinutes(minutes)
-                    }
+                    val newStart = startTime.with(date)
+                    if (!isRunningEntry) endTime = retimedEnd(startTime, newStart, endTime)
+                    startTime = newStart
                 } else {
                     endTime = endTime.with(date)
                     durationMinutes = java.time.Duration.between(startTime, endTime).toMinutes().toString()
@@ -766,6 +764,10 @@ private fun EntryTimePickerDialog(title: String, initial: ZonedDateTime, onDismi
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
+
+/** Moving the start keeps the entry's exact length; the minutes field alone rounds seconds away. */
+internal fun retimedEnd(previousStart: ZonedDateTime, newStart: ZonedDateTime, end: ZonedDateTime): ZonedDateTime =
+    end.plus(Duration.between(previousStart, newStart))
 
 private fun formatEditableDuration(minutes: Long): String {
     val hours = minutes / MINUTES_PER_HOUR

@@ -51,6 +51,9 @@ data class TimeEntry(
     val type: TimeEntryType = TimeEntryType.WORK,
 )
 
+/** Optimistic START/CREATE rows carry this prefix until sync rekeys them to the server id. */
+fun isLocalTimeEntryId(id: String): Boolean = id.startsWith("local-")
+
 @Serializable
 enum class TimeEntryType {
     @SerialName("work")

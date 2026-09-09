@@ -10,4 +10,8 @@ package dev.tricked.solidverdant.ui.sync
 object SyncCenterTestTags {
     const val SCREEN = "sync_status_screen"
     const val BACK_BUTTON = "sync_status_back"
+
+    fun conflictRetry(entryId: String) = "sync_conflict_retry_$entryId"
+
+    fun failedRetry(entryId: String) = "sync_failed_retry_$entryId"
 }

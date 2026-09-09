@@ -154,7 +154,7 @@ class StatisticsAggregatorTest {
     }
 
     @Test
-    fun `groups by project and null becomes No project sorted desc`() {
+    fun `groups by project and null keeps a null name sorted desc`() {
         val entries = listOf(
             entry("1", "2026-07-01T09:00:00Z", duration = 100, projectId = "p1"),
             entry("2", "2026-07-01T10:00:00Z", duration = 500, projectId = "p2"),
@@ -168,7 +168,7 @@ class StatisticsAggregatorTest {
             utc,
             TrendGranularity.DAY,
         )
-        assertEquals(listOf("Beta", "No project", "Alpha"), s.perProject.map { it.projectName })
+        assertEquals(listOf("Beta", null, "Alpha"), s.perProject.map { it.projectName })
         assertEquals(500L, s.perProject.first().seconds)
         assertEquals("#9E9E9E", s.perProject.first { it.projectId == null }.colorHex)
     }

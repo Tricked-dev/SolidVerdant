@@ -157,7 +157,7 @@ class AuthViewModel @Inject constructor(
                     Timber.e(error, "Failed to start OAuth flow")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = error.message ?: "Failed to start OAuth flow",
+                        error = error.message ?: context.getString(R.string.auth_error_start_oauth),
                     )
                 }
         }
@@ -169,7 +169,7 @@ class AuthViewModel @Inject constructor(
     fun handleOAuthCallback(code: String?, state: String?) {
         if (code.isNullOrEmpty() || state.isNullOrEmpty()) {
             _uiState.value = _uiState.value.copy(
-                error = "Invalid OAuth callback parameters",
+                error = context.getString(R.string.auth_error_invalid_callback),
             )
             return
         }
@@ -187,7 +187,7 @@ class AuthViewModel @Inject constructor(
                     Timber.e(error, "Failed to handle OAuth callback")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = error.message ?: "Failed to complete OAuth flow",
+                        error = error.message ?: context.getString(R.string.auth_error_complete_oauth),
                     )
                 }
         }
@@ -243,7 +243,7 @@ class AuthViewModel @Inject constructor(
                         Timber.e(error, "Failed to load memberships")
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
-                            error = error.message ?: "Failed to load memberships",
+                            error = error.message ?: context.getString(R.string.auth_error_load_memberships),
                         )
                     }
             }

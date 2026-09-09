@@ -22,6 +22,7 @@
     <string name="connection_failed">サーバーに接続できませんでした。</string>
     <string name="connection_test_failed">接続テストに失敗しました。</string>
     <string name="sync_entry_failed">この変更はサーバーに届いていません。</string>
+    <string name="sync_retry_entry">同期を再試行</string>
     <string name="search_and_filter">検索と絞り込み</string>
     <string name="search_options">検索オプション</string>
     <string name="hide_search_options">検索オプションを非表示</string>
@@ -108,7 +109,7 @@
     <!-- App Name -->
     <string name="app_name">ソリッドグリーン</string>
     <string name="tile_label">時間追跡</string>
-    <string name="sync_error">一部の変更を同期できませんでした。自動的に再試行されます。</string>
+    <string name="sync_error">一部の変更を同期できませんでした。再試行するか、同期センターで確認してください。</string>
     <string name="sync_conflict_edit_locked">編集を保存する前に、レビューでこの同期競合を解決してください。</string>
 
     <!-- Login Screen -->
@@ -295,4 +296,22 @@
     <string name="entry_warning_overlap">このエントリは他のエントリと重複しています。重複は許可されますが、フラグが付く場合があります。</string>
     <string name="entry_warning_overlap_policy">このエントリは他のエントリと重複しており、組織のポリシーで推奨されていません。</string>
 
+    <string name="error_load_tracking_state">トラッキング状態を読み込めませんでした。</string>
+    <string name="error_load_more_entries">追加のエントリーを読み込めませんでした。</string>
+    <string name="error_load_date">その日付を読み込めませんでした。</string>
+    <string name="error_start_entry">エントリーを開始できませんでした。</string>
+    <string name="error_update_entry">エントリーを更新できませんでした。</string>
+    <string name="error_stop_entry">エントリーを停止できませんでした。</string>
+    <string name="error_pause_entry">エントリーを一時停止できませんでした。</string>
+    <string name="error_resume_entry">エントリーを再開できませんでした。</string>
+    <string name="error_create_entry">エントリーを作成できませんでした。</string>
+    <string name="error_duplicate_entry">エントリーを複製できませんでした。</string>
+    <string name="error_split_entry">エントリーを分割できませんでした。</string>
+    <string name="tracking_invalid_time">無効な時刻</string>
+    <string name="auth_error_start_oauth">サインインを開始できませんでした。</string>
+    <string name="auth_error_invalid_callback">サインインの応答が不完全でした。もう一度お試しください。</string>
+    <string name="auth_error_complete_oauth">サインインを完了できませんでした。</string>
+    <string name="auth_error_load_memberships">組織を読み込めませんでした。</string>
+    <string name="tile_error_no_organization">組織が選択されていません。</string>
+    <string name="tile_error_load_projects">プロジェクトを読み込めませんでした。</string>
 </resources>

@@ -32,6 +32,10 @@ interface OutboxDao {
     @Query("SELECT * FROM outbox ORDER BY id ASC")
     fun observeAll(): Flow<List<OutboxEntity>>
 
+    /** Dead-lettered rows the current organization's Sync center would otherwise never show. */
+    @Query("SELECT COUNT(*) FROM outbox WHERE deadLettered = 1 AND organizationId != :organizationId")
+    fun observeDeadLetteredOutsideOrganization(organizationId: String): Flow<Int>
+
     @Insert
     suspend fun insert(op: OutboxEntity): Long
 

@@ -212,8 +212,17 @@ class TimeTrackingTileService : TileService() {
                     }
 
                     else -> {
-                        // Network failed or no active entry
-                        val cachedEntry = getCachedEntryForStop()
+                        // Network failed or no active entry. The cache is written only by this
+                        // tile, so a stop made in the app leaves a stale id behind; Room already
+                        // knows that entry ended, and stopping it again would only fail.
+                        val cachedEntry = getCachedEntryForStop()?.takeIf { cached ->
+                            timeEntryRepository.isEntryRunning(cached.entryId).also { running ->
+                                if (!running) {
+                                    Timber.d("Dropping cached entry that is no longer running")
+                                    clearCachedEntry()
+                                }
+                            }
+                        }
                         if (cachedEntry != null) {
                             // We have cached entry data - try to stop using it
                             Timber.d("Using cached entry for stop")

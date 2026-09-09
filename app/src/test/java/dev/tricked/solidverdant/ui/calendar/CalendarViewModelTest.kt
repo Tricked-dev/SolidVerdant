@@ -330,10 +330,14 @@ class CalendarViewModelTest {
     fun prefetches_the_month_before_and_after_the_visible_month() = runTest {
         val reader = FakeReader(emptyList())
         val model = vm(reader)
+        // Pin the week inside one month; the default week anchor is today, and a week that
+        // straddles a month boundary legitimately loads four months.
+        model.selectDate(LocalDate.of(2026, 7, 15))
 
         model.setOrganization("org1")
 
         val visible = model.uiState.value.visibleMonth
+        assertEquals(YearMonth.of(2026, 7), visible)
         assertEquals(
             listOf(visible, visible.minusMonths(1), visible.plusMonths(1)),
             reader.loadedMonths,

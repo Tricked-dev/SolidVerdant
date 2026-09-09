@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.WindowInsets
@@ -76,6 +77,7 @@ import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.SyncProblem
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
@@ -187,6 +189,7 @@ import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.domain.time.clipTimeEntryToLocalDay
+import dev.tricked.solidverdant.domain.time.formatTimeEntryInstant
 import dev.tricked.solidverdant.domain.time.isCompletedTimeEntry
 import dev.tricked.solidverdant.domain.time.isRunningTimeEntry
 import dev.tricked.solidverdant.domain.time.isWorkTimeEntry
@@ -207,12 +210,15 @@ import dev.tricked.solidverdant.data.local.AppThemeMode
 import dev.tricked.solidverdant.ui.components.ProjectTaskDropdown as SharedProjectTaskDropdown
 import dev.tricked.solidverdant.ui.components.EntryDateFieldButton
 import dev.tricked.solidverdant.ui.components.EntryDatePickerDialog
+import dev.tricked.solidverdant.ui.components.retimedEnd
 import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
 import dev.tricked.solidverdant.ui.components.SectionCard
 import dev.tricked.solidverdant.ui.components.SearchableSingleSelectDialog
 import dev.tricked.solidverdant.ui.components.SyncChip
 import dev.tricked.solidverdant.ui.localization.appLocale
 import dev.tricked.solidverdant.ui.theme.Dimens
+import dev.tricked.solidverdant.ui.theme.syncFailed
+import dev.tricked.solidverdant.ui.theme.syncPending
 import dev.tricked.solidverdant.util.IsoTimes
 import dev.tricked.solidverdant.util.NotificationPermissionHelper
 import dev.tricked.solidverdant.service.TimeTrackingNotificationService
@@ -294,6 +300,7 @@ fun TrackingScreen(
     onLoadNewerEntries: () -> Unit,
     onJumpToDate: (LocalDate) -> Unit,
     onHistoryJumpConsumed: () -> Unit,
+    onClearError: () -> Unit = {},
 ) {
     var showEditDialog by remember { mutableStateOf<TimeEntry?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
@@ -321,6 +328,7 @@ fun TrackingScreen(
     }
     val templatesSavedMessage = stringResource(R.string.templates_saved)
     val entryDeletedMessage = stringResource(R.string.entry_deleted)
+    val conflictEditLockedMessage = stringResource(R.string.sync_conflict_edit_locked)
     val undoLabel = stringResource(R.string.undo)
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -342,9 +350,20 @@ fun TrackingScreen(
 
     LaunchedEffect(editActiveEntryRequested, uiState.currentTimeEntry) {
         if (editActiveEntryRequested) {
-            uiState.currentTimeEntry?.takeUnless { it.id in uiState.conflictedEntryIds }?.let { showEditDialog = it }
-            if (uiState.currentTimeEntry != null) onEditActiveEntryConsumed()
+            val entry = uiState.currentTimeEntry ?: return@LaunchedEffect
+            onEditActiveEntryConsumed()
+            if (entry.id in uiState.conflictedEntryIds) {
+                snackbarHostState.showSnackbar(conflictEditLockedMessage, withDismissAction = true)
+            } else {
+                showEditDialog = entry
+            }
         }
+    }
+
+    LaunchedEffect(uiState.error) {
+        val message = uiState.error ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message = message, withDismissAction = true)
+        onClearError()
     }
 
     // Roadmap #13: after a duplicate/split the VM emits the new entry's id; open it for editing
@@ -607,12 +626,14 @@ fun TrackingScreen(
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
+                                .heightIn(min = Dimens.MinTouchTarget)
+                                .clickable(role = Role.Button) {
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                     clipboard.setPrimaryClip(ClipData.newPlainText("Server endpoint", serverEndpoint))
                                     Toast.makeText(context, R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show()
                                 }
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .wrapContentHeight()
                         )
                         Text(
                             text = stringResource(R.string.client_id),
@@ -626,12 +647,14 @@ fun TrackingScreen(
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
+                                .heightIn(min = Dimens.MinTouchTarget)
+                                .clickable(role = Role.Button) {
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                     clipboard.setPrimaryClip(ClipData.newPlainText("Client ID", clientId))
                                     Toast.makeText(context, R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show()
                                 }
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .wrapContentHeight()
                         )
 
                         Spacer(modifier = Modifier.height(16.dp))
@@ -926,16 +949,21 @@ fun TrackingScreen(
                     if (uiState.syncStatusVisible) uiState.syncOperations else emptyList()
                 }
                 val syncStatusByEntryId = remember(visibleSyncOperations) {
-                    visibleSyncOperations.groupBy { it.entryId }.mapValues { (_, operations) ->
-                        operations.last().status
-                    }
+                    worstSyncStatusByEntryId(visibleSyncOperations)
+                }
+                val showConflictLocked: () -> Unit = {
+                    scope.launch { snackbarHostState.showSnackbar(conflictEditLockedMessage, withDismissAction = true) }
                 }
                 val onHistoryEdit = remember(uiState.conflictedEntryIds) {
-                    { entry: TimeEntry -> if (entry.id !in uiState.conflictedEntryIds) showEditDialog = entry }
+                    { entry: TimeEntry ->
+                        if (entry.id in uiState.conflictedEntryIds) showConflictLocked() else showEditDialog = entry
+                    }
                 }
                 val onHistoryDelete = remember(uiState.conflictedEntryIds) {
                     { entry: TimeEntry ->
-                        if (entry.id !in uiState.conflictedEntryIds) {
+                        if (entry.id in uiState.conflictedEntryIds) {
+                            showConflictLocked()
+                        } else {
                             deletedEntry = entry
                             onDeleteEntry(entry.id)
                         }
@@ -977,7 +1005,11 @@ fun TrackingScreen(
                                 onPause = onPauseTracking,
                                 onResume = onResumeTracking,
                                 onUpdate = onUpdateCurrentEntry,
-                                onEditActiveEntry = { uiState.currentTimeEntry?.let { showEditDialog = it } },
+                                onEditActiveEntry = {
+                                    uiState.currentTimeEntry?.let { entry ->
+                                        if (entry.id in uiState.conflictedEntryIds) showConflictLocked() else showEditDialog = entry
+                                    }
+                                },
                             )
                         }
                         item(key = "long_timer_warning") {
@@ -1074,7 +1106,8 @@ fun TrackingScreen(
                                     syncStatusByEntryId = syncStatusByEntryId,
                                     onEdit = onHistoryEdit,
                                     onDelete = onHistoryDelete,
-                                    onDateClick = onHistoryDateClick
+                                    onDateClick = onHistoryDateClick,
+                                    onRetrySync = { onRetrySyncEntry(it.id) }
                                 )
                                 item { Spacer(Modifier.height(16.dp)) }
                             }
@@ -1105,7 +1138,8 @@ fun TrackingScreen(
                                 syncStatusByEntryId = syncStatusByEntryId,
                                 onEdit = onHistoryEdit,
                                 onDelete = onHistoryDelete,
-                                onDateClick = onHistoryDateClick
+                                onDateClick = onHistoryDateClick,
+                                onRetrySync = { onRetrySyncEntry(it.id) }
                             )
                             item { Spacer(Modifier.height(16.dp)) }
                         }
@@ -1683,7 +1717,8 @@ internal fun LazyListScope.trackingHistoryItems(
     syncStatusByEntryId: Map<String, TimeEntryRepository.EntrySyncStatus>,
     onEdit: (TimeEntry) -> Unit,
     onDelete: (TimeEntry) -> Unit,
-    onDateClick: (LocalDate) -> Unit
+    onDateClick: (LocalDate) -> Unit,
+    onRetrySync: (TimeEntry) -> Unit = {}
 ) {
     if (!uiState.hasLoadedTimeEntries && uiState.timeEntries.isEmpty()) {
         item(key = "history_loading_header") { HistoryLoadingHeader() }
@@ -1726,7 +1761,8 @@ internal fun LazyListScope.trackingHistoryItems(
                         tasksById = tasksById,
                         syncStatusByEntryId = syncStatusByEntryId,
                         onEdit = onEdit,
-                        onDelete = onDelete
+                        onDelete = onDelete,
+                        onRetrySync = onRetrySync
                     )
             }
         }
@@ -1770,6 +1806,7 @@ internal fun LazyListScope.trackingHistoryItems(
     onEdit: (TimeEntry) -> Unit,
     onDelete: (TimeEntry) -> Unit,
     onDateClick: (LocalDate) -> Unit,
+    onRetrySync: (TimeEntry) -> Unit = {},
 ) {
     val historyItems = buildList {
         groupedEntries.forEach { (date, entries) ->
@@ -1790,14 +1827,31 @@ internal fun LazyListScope.trackingHistoryItems(
         historyItems = historyItems,
         projectsById = uiState.projects.associateBy { it.id },
         tasksById = uiState.tasks.associateBy { it.id },
-        syncStatusByEntryId = uiState.syncOperations.groupBy { it.entryId }.mapValues { (_, operations) ->
-            operations.last().status
-        },
+        syncStatusByEntryId = worstSyncStatusByEntryId(uiState.syncOperations),
         onEdit = onEdit,
         onDelete = onDelete,
         onDateClick = onDateClick,
+        onRetrySync = onRetrySync,
     )
 }
+
+/**
+ * One chip per entry: a dead-lettered UPDATE queued behind a pending STOP must not read as merely
+ * queued, so the entry shows its worst operation.
+ */
+private val syncStatusSeverity = listOf(
+    TimeEntryRepository.EntrySyncStatus.FAILED,
+    TimeEntryRepository.EntrySyncStatus.CONFLICT,
+    TimeEntryRepository.EntrySyncStatus.RETRYING,
+    TimeEntryRepository.EntrySyncStatus.PENDING,
+    TimeEntryRepository.EntrySyncStatus.SYNCED,
+)
+
+internal fun worstSyncStatusByEntryId(
+    operations: List<TimeEntryRepository.SyncOperation>,
+): Map<String, TimeEntryRepository.EntrySyncStatus> = operations
+    .groupBy { it.entryId }
+    .mapValues { (_, entryOperations) -> entryOperations.minBy { syncStatusSeverity.indexOf(it.status) }.status }
 
 @Immutable
  internal data class HistoryDay(
@@ -1815,6 +1869,10 @@ internal fun LazyListScope.trackingHistoryItems(
  }
 
 /** Keep every punch visible, even when multiple entries share the same project/task/description. */
+/** Statuses a user can act on from the card; PENDING is queued and will upload on its own. */
+internal fun canRetrySync(status: TimeEntryRepository.EntrySyncStatus): Boolean =
+    status == TimeEntryRepository.EntrySyncStatus.FAILED || status == TimeEntryRepository.EntrySyncStatus.RETRYING
+
 internal fun historyEntryGroups(entries: List<TimeEntry>): List<List<TimeEntry>> =
     entries.map(::listOf)
 
@@ -2582,14 +2640,12 @@ private fun DateHeader(
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 12.sp,
             maxLines = 1
         )
         Text(
             text = headerStats,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-            fontSize = 11.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
@@ -2609,7 +2665,8 @@ private fun CollapsibleTimeEntryGroup(
     tasksById: Map<String, Task>,
     syncStatusByEntryId: Map<String, TimeEntryRepository.EntrySyncStatus>,
     onEdit: (TimeEntry) -> Unit,
-    onDelete: (TimeEntry) -> Unit
+    onDelete: (TimeEntry) -> Unit,
+    onRetrySync: (TimeEntry) -> Unit
 ) {
     var isExpanded by remember { mutableStateOf(false) }
     val now = remember { Instant.now() }
@@ -2633,6 +2690,7 @@ private fun CollapsibleTimeEntryGroup(
                 syncStatus = syncStatusByEntryId[entries.first().id],
                 onEdit = { onEdit(entries.first()) },
                 onDelete = { onDelete(entries.first()) },
+                onRetrySync = { onRetrySync(entries.first()) },
                 count = null
             )
         } else {
@@ -2648,6 +2706,9 @@ private fun CollapsibleTimeEntryGroup(
                     syncStatus = worstSyncStatus,
                     onEdit = { isExpanded = true },
                     onDelete = { /* Don't allow deleting grouped entries */ },
+                    onRetrySync = {
+                        entries.filter { syncStatusByEntryId[it.id]?.let(::canRetrySync) == true }.forEach(onRetrySync)
+                    },
                     count = entries.size,
                     totalDuration = totalDuration
                 )
@@ -2663,6 +2724,7 @@ private fun CollapsibleTimeEntryGroup(
                         syncStatus = syncStatusByEntryId[entry.id],
                         onEdit = { onEdit(entry) },
                         onDelete = { onDelete(entry) },
+                        onRetrySync = { onRetrySync(entry) },
                         count = null,
                         isIndented = true
                     )
@@ -2675,14 +2737,16 @@ private fun CollapsibleTimeEntryGroup(
                             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                             RoundedCornerShape(6.dp)
                         )
+                        .heightIn(min = Dimens.MinTouchTarget)
+                        .clickable(role = Role.Button) { isExpanded = false }
                         .padding(horizontal = 12.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.Center
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = pluralStringResource(R.plurals.collapse_entries, entries.size, entries.size),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.clickable { isExpanded = false }
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -2810,6 +2874,7 @@ private fun CompactTimeEntryRow(
     syncStatus: TimeEntryRepository.EntrySyncStatus?,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onRetrySync: () -> Unit,
     count: Int? = null,
     totalDuration: Long? = null,
     isIndented: Boolean = false
@@ -2817,8 +2882,9 @@ private fun CompactTimeEntryRow(
     val now = remember { Instant.now() }
     val locale = appLocale()
     val nowLabel = stringResource(R.string.tracking_now)
-    val timeRange = remember(entry.start, entry.end, zone, locale, nowLabel) {
-        formatTimeRange(entry.start, entry.end, zone, locale, nowLabel)
+    val invalidTimeLabel = stringResource(R.string.tracking_invalid_time)
+    val timeRange = remember(entry.start, entry.end, zone, locale, nowLabel, invalidTimeLabel) {
+        formatTimeRange(entry.start, entry.end, zone, locale, nowLabel, invalidTimeLabel)
     }
     val durationText = remember(totalDuration, entry, date, zone, now) {
         formatDuration(totalDuration ?: entryDurationOnDay(entry, date, zone, now))
@@ -2924,7 +2990,27 @@ private fun CompactTimeEntryRow(
         ) {
             // Kit chip renders nothing for SYNCED (and null); only PENDING /
             // RETRYING / FAILED surface, so a healthy row stays clutter-free.
-            syncStatus?.let { SyncChip(status = it, showLabel = false) }
+            // A change that has not reached the server gets a tappable retry instead of the
+            // passive chip, so recovery happens on the card rather than in the Sync center.
+            if (syncStatus != null && canRetrySync(syncStatus)) {
+                IconButton(
+                    onClick = onRetrySync,
+                    modifier = Modifier.size(48.dp).testTag(TrackingTestTags.entryRetrySyncButton(entry.id))
+                ) {
+                    Icon(
+                        Icons.Default.SyncProblem,
+                        contentDescription = stringResource(R.string.sync_retry_entry),
+                        tint = if (syncStatus == TimeEntryRepository.EntrySyncStatus.FAILED) {
+                            MaterialTheme.colorScheme.syncFailed
+                        } else {
+                            MaterialTheme.colorScheme.syncPending
+                        },
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            } else {
+                syncStatus?.let { SyncChip(status = it, showLabel = false) }
+            }
             // Duration (use totalDuration if grouped, otherwise entry duration)
             Text(
                 text = durationText,
@@ -3029,8 +3115,8 @@ internal fun TimeEntryFormSheet(
             val candidate = TimeEntry(
                 id = entry?.id ?: "",
                 userId = entry?.userId ?: "",
-                start = startTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
-                end = endTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                start = formatTimeEntryInstant(startTime),
+                end = formatTimeEntryInstant(endTime),
                 organizationId = org,
             )
             existingEntries.any { it.id != candidate.id && EntryTrustRules.overlaps(candidate, it) }
@@ -3381,8 +3467,8 @@ internal fun TimeEntryFormSheet(
                                 taskId,
                                 selectedTags,
                                 billable,
-                                startTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
-                                endTime.takeUnless { isRunningEntry }?.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                                formatTimeEntryInstant(startTime),
+                                endTime.takeUnless { isRunningEntry }?.let(::formatTimeEntryInstant)
                             )
                         },
                         enabled = saveEnabled && durationIsValid && validation.canSave,
@@ -3403,11 +3489,9 @@ internal fun TimeEntryFormSheet(
             onDismiss = { editingTime = null },
             onConfirm = { hour, minute ->
                 if (field == TimeField.Start) {
-                    startTime = startTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
-                    if (!isRunningEntry) {
-                        val minutes = durationMinutes.toLongOrNull() ?: 1
-                        endTime = startTime.plusMinutes(minutes)
-                    }
+                    val newStart = startTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
+                    if (!isRunningEntry) endTime = retimedEnd(startTime, newStart, endTime)
+                    startTime = newStart
                 } else {
                     val sameDayEnd = endTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
                     // Do not silently roll an earlier clock-time into a ~24h entry: only a plausible
@@ -3428,11 +3512,9 @@ internal fun TimeEntryFormSheet(
             onDismiss = { editingDate = null },
             onConfirm = { date ->
                 if (field == TimeField.Start) {
-                    startTime = startTime.with(date)
-                    if (!isRunningEntry) {
-                        val minutes = durationMinutes.toLongOrNull() ?: 1
-                        endTime = startTime.plusMinutes(minutes)
-                    }
+                    val newStart = startTime.with(date)
+                    if (!isRunningEntry) endTime = retimedEnd(startTime, newStart, endTime)
+                    startTime = newStart
                 } else {
                     endTime = endTime.with(date)
                     durationMinutes = java.time.Duration.between(startTime, endTime).toMinutes().toString()
@@ -3457,7 +3539,7 @@ internal fun TimeEntryFormSheet(
                 // Clamp into the open interval: reject boundary/out-of-range picks (half-open
                 // semantics) - the repository re-validates, this just avoids an obvious no-op.
                 if (candidate.isAfter(originalStart) && candidate.isBefore(originalEnd)) {
-                    onSplit(candidate.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+                    onSplit(formatTimeEntryInstant(candidate))
                     onDismiss()
                 }
             },
@@ -3574,9 +3656,11 @@ private fun AboutSection(context: Context) {
                 text = context.packageName,
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                modifier = Modifier.clickable {
-                    copyToClipboard(context, context.packageName)
-                }
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = Dimens.MinTouchTarget)
+                    .clickable(role = Role.Button) { copyToClipboard(context, context.packageName) }
+                    .wrapContentHeight()
             )
 
             Spacer(modifier = Modifier.height(4.dp))
@@ -3592,9 +3676,11 @@ private fun AboutSection(context: Context) {
                 text = signingHash,
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                modifier = Modifier.clickable {
-                    copyToClipboard(context, signingHash)
-                }
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = Dimens.MinTouchTarget)
+                    .clickable(role = Role.Button) { copyToClipboard(context, signingHash) }
+                    .wrapContentHeight()
             )
         }
     }
@@ -3861,13 +3947,14 @@ internal fun formatTimeRange(
     zone: ZoneId,
     locale: Locale = Locale.getDefault(),
     nowLabel: String = "now",
+    invalidLabel: String = "Invalid time",
 ): String {
     val startValue = runCatching { ZonedDateTime.parse(start).withZoneSameInstant(zone) }.getOrNull()
-        ?: return "Invalid time"
+        ?: return invalidLabel
     val startFormatted = startValue.format(hourMinuteFormatter)
     return if (end != null) {
         val endValue = runCatching { ZonedDateTime.parse(end).withZoneSameInstant(zone) }.getOrNull()
-            ?: return "Invalid time"
+            ?: return invalidLabel
         val endFormatted = endValue.format(hourMinuteFormatter)
         val startDate = startValue.toLocalDate()
         val endDate = endValue.toLocalDate()

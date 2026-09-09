@@ -218,17 +218,16 @@ fun StatisticsScreen(viewModel: StatisticsViewModel = hiltViewModel()) {
                             s.perProject.forEach { p ->
                                 val pct = if (s.totalSeconds > 0) p.seconds * PERCENT_SCALE_INT / s.totalSeconds else 0
                                 ProjectLegendRow(
-                                    projectName = if (p.projectId == null) {
-                                        stringResource(R.string.stats2_no_project)
-                                    } else {
-                                        p.projectName
+                                    projectName = when {
+                                        p.projectId == null -> stringResource(R.string.stats2_no_project)
+                                        else -> p.projectName ?: stringResource(R.string.stats2_unknown_project)
                                     },
                                     colorHex = p.colorHex,
                                     valueText = "${formatDuration(p.seconds)} ($pct%)",
                                     onClick = {
                                         viewModel.openProjectDrillDown(
                                             p.projectId,
-                                            p.projectName.takeUnless { p.projectId == null },
+                                            p.projectName,
                                             p.colorHex,
                                         )
                                     },

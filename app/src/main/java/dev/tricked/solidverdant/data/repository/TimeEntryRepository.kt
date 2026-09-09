@@ -12,6 +12,7 @@ import dev.tricked.solidverdant.data.local.db.CatalogDao
 import dev.tricked.solidverdant.data.local.db.OutboxDao
 import dev.tricked.solidverdant.data.local.db.OutboxEntity
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
+import dev.tricked.solidverdant.data.local.db.RateLimitMarker
 import dev.tricked.solidverdant.data.local.db.SyncMetaDao
 import dev.tricked.solidverdant.data.local.db.SyncMetaEntity
 import dev.tricked.solidverdant.data.local.db.SyncState
@@ -25,6 +26,7 @@ import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.model.TimeEntry
 import dev.tricked.solidverdant.data.model.TimeEntryType
+import dev.tricked.solidverdant.data.model.isLocalTimeEntryId
 import dev.tricked.solidverdant.data.remote.RemoteDataSource
 import dev.tricked.solidverdant.data.remote.TimeEntriesQuery
 import dev.tricked.solidverdant.domain.time.parseTimeEntryInstant
@@ -195,7 +197,15 @@ class TimeEntryRepository @Inject constructor(
         entity?.toModel(timeEntryDao.tagIdsFor(entity.id).map { Tag(it) })
     }
 
+    /** Room's view of whether [entryId] is still running: false when it was stopped, deleted, or never cached. */
+    suspend fun isEntryRunning(entryId: String): Boolean =
+        timeEntryDao.getById(entryId)?.let { it.end == null && !it.pendingDelete } ?: false
+
     fun observeOutboxCount(): Flow<Int> = outboxDao.observeCount()
+
+    /** Terminal failures queued for organizations other than [organizationId]; [observeSyncOperations] hides them. */
+    fun observeFailedOperationCountOutsideOrganization(organizationId: String): Flow<Int> =
+        outboxDao.observeDeadLetteredOutsideOrganization(organizationId)
 
     /**
      * Reactive sync freshness for an org (last full pull + last successful push), for the dedicated
@@ -216,7 +226,7 @@ class TimeEntryRepository @Inject constructor(
                 type = op.opType,
                 status = when {
                     op.deadLettered -> EntrySyncStatus.FAILED
-                    op.attemptCount > 0 -> EntrySyncStatus.RETRYING
+                    op.attemptCount > 0 || RateLimitMarker.matches(op.lastError) -> EntrySyncStatus.RETRYING
                     else -> EntrySyncStatus.PENDING
                 },
                 attemptCount = op.attemptCount,
@@ -481,21 +491,36 @@ class TimeEntryRepository @Inject constructor(
         }
     }
 
+    /**
+     * The Room row an entry snapshot refers to now. UI surfaces hold a [TimeEntry] captured
+     * before START/CREATE reconciliation rekeyed the row to its server id, so [entry].id can be
+     * retired. Rule: the exact id when that row exists; otherwise, for a `local-` id only, the row
+     * with the same organization, user and start (the identity a reconcile preserves); otherwise
+     * null. Callers must never write under a retired id: that resurrects a ghost row plus an
+     * outbox op that can only 404.
+     */
+    private suspend fun resolveCurrentId(entry: TimeEntry): String? = timeEntryDao.getById(entry.id)?.id
+        ?: entry.id.takeIf(::isLocalTimeEntryId)
+            ?.let { timeEntryDao.findByIdentity(entry.organizationId, entry.userId, entry.start)?.id }
+
     suspend fun updateEntry(entry: TimeEntry, tagIds: List<String>) {
         val now = clock.nowMs()
-        val normalizedEntry = entry.withDerivedCompletedDuration()
         database.withTransaction {
-            check(timeEntryDao.getById(entry.id)?.syncState != SyncState.CONFLICT) {
+            val targetId = checkNotNull(resolveCurrentId(entry)) {
+                "This entry no longer exists locally; refresh before editing it"
+            }
+            val normalizedEntry = entry.copy(id = targetId).withDerivedCompletedDuration()
+            check(timeEntryDao.getById(targetId)?.syncState != SyncState.CONFLICT) {
                 "Resolve the sync conflict in Review before editing this entry"
             }
-            val base = captureBaseSnapshot(entry.id)
+            val base = captureBaseSnapshot(targetId)
             timeEntryDao.upsert(normalizedEntry.toEntity(updatedAt = now, syncState = SyncState.PENDING))
-            timeEntryDao.replaceTagRefs(entry.id, tagIds)
+            timeEntryDao.replaceTagRefs(targetId, tagIds)
             outboxDao.insert(
                 OutboxEntity(
                     opType = OutboxOpType.UPDATE,
                     organizationId = entry.organizationId,
-                    timeEntryId = entry.id,
+                    timeEntryId = targetId,
                     createdAtMs = now,
                     clientId = newClientId(),
                     payloadJson = json.encodeToString(
@@ -730,9 +755,11 @@ class TimeEntryRepository @Inject constructor(
      */
     suspend fun softDeleteLocal(entry: TimeEntry) {
         val now = clock.nowMs()
-        val current = timeEntryDao.getById(entry.id)
+        val current = resolveCurrentId(entry)?.let { timeEntryDao.getById(it) }
         if (current?.syncState == SyncState.CONFLICT) return
-        timeEntryDao.upsert(entry.toEntity(updatedAt = now, syncState = SyncState.PENDING, pendingDelete = true))
+        val hidden = current?.copy(updatedAt = now, syncState = SyncState.PENDING, pendingDelete = true)
+            ?: entry.toEntity(updatedAt = now, syncState = SyncState.PENDING, pendingDelete = true)
+        timeEntryDao.upsert(hidden)
     }
 
     /**
@@ -750,21 +777,24 @@ class TimeEntryRepository @Inject constructor(
     suspend fun commitDelete(entry: TimeEntry) {
         val now = clock.nowMs()
         database.withTransaction {
-            if (timeEntryDao.getById(entry.id)?.syncState == SyncState.CONFLICT) return@withTransaction
-            if (entry.id.startsWith("local-")) {
-                timeEntryDao.deleteById(entry.id)
-                outboxDao.deleteByTimeEntryId(entry.id)
+            // The undo window is long enough for a START/CREATE to reconcile, so the snapshot's
+            // local id may now belong to a server-owned row that needs a real DELETE.
+            val targetId = resolveCurrentId(entry) ?: entry.id
+            if (timeEntryDao.getById(targetId)?.syncState == SyncState.CONFLICT) return@withTransaction
+            if (isLocalTimeEntryId(targetId)) {
+                timeEntryDao.deleteById(targetId)
+                outboxDao.deleteByTimeEntryId(targetId)
             } else {
                 // softDeleteLocal has already flipped this row to PENDING by the time we get here,
                 // but the content fields are still the last server-acked ones - captureBaseSnapshot
                 // reads them from the entity, not from `entry`, so the PENDING flag flip is
                 // irrelevant to what gets snapshotted (SV-027 rule 3).
-                val base = captureBaseSnapshot(entry.id)
+                val base = captureBaseSnapshot(targetId)
                 outboxDao.insert(
                     OutboxEntity(
                         opType = OutboxOpType.DELETE,
                         organizationId = entry.organizationId,
-                        timeEntryId = entry.id,
+                        timeEntryId = targetId,
                         createdAtMs = now,
                         clientId = newClientId(),
                         payloadJson = "{}",
@@ -786,22 +816,23 @@ class TimeEntryRepository @Inject constructor(
     }
 
     suspend fun undoDelete(entry: TimeEntry, memberId: String?): Boolean {
-        val current = timeEntryDao.getById(entry.id)
+        val targetId = resolveCurrentId(entry) ?: entry.id
+        val current = timeEntryDao.getById(targetId)
         // Window still open: softDeleteLocal ran but commitDelete never enqueued anything (no
         // DELETE op exists for this id yet), so a plain local restore is enough - there is nothing
         // server-facing to cancel. (A never-synced local- entry whose window already closed has no
         // Room row left at all - commitDelete hard-deletes it - so `current` alone rules that out.)
-        if (current != null && current.pendingDelete && !outboxDao.hasPendingDelete(entry.id)) {
+        if (current != null && current.pendingDelete && !outboxDao.hasPendingDelete(targetId)) {
             database.withTransaction {
                 // SV-024: restore to the entry's real sync state, not the PENDING the soft-delete
                 // stamped it with - a synced (server-id) row must go back to SYNCED so it isn't
                 // silently skipped by applyServerEntries forever with no outbox op to fix it.
-                val state = if (entry.id.startsWith("local-")) SyncState.PENDING else SyncState.SYNCED
-                timeEntryDao.restoreDeleted(entry.id, state)
+                val state = if (isLocalTimeEntryId(targetId)) SyncState.PENDING else SyncState.SYNCED
+                timeEntryDao.restoreDeleted(targetId, state)
             }
             return true
         }
-        if (outboxDao.cancelLatestDelete(entry.id) == 0) {
+        if (outboxDao.cancelLatestDelete(targetId) == 0) {
             val end = entry.end ?: return false
             val membership = memberId ?: return false
             val now = clock.nowMs()
@@ -827,17 +858,16 @@ class TimeEntryRepository @Inject constructor(
             }
             return true
         }
-        val existing = timeEntryDao.getById(entry.id)
         // SV-024: restore to the entry's real sync state - SYNCED for a server-id row (mirroring
         // the window-still-open branch above), regardless of what a stale local snapshot's
         // syncState column says - never leave a synced entry stuck PENDING with no outbox op.
-        val state = if (entry.id.startsWith("local-")) SyncState.PENDING else SyncState.SYNCED
+        val state = if (isLocalTimeEntryId(targetId)) SyncState.PENDING else SyncState.SYNCED
         database.withTransaction {
-            if (existing == null) {
-                timeEntryDao.upsert(entry.toEntity(updatedAt = clock.nowMs(), syncState = state))
-                timeEntryDao.replaceTagRefs(entry.id, entry.tags.map { it.id })
+            if (current == null) {
+                timeEntryDao.upsert(entry.copy(id = targetId).toEntity(updatedAt = clock.nowMs(), syncState = state))
+                timeEntryDao.replaceTagRefs(targetId, entry.tags.map { it.id })
             } else {
-                timeEntryDao.restoreDeleted(entry.id, state)
+                timeEntryDao.restoreDeleted(targetId, state)
             }
         }
         return true

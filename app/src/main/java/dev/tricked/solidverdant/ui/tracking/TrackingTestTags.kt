@@ -58,5 +58,7 @@ object TrackingTestTags {
 
     fun entryTimeRange(entryId: String): String = "track_entry_time_range_$entryId"
 
+    fun entryRetrySyncButton(entryId: String): String = "track_entry_retry_sync_$entryId"
+
     fun sheetTagChip(tagId: String): String = dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags.tagChip(tagId)
 }

@@ -61,6 +61,12 @@
 
 ## Task and handoff
 
+### Branch selection
+
+- Use `master` as the default branch for new work unless the user explicitly names another branch.
+- Treat `codex/timezen-clockify-experiment` as archived experimental history. Check it out or base work on it only when the user explicitly requests that exact branch.
+- Confirm the current branch before editing or committing.
+
 - Start implementation work by stating the requested scope, affected layers, acceptance criteria,
   and verification plan. Use `.github/ISSUE_TEMPLATE/agent-task.yml` when creating a new task and
   `.github/PULL_REQUEST_TEMPLATE.md` when handing off a change for review.

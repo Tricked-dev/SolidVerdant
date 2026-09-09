@@ -20,7 +20,8 @@ import java.time.temporal.WeekFields
 
 enum class TrendGranularity { DAY, WEEK }
 
-data class ProjectTotal(val projectId: String?, val projectName: String, val colorHex: String, val seconds: Long)
+/** [projectName] is null when the entry has no project or its project is missing from the catalogue. */
+data class ProjectTotal(val projectId: String?, val projectName: String?, val colorHex: String, val seconds: Long)
 
 data class TrendBucket(val label: String, val startDate: LocalDate, val seconds: Long)
 
@@ -218,12 +219,12 @@ object StatisticsAggregator {
                 val project = pid?.let { projectById[it] }
                 ProjectTotal(
                     projectId = pid,
-                    projectName = project?.name ?: if (pid == null) "No project" else "Unknown",
+                    projectName = project?.name,
                     colorHex = project?.color ?: NO_PROJECT_COLOR,
                     seconds = rows.sumOf { it.seconds },
                 )
             }
-            .sortedWith(compareByDescending<ProjectTotal> { it.seconds }.thenBy { it.projectName })
+            .sortedWith(compareByDescending<ProjectTotal> { it.seconds }.thenBy { it.projectName ?: "" })
 
         val days = ChronoUnit.DAYS.between(rangeStart, rangeEnd) + 1
         val avgPerDay = if (days > 0) totalSeconds / days else totalSeconds

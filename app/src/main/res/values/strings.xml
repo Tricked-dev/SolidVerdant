@@ -22,6 +22,7 @@
     <string name="connection_failed">Could not connect to the server.</string>
     <string name="connection_test_failed">The connection test failed.</string>
     <string name="sync_entry_failed">This change has not reached the server.</string>
+    <string name="sync_retry_entry">Retry sync</string>
     <string name="search_and_filter">Search &amp; filter</string>
     <string name="search_options">Search options</string>
     <string name="hide_search_options">Hide search options</string>
@@ -111,7 +112,7 @@
     <string name="app_name">SolidVerdant</string>
 
     <!-- Sync -->
-    <string name="sync_error">Some changes couldn\'t be synced. They\'ll retry automatically.</string>
+    <string name="sync_error">Some changes couldn\'t be synced. Retry them or review them in the Sync center.</string>
     <string name="sync_conflict_edit_locked">Resolve this sync conflict in Review before saving edits.</string>
 
     <!-- Bottom Navigation -->
@@ -317,4 +318,22 @@
     <string name="entry_warning_overlap">This entry overlaps another entry. Overlaps are allowed but may be flagged.</string>
     <string name="entry_warning_overlap_policy">This entry overlaps another entry, which your organization\'s policy discourages.</string>
 
+    <string name="error_load_tracking_state">Couldn\'t load tracking state.</string>
+    <string name="error_load_more_entries">Couldn\'t load more entries.</string>
+    <string name="error_load_date">Couldn\'t load that date.</string>
+    <string name="error_start_entry">Couldn\'t start the time entry.</string>
+    <string name="error_update_entry">Couldn\'t update the time entry.</string>
+    <string name="error_stop_entry">Couldn\'t stop the time entry.</string>
+    <string name="error_pause_entry">Couldn\'t pause the time entry.</string>
+    <string name="error_resume_entry">Couldn\'t resume the time entry.</string>
+    <string name="error_create_entry">Couldn\'t create the entry.</string>
+    <string name="error_duplicate_entry">Couldn\'t duplicate the entry.</string>
+    <string name="error_split_entry">Couldn\'t split the entry.</string>
+    <string name="tracking_invalid_time">Invalid time</string>
+    <string name="auth_error_start_oauth">Couldn\'t start sign-in.</string>
+    <string name="auth_error_invalid_callback">The sign-in response was incomplete. Try again.</string>
+    <string name="auth_error_complete_oauth">Couldn\'t complete sign-in.</string>
+    <string name="auth_error_load_memberships">Couldn\'t load your organizations.</string>
+    <string name="tile_error_no_organization">No organization selected.</string>
+    <string name="tile_error_load_projects">Couldn\'t load projects.</string>
 </resources>

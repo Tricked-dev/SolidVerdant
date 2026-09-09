@@ -22,6 +22,7 @@
     <string name="connection_failed">Er kon geen verbinding met de server worden gemaakt.</string>
     <string name="connection_test_failed">De verbindingstest is mislukt.</string>
     <string name="sync_entry_failed">Deze wijziging heeft de server niet bereikt.</string>
+    <string name="sync_retry_entry">Synchronisatie opnieuw proberen</string>
     <string name="search_and_filter">Zoeken en filteren</string>
     <string name="search_options">Zoekopties</string>
     <string name="hide_search_options">Zoekopties verbergen</string>
@@ -117,7 +118,7 @@
     <!-- App Name -->
     <string name="app_name">SolidGroen</string>
     <string name="tile_label">Tijdregistratie</string>
-    <string name="sync_error">Sommige wijzigingen konden niet worden gesynchroniseerd. Ze worden automatisch opnieuw geprobeerd.</string>
+    <string name="sync_error">Sommige wijzigingen konden niet worden gesynchroniseerd. Probeer het opnieuw of bekijk ze in het Synchronisatiecentrum.</string>
     <string name="sync_conflict_edit_locked">Los dit synchronisatieconflict eerst op in Review.</string>
 
     <!-- Login Screen -->
@@ -308,4 +309,22 @@
     <string name="entry_warning_overlap">Deze registratie overlapt met een andere. Overlap is toegestaan maar kan worden gemarkeerd.</string>
     <string name="entry_warning_overlap_policy">Deze registratie overlapt met een andere, wat het beleid van je organisatie afraadt.</string>
 
+    <string name="error_load_tracking_state">Kon de trackingstatus niet laden.</string>
+    <string name="error_load_more_entries">Kon geen extra boekingen laden.</string>
+    <string name="error_load_date">Kon die datum niet laden.</string>
+    <string name="error_start_entry">Kon de boeking niet starten.</string>
+    <string name="error_update_entry">Kon de boeking niet bijwerken.</string>
+    <string name="error_stop_entry">Kon de boeking niet stoppen.</string>
+    <string name="error_pause_entry">Kon de boeking niet pauzeren.</string>
+    <string name="error_resume_entry">Kon de boeking niet hervatten.</string>
+    <string name="error_create_entry">Kon de boeking niet aanmaken.</string>
+    <string name="error_duplicate_entry">Kon de boeking niet dupliceren.</string>
+    <string name="error_split_entry">Kon de boeking niet splitsen.</string>
+    <string name="tracking_invalid_time">Ongeldige tijd</string>
+    <string name="auth_error_start_oauth">Kon het inloggen niet starten.</string>
+    <string name="auth_error_invalid_callback">Het inlogantwoord was onvolledig. Probeer het opnieuw.</string>
+    <string name="auth_error_complete_oauth">Kon het inloggen niet voltooien.</string>
+    <string name="auth_error_load_memberships">Kon je organisaties niet laden.</string>
+    <string name="tile_error_no_organization">Geen organisatie geselecteerd.</string>
+    <string name="tile_error_load_projects">Kon de projecten niet laden.</string>
 </resources>

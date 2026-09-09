@@ -4,7 +4,7 @@
     <string name="sync_status_card_title">Synchronisatiestatus</string>
     <string name="sync_center_title">Synchronisatie en herstel</string>
     <string name="sync_center_open">Synchronisatiedetails bekijken</string>
-    <string name="sync_center_description">Bekijk welke wijzigingen nog op de server wachten. Probeer mislukte wijzigingen hier opnieuw. Conflicten blijven veilig bewaard totdat je ze oplost onder Nakijken.</string>
+    <string name="sync_center_description">Bekijk welke wijzigingen nog op de server wachten. Probeer mislukte uploads opnieuw of kies welke versie je wilt bewaren wanneer een registratie elders is gewijzigd.</string>
     <string name="sync_center_navigate_back">Terug</string>
 
     <!-- Actualiteit -->
@@ -40,6 +40,10 @@
     </plurals>
     <string name="sync_status_icon_synced">Alles gesynchroniseerd</string>
     <string name="sync_status_icon_warning">Aandacht vereist</string>
+    <plurals name="sync_failed_outside_organization">
+        <item quantity="one">%1$d mislukte wijziging in een andere organisatie. Wissel van organisatie om deze te bekijken.</item>
+        <item quantity="other">%1$d mislukte wijzigingen in andere organisaties. Wissel van organisatie om ze te bekijken.</item>
+    </plurals>
 
     <!-- Wachtende wijzigingen -->
     <string name="sync_pending_section_title">Wacht op synchronisatie</string>
@@ -48,7 +52,9 @@
     <!-- Mislukkingen -->
     <string name="sync_failures_section_title">Synchronisatie mislukt</string>
     <string name="sync_conflicts_section_title">Vraagt om je aandacht</string>
-    <string name="sync_conflict_item">Dit item is op een ander apparaat gewijzigd. Open Nakijken om te kiezen wat er moet gebeuren.</string>
+    <string name="sync_conflict_item">Deze registratie is elders gewijzigd. Opnieuw uploaden verzendt de versie op dit apparaat, of je kunt de serverversie gebruiken.</string>
+    <string name="sync_retry_upload">Opnieuw uploaden</string>
+    <string name="sync_use_server_version">Serverversie gebruiken</string>
     <string name="sync_retry_all">Alles opnieuw proberen</string>
     <string name="sync_retry">Opnieuw</string>
     <string name="sync_discard">Verwijderen</string>
@@ -64,7 +70,8 @@
     <string name="sync_reason_offline">Je apparaat was offline, dus deze wijziging kon niet worden verzonden.</string>
     <string name="sync_reason_server">De server had een probleem met het verwerken van deze wijziging.</string>
     <string name="sync_reason_rejected">De server accepteerde deze wijziging niet.</string>
-    <string name="sync_reason_generic">Deze wijziging kon niet worden verzonden. We blijven het proberen.</string>
+    <string name="sync_reason_rate_limited">De server vroeg ons om het rustiger aan te doen; synchroniseren gaat automatisch verder.</string>
+    <string name="sync_reason_generic">Deze wijziging kon niet worden verzonden. Probeer het opnieuw of verwijder de wijziging.</string>
 
     <!-- Lege staat -->
     <string name="sync_all_caught_up">Je bent helemaal bij. Elke wijziging staat veilig op de server.</string>

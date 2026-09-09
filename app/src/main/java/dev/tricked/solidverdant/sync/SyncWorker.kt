@@ -17,6 +17,7 @@ import dev.tricked.solidverdant.data.local.db.AppDatabase
 import dev.tricked.solidverdant.data.local.db.OutboxDao
 import dev.tricked.solidverdant.data.local.db.OutboxEntity
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
+import dev.tricked.solidverdant.data.local.db.RateLimitMarker
 import dev.tricked.solidverdant.data.local.db.SyncMetaDao
 import dev.tricked.solidverdant.data.local.db.SyncState
 import dev.tricked.solidverdant.data.local.db.TimeEntryDao
@@ -124,12 +125,12 @@ class SyncWorker @AssistedInject constructor(
                         }
                     }
                 }
-                Outcome.RateLimited -> {
+                is Outcome.RateLimited -> {
                     // Solidtime's per-user API limit is a temporary one-minute window. Do not
                     // consume the operation's terminal retry budget: a healthy queued change must
                     // not become a permanent sync failure merely because the window stayed closed.
                     outboxDao.update(
-                        op.copy(lastError = "Rate limited; retry scheduled"),
+                        op.copy(lastError = RateLimitMarker.encode(outcome.retryAfterSeconds)),
                     )
                     retryResult = Result.retry()
                     if (op.opType == OutboxOpType.START || op.opType == OutboxOpType.CREATE) {
@@ -153,12 +154,10 @@ class SyncWorker @AssistedInject constructor(
         // only lastPushAtMs, never the pull timestamp a concurrent refresh may have written.
         val pushedAt = clock.nowMs()
         pushedOrgs.forEach { orgId -> syncMetaDao.stampPush(orgId, pushedAt) }
-        if (retryResult != null) {
-            syncStatus.set(SyncStatus.Idle)
-            return retryResult
-        }
+        // A dead-letter raised earlier in this drain must stay visible even when another op
+        // still needs a retry; only a clean drain returns the banner to idle.
         if (syncStatus.status.value !is SyncStatus.Error) syncStatus.set(SyncStatus.Idle)
-        return Result.success()
+        return retryResult ?: Result.success()
     }
 
     /** Rewrite [OutboxEntity.timeEntryId] through the in-run rekey map, following chained hops. */
@@ -195,7 +194,7 @@ class SyncWorker @AssistedInject constructor(
         /** [rekeyedTo] is set only when this op reconciled a local- id to a new server id. */
         data class Success(val rekeyedTo: String? = null) : Outcome()
         data object Retry : Outcome()
-        data object RateLimited : Outcome()
+        data class RateLimited(val retryAfterSeconds: Long?) : Outcome()
         data object Fail : Outcome()
 
         /** A revived dead-lettered op superseded by a later write; drop without touching the server. */
@@ -228,7 +227,8 @@ class SyncWorker @AssistedInject constructor(
         if (op.opType !in CONFLICT_CHECK_OPS || op.baseSnapshotJson == null) return null
         val baseSnapshotJson = op.baseSnapshotJson
         return when (val index = conflictIndexes[op.organizationId]) {
-            is ConflictIndex.Failed -> if (index.rateLimited) Outcome.RateLimited else Outcome.Retry
+            is ConflictIndex.Failed ->
+                if (index.rateLimited) Outcome.RateLimited(index.retryAfterSeconds) else Outcome.Retry
             null -> Outcome.Retry
             is ConflictIndex.Ready -> {
                 val server = index.entries[op.timeEntryId]
@@ -453,7 +453,8 @@ class SyncWorker @AssistedInject constructor(
             }.getOrElse { error ->
                 if (error is CancellationException) throw error
                 Timber.w(error, "Could not fetch conflict comparison data")
-                ConflictIndex.Failed(rateLimited = error is HttpException && error.code() == HTTP_TOO_MANY_REQUESTS)
+                val rateLimit = (error as? HttpException)?.takeIf { it.code() == HTTP_TOO_MANY_REQUESTS }
+                ConflictIndex.Failed(rateLimited = rateLimit != null, retryAfterSeconds = rateLimit?.retryAfterSeconds())
             }
         }
     }
@@ -545,7 +546,12 @@ class SyncWorker @AssistedInject constructor(
                 outboxDao.rekeyReferences(localId, server.id)
                 rekeyedTo = server.id
             }
-            timeEntryDao.upsert(server.toEntity(updatedAt = clock.nowMs(), syncState = SyncState.SYNCED))
+            // The user may have soft-deleted this entry while its START/CREATE was in flight; the
+            // queued DELETE follows once this reply lands, so the row must stay hidden until then.
+            val pendingDelete = timeEntryDao.getById(server.id)?.pendingDelete ?: false
+            timeEntryDao.upsert(
+                server.toEntity(updatedAt = clock.nowMs(), syncState = SyncState.SYNCED, pendingDelete = pendingDelete),
+            )
             // Preserve the server's authoritative tag set; only fall back to the queued tags when
             // the server returned none (avoids clobbering a server-side tag merge).
             val tagIds = server.tags.map { it.id }.ifEmpty { fallbackTagIds.orEmpty() }
@@ -563,10 +569,13 @@ class SyncWorker @AssistedInject constructor(
     private fun classify(e: Exception): Outcome = when {
         e is IOException -> Outcome.Retry
         e is HttpException && e.code() == HTTP_REQUEST_TIMEOUT -> Outcome.Retry
-        e is HttpException && e.code() == HTTP_TOO_MANY_REQUESTS -> Outcome.RateLimited
+        e is HttpException && e.code() == HTTP_TOO_MANY_REQUESTS -> Outcome.RateLimited(e.retryAfterSeconds())
         e is HttpException && e.code() >= HTTP_SERVER_ERROR_START -> Outcome.Retry
         else -> Outcome.Fail
     }
+
+    /** Numeric Retry-After only; an HTTP-date form is treated as unknown. */
+    private fun HttpException.retryAfterSeconds(): Long? = response()?.headers()?.get("Retry-After")?.trim()?.toLongOrNull()
 
     companion object {
         private const val PAGE_SIZE = 250
@@ -593,7 +602,7 @@ class SyncWorker @AssistedInject constructor(
 
 private sealed class ConflictIndex {
     data class Ready(val entries: Map<String, TimeEntry>) : ConflictIndex()
-    data class Failed(val rateLimited: Boolean) : ConflictIndex()
+    data class Failed(val rateLimited: Boolean, val retryAfterSeconds: Long? = null) : ConflictIndex()
 }
 
 private fun TimeEntry.toConflictSnapshot(): ConflictSnapshot = ConflictSnapshot.of(

@@ -102,7 +102,14 @@ open class MainActivity : ComponentActivity() {
                 ) {
                     AppStatusOverlay(
                         syncStatus = syncStatus,
-                        onRetrySync = { trackingViewModel.retrySync() },
+                        onRetrySync = {
+                            val organizationId = authViewModel.uiState.value.currentMembership?.organizationId
+                            if (organizationId != null) {
+                                trackingViewModel.retryAllSync(organizationId)
+                            } else {
+                                trackingViewModel.retrySync()
+                            }
+                        },
                     ) {
                         SolidVerdantApp(
                             authViewModel = authViewModel,
@@ -462,6 +469,7 @@ fun SolidVerdantApp(
                         onLoadNewerEntries = trackingViewModel::loadNewerTimeEntries,
                         onJumpToDate = trackingViewModel::jumpToHistoryDate,
                         onHistoryJumpConsumed = trackingViewModel::consumeHistoryJump,
+                        onClearError = trackingViewModel::clearError,
                     )
                 },
                 calendarContent = {

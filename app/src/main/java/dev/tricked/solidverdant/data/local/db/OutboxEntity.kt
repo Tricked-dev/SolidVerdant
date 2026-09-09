@@ -39,3 +39,16 @@ data class OutboxEntity(
      */
     val baseSnapshotJson: String? = null,
 )
+
+/**
+ * Machine-readable [OutboxEntity.lastError] written when the server answered HTTP 429. Encoded as
+ * `rate_limited` or `rate_limited:<retry-after seconds>`. A rate-limited row keeps its attempt
+ * budget, so this marker is the only evidence the UI has that the wait is deliberate.
+ */
+object RateLimitMarker {
+    const val PREFIX = "rate_limited"
+
+    fun encode(retryAfterSeconds: Long?): String = if (retryAfterSeconds == null) PREFIX else "$PREFIX:$retryAfterSeconds"
+
+    fun matches(error: String?): Boolean = error == PREFIX || error?.startsWith("$PREFIX:") == true
+}

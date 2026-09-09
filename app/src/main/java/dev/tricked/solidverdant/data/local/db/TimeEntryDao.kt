@@ -13,6 +13,7 @@ import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Upsert
 import dev.tricked.solidverdant.data.model.TimeEntry
+import dev.tricked.solidverdant.domain.inbox.rekeyInboxIssueKey
 import dev.tricked.solidverdant.sync.ConflictSnapshot
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.json.Json
@@ -38,6 +39,16 @@ interface TimeEntryDao {
     @Query("SELECT * FROM time_entries WHERE id = :id")
     suspend fun getById(id: String): TimeEntryEntity?
 
+    /**
+     * The row a START/CREATE reply preserves when it rekeys a `local-` id: same organization,
+     * user and start. A visible row wins over one awaiting its server DELETE.
+     */
+    @Query(
+        "SELECT * FROM time_entries WHERE organizationId = :orgId AND userId = :userId AND start = :start " +
+            "ORDER BY pendingDelete ASC, updatedAt DESC LIMIT 1",
+    )
+    suspend fun findByIdentity(orgId: String, userId: String, start: String): TimeEntryEntity?
+
     @Query(
         "SELECT * FROM time_entries WHERE organizationId = :orgId AND type = 'work' AND end IS NULL AND pendingDelete = 0 ORDER BY start DESC LIMIT 1",
     )
@@ -61,6 +72,11 @@ interface TimeEntryDao {
     @Query("UPDATE time_entries SET id = :newId WHERE id = :oldId")
     suspend fun updateId(oldId: String, newId: String)
 
+    /**
+     * Move an entry and everything keyed by its id (tag refs, Time Inbox dismissals) from the
+     * optimistic `local-` id to the id the server assigned. Outbox references move separately in
+     * [OutboxDao.rekeyReferences] inside the same reconcile transaction.
+     */
     @Transaction
     suspend fun rekey(oldId: String, newId: String) {
         if (oldId == newId) return
@@ -74,7 +90,24 @@ interface TimeEntryDao {
             clearTagRefs(oldId)
             deleteById(oldId)
         }
+        // Issue keys embed entry ids, so a dismissal recorded against the local id would stop
+        // matching the same issue after sync and the dismissed item would resurface.
+        findDismissalsReferencing(oldId).forEach { dismissal ->
+            val rekeyed = rekeyInboxIssueKey(dismissal.issueKey, oldId, newId)
+            if (rekeyed == dismissal.issueKey) return@forEach
+            deleteDismissal(dismissal.issueKey)
+            insertDismissal(dismissal.copy(issueKey = rekeyed))
+        }
     }
+
+    @Query("SELECT * FROM inbox_dismissals WHERE issueKey LIKE '%' || :entryId || '%'")
+    suspend fun findDismissalsReferencing(entryId: String): List<InboxDismissalEntity>
+
+    @Query("DELETE FROM inbox_dismissals WHERE issueKey = :issueKey")
+    suspend fun deleteDismissal(issueKey: String)
+
+    @Upsert
+    suspend fun insertDismissal(dismissal: InboxDismissalEntity)
 
     @Query("SELECT tagId FROM time_entry_tag_cross_ref WHERE timeEntryId = :entryId")
     suspend fun tagIdsFor(entryId: String): List<String>

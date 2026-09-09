@@ -18,9 +18,9 @@ enum class ReviewItemType { RUNNING_TIMER, FAILED_SYNC, UNCATEGORIZED }
 
 /**
  * One actionable item in the guided end-of-day review. [id] is a stable key derived from the
- * underlying data (never a list index) so the step machine stays correct as items are resolved or
- * as new items appear. Text fields hold the user's own data for on-screen display only; they are
- * never logged.
+ * underlying data (never a list index, and never the entry id) so the step machine stays correct as
+ * items are resolved or as new items appear. Text fields hold the user's own data for on-screen
+ * display only; they are never logged.
  */
 data class ReviewItem(
     val id: String,
@@ -31,6 +31,21 @@ data class ReviewItem(
     val endIso: String? = null,
     val detail: String? = null,
 )
+
+/**
+ * Identity of a review step, stable across a sync rekey.
+ *
+ * An optimistic entry id (`local-...`) is rewritten to the server id by the sync worker while the
+ * review is open. Keying a step on the entry id therefore makes a step the user already completed
+ * reappear under a new name, and inflates the "x of n" total because the retired key and the new
+ * item are both counted. Reconcile preserves (organizationId, userId, start), and the item list is
+ * already scoped to one organization, so (userId, start) identifies the entry across the rekey.
+ *
+ * [entry] is null only when the underlying row is not in the current list (a failed sync operation
+ * for an entry outside the day); the entry id is then the best identity available.
+ */
+fun reviewItemKey(type: ReviewItemType, entry: TimeEntry?, entryId: String): String =
+    if (entry == null) "${type.name}:entry:$entryId" else "${type.name}:${entry.userId}@${entry.start}"
 
 /** Progress through the guided review, expressed as a stable "completed of total". */
 data class ReviewProgress(val completed: Int, val total: Int) {

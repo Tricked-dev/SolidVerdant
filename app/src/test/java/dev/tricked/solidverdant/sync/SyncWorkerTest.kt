@@ -11,8 +11,10 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.work.ListenableWorker
 import androidx.work.testing.TestListenableWorkerBuilder
 import dev.tricked.solidverdant.data.local.db.AppDatabase
+import dev.tricked.solidverdant.data.local.db.InboxDismissalEntity
 import dev.tricked.solidverdant.data.local.db.OutboxEntity
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
+import dev.tricked.solidverdant.data.local.db.RateLimitMarker
 import dev.tricked.solidverdant.data.local.db.SyncState
 import dev.tricked.solidverdant.data.local.db.toEntity
 import dev.tricked.solidverdant.data.model.Membership
@@ -38,6 +40,7 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -1381,7 +1384,7 @@ class SyncWorkerTest {
         val deferred = db.outboxDao().peekAll()
         assertEquals(listOf(OutboxOpType.START, OutboxOpType.STOP), deferred.map { it.opType })
         assertEquals(listOf(0, 0), deferred.map { it.attemptCount })
-        assertTrue(deferred.first().lastError?.contains("Rate limited") == true)
+        assertTrue(RateLimitMarker.matches(deferred.first().lastError))
         coVerify(exactly = 0) { syncRemote.stopTimeEntry(any(), any(), any(), any(), any()) }
 
         assertEquals(ListenableWorker.Result.success(), buildWorker(remoteDataSource = syncRemote).doWork())
@@ -1593,5 +1596,75 @@ class SyncWorkerTest {
         assertTrue(db.outboxDao().peekAll().isEmpty())
         assertNull(db.timeEntryDao().getById("local-1"))
         assertEquals(SyncState.SYNCED, db.timeEntryDao().getById("server-9")?.syncState)
+    }
+
+    private fun repository() = TimeEntryRepository(
+        db.timeEntryDao(),
+        db.catalogDao(),
+        db.outboxDao(),
+        db.syncMetaDao(),
+        remote,
+        clock,
+        json,
+        db,
+    )
+
+    @Test fun start_reply_keeps_a_soft_delete_that_landed_while_the_start_was_in_flight() = runTest {
+        val repository = repository()
+        val local = repository.startEntry("org1", "m1", "u1", null, null, "work", emptyList())
+        repository.softDeleteLocal(local)
+        remote.startResult = { it.copy(id = "server-1") }
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        val row = db.timeEntryDao().getById("server-1")
+        assertNotNull(row)
+        assertTrue("CREATE reply must not resurrect a delete in progress", row!!.pendingDelete)
+        assertNull(db.timeEntryDao().getById(local.id))
+    }
+
+    @Test fun start_reply_rekeys_inbox_dismissals_recorded_against_the_local_id() = runTest {
+        val local = repository().startEntry("org1", "m1", "u1", null, null, "", emptyList())
+        db.inboxDismissalDao().upsert(InboxDismissalEntity("missing:v1:${local.id}:1000:DESCRIPTION", "org1", 1L))
+        remote.startResult = { it.copy(id = "server-1") }
+
+        assertEquals(ListenableWorker.Result.success(), buildWorker().doWork())
+
+        assertEquals(
+            listOf("missing:v1:server-1:1000:DESCRIPTION"),
+            db.inboxDismissalDao().observeDismissedKeys("org1").first(),
+        )
+    }
+
+    @Test fun rate_limit_records_marker_and_retry_after_without_spending_an_attempt() = runTest {
+        val body = """{"message":"Too Many Attempts."}""".toResponseBody()
+        val raw = okhttp3.Response.Builder()
+            .code(429)
+            .message("Too Many Requests")
+            .protocol(okhttp3.Protocol.HTTP_1_1)
+            .request(okhttp3.Request.Builder().url("http://localhost/").build())
+            .header("Retry-After", "30")
+            .build()
+        remote.writeError = HttpException(Response.error<Unit>(body, raw))
+        db.outboxDao().insert(
+            OutboxEntity(
+                opType = OutboxOpType.DELETE,
+                organizationId = "org1",
+                timeEntryId = "server-rate-limited",
+                createdAtMs = 1L,
+                payloadJson = "{}",
+            ),
+        )
+
+        assertEquals(ListenableWorker.Result.retry(), buildWorker().doWork())
+
+        val stored = db.outboxDao().peekAll().single()
+        assertEquals(0, stored.attemptCount)
+        assertEquals("rate_limited:30", stored.lastError)
+        assertTrue(RateLimitMarker.matches(stored.lastError))
+
+        remote.writeError = httpException(429, """{"message":"Too Many Attempts."}""")
+        assertEquals(ListenableWorker.Result.retry(), buildWorker().doWork())
+        assertEquals("rate_limited", db.outboxDao().peekAll().single().lastError)
     }
 }

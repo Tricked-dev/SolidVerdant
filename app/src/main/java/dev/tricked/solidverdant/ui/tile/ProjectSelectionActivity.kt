@@ -133,9 +133,12 @@ fun ProjectSelectionContent(
                     }
                 }
 
-                uiState.error != null && uiState.projects.isEmpty() -> {
+                (uiState.error != null || uiState.errorRes != null) && uiState.projects.isEmpty() -> {
                     Text(
-                        text = stringResource(R.string.error_format, uiState.error ?: ""),
+                        text = stringResource(
+                            R.string.error_format,
+                            uiState.error ?: uiState.errorRes?.let { stringResource(it) }.orEmpty(),
+                        ),
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodyMedium,
                     )

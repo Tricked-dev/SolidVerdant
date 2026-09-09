@@ -19,6 +19,7 @@ import dev.tricked.solidverdant.util.Clock
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -50,6 +52,8 @@ class SyncCenterViewModel @Inject constructor(
         .map { auth -> resolveOrgId(auth) }
         .distinctUntilChanged()
 
+    private val activeRecoveryEntryIds = MutableStateFlow<Set<String>>(emptySet())
+
     val uiState: StateFlow<SyncCenterUiState> = orgIdFlow.flatMapLatest { orgId ->
         if (orgId == null) {
             flowOf(SyncCenterUiState(isLoading = false))
@@ -57,7 +61,9 @@ class SyncCenterViewModel @Inject constructor(
             combine(
                 repository.observeSyncOperations(orgId),
                 repository.observeSyncMeta(orgId),
-            ) { operations, meta ->
+                repository.observeFailedOperationCountOutsideOrganization(orgId),
+                activeRecoveryEntryIds,
+            ) { operations, meta, failedOutsideCount, activeRecoveryIds ->
                 val failed = operations.filter { it.status == EntrySyncStatus.FAILED }
                 val conflicts = operations.filter { it.status == EntrySyncStatus.CONFLICT }
                 val pending = operations.filter {
@@ -73,6 +79,8 @@ class SyncCenterViewModel @Inject constructor(
                     pending = pending,
                     failed = failed,
                     conflicts = conflicts,
+                    failedOutsideOrganizationCount = failedOutsideCount,
+                    activeRecoveryEntryIds = activeRecoveryIds,
                     topLine = when {
                         failed.isNotEmpty() -> SyncCenterUiState.TopLine.FAILURES
                         conflicts.isNotEmpty() -> SyncCenterUiState.TopLine.CONFLICTS
@@ -107,7 +115,40 @@ class SyncCenterViewModel @Inject constructor(
     /** Retry a single failed change: clear its dead-letter/attempt state, then request a sync. */
     fun retry(entryId: String) {
         viewModelScope.launch {
-            if (repository.prepareRetry(entryId)) syncTrigger.requestSync()
+            withActiveRecovery(entryId) {
+                if (repository.prepareRetry(entryId)) syncTrigger.requestSync()
+            }
+        }
+    }
+
+    /** Resolve a conflict in favour of the device copy, then upload it through the outbox. */
+    fun retryConflictWithLocal(entryId: String): Job = viewModelScope.launch {
+        withActiveRecovery(entryId) {
+            val auth = settingsDataStore.getCachedAuth()
+            val memberId = auth?.let {
+                (
+                    it.memberships.firstOrNull { membership -> membership.id == it.currentMembershipId }
+                        ?: it.memberships.firstOrNull()
+                    )?.id
+            }
+            if (repository.resolveKeepMine(entryId, memberId)) syncTrigger.requestSync()
+        }
+    }
+
+    /** Resolve a conflict in favour of the latest server copy. */
+    fun useServerVersion(entryId: String): Job = viewModelScope.launch {
+        withActiveRecovery(entryId) {
+            if (repository.resolveKeepTheirs(entryId)) syncTrigger.requestSync()
+        }
+    }
+
+    private suspend fun withActiveRecovery(entryId: String, action: suspend () -> Unit) {
+        if (entryId in activeRecoveryEntryIds.value) return
+        activeRecoveryEntryIds.update { it + entryId }
+        try {
+            action()
+        } finally {
+            activeRecoveryEntryIds.update { it - entryId }
         }
     }
 
@@ -149,6 +190,9 @@ data class SyncCenterUiState(
     val pending: List<SyncOperation> = emptyList(),
     val failed: List<SyncOperation> = emptyList(),
     val conflicts: List<SyncOperation> = emptyList(),
+    /** Dead-lettered changes in organizations other than [organizationId]; the worker drains them all but the lists above do not show them. */
+    val failedOutsideOrganizationCount: Int = 0,
+    val activeRecoveryEntryIds: Set<String> = emptySet(),
     val topLine: TopLine = TopLine.SYNCED,
 ) {
     val pendingCount: Int get() = pending.size

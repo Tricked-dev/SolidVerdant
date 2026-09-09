@@ -66,6 +66,30 @@ class TimeEntryDaoTest {
         assertEquals("server-1", dao.getById("server-1")?.id)
     }
 
+    @Test fun rekey_moves_inbox_dismissals_for_the_entry_to_its_new_id() = runTest {
+        dao.upsert(entry("local-1"))
+        db.inboxDismissalDao().upsertAll(
+            listOf(
+                InboxDismissalEntity("missing:v1:local-1:1000:DESCRIPTION", "org1", 5L),
+                InboxDismissalEntity("overlap:v1:bbb:local-1:100:200:300:400", "org1", 6L),
+                InboxDismissalEntity("missing:v1:local-10:1000:DESCRIPTION", "org1", 7L),
+            ),
+        )
+
+        dao.rekey("local-1", "aaa")
+
+        val dismissals = db.inboxDismissalDao().observeDismissals("org1").first()
+        assertEquals(
+            setOf(
+                "missing:v1:aaa:1000:DESCRIPTION",
+                "overlap:v1:aaa:bbb:300:400:100:200",
+                "missing:v1:local-10:1000:DESCRIPTION",
+            ),
+            dismissals.map { it.issueKey }.toSet(),
+        )
+        assertEquals(5L, dismissals.single { it.issueKey == "missing:v1:aaa:1000:DESCRIPTION" }.dismissedAtMs)
+    }
+
     @Test fun replace_tag_refs_round_trips() = runTest {
         dao.upsert(entry("a"))
         dao.replaceTagRefs("a", listOf("t1", "t2"))

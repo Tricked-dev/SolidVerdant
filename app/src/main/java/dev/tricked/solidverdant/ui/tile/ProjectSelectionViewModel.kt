@@ -6,9 +6,11 @@
 
 package dev.tricked.solidverdant.ui.tile
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.local.SettingsDataStore
 import dev.tricked.solidverdant.data.model.Project
 import dev.tricked.solidverdant.data.model.Task
@@ -30,6 +32,8 @@ data class ProjectSelectionUiState(
     val projects: List<Project> = emptyList(),
     val tasks: List<Task> = emptyList(),
     val error: String? = null,
+    /** Resolved by the screen when [error] carries no message of its own. */
+    @StringRes val errorRes: Int? = null,
 )
 
 /**
@@ -56,7 +60,7 @@ class ProjectSelectionViewModel @Inject constructor(
         loadJob?.cancel()
         backgroundLoadJob?.cancel()
         loadJob = viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null, errorRes = null)
 
             try {
                 val organizationId = authRepository.getCurrentMembership()?.organizationId
@@ -65,7 +69,7 @@ class ProjectSelectionViewModel @Inject constructor(
                 if (organizationId == null) {
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = "No organization found",
+                        errorRes = R.string.tile_error_no_organization,
                     )
                     return@launch
                 }
@@ -108,7 +112,8 @@ class ProjectSelectionViewModel @Inject constructor(
                 Timber.e(e, "Failed to load projects and tasks")
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = e.message ?: "Failed to load projects",
+                    error = e.message,
+                    errorRes = R.string.tile_error_load_projects,
                 )
             }
         }

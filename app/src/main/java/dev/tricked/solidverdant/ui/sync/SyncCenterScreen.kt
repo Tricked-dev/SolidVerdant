@@ -8,6 +8,8 @@ package dev.tricked.solidverdant.ui.sync
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,6 +48,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.data.local.db.OutboxOpType
+import dev.tricked.solidverdant.data.local.db.RateLimitMarker
+import dev.tricked.solidverdant.data.repository.TimeEntryRepository.EntrySyncStatus
 import dev.tricked.solidverdant.data.repository.TimeEntryRepository.SyncOperation
 import dev.tricked.solidverdant.ui.components.SectionCard
 import dev.tricked.solidverdant.ui.theme.Dimens
@@ -95,15 +99,33 @@ fun SyncCenterScreen(onBack: () -> Unit, viewModel: SyncCenterViewModel = hiltVi
             )
             FreshnessSection(state = state, onSyncNow = viewModel::syncNow, nowMs = viewModel.nowMs())
             StatusSummarySection(state = state)
+            if (state.failedOutsideOrganizationCount > 0) {
+                Text(
+                    text = pluralStringResource(
+                        R.plurals.sync_failed_outside_organization,
+                        state.failedOutsideOrganizationCount,
+                        state.failedOutsideOrganizationCount,
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("sync_failed_outside_organization"),
+                )
+            }
             if (state.pending.isNotEmpty()) {
                 PendingSection(state.pending)
             }
             if (state.conflicts.isNotEmpty()) {
-                ConflictsSection(state.conflicts)
+                ConflictsSection(
+                    conflicts = state.conflicts,
+                    activeRecoveryEntryIds = state.activeRecoveryEntryIds,
+                    onRetryUpload = viewModel::retryConflictWithLocal,
+                    onUseServerVersion = viewModel::useServerVersion,
+                )
             }
             if (state.failed.isNotEmpty()) {
                 FailuresSection(
                     failed = state.failed,
+                    activeRecoveryEntryIds = state.activeRecoveryEntryIds,
                     onRetry = viewModel::retry,
                     onDiscard = viewModel::discard,
                     onRetryAll = viewModel::retryAll,
@@ -204,7 +226,7 @@ private fun PendingSection(pending: List<SyncOperation>) {
             Column {
                 Text(opLabel(op.type), style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    stringResource(R.string.sync_pending_item),
+                    stringResource(pendingReasonRes(op)),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -213,25 +235,52 @@ private fun PendingSection(pending: List<SyncOperation>) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ConflictsSection(conflicts: List<SyncOperation>) {
+private fun ConflictsSection(
+    conflicts: List<SyncOperation>,
+    activeRecoveryEntryIds: Set<String>,
+    onRetryUpload: (String) -> Unit,
+    onUseServerVersion: (String) -> Unit,
+) {
     SectionCard(title = stringResource(R.string.sync_conflicts_section_title)) {
         conflicts.forEachIndexed { index, op ->
             if (index > 0) HorizontalDivider()
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(Dimens.Space4)) {
                 Text(opLabel(op.type), style = MaterialTheme.typography.bodyMedium)
                 Text(
                     stringResource(R.string.sync_conflict_item),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
+                    TextButton(
+                        onClick = { onUseServerVersion(op.entryId) },
+                        enabled = op.entryId !in activeRecoveryEntryIds,
+                    ) {
+                        Text(stringResource(R.string.sync_use_server_version))
+                    }
+                    TextButton(
+                        onClick = { onRetryUpload(op.entryId) },
+                        enabled = op.entryId !in activeRecoveryEntryIds,
+                        modifier = Modifier.testTag(SyncCenterTestTags.conflictRetry(op.entryId)),
+                    ) {
+                        Text(stringResource(R.string.sync_retry_upload))
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun FailuresSection(failed: List<SyncOperation>, onRetry: (String) -> Unit, onDiscard: (String) -> Unit, onRetryAll: () -> Unit) {
+private fun FailuresSection(
+    failed: List<SyncOperation>,
+    activeRecoveryEntryIds: Set<String>,
+    onRetry: (String) -> Unit,
+    onDiscard: (String) -> Unit,
+    onRetryAll: () -> Unit,
+) {
     SectionCard(title = stringResource(R.string.sync_failures_section_title)) {
         failed.forEachIndexed { index, op ->
             if (index > 0) HorizontalDivider()
@@ -243,7 +292,13 @@ private fun FailuresSection(failed: List<SyncOperation>, onRetry: (String) -> Un
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(Dimens.Space8)) {
-                    TextButton(onClick = { onRetry(op.entryId) }) { Text(stringResource(R.string.sync_retry)) }
+                    TextButton(
+                        onClick = { onRetry(op.entryId) },
+                        enabled = op.entryId !in activeRecoveryEntryIds,
+                        modifier = Modifier.testTag(SyncCenterTestTags.failedRetry(op.entryId)),
+                    ) {
+                        Text(stringResource(R.string.sync_retry))
+                    }
                     TextButton(onClick = { onDiscard(op.entryId) }) { Text(stringResource(R.string.sync_discard)) }
                 }
             }
@@ -275,15 +330,22 @@ internal fun failureReasonRes(error: String?): Int {
     val lower = error?.lowercase().orEmpty()
     return when {
         lower.isBlank() -> R.string.sync_reason_generic
+        RateLimitMarker.matches(error) -> R.string.sync_reason_rate_limited
         listOf("offline", "timeout", "unable to resolve host", "connect", "unreachable", "network")
             .any { it in lower } -> R.string.sync_reason_offline
-        listOf("400", "401", "403", "404", "409", "422", "unprocessable", "forbidden", "unauthorized", "bad request")
+        // The worker's own dead-letter message says "rejected"; match it before the server
+        // bucket, whose "server" keyword would otherwise claim it and imply a transient fault.
+        listOf("400", "401", "403", "404", "409", "422", "unprocessable", "forbidden", "unauthorized", "bad request", "reject")
             .any { it in lower } -> R.string.sync_reason_rejected
         listOf("500", "502", "503", "504", "server", "gateway", "unavailable")
             .any { it in lower } -> R.string.sync_reason_server
         else -> R.string.sync_reason_generic
     }
 }
+
+/** A queued change only earns an explanation once the worker has tried it and written why it is still waiting. */
+internal fun pendingReasonRes(op: SyncOperation): Int =
+    if (op.status == EntrySyncStatus.RETRYING && !op.error.isNullOrBlank()) failureReasonRes(op.error) else R.string.sync_pending_item
 
 @Composable
 private fun relativeTimeText(timeMs: Long?, neverRes: Int, nowMs: Long): String = when (RelativeTime.bucketOf(timeMs, nowMs)) {

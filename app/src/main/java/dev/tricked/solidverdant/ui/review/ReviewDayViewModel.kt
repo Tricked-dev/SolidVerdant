@@ -122,6 +122,7 @@ class ReviewDayViewModel @Inject constructor(
         val today = nowInstant.atZone(zone).toLocalDate()
         val dayFacts = buildDayFacts(entries, today, zone, nowInstant)
 
+        val entriesById = entries.associateBy { it.id }
         val runningEntry = entries.firstOrNull(::isRunningTimeEntry)
         val uncategorized = dayFacts.uncategorized
         val failed = syncOps.filter { it.status == TimeEntryRepository.EntrySyncStatus.FAILED }
@@ -131,7 +132,7 @@ class ReviewDayViewModel @Inject constructor(
             runningEntry?.let {
                 add(
                     ReviewItem(
-                        id = "running:${it.id}",
+                        id = reviewItemKey(ReviewItemType.RUNNING_TIMER, it, it.id),
                         type = ReviewItemType.RUNNING_TIMER,
                         entryId = it.id,
                         description = it.description,
@@ -142,7 +143,7 @@ class ReviewDayViewModel @Inject constructor(
             failed.forEach { op ->
                 add(
                     ReviewItem(
-                        id = "sync:${op.entryId}",
+                        id = reviewItemKey(ReviewItemType.FAILED_SYNC, entriesById[op.entryId], op.entryId),
                         type = ReviewItemType.FAILED_SYNC,
                         entryId = op.entryId,
                         detail = op.error,
@@ -152,7 +153,7 @@ class ReviewDayViewModel @Inject constructor(
             uncategorized.forEach { e ->
                 add(
                     ReviewItem(
-                        id = "uncat:${e.id}",
+                        id = reviewItemKey(ReviewItemType.UNCATEGORIZED, e, e.id),
                         type = ReviewItemType.UNCATEGORIZED,
                         entryId = e.id,
                         description = e.description,
@@ -197,7 +198,7 @@ class ReviewDayViewModel @Inject constructor(
         runCatching { repository.stopEntry(entry, userId) }
             .onSuccess {
                 syncScheduler.requestSync()
-                markHandled("running:${entry.id}")
+                markHandled(reviewItemKey(ReviewItemType.RUNNING_TIMER, entry, entry.id))
                 _message.value = R.string.review_msg_timer_stopped
             }
             .onFailure { _message.value = R.string.review_msg_action_failed }
@@ -206,7 +207,7 @@ class ReviewDayViewModel @Inject constructor(
     /** Leave the timer running and move past this step. */
     fun keepRunning() {
         val entry = uiState.value.runningEntry ?: return
-        markHandled("running:${entry.id}")
+        markHandled(reviewItemKey(ReviewItemType.RUNNING_TIMER, entry, entry.id))
     }
 
     /**
@@ -230,25 +231,36 @@ class ReviewDayViewModel @Inject constructor(
             repository.updateEntry(entry.copy(end = formatIso(endInstant)), entry.tags.map { it.id })
         }.onSuccess {
             syncScheduler.requestSync()
-            markHandled("running:${entry.id}")
+            markHandled(reviewItemKey(ReviewItemType.RUNNING_TIMER, entry, entry.id))
             _message.value = R.string.review_msg_end_adjusted
         }.onFailure { _message.value = R.string.review_msg_action_failed }
     }
 
-    /** Queue a retry for a change that failed to sync. */
+    /**
+     * Queue a retry for a change that failed to sync. Nothing is marked handled when the outbox
+     * reports no operation was reset: the change is still failing, so the step must stay on screen.
+     */
     fun retryFailedSync(item: ReviewItem) = viewModelScope.launch {
-        runCatching { repository.prepareRetry(item.entryId) }
+        runCatching { repository.prepareRetry(currentEntryId(item)) }
             .onSuccess { reset ->
-                if (reset) syncScheduler.requestSync()
-                markHandled(item.id)
-                _message.value = R.string.review_msg_retry_queued
+                if (reset) {
+                    syncScheduler.requestSync()
+                    markHandled(item.id)
+                    _message.value = R.string.review_msg_retry_queued
+                } else {
+                    _message.value = R.string.review_msg_action_failed
+                }
             }
             .onFailure { _message.value = R.string.review_msg_action_failed }
     }
 
     /** Assign [projectId] to the uncategorized entry behind [item]. */
     fun assignProject(item: ReviewItem, projectId: String) = viewModelScope.launch {
-        val entry = uiState.value.uncategorizedById[item.entryId] ?: return@launch
+        val entry = uiState.value.uncategorizedById[currentEntryId(item)]
+        if (entry == null) {
+            _message.value = R.string.review_msg_action_failed
+            return@launch
+        }
         runCatching {
             repository.updateEntry(entry.copy(projectId = projectId), entry.tags.map { it.id })
         }.onSuccess {
@@ -269,7 +281,7 @@ class ReviewDayViewModel @Inject constructor(
     fun keepAsIs(item: ReviewItem) {
         if (item.type == ReviewItemType.FAILED_SYNC) {
             viewModelScope.launch {
-                runCatching { repository.discardFailedSync(item.entryId) }
+                runCatching { repository.discardFailedSync(currentEntryId(item)) }
                     .onFailure { _message.value = R.string.review_msg_action_failed }
             }
         }
@@ -280,6 +292,13 @@ class ReviewDayViewModel @Inject constructor(
     fun reviewAgain() {
         handledIds.value = emptySet()
     }
+
+    /**
+     * The entry id the step points at right now. [item] can be a snapshot the UI captured before a
+     * sync rekey (the project picker holds one while it is open), and its [ReviewItem.entryId] may
+     * name a retired local id. The step key survives the rekey, so re-resolve through it.
+     */
+    private fun currentEntryId(item: ReviewItem): String = uiState.value.items.firstOrNull { it.id == item.id }?.entryId ?: item.entryId
 
     private fun markHandled(id: String) {
         handledIds.update { it + id }

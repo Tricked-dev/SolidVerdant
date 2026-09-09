@@ -13,7 +13,9 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 
 /** A half-open portion of a time entry clipped to one local calendar day. */
 data class LocalDayTimeSlice(val date: LocalDate, val start: Instant, val endExclusive: Instant) {
@@ -101,3 +103,12 @@ fun parseTimeEntryInstant(value: String): Instant? = runCatching { OffsetDateTim
     .recoverCatching { Instant.parse(value) }
     .recoverCatching { ZonedDateTime.parse(value).toInstant() }
     .getOrNull()
+
+private val timeEntryInstantFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'").withZone(ZoneOffset.UTC)
+
+/**
+ * Solidtime's timestamp shape: UTC, whole seconds, `Z` suffix. Every local writer must use it, as
+ * Room's `ORDER BY start` and the history window compare these strings lexicographically and an
+ * offset form such as `+02:00` sorts out of chronological order next to server echoes.
+ */
+fun formatTimeEntryInstant(value: ZonedDateTime): String = timeEntryInstantFormatter.format(value.toInstant())
