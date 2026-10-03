@@ -14,6 +14,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
 import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.repository.EntryTemplate
 import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
@@ -38,6 +40,7 @@ class TemplateEditorSheetTest {
     private var saved: TemplateDraft? = null
     private var updated: EntryTemplate? = null
     private var deleted = 0
+    private var dismissed = 0
 
     private fun show(template: EntryTemplate?, deletable: Boolean = true) {
         composeRule.setContent {
@@ -47,7 +50,7 @@ class TemplateEditorSheetTest {
                     projects = emptyList(),
                     tasks = emptyList(),
                     tags = tags,
-                    onDismiss = {},
+                    onDismiss = { dismissed++ },
                     onSave = { saved = it },
                     onUpdate = { updated = it },
                     onDelete = if (deletable) ({ deleted++ }) else null,
@@ -111,5 +114,16 @@ class TemplateEditorSheetTest {
         show(existing, deletable = false)
 
         composeRule.onNodeWithTag(TemplateEditorTestTags.DELETE).assertDoesNotExist()
+    }
+
+    @Test
+    fun swipingDownInsideTheFormDoesNotDismissTheSheet() {
+        show(template = existing)
+
+        composeRule.onNodeWithTag(TemplateEditorTestTags.NAME).performTouchInput { swipeDown(durationMillis = 100) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(TemplateEditorTestTags.SHEET).assertExists()
+        assertEquals(0, dismissed)
     }
 }

@@ -16,6 +16,8 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
 import dev.tricked.solidverdant.data.model.TimeEntry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -114,5 +116,38 @@ class TimeEntryFormSheetTest {
         composeRule.onNodeWithTag(TrackingTestTags.SHEET_DESCRIPTION_FIELD).assert(hasText("Running work"))
         composeRule.onNodeWithTag(TrackingTestTags.SHEET_SAVE_BUTTON).performClick()
         assertEquals("Running work", saved)
+    }
+
+    @Test
+    fun swiping_down_inside_the_form_does_not_dismiss_the_sheet() {
+        var dismissCount = 0
+        composeRule.setContent {
+            MaterialTheme {
+                TimeEntryFormSheet(
+                    entry = TimeEntry(
+                        id = "completed",
+                        userId = "user",
+                        organizationId = "org",
+                        start = "2026-08-21T08:00:00Z",
+                        end = "2026-08-21T09:00:00Z",
+                        description = "Milling",
+                    ),
+                    zone = ZoneId.of("UTC"),
+                    suggestedStart = null,
+                    projects = emptyList(),
+                    tasks = emptyList(),
+                    tags = emptyList(),
+                    onDismiss = { dismissCount++ },
+                    onSave = { _, _, _, _, _, _, _ -> },
+                )
+            }
+        }
+
+        // The form is already scrolled to the top, so the whole swipe is leftover the sheet could take.
+        composeRule.onNodeWithTag(TrackingTestTags.SHEET_DESCRIPTION_FIELD).performTouchInput { swipeDown(durationMillis = 100) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(TrackingTestTags.SHEET).assertExists()
+        assertEquals(0, dismissCount)
     }
 }

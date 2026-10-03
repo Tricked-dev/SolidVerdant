@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -43,6 +44,7 @@ import dev.tricked.solidverdant.data.model.Tag
 import dev.tricked.solidverdant.data.model.Task
 import dev.tricked.solidverdant.data.repository.EntryTemplate
 import dev.tricked.solidverdant.ui.components.ConfirmDialog
+import dev.tricked.solidverdant.ui.components.ConsumeVerticalOverscroll
 import dev.tricked.solidverdant.ui.components.DestructiveActionRow
 import dev.tricked.solidverdant.ui.components.EntrySheetHeader
 import dev.tricked.solidverdant.ui.components.GroupedDivider
@@ -142,6 +144,8 @@ fun TemplateEditorSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                // Only the drag handle may dismiss the sheet; swipes in the content just scroll it.
+                .nestedScroll(ConsumeVerticalOverscroll)
                 .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()
                 .imePadding()

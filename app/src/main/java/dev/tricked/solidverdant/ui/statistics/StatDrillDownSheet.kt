@@ -27,12 +27,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import dev.tricked.solidverdant.R
+import dev.tricked.solidverdant.ui.components.ConsumeVerticalOverscroll
 import dev.tricked.solidverdant.ui.components.EmptyState
 import dev.tricked.solidverdant.ui.components.ErrorState
 import dev.tricked.solidverdant.ui.components.GroupedPosition
@@ -85,7 +87,12 @@ fun StatDrillDownSheet(state: DrillDownUiState, onDismiss: () -> Unit, onRetry: 
         containerColor = MaterialTheme.colorScheme.background,
     ) {
         LazyColumn(
-            modifier = Modifier.fillMaxWidth().navigationBarsPadding().testTag(StatDrillDownTestTags.LIST),
+            modifier = Modifier
+                .fillMaxWidth()
+                // Only the drag handle may dismiss the sheet; swipes in the content just scroll it.
+                .nestedScroll(ConsumeVerticalOverscroll)
+                .navigationBarsPadding()
+                .testTag(StatDrillDownTestTags.LIST),
             contentPadding = PaddingValues(bottom = Dimens.Space24),
         ) {
             item(key = "title") {

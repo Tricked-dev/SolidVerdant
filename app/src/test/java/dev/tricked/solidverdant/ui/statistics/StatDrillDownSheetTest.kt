@@ -13,6 +13,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -42,9 +44,11 @@ class StatDrillDownSheetTest {
         billable = index % 2 == 0,
     )
 
+    private var dismissed = 0
+
     private fun show(state: DrillDownUiState) {
         composeRule.setContent {
-            MaterialTheme { StatDrillDownSheet(state = state, onDismiss = {}) }
+            MaterialTheme { StatDrillDownSheet(state = state, onDismiss = { dismissed++ }) }
         }
     }
 
@@ -112,5 +116,16 @@ class StatDrillDownSheetTest {
         composeRule.onNodeWithText("Retry").performClick()
         assertEquals(1, retries)
         composeRule.onNodeWithTag(StatDrillDownTestTags.row("e0")).assertExists()
+    }
+
+    @Test
+    fun swipingDownInsideTheListDoesNotDismissTheSheet() {
+        show(DrillDownUiState(target = target, isLoading = false, rows = listOf(row(0)), totalSeconds = 600))
+
+        composeRule.onNodeWithTag(StatDrillDownTestTags.LIST).performTouchInput { swipeDown(durationMillis = 100) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(StatDrillDownTestTags.SHEET).assertExists()
+        assertEquals(0, dismissed)
     }
 }

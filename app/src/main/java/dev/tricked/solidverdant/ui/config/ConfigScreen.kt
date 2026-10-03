@@ -47,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -57,6 +58,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.tricked.solidverdant.R
 import dev.tricked.solidverdant.ui.auth.OAuthConfigState
+import dev.tricked.solidverdant.ui.components.ConsumeVerticalOverscroll
 import dev.tricked.solidverdant.ui.components.EntrySheetHeader
 import dev.tricked.solidverdant.ui.components.GroupedDivider
 import dev.tricked.solidverdant.ui.components.GroupedRow
@@ -128,6 +130,8 @@ fun ConfigScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                // Only the drag handle may dismiss the sheet; swipes in the content just scroll it.
+                .nestedScroll(ConsumeVerticalOverscroll)
                 .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()
                 .imePadding()

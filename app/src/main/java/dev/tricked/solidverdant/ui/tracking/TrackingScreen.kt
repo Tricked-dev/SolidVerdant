@@ -163,6 +163,7 @@ import dev.tricked.solidverdant.service.TimeTrackingNotificationService
 import dev.tricked.solidverdant.ui.components.AppSheet
 import dev.tricked.solidverdant.ui.components.AppTimePickerDialog
 import dev.tricked.solidverdant.ui.components.ConfirmDialog
+import dev.tricked.solidverdant.ui.components.ConsumeVerticalOverscroll
 import dev.tricked.solidverdant.ui.components.DateRangePickerDialog
 import dev.tricked.solidverdant.ui.components.DestructiveActionRow
 import dev.tricked.solidverdant.ui.components.EditTimeEntryTestTags
@@ -1953,6 +1954,8 @@ internal fun TimeEntryFormSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                // Only the drag handle may dismiss the sheet; swipes in the form just scroll it.
+                .nestedScroll(ConsumeVerticalOverscroll)
                 .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()
                 .imePadding()

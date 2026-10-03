@@ -18,6 +18,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
 import androidx.lifecycle.Lifecycle
 import dev.tricked.solidverdant.ui.auth.OAuthConfigState
 import org.junit.Assert.assertEquals
@@ -36,6 +38,7 @@ class ConfigScreenPasteTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     private var saved: Pair<String, String>? = null
+    private var dismissed = 0
 
     private fun showSheetWithClipboard(text: String) {
         val clipboard = composeRule.activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -47,7 +50,7 @@ class ConfigScreenPasteTest {
                     onSave = { endpoint, clientId -> saved = endpoint to clientId },
                     onReset = {},
                     onTestConnection = { _, _ -> },
-                    onDismiss = {},
+                    onDismiss = { dismissed++ },
                 )
             }
         }
@@ -89,6 +92,17 @@ class ConfigScreenPasteTest {
 
         composeRule.onNodeWithTag(ConfigTestTags.ENDPOINT_FIELD).assert(hasText("https://saved.example"))
         composeRule.onNodeWithTag(ConfigTestTags.CLIENT_ID_FIELD).assert(hasText("saved-client"))
+    }
+
+    @Test
+    fun swiping_down_inside_the_form_does_not_dismiss_the_sheet() {
+        showSheetWithClipboard("https://clip.example:$CLIP_CLIENT")
+
+        composeRule.onNodeWithTag(ConfigTestTags.ENDPOINT_FIELD).performTouchInput { swipeDown(durationMillis = 100) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(ConfigTestTags.ENDPOINT_FIELD).assertExists()
+        assertEquals(0, dismissed)
     }
 
     private companion object {

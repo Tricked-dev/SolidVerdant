@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -98,5 +99,23 @@ class SheetSwipeDismissTest {
 
     private companion object {
         const val FORM = "sheet_form"
+    }
+
+    @Test
+    fun swiping_down_inside_an_app_sheet_does_not_dismiss_it() {
+        var dismissed = 0
+        composeRule.setContent {
+            MaterialTheme {
+                AppSheet(title = "Options", onDismiss = { dismissed++ }) {
+                    Text("Body", Modifier.fillMaxWidth().height(200.dp).testTag("body"))
+                }
+            }
+        }
+
+        composeRule.onNodeWithTag("body").performTouchInput { swipeDown(durationMillis = 100) }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("body").assertExists()
+        assertEquals(0, dismissed)
     }
 }
