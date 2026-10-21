@@ -16,12 +16,17 @@ private const val CALENDAR_DATE_QUERY = "date"
 private const val LOCAL_DATE_LENGTH = 10
 
 /** Resolve a calendar date from the public app-link contract without accepting malformed input. */
-internal fun calendarDateFromUri(uri: Uri): LocalDate? = parseCalendarDateDeepLink(
-    scheme = uri.scheme,
-    host = uri.host,
-    path = uri.path,
-    queryDate = uri.getQueryParameter(CALENDAR_DATE_QUERY),
-)
+internal fun calendarDateFromUri(uri: Uri): LocalDate? {
+    // The activity is exported, so explicit intents can carry any URI. Query accessors throw on
+    // opaque URIs such as `solidtime:calendar`, which would otherwise crash the activity.
+    if (!uri.isHierarchical) return null
+    return parseCalendarDateDeepLink(
+        scheme = uri.scheme,
+        host = uri.host,
+        path = uri.path,
+        queryDate = uri.getQueryParameter(CALENDAR_DATE_QUERY),
+    )
+}
 
 /**
  * Pure parser seam for JVM tests. Both `solidtime://calendar?date=yyyy-MM-dd` and
