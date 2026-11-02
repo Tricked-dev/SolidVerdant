@@ -377,9 +377,12 @@ fun EditTimeEntryDialog(
             onDismiss = { editingTime = null },
             onConfirm = { hour, minute ->
                 if (field == TimeField.Start) {
-                    val newStart = startTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
-                    if (!isRunningEntry) endTime = retimedEnd(startTime, newStart, endTime)
-                    startTime = newStart
+                    // Editing the start time corrects when work began; the end stays put and the
+                    // duration follows, so a clock-in fix does not shift the clock-out.
+                    startTime = startTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
+                    if (!isRunningEntry) {
+                        durationMinutes = java.time.Duration.between(startTime, endTime).toMinutes().toString()
+                    }
                 } else {
                     val sameDayEnd = endTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
                     // Do not silently roll an earlier clock-time into a ~24h entry: only a plausible
@@ -726,7 +729,7 @@ private fun EntryTimePickerDialog(title: String, initial: ZonedDateTime, onDismi
     )
 }
 
-/** Moving the start keeps the entry's exact length; the minutes field alone rounds seconds away. */
+/** Moving the start date keeps the entry's exact length; the minutes field alone rounds seconds away. */
 internal fun retimedEnd(previousStart: ZonedDateTime, newStart: ZonedDateTime, end: ZonedDateTime): ZonedDateTime =
     end.plus(Duration.between(previousStart, newStart))
 
