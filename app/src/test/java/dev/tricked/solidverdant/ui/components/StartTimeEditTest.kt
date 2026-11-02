@@ -99,6 +99,31 @@ class StartTimeEditTest {
         assertSaved(saved, start = "2026-07-06T20:00:00Z", end = "2026-07-06T22:00:00Z")
     }
 
+    @Test
+    fun confirming_the_start_of_a_sub_minute_entry_keeps_it_saveable() {
+        var saved: Pair<String, String?>? = null
+        composeRule.setContent {
+            MaterialTheme {
+                TimeEntryFormSheet(
+                    entry = entry.copy(start = "2026-07-06T20:00:00Z", end = "2026-07-06T20:00:30Z", duration = 30),
+                    zone = ZoneOffset.UTC,
+                    suggestedStart = null,
+                    projects = emptyList(),
+                    tasks = emptyList(),
+                    tags = emptyList(),
+                    onDismiss = {},
+                    onSave = { _, _, _, _, _, start, end -> saved = start to end },
+                )
+            }
+        }
+
+        // Confirm the picker unchanged: neither endpoint moves.
+        pickStartHour(TrackingTestTags.SHEET_START_TIME, hour = null)
+        composeRule.onNodeWithTag(TrackingTestTags.SHEET_SAVE_BUTTON).performScrollTo().performClick()
+
+        assertSaved(saved, start = "2026-07-06T20:00:00Z", end = "2026-07-06T20:00:30Z")
+    }
+
     @Before
     fun use24HourClock() {
         // The picker follows the device clock format; pin it so the hour dial labels are stable.
@@ -106,10 +131,12 @@ class StartTimeEditTest {
         Settings.System.putString(context.contentResolver, Settings.System.TIME_12_24, "24")
     }
 
-    private fun pickStartHour(startTimeTag: String, hour: Int) {
+    private fun pickStartHour(startTimeTag: String, hour: Int?) {
         composeRule.onNodeWithTag(startTimeTag).performScrollTo().performClick()
-        composeRule.onNodeWithContentDescription("$hour hours")
-            .performSemanticsAction(SemanticsActions.OnClick)
+        if (hour != null) {
+            composeRule.onNodeWithContentDescription("$hour hours")
+                .performSemanticsAction(SemanticsActions.OnClick)
+        }
         composeRule.onNodeWithTag(EditTimeEntryTestTags.TIME_PICKER_CONFIRM).performClick()
         composeRule.waitForIdle()
     }

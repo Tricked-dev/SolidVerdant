@@ -2196,7 +2196,9 @@ internal fun TimeEntryFormSheet(
                     // duration follows, so a clock-in fix does not shift the clock-out.
                     startTime = startTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
                     if (!isRunningEntry) {
-                        durationMinutes = java.time.Duration.between(startTime, endTime).toMinutes().toString()
+                        val minutes = java.time.Duration.between(startTime, endTime).toMinutes()
+                        // A positive sub-minute span stays saveable, matching how the sheet opens.
+                        durationMinutes = (if (endTime.isAfter(startTime)) minutes.coerceAtLeast(1) else minutes).toString()
                     }
                 } else {
                     val sameDayEnd = endTime.withHour(hour).withMinute(minute).withSecond(0).withNano(0)
